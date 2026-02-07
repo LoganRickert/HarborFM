@@ -1,0 +1,453 @@
+.users {
+  max-width: var(--max-content);
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.searchWrap {
+  margin-bottom: 1.5rem;
+}
+
+.searchInput {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 0 0 1.5rem 0;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+
+.error {
+  color: var(--error);
+  font-size: 0.9375rem;
+}
+
+.empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+
+.userList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.userCard {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.userCard:hover {
+  border-color: rgba(139, 146, 163, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.userCardRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.375rem;
+}
+
+.userCardLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.userCardEmail {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.userCardMeta {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.userCardActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.pageBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pageBtn:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--text-muted);
+}
+
+.pageBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pageInfo {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.roleUser,
+.roleAdmin {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.roleUser {
+  color: var(--text);
+}
+
+.roleAdmin {
+  color: var(--accent);
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.actionBtn:hover {
+  background: var(--bg);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.actionBtnDanger {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.actionBtnDanger:hover {
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--bg);
+}
+
+@media (max-width: 640px) {
+  .userCardRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .userCardActions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .actionBtn {
+    justify-content: center;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .userCard {
+    padding: 0.75rem;
+  }
+}
+
+/* Dialog styles */
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1100;
+  animation: fadeIn 0.15s ease;
+}
+
+.dialogContent {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 360px;
+  width: calc(100% - 2rem);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 1101;
+  animation: fadeIn 0.15s ease;
+}
+
+.dialogTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dialogDescription {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dialogActions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.cancel {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cancel:hover {
+  background: var(--bg);
+  border-color: var(--text-muted);
+}
+
+.dialogConfirmRemove {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--error);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dialogConfirmRemove:hover:not(:disabled) {
+  background: var(--error-dim, #c53030);
+  border-color: var(--error-dim, #c53030);
+}
+
+.dialogConfirmRemove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialogConfirm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dialogConfirm:hover:not(:disabled) {
+  background: var(--accent-dim, #4a9eff);
+  border-color: var(--accent-dim, #4a9eff);
+}
+
+.dialogConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.375rem;
+}
+
+.formInput {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.formInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.formInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.roleToggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.roleToggleBtn,
+.roleToggleBtnActive {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.roleToggleBtn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.roleToggleBtnActive {
+  color: var(--bg);
+  background: var(--accent);
+}
+
+.roleToggleBtnActive:hover {
+  color: var(--bg);
+  background: var(--accent-dim);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .users {
+    padding: 1rem;
+  }
+  
+  .title {
+    font-size: 1.5rem;
+  }
+  
+  .userCard {
+    padding: 0.75rem;
+  }
+  
+  .userCardRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  
+  .userCardLeft {
+    width: 100%;
+  }
+  
+  .userCardActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .actionBtn {
+    flex: 0 1 auto;
+  }
+}

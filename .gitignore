@@ -1,0 +1,12 @@
+node_modules
+dist
+.data
+data
+*.db
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+coverage
+.turbo

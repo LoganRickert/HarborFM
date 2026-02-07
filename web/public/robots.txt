@@ -1,0 +1,20 @@
+User-agent: *
+Disallow: /
+
+# Allow public podcast feeds and episodes (web pages)
+Allow: /feed/
+
+# Allow public API endpoints for podcasts and episodes
+Allow: /api/public/podcasts/
+
+# Allow RSS feeds
+Allow: /api/public/podcasts/*/rss
+
+# Allow audio files (linked from RSS feeds)
+Allow: /api/*/episodes/*
+
+# Disallow specific non-public paths
+Disallow: /setup
+Disallow: /login
+Disallow: /register
+Disallow: /reset-password

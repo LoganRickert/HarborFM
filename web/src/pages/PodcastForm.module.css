@@ -1,0 +1,94 @@
+.wrap {
+  max-width: var(--max-content);
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.title {
+  margin: 0 0 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.input,
+.textarea {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--error);
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.cancel {
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.cancel:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.submit {
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+}
+.submit:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+.submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.audioSection {
+  padding: 1rem 0;
+  border-top: 1px solid var(--border);
+}

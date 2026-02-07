@@ -1,0 +1,23 @@
+{
+  "name": "harborfm",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Open source podcast creator.",
+  "scripts": {
+    "dev": "pnpm run dev:server & pnpm run dev:web",
+    "dev:server": "pnpm --filter server run dev",
+    "dev:web": "pnpm --filter web run dev",
+    "dev:migrate": "pnpm --filter server run db:migrate",
+    "db:clear-ip-bans": "pnpm --filter server run db:clear-ip-bans",
+    "reset-password": "pnpm --filter server run reset-password",
+    "build": "pnpm --filter shared run build && pnpm --filter server run build && pnpm --filter web run build",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "docker:build": "docker build -t harborfm ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.14.2"
+}

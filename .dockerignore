@@ -1,0 +1,30 @@
+# Dependencies and build outputs (rebuilt in image)
+node_modules
+**/node_modules
+shared/dist
+server/dist
+web/dist
+server/public
+
+# Git and IDE
+.git
+.gitignore
+.cursor
+*.log
+.env
+.env.*
+!.env.example
+
+# Test and misc
+**/*.test.ts
+**/*.spec.ts
+coverage
+*.md
+!README.md
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Local data (never bake in)
+data
