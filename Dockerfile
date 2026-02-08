@@ -35,7 +35,7 @@ COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/server/package.json ./server/
 COPY --from=builder /app/web/package.json ./web/
 
-RUN pnpm install --frozen-lockfile --prod
+RUN pnpm install --frozen-lockfile --prod && pnpm rebuild
 
 COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/web/dist ./server/public
