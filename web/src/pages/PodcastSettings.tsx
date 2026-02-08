@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Rss, ExternalLink, Settings as GearIcon, Cloud, X, FlaskConical, UploadCloud } from 'lucide-react';
+import { Rss, ExternalLink, List, Settings as GearIcon, Cloud, X, FlaskConical, UploadCloud } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getPodcast } from '../api/podcasts';
 import { getAuthRssPreviewUrl } from '../api/rss';
@@ -34,13 +34,19 @@ export function PodcastSettings() {
         <div className={styles.cardHeader}>
           <h1 className={styles.cardTitle}>{podcast.title}</h1>
           <div className={styles.cardHeaderActions}>
-            <button type="button" className={styles.secondaryBtn} onClick={() => setDetailsDialogOpen(true)} aria-label="Edit show details">
-              Edit show details
+            <Link to={`/podcasts/${id}/episodes`} className={styles.cardHeaderPrimary}>
+              <List size={16} strokeWidth={2} aria-hidden />
+              Episodes
+            </Link>
+            <button
+              type="button"
+              className={styles.cardSettings}
+              onClick={() => setDetailsDialogOpen(true)}
+              aria-label={`Edit show details for ${podcast.title}`}
+            >
+              <GearIcon size={18} strokeWidth={2} />
             </button>
-              <Link to={`/podcasts/${id}/episodes`} className={styles.primaryBtn}>
-                Episodes
-              </Link>
-            </div>
+          </div>
           </div>
           {podcast.description && (
             <div className={styles.cardDescription}>
