@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { ChevronRight } from 'lucide-react';
 import { getPodcast } from '../api/podcasts';
 import { listEpisodes } from '../api/episodes';
 import { FullPageLoading, InlineLoading } from '../components/Loading';
@@ -68,7 +69,7 @@ export function EpisodesList() {
           <ul className={styles.list}>
             {episodes.map((ep) => (
               <li key={ep.id} className={styles.item}>
-                <Link to={`/episodes/${ep.id}`} className={styles.itemLink}>
+                <Link to={`/episodes/${ep.id}`} className={styles.itemLink} aria-label={`Open ${ep.title}`}>
                   <div className={styles.itemContent}>
                     <span className={styles.itemTitle}>{ep.title}</span>
                     <div className={styles.itemMeta}>
@@ -83,6 +84,7 @@ export function EpisodesList() {
                       )}
                     </div>
                   </div>
+                  <ChevronRight className={styles.itemChevron} size={20} strokeWidth={2} aria-hidden />
                 </Link>
               </li>
             ))}
