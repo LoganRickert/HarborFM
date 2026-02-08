@@ -4,7 +4,7 @@
 
 Open source podcast creator. Build episodes from segments: record or upload clips, pull in intros and bumpers from a library, trim and reorder, then export a single audio file and RSS feed.
 
-The app also has PWA so you can add it to your server to your home screen.
+The app also has PWA so you can add your server to your home screen.
 
 **License:** MIT
 
