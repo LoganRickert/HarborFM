@@ -2221,11 +2221,20 @@ function RecordModal({
   const recordButtonRef = useRef<HTMLButtonElement>(null);
   const stopButtonRef = useRef<HTMLButtonElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const wakeLockRef = useRef<{ release(): Promise<void> } | null>(null);
+
+  function releaseWakeLock() {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  }
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      releaseWakeLock();
     };
   }, []);
 
@@ -2358,6 +2367,14 @@ function RecordModal({
       setSeconds(0);
       setBlob(null);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+      // Keep screen on during recording (e.g. on phones) so recording isn't interrupted
+      try {
+        if ('wakeLock' in navigator && typeof (navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock?.request === 'function') {
+          wakeLockRef.current = await (navigator as Navigator & { wakeLock: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock.request('screen');
+        }
+      } catch {
+        // Wake Lock not supported or failed (e.g. low battery); recording continues
+      }
     } catch (err) {
       console.error(err);
       alert('Could not access microphone.');
@@ -2371,6 +2388,7 @@ function RecordModal({
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
+      releaseWakeLock();
       setRecording(false);
     }
   }
