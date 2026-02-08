@@ -397,7 +397,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.dialogContent}>
             <Dialog.Title className={styles.dialogTitle}>Discard recording?</Dialog.Title>
-            <p className={styles.dialogDescription}>Your recording will not be saved.</p>
+            <Dialog.Description className={styles.dialogDescription}>Your recording will not be saved.</Dialog.Description>
             <div className={styles.dialogActions}>
               <Dialog.Close asChild>
                 <button type="button" className={styles.cancel} aria-label="Stay and continue recording">

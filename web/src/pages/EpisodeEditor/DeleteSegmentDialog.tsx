@@ -23,7 +23,7 @@ export function DeleteSegmentDialog({
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content className={styles.dialogContent}>
           <Dialog.Title className={styles.dialogTitle}>Remove section?</Dialog.Title>
-          <p className={styles.dialogDescription}>{description}</p>
+          <Dialog.Description className={styles.dialogDescription}>{description}</Dialog.Description>
           <div className={styles.dialogActions}>
             <Dialog.Close asChild>
               <button type="button" className={styles.cancel} aria-label="Cancel removing section">

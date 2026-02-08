@@ -387,6 +387,11 @@
   transform: scale(1.05);
 }
 
+.cardSettings:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .dashboard {

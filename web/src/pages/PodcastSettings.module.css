@@ -492,6 +492,43 @@
 
 .dialogContentWide {
   max-width: 420px;
+  max-height: min(90vh, 720px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialogContentWide .dialogTitle {
+  flex-shrink: 0;
+}
+
+.dialogBodyScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  margin: 0 -0.25rem 0 0;
+  padding-right: 0.25rem;
+}
+
+.dialogBodyScroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dialogBodyScroll::-webkit-scrollbar-track {
+  background: var(--bg-muted);
+  border-radius: 4px;
+}
+
+.dialogBodyScroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.dialogBodyScroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 @media (min-width: 640px) {

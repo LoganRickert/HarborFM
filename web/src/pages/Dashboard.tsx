@@ -1,12 +1,15 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Settings, List, Mic2, Radio, Rss, ArrowUpRight } from 'lucide-react';
 import { listPodcasts, listPodcastsForUser } from '../api/podcasts';
 import { getUser } from '../api/users';
+import { EditShowDetailsDialog } from './EditShowDetailsDialog';
 import styles from './Dashboard.module.css';
 
 export function Dashboard() {
   const { userId } = useParams<{ userId?: string }>();
+  const [editingPodcastId, setEditingPodcastId] = useState<string | null>(null);
   const isAdminView = Boolean(userId);
   const { data: selectedUser } = useQuery({
     queryKey: ['user', userId],
@@ -92,13 +95,14 @@ export function Dashboard() {
                       <ArrowUpRight className={styles.cardTitleIcon} size={16} strokeWidth={2} aria-hidden="true" />
                     </Link>
                     {!isAdminView && (
-                      <Link 
-                        to={`/podcasts/${p.id}?edit=true`} 
+                      <button
+                        type="button"
                         className={styles.cardSettings}
-                        aria-label={`Edit settings for ${p.title}`}
+                        aria-label={`Edit show details for ${p.title}`}
+                        onClick={() => setEditingPodcastId(p.id)}
                       >
                         <Settings size={18} strokeWidth={2} />
-                      </Link>
+                      </button>
                     )}
                   </div>
                   <p className={styles.cardSlug}>{p.slug}</p>
@@ -145,6 +149,12 @@ export function Dashboard() {
           ))}
         </div>
       )}
+
+      <EditShowDetailsDialog
+        open={editingPodcastId !== null}
+        podcastId={editingPodcastId}
+        onClose={() => setEditingPodcastId(null)}
+      />
     </div>
   );
 }

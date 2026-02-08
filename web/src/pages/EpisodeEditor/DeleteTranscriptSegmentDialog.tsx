@@ -37,9 +37,9 @@ export function DeleteTranscriptSegmentDialog({
           onInteractOutside={(e) => e.preventDefault()}
         >
           <Dialog.Title className={styles.dialogTitle}>Delete transcript segment?</Dialog.Title>
-          <p className={styles.dialogDescription}>
+          <Dialog.Description className={styles.dialogDescription}>
             This will remove the segment from both the audio file and transcript. This cannot be undone.
-          </p>
+          </Dialog.Description>
           <div className={styles.dialogActions}>
             <button type="button" className={styles.cancel} onClick={handleCancel} aria-label="Cancel deleting transcript segment">
               Cancel

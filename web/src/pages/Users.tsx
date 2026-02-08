@@ -232,6 +232,9 @@ export function Users() {
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.dialogContent}>
             <Dialog.Title className={styles.dialogTitle}>Edit user</Dialog.Title>
+            <Dialog.Description className={styles.dialogDescription}>
+              Update the user email, password, and role.
+            </Dialog.Description>
             <form onSubmit={handleEditSubmit}>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>
@@ -327,14 +330,14 @@ export function Users() {
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.dialogContent}>
             <Dialog.Title className={styles.dialogTitle}>Delete user?</Dialog.Title>
-            <p className={styles.dialogDescription}>
+            <Dialog.Description className={styles.dialogDescription}>
               {userToDelete && (() => {
                 const user = users.find((u) => u.id === userToDelete);
                 return user
                   ? `Are you sure you want to delete "${user.email}"? This action cannot be undone.`
                   : 'Are you sure you want to delete this user? This action cannot be undone.';
               })()}
-            </p>
+            </Dialog.Description>
             <div className={styles.dialogActions}>
               <Dialog.Close asChild>
                 <button type="button" className={styles.cancel} aria-label="Cancel deleting user">Cancel</button>

@@ -328,6 +328,9 @@ export function EpisodeEditor() {
               <Dialog.Overlay className={styles.dialogOverlay} />
               <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide}`}>
                 <Dialog.Title className={styles.dialogTitle}>Episode details</Dialog.Title>
+                <Dialog.Description className={styles.dialogDescription}>
+                  Edit the episode title, description, and publish settings.
+                </Dialog.Description>
                 <div className={styles.dialogBodyScroll}>
                 <EpisodeDetailsForm
                   title={title}
@@ -1167,7 +1170,7 @@ function TranscriptModal({
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide}`}>
+        <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide}`} aria-describedby={undefined}>
           <Dialog.Title className={styles.dialogTitle}>{segmentName}</Dialog.Title>
           <div className={styles.dialogDescription}>
             {showTranscriptModeBar && (
