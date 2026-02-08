@@ -40,11 +40,23 @@ export function assertPathUnder(pathToCheck: string, allowedBase: string): strin
   return resolved;
 }
 
+/**
+ * Asserts that pathToCheck, when resolved, is under allowedBase. Does not require pathToCheck to exist.
+ */
+function assertResolvedPathUnder(pathToCheck: string, allowedBase: string): void {
+  const base = resolve(allowedBase);
+  const resolved = resolve(pathToCheck);
+  if (resolved !== base && !resolved.startsWith(base + sep)) {
+    throw new Error('Path escapes allowed directory');
+  }
+}
+
 export function getDataDir() {
   return DATA_DIR;
 }
 
 export function ensureDir(dir: string) {
+  assertResolvedPathUnder(dir, DATA_DIR);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

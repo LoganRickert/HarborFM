@@ -5,12 +5,7 @@ import { db } from '../db/index.js';
 import { consumeSetupToken, getOrCreateSetupToken, isSetupComplete, readSetupToken } from '../services/setup.js';
 import { readSettings } from './settings.js';
 import { getClientIp, getIpBan, getUserAgent, recordFailureAndMaybeBan } from '../services/loginAttempts.js';
-
-function normalizeHostname(input: string): string {
-  const v = input.trim();
-  if (!v) return '';
-  return v.replace(/\/+$/, '');
-}
+import { normalizeHostname } from '../utils/url.js';
 
 function writeSetting(key: string, value: string): void {
   db.prepare(

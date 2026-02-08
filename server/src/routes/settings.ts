@@ -5,14 +5,9 @@ import { getDataDir } from '../services/paths.js';
 import { requireAdmin } from '../plugins/auth.js';
 import { db } from '../db/index.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
+import { normalizeHostname } from '../utils/url.js';
 
 const SETTINGS_FILENAME = 'settings.json';
-
-function normalizeHostname(input: string): string {
-  const v = input.trim();
-  if (!v) return '';
-  return v.replace(/\/+$/, '');
-}
 
 function validateOllamaBaseUrl(input: string): string {
   const raw = (input || '').trim() || 'http://localhost:11434';
@@ -35,15 +30,9 @@ function validateOllamaBaseUrl(input: string): string {
 
   // Normalize by removing any trailing slash from pathname
   const normalized = new URL(url.toString());
-  normalized.pathname = normalized.pathname.replace(/\/+$/, '');
+  normalized.pathname = normalizeHostname(normalized.pathname);
 
   return normalized.toString();
-}
-
-function normalizeWhisperUrl(input: string): string {
-  const v = input.trim();
-  if (!v) return '';
-  return v.replace(/\/+$/, '');
 }
 
 export interface AppSettings {
@@ -205,7 +194,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
       const whisper_asr_url =
         body.whisper_asr_url !== undefined
-          ? normalizeWhisperUrl(String(body.whisper_asr_url))
+          ? normalizeHostname(String(body.whisper_asr_url))
           : current.whisper_asr_url;
       const llm_provider =
         body.llm_provider === 'openai' ? 'openai' : body.llm_provider === 'ollama' ? 'ollama' : 'none';
