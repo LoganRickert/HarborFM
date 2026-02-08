@@ -25,7 +25,7 @@ import { llmRoutes } from './routes/llm.js';
 import { usersRoutes } from './routes/users.js';
 import { publicRoutes } from './routes/public.js';
 import { setupRoutes } from './routes/setup.js';
-import { ensureDir, getDataDir } from './services/paths.js';
+import { ensureSecretsDir, getSecretsDir } from './services/paths.js';
 import { getOrCreateSetupToken, isSetupComplete } from './services/setup.js';
 import { getSecretsKey } from './services/secrets.js';
 
@@ -36,10 +36,8 @@ function loadOrCreateJwtSecret(): string {
   const fromEnv = process.env.JWT_SECRET?.trim();
   if (fromEnv) return fromEnv;
 
-  const dataDir = getDataDir();
-  ensureDir(dataDir);
-
-  const secretPath = join(dataDir, 'jwt-secret.txt');
+  ensureSecretsDir();
+  const secretPath = join(getSecretsDir(), 'jwt-secret.txt');
   if (existsSync(secretPath)) {
     console.warn(
       `[security] JWT_SECRET is not set in the environment. ` +
@@ -61,7 +59,7 @@ function loadOrCreateJwtSecret(): string {
 
   console.warn(
     `[security] JWT_SECRET is not set in the environment; generated and persisted a secret at ${secretPath}. ` +
-      `Persist DATA_DIR to keep sessions stable across restarts, or (recommended) set JWT_SECRET via env.`
+      `Persist SECRETS_DIR to keep sessions stable across restarts, or (recommended) set JWT_SECRET via env.`
   );
   return secret;
 }
@@ -106,7 +104,7 @@ async function main() {
       );
     },
   });
-  
+
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } });
   await app.register(jwt, {

@@ -3,6 +3,7 @@ import { existsSync, statSync } from 'fs';
 import { dirname, basename } from 'path';
 import send from '@fastify/send';
 import { nanoid } from 'nanoid';
+import { libraryUpdateSchema } from '@harborfm/shared';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../plugins/auth.js';
 import { libraryDir, libraryAssetPath } from '../services/paths.js';
@@ -17,8 +18,11 @@ export async function libraryRoutes(app: FastifyInstance) {
   app.get('/api/library', { preHandler: [requireAuth] }, async (request) => {
     const rows = db
       .prepare(
-        `SELECT id, name, tag, duration_sec, created_at FROM reusable_assets
-         WHERE owner_user_id = ? ORDER BY name`
+        `SELECT id, owner_user_id, name, tag, duration_sec, created_at,
+                COALESCE(global_asset, 0) AS global_asset
+         FROM reusable_assets
+         WHERE owner_user_id = ? OR global_asset = 1
+         ORDER BY name`
       )
       .all(request.userId) as Record<string, unknown>[];
     return { assets: rows };
@@ -28,7 +32,9 @@ export async function libraryRoutes(app: FastifyInstance) {
     const { userId } = request.params as { userId: string };
     const rows = db
       .prepare(
-        `SELECT id, name, tag, duration_sec, created_at FROM reusable_assets
+        `SELECT id, owner_user_id, name, tag, duration_sec, created_at,
+                COALESCE(global_asset, 0) AS global_asset
+         FROM reusable_assets
          WHERE owner_user_id = ? ORDER BY name`
       )
       .all(userId) as Record<string, unknown>[];
@@ -105,20 +111,37 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.patch('/api/library/:id', { preHandler: [requireAuth] }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { name?: string; tag?: string | null } | undefined;
-    const updates: string[] = [];
-    const values: (string | null)[] = [];
-
-    if (body?.name !== undefined) {
-      const name = body.name.trim();
-      if (!name) return reply.status(400).send({ error: 'Name is required' });
-      updates.push('name = ?');
-      values.push(name);
+    const parse = libraryUpdateSchema.safeParse(request.body);
+    if (!parse.success) {
+      const msg = parse.error.issues.map((issue) => issue.message).join('; ') || 'Invalid body';
+      return reply.status(400).send({ error: msg });
     }
-    if (body?.tag !== undefined) {
-      const tag = body.tag === null ? null : body.tag.trim();
+    const body = parse.data;
+    const asset = db
+      .prepare('SELECT id, owner_user_id, name, tag, COALESCE(global_asset, 0) AS global_asset FROM reusable_assets WHERE id = ?')
+      .get(id) as { owner_user_id: string; global_asset: number } | undefined;
+    if (!asset) return reply.status(404).send({ error: 'Asset not found' });
+
+    const isAdmin = (db.prepare('SELECT role FROM users WHERE id = ?').get(request.userId) as { role: string } | undefined)?.role === 'admin';
+    const isOwner = asset.owner_user_id === request.userId;
+    if (!isOwner && !isAdmin) {
+      return reply.status(403).send({ error: 'Only the owner or an administrator can edit this asset.' });
+    }
+
+    const updates: string[] = [];
+    const values: (string | number | null)[] = [];
+
+    if (body.name !== undefined) {
+      updates.push('name = ?');
+      values.push(body.name.trim());
+    }
+    if (body.tag !== undefined) {
       updates.push('tag = ?');
-      values.push(tag || null);
+      values.push(body.tag === null ? null : body.tag.trim() || null);
+    }
+    if (isAdmin && body.global_asset !== undefined) {
+      updates.push('global_asset = ?');
+      values.push(body.global_asset ? 1 : 0);
     }
 
     if (updates.length === 0) {
@@ -126,26 +149,38 @@ export async function libraryRoutes(app: FastifyInstance) {
     }
 
     values.push(id);
-    values.push(request.userId);
-    db.prepare(`UPDATE reusable_assets SET ${updates.join(', ')} WHERE id = ? AND owner_user_id = ?`).run(...values);
+    if (isOwner) {
+      values.push(request.userId);
+      db.prepare(`UPDATE reusable_assets SET ${updates.join(', ')} WHERE id = ? AND owner_user_id = ?`).run(...values);
+    } else {
+      db.prepare(`UPDATE reusable_assets SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    }
     const row = db
-      .prepare('SELECT id, name, tag, duration_sec, created_at FROM reusable_assets WHERE id = ? AND owner_user_id = ?')
-      .get(id, request.userId) as Record<string, unknown> | undefined;
-    if (!row) return reply.status(404).send({ error: 'Asset not found' });
+      .prepare(
+        `SELECT id, owner_user_id, name, tag, duration_sec, created_at, COALESCE(global_asset, 0) AS global_asset
+         FROM reusable_assets WHERE id = ?`
+      )
+      .get(id) as Record<string, unknown>;
     return reply.send(row);
   });
 
   app.delete('/api/library/:id', { preHandler: [requireAuth] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const row = db
-      .prepare('SELECT * FROM reusable_assets WHERE id = ? AND owner_user_id = ?')
-      .get(id, request.userId) as Record<string, unknown> | undefined;
+      .prepare('SELECT * FROM reusable_assets WHERE id = ?')
+      .get(id) as (Record<string, unknown> & { owner_user_id: string; global_asset?: number }) | undefined;
     if (!row) return reply.status(404).send({ error: 'Asset not found' });
+    const isAdmin = (db.prepare('SELECT role FROM users WHERE id = ?').get(request.userId) as { role: string } | undefined)?.role === 'admin';
+    const isOwner = row.owner_user_id === request.userId;
+    if (!isOwner && !isAdmin) {
+      return reply.status(403).send({ error: 'Only the owner or an administrator can delete this asset.' });
+    }
     const { unlinkSync } = await import('fs');
     const path = row.audio_path as string;
+    const ownerId = row.owner_user_id;
     let bytesFreed = 0;
     if (path && existsSync(path)) {
-      const base = libraryDir(request.userId);
+      const base = libraryDir(ownerId);
       assertPathUnder(path, base);
       try {
         bytesFreed = statSync(path).size;
@@ -165,7 +200,7 @@ export async function libraryRoutes(app: FastifyInstance) {
              ELSE COALESCE(disk_bytes_used, 0) - ?
            END
          WHERE id = ?`
-      ).run(bytesFreed, bytesFreed, request.userId);
+      ).run(bytesFreed, bytesFreed, ownerId);
     }
 
     return reply.status(204).send();
@@ -173,20 +208,26 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.patch('/api/library/user/:userId/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
     const { id, userId } = request.params as { id: string; userId: string };
-    const body = request.body as { name?: string; tag?: string | null } | undefined;
-    const updates: string[] = [];
-    const values: (string | null)[] = [];
-
-    if (body?.name !== undefined) {
-      const name = body.name.trim();
-      if (!name) return reply.status(400).send({ error: 'Name is required' });
-      updates.push('name = ?');
-      values.push(name);
+    const parse = libraryUpdateSchema.safeParse(request.body);
+    if (!parse.success) {
+      const msg = parse.error.issues.map((issue) => issue.message).join('; ') || 'Invalid body';
+      return reply.status(400).send({ error: msg });
     }
-    if (body?.tag !== undefined) {
-      const tag = body.tag === null ? null : body.tag.trim();
+    const body = parse.data;
+    const updates: string[] = [];
+    const values: (string | number | null)[] = [];
+
+    if (body.name !== undefined) {
+      updates.push('name = ?');
+      values.push(body.name.trim());
+    }
+    if (body.tag !== undefined) {
       updates.push('tag = ?');
-      values.push(tag || null);
+      values.push(body.tag === null ? null : body.tag.trim() || null);
+    }
+    if (body.global_asset !== undefined) {
+      updates.push('global_asset = ?');
+      values.push(body.global_asset ? 1 : 0);
     }
 
     if (updates.length === 0) {
@@ -197,7 +238,10 @@ export async function libraryRoutes(app: FastifyInstance) {
     values.push(userId);
     db.prepare(`UPDATE reusable_assets SET ${updates.join(', ')} WHERE id = ? AND owner_user_id = ?`).run(...values);
     const row = db
-      .prepare('SELECT id, name, tag, duration_sec, created_at FROM reusable_assets WHERE id = ? AND owner_user_id = ?')
+      .prepare(
+        `SELECT id, owner_user_id, name, tag, duration_sec, created_at, COALESCE(global_asset, 0) AS global_asset
+         FROM reusable_assets WHERE id = ? AND owner_user_id = ?`
+      )
       .get(id, userId) as Record<string, unknown> | undefined;
     if (!row) return reply.status(404).send({ error: 'Asset not found' });
     return reply.send(row);
@@ -281,12 +325,15 @@ export async function libraryRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const row = db
-        .prepare('SELECT * FROM reusable_assets WHERE id = ? AND owner_user_id = ?')
+        .prepare(
+          'SELECT * FROM reusable_assets WHERE id = ? AND (owner_user_id = ? OR global_asset = 1)'
+        )
         .get(id, request.userId) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: 'Asset not found' });
       const path = row.audio_path as string;
+      const ownerUserId = row.owner_user_id as string;
       if (!path || !existsSync(path)) return reply.status(404).send({ error: 'File not found' });
-      const base = libraryDir(request.userId);
+      const base = libraryDir(ownerUserId);
       const safePath = assertPathUnder(path, base);
       const contentType = libraryStreamContentType(path);
       return sendLibraryStream(request, reply, safePath, contentType);

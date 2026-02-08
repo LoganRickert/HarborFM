@@ -33,13 +33,15 @@ HarborFM lets you assemble podcast episodes from building blocks. Create a show,
 
 ### Quick Start
 
-The app expects a writable directory for data (SQLite DB, uploads, processed audio, RSS files, artwork, library). Bind a volume to `/data`:
+The app expects two writable directories: `/data` (SQLite DB, uploads, processed audio, RSS, artwork, library) and `/secrets` (JWT and encryption keys). You can mount them independently:
 
 ```bash
 HARBORFM_SECRETS_KEY=$(openssl rand -base64 32)
 JWT_SECRET=$(openssl rand -base64 32)
 
 docker run --name harborfm -p 3001:3001 \
+  -v harborfm-data:/data \
+  -v harborfm-secrets:/secrets \
   -e HARBORFM_SECRETS_KEY="$HARBORFM_SECRETS_KEY" \
   -e JWT_SECRET="$JWT_SECRET" \
   ghcr.io/loganrickert/harborfm:latest
@@ -179,13 +181,14 @@ pnpm run docker:build
 
 ### Run
 
-The app expects a writable directory for data (SQLite DB, uploads, processed audio, RSS files, artwork, library). Bind a volume to `/data`:
+The app expects two writable directories: `/data` (SQLite DB, uploads, processed audio, RSS, artwork, library) and `/secrets` (JWT and encryption keys). Mount them independently:
 
 ```bash
 docker run -d \
   --name harborfm \
   -p 3001:3001 \
   -v harborfm-data:/data \
+  -v harborfm-secrets:/secrets \
   -e HARBORFM_SECRETS_KEY="your-secure-secret-at-least-32-characters" \
   -e JWT_SECRET="your-secure-secret-at-least-32-characters" \
   harborfm
@@ -200,6 +203,8 @@ All [environment variables](#environment-variables) supported by the server work
 | Variable | Default in image | Description |
 |----------|------------------|-------------|
 | `PORT` | `3001` | Port the server listens on |
+| `DATA_DIR` | `/data` | Directory for DB, uploads, processed audio, RSS, artwork, library |
+| `SECRETS_DIR` | `/secrets` | Directory for jwt-secret.txt and secrets-key.txt (mount separately for stricter access) |
 | `JWT_SECRET` | (none) | **Required.** Secret for signing JWTs (use a long random string) |
 | `HARBORFM_SECRETS_KEY` | (none) | Optional 32-byte hex key for encrypting export credentials |
 | `COOKIE_SECURE` | (auto) | Set to `true` when using HTTPS so cookies are Secure |
@@ -210,13 +215,13 @@ All [environment variables](#environment-variables) supported by the server work
 
 1. **Build:** From the repo root, run `pnpm run build`. This builds the shared package, server, and web app.
 
-2. **Run the server:** From the repo root, run `node server/dist/app.js`. Ensure `DATA_DIR` and `JWT_SECRET` are set (env or `server/.env`).
+2. **Run the server:** From the repo root, run `node server/dist/app.js`. Ensure `DATA_DIR`, `SECRETS_DIR`, and `JWT_SECRET` are set (env or `server/.env`).
 
 3. **Process manager:** Run the server under pm2, systemd, or another process manager. The repo does not include a pm2 config; add one if you want. Example with pm2:
 
    ```bash
    cd /path/to/harborfm
-   PORT=3001 DATA_DIR=/var/lib/harborfm JWT_SECRET="..." pm2 start server/dist/app.js --name harborfm
+   PORT=3001 DATA_DIR=/var/lib/harborfm SECRETS_DIR=/var/lib/harborfm-secrets JWT_SECRET="..." pm2 start server/dist/app.js --name harborfm
    ```
 
 The server serves both the API and the static web app; no separate web server is required for production.

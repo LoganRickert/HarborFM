@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { ensureDir, getDataDir } from './paths.js';
+import { ensureSecretsDir, getSecretsDir } from './paths.js';
 
 const SECRETS_KEY_ENV = 'HARBORFM_SECRETS_KEY';
 const SECRETS_KEY_FILENAME = 'secrets-key.txt';
@@ -9,7 +9,7 @@ const SECRETS_KEY_FILENAME = 'secrets-key.txt';
 let cachedKey: Buffer | null = null;
 
 function getSecretsKeyPath(): string {
-  return join(getDataDir(), SECRETS_KEY_FILENAME);
+  return join(getSecretsDir(), SECRETS_KEY_FILENAME);
 }
 
 /**
@@ -32,7 +32,7 @@ export function getSecretsKey(): Buffer {
     return raw;
   }
 
-  ensureDir(getDataDir());
+  ensureSecretsDir();
   const path = getSecretsKeyPath();
   if (existsSync(path)) {
     console.warn(
@@ -61,7 +61,7 @@ export function getSecretsKey(): Buffer {
   }
   console.warn(
     `[security] ${SECRETS_KEY_ENV} is not set; generated and persisted a secrets key at ${path}. ` +
-      `Persist DATA_DIR to avoid losing access to encrypted credentials.`
+      `Persist SECRETS_DIR to avoid losing access to encrypted credentials.`
   );
   cachedKey = raw;
   return raw;

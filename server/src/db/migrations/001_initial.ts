@@ -106,6 +106,7 @@ export const up = (db: { exec: (sql: string) => void }) => {
       audio_path TEXT NOT NULL,
       duration_sec INTEGER NOT NULL,
       tag TEXT,
+      global_asset INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 

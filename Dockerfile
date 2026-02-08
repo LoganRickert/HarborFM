@@ -55,11 +55,10 @@ RUN pnpm install --frozen-lockfile --prod && pnpm rebuild
 COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/web/dist ./server/public
 
-RUN mkdir -p /data
+RUN mkdir -p /data /secrets
 
 RUN useradd -m -u 10001 appuser \
-  && mkdir -p /data \
-  && chown -R appuser:appuser /app /data
+  && chown -R appuser:appuser /app /data /secrets
 
 USER appuser
 
@@ -68,9 +67,13 @@ WORKDIR /app/server
 
 ENV NODE_ENV=production
 ENV PORT=3001
-# Map this volume to persist DB, uploads, processed audio, rss, artwork, library
+# Persist app data (DB, uploads, processed audio, rss, artwork, library)
 ENV DATA_DIR=/data
+# Persist secrets (jwt-secret.txt, secrets-key.txt) — mount separately for stricter access
+ENV SECRETS_DIR=/secrets
 ENV PUBLIC_DIR=/app/server/public
+
+VOLUME ["/data", "/secrets"]
 
 EXPOSE 3001
 

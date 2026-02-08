@@ -41,7 +41,7 @@ export function EpisodeSectionsPanel({
   return (
     <div className={styles.sectionsPanel}>
       <header className={styles.sectionsPanelHeader}>
-        <h2 className={styles.sectionTitle}>Build your episode</h2>
+        <h2 className={styles.sectionTitle}>Build Your Episode</h2>
         <p className={styles.sectionSub}>
           Add sections in order: record new audio or insert from your library. Then build the final MP3.
         </p>

@@ -189,7 +189,9 @@ export async function segmentRoutes(app: FastifyInstance) {
         const body = request.body as { type?: string; reusable_asset_id?: string; name?: string };
         if (body?.type === 'reusable' && body?.reusable_asset_id) {
           const asset = db
-            .prepare('SELECT id, name FROM reusable_assets WHERE id = ? AND owner_user_id = ?')
+            .prepare(
+              'SELECT id, name FROM reusable_assets WHERE id = ? AND (owner_user_id = ? OR global_asset = 1)'
+            )
             .get(body.reusable_asset_id, request.userId) as { name: string } | undefined;
           if (!asset) return reply.status(404).send({ error: 'Library asset not found' });
           const maxPos = db

@@ -4,10 +4,12 @@ const BASE = '/api';
 
 export interface LibraryAsset {
   id: string;
+  owner_user_id?: string;
   name: string;
   tag: string | null;
   duration_sec: number;
   created_at: string;
+  global_asset?: boolean | number;
 }
 
 export function listLibrary(): Promise<{ assets: LibraryAsset[] }> {
@@ -41,7 +43,7 @@ export function createLibraryAsset(file: File, name: string, tag?: string | null
   });
 }
 
-export function updateLibraryAsset(id: string, data: { name?: string; tag?: string | null }): Promise<LibraryAsset> {
+export function updateLibraryAsset(id: string, data: { name?: string; tag?: string | null; global_asset?: boolean }): Promise<LibraryAsset> {
   return fetch(`${BASE}/library/${id}`, {
     method: 'PATCH',
     credentials: 'include',
@@ -53,7 +55,7 @@ export function updateLibraryAsset(id: string, data: { name?: string; tag?: stri
   });
 }
 
-export function updateLibraryAssetForUser(userId: string, id: string, data: { name?: string; tag?: string | null }): Promise<LibraryAsset> {
+export function updateLibraryAssetForUser(userId: string, id: string, data: { name?: string; tag?: string | null; global_asset?: boolean }): Promise<LibraryAsset> {
   return fetch(`${BASE}/library/user/${userId}/${id}`, {
     method: 'PATCH',
     credentials: 'include',

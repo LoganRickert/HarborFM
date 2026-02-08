@@ -120,7 +120,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
             onClick={() => fileInputRef.current?.click()}
           >
             <Upload size={24} strokeWidth={2} aria-hidden />
-            <span>Choose file to add to library</span>
+            <span>Choose file to add to Library</span>
           </button>
         ) : (
           <div className={styles.libraryUploadForm}>
@@ -163,7 +163,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
                 Cancel
               </button>
               <button type="button" className={styles.submit} onClick={handleAddToLibrary} disabled={uploadMutation.isPending} aria-label="Add file to library">
-                {uploadMutation.isPending ? 'Adding…' : 'Add to library'}
+                {uploadMutation.isPending ? 'Adding…' : 'Add to Library'}
               </button>
             </div>
           </div>

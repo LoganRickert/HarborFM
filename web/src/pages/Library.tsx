@@ -15,6 +15,7 @@ import {
   updateLibraryAssetForUser,
   type LibraryAsset,
 } from '../api/library';
+import { me } from '../api/auth';
 import { getUser } from '../api/users';
 import styles from './Library.module.css';
 
@@ -47,6 +48,11 @@ export function Library() {
     queryFn: () => getUser(userId!),
     enabled: !!userId,
   });
+  const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
+  const currentUser = meData?.user;
+  const isAdmin = currentUser?.role === 'admin';
+  const currentUserId = currentUser?.id;
+
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['library', userId],
     queryFn: () => (userId ? listLibraryForUser(userId) : listLibrary()),
@@ -63,6 +69,7 @@ export function Library() {
   const [editName, setEditName] = useState('');
   const [editTag, setEditTag] = useState('');
   const [editCustomTag, setEditCustomTag] = useState('');
+  const [editGlobalAsset, setEditGlobalAsset] = useState(false);
   const [assetToDelete, setAssetToDelete] = useState<LibraryAsset | null>(null);
   const [assetToEdit, setAssetToEdit] = useState<LibraryAsset | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -95,13 +102,28 @@ export function Library() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['library', userId] }),
   });
   const editMutation = useMutation({
-    mutationFn: ({ id, name, tag }: { id: string; name: string; tag: string }) =>
-      (userId ? updateLibraryAssetForUser(userId, id, { name, tag: tag || null }) : updateLibraryAsset(id, { name, tag: tag || null })),
+    mutationFn: ({
+      id,
+      name,
+      tag,
+      global_asset,
+    }: {
+      id: string;
+      name: string;
+      tag: string;
+      global_asset?: boolean;
+    }) => {
+      const payload = { name, tag: tag || null, ...(global_asset !== undefined && { global_asset }) };
+      return userId
+        ? updateLibraryAssetForUser(userId, id, payload)
+        : updateLibraryAsset(id, payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['library', userId] });
       setEditName('');
       setEditTag('');
       setEditCustomTag('');
+      setEditGlobalAsset(false);
       setAssetToEdit(null);
     },
   });
@@ -185,9 +207,19 @@ export function Library() {
     setAssetToDelete(asset);
   }
 
+  function canEditAsset(asset: LibraryAsset): boolean {
+    const ownerId = asset.owner_user_id ?? (userId || currentUserId);
+    return ownerId === currentUserId || isAdmin === true;
+  }
+
+  function canDeleteAsset(asset: LibraryAsset): boolean {
+    return canEditAsset(asset);
+  }
+
   function handleEditStart(asset: LibraryAsset) {
     setAssetToEdit(asset);
     setEditName(asset.name);
+    setEditGlobalAsset(Boolean(asset.global_asset));
     if (!asset.tag) {
       setEditTag('');
       setEditCustomTag('');
@@ -204,6 +236,7 @@ export function Library() {
     setEditName('');
     setEditTag('');
     setEditCustomTag('');
+    setEditGlobalAsset(false);
     setAssetToEdit(null);
   }
 
@@ -212,7 +245,8 @@ export function Library() {
     const name = editName.trim();
     if (!name) return;
     const tag = editTag === 'Other' ? (editCustomTag.trim() || '') : editTag.trim();
-    editMutation.mutate({ id: assetToEdit.id, name, tag });
+    const global_asset = isAdmin ? editGlobalAsset : undefined;
+    editMutation.mutate({ id: assetToEdit.id, name, tag, global_asset });
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -313,7 +347,7 @@ export function Library() {
                   onClick={handleAddToLibrary}
                   disabled={uploadMutation.isPending}
                 >
-                  {uploadMutation.isPending ? 'Adding…' : 'Add to library'}
+                  {uploadMutation.isPending ? 'Adding…' : 'Add to Library'}
                 </button>
               </div>
             </div>
@@ -413,6 +447,11 @@ export function Library() {
                     <div className={styles.itemTitleRow}>
                       <span className={styles.itemName}>{asset.name}</span>
                       {asset.tag && <span className={styles.itemTag}>{asset.tag}</span>}
+                      {asset.global_asset && (
+                        <span className={styles.itemTag} title="Visible to everyone in the library">
+                          Global
+                        </span>
+                      )}
                     </div>
                     <div className={styles.itemMeta}>
                       {formatDuration(asset.duration_sec)} · {formatLibraryDate(asset.created_at)}
@@ -428,25 +467,29 @@ export function Library() {
                       {isThisPlaying ? <Pause size={16} strokeWidth={2} /> : <Play size={16} strokeWidth={2} />}
                       {isThisPlaying ? 'Pause' : 'Listen'}
                     </button>
-                    <button
-                      type="button"
-                      className={styles.editBtn}
-                      onClick={() => handleEditStart(asset)}
-                      aria-label={`Edit ${asset.name}`}
-                    >
-                      <Edit size={16} strokeWidth={2} />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.deleteBtn}
-                      onClick={() => handleDeleteRequest(asset)}
-                      disabled={deleteMutation.isPending}
-                      aria-label={`Delete ${asset.name}`}
-                    >
-                      <Trash2 size={16} strokeWidth={2} />
-                      Delete
-                    </button>
+                    {canEditAsset(asset) && (
+                      <button
+                        type="button"
+                        className={styles.editBtn}
+                        onClick={() => handleEditStart(asset)}
+                        aria-label={`Edit ${asset.name}`}
+                      >
+                        <Edit size={16} strokeWidth={2} />
+                        Edit
+                      </button>
+                    )}
+                    {canDeleteAsset(asset) && (
+                      <button
+                        type="button"
+                        className={styles.deleteBtn}
+                        onClick={() => handleDeleteRequest(asset)}
+                        disabled={deleteMutation.isPending}
+                        aria-label={`Delete ${asset.name}`}
+                      >
+                        <Trash2 size={16} strokeWidth={2} />
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -546,6 +589,18 @@ export function Library() {
                     value={editCustomTag}
                     onChange={(e) => setEditCustomTag(e.target.value)}
                   />
+                </label>
+              )}
+              {isAdmin && (
+                <label className="toggle" style={{ marginTop: '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={editGlobalAsset}
+                    onChange={(e) => setEditGlobalAsset(e.target.checked)}
+                    aria-label="Global Asset"
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Global Asset</span>
                 </label>
               )}
             </div>

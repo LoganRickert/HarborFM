@@ -90,7 +90,7 @@ export function GenerateFinalBar({
   return (
     <div className={styles.generateBar}>
       <div className={styles.generateBarHeader}>
-        <h2 className={styles.generateBarTitle}>Generate final episode</h2>
+        <h2 className={styles.generateBarTitle}>Generate Final Episode</h2>
         <p className={styles.generateBarSub}>
           Build the final MP3 from your sections. When done, you can play it here or download it for your feed.
         </p>

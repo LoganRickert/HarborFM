@@ -2,6 +2,7 @@ import { join, resolve, sep } from 'path';
 import { mkdirSync, existsSync, realpathSync } from 'fs';
 
 const DATA_DIR = resolve(process.env.DATA_DIR ?? join(process.cwd(), 'data'));
+const SECRETS_DIR = resolve(process.env.SECRETS_DIR ?? join(process.cwd(), 'secrets'));
 
 /** Only allow IDs that cannot be used for path traversal (nanoid-style: alphanumeric, hyphen, underscore). */
 const SAFE_ID = /^[a-zA-Z0-9_-]+$/;
@@ -53,6 +54,16 @@ function assertResolvedPathUnder(pathToCheck: string, allowedBase: string): void
 
 export function getDataDir() {
   return DATA_DIR;
+}
+
+export function getSecretsDir() {
+  return SECRETS_DIR;
+}
+
+export function ensureSecretsDir() {
+  if (!existsSync(SECRETS_DIR)) {
+    mkdirSync(SECRETS_DIR, { recursive: true });
+  }
 }
 
 export function ensureDir(dir: string) {
