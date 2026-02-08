@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -92,6 +93,20 @@ async function main() {
     origin: process.env.NODE_ENV === 'production' ? false : true,
     credentials: true,
   });
+
+  await app.register(rateLimit, {
+    max: 30,
+    timeWindow: '1 minute',
+    allowList: (req) => {
+      const path = req.url.split('?')[0];
+      return (
+        path === '/api/health' ||
+        path.startsWith('/api/setup') ||
+        path === '/setup'
+      );
+    },
+  });
+  
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } });
   await app.register(jwt, {

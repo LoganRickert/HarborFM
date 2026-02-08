@@ -58,6 +58,14 @@ export async function api<T>(
     body: json !== undefined ? JSON.stringify(json) : init.body,
   });
   if (!res.ok) {
+    if (res.status === 429) {
+      const retryAfter = res.headers.get('Retry-After');
+      const msg =
+        retryAfter && /^\d+$/.test(retryAfter)
+          ? `Too many requests. Please try again in ${retryAfter} second${retryAfter === '1' ? '' : 's'}.`
+          : 'Too many requests. Please wait a moment and try again.';
+      throw new Error(msg);
+    }
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((err as { error?: string }).error ?? res.statusText);
   }
