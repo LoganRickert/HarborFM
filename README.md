@@ -42,7 +42,7 @@ docker run -d \
   -v harborfm-data:/data \
   -e HARBORFM_SECRETS_KEY="your-secure-secret-at-least-32-characters" \
   -e JWT_SECRET="your-secure-secret-at-least-32-characters" \
-  harborfm
+  ghcr.io/loganrickert/harborfm:latest
 ```
 
 Use nginx+letsencrypt to provide a secure connection.
@@ -127,7 +127,7 @@ You can view a list of users on the users page. You can view the list of podcast
 
 ## Requirements
 
-- **Node.js** 20 or newer
+- **Node.js** 22 or newer
 - **pnpm** (recommended; the repo uses pnpm workspaces)
 - **ffmpeg** (for local dev; the Docker image includes it)
 
@@ -161,7 +161,7 @@ You can view a list of users on the users page. You can view the list of podcast
 
 ## Docker
 
-You can build and run HarborFM as a single container. The image includes Node 20, ffmpeg, and the built app; the server serves both the API and the static web app.
+You can build and run HarborFM as a single container. The image includes Node 22, ffmpeg, and the built app; the server serves both the API and the static web app.
 
 ### Build
 

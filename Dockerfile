@@ -1,5 +1,5 @@
 # Build stage: install deps, build shared + server + web
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 WORKDIR /app
@@ -18,7 +18,7 @@ COPY web ./web
 RUN pnpm run build
 
 # Runtime stage: Node + ffmpeg, single image
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # Install ffmpeg for audio processing (segments, concat, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg tini \

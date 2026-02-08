@@ -20,22 +20,21 @@
     "@fastify/cookie": "^10.0.1",
     "@fastify/cors": "^10.0.1",
     "@fastify/jwt": "^9.0.1",
-    "@fastify/multipart": "^9.0.1",
+    "@fastify/multipart": "^9.4.0",
     "@harborfm/shared": "workspace:*",
     "better-sqlite3": "^11.6.0",
     "fastify": "^5.7.4",
-    "@aws-sdk/client-s3": "^3.700.0",
-    "p-queue": "^8.0.1",
-    "argon2": "^0.41.1",
-    "nanoid": "^5.0.9"
+    "@aws-sdk/client-s3": "^3.985.0",
+    "argon2": "^0.44.0",
+    "nanoid": "^5.1.6"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "@eslint/js": "^9",
     "eslint": "^9",
-    "typescript-eslint": "^8.15.0"
+    "typescript-eslint": "^8.54.0"
   }
 }
