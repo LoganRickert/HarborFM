@@ -36,12 +36,12 @@ HarborFM lets you assemble podcast episodes from building blocks. Create a show,
 The app expects a writable directory for data (SQLite DB, uploads, processed audio, RSS files, artwork, library). Bind a volume to `/data`:
 
 ```bash
-docker run -d \
-  --name harborfm \
-  -p 3001:3001 \
-  -v harborfm-data:/data \
-  -e HARBORFM_SECRETS_KEY="your-secure-secret-at-least-32-characters" \
-  -e JWT_SECRET="your-secure-secret-at-least-32-characters" \
+HARBORFM_SECRETS_KEY=$(openssl rand -base64 32)
+JWT_SECRET=$(openssl rand -base64 32)
+
+docker run --name harborfm -p 3001:3001 \
+  -e HARBORFM_SECRETS_KEY="$HARBORFM_SECRETS_KEY" \
+  -e JWT_SECRET="$JWT_SECRET" \
   ghcr.io/loganrickert/harborfm:latest
 ```
 

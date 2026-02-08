@@ -14,10 +14,6 @@ const LLM_OPTIONS: { value: AppSettings['llm_provider']; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
 ];
 
-function redactApiKey(msg: string): string {
-  return msg.replace(/sk-[a-zA-Z0-9._-]+/gi, '[REDACTED]');
-}
-
 export function Settings() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading, isFetching, isError } = useQuery({
@@ -315,7 +311,7 @@ export function Settings() {
                 </button>
                 {testMutation.data && (
                   <span className={testMutation.data.ok ? styles.testSuccess : styles.testError}>
-                    {testMutation.data.ok ? 'Connection successful' : redactApiKey(testMutation.data.error ?? '')}
+                    {testMutation.data.ok ? 'Connection successful' : (testMutation.data.error ?? '')}
                   </span>
                 )}
               </div>
