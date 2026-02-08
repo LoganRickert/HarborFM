@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { createReadStream, existsSync, statSync } from 'fs';
+import { dirname, basename } from 'path';
+import send from '@fastify/send';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../plugins/auth.js';
@@ -230,35 +232,31 @@ export async function libraryRoutes(app: FastifyInstance) {
     return 'audio/mpeg';
   }
 
-  function sendLibraryStream(
+  async function sendLibraryStream(
     request: import('fastify').FastifyRequest,
     reply: import('fastify').FastifyReply,
     safePath: string,
     contentType: string
   ) {
-    const stat = statSync(safePath);
-    const range = request.headers.range;
-    if (range) {
-      const match = /bytes=(\d*)-(\d*)/.exec(range);
-      if (!match) return reply.status(416).send();
-      const start = match[1] ? parseInt(match[1], 10) : 0;
-      const end = match[2] ? parseInt(match[2], 10) : stat.size - 1;
-      if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= stat.size) {
-        return reply.status(416).send();
-      }
-      reply
-        .status(206)
-        .header('Content-Type', contentType)
-        .header('Accept-Ranges', 'bytes')
-        .header('Content-Range', `bytes ${start}-${end}/${stat.size}`)
-        .header('Content-Length', String(end - start + 1));
-      return reply.send(createReadStream(safePath, { start, end }));
+    const result = await send(request.raw, basename(safePath), {
+      root: dirname(safePath),
+      contentType: false,
+      acceptRanges: true,
+      cacheControl: false,
+    });
+
+    if (result.type === 'error') {
+      const err = result.metadata.error as Error & { status?: number };
+      return reply.status(err.status ?? 500).send({ error: err.message ?? 'Internal Server Error' });
     }
-    reply
-      .header('Content-Type', contentType)
-      .header('Accept-Ranges', 'bytes')
-      .header('Content-Length', String(stat.size));
-    return reply.send(createReadStream(safePath));
+
+    reply.code(result.statusCode);
+    const headers = result.headers as Record<string, string>;
+    for (const [key, value] of Object.entries(headers)) {
+      if (value !== undefined) reply.header(key, value);
+    }
+    reply.header('Content-Type', contentType);
+    return reply.send(result.stream);
   }
 
   app.get(

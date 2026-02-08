@@ -25,6 +25,9 @@ importers:
       '@fastify/multipart':
         specifier: ^9.4.0
         version: 9.4.0
+      '@fastify/send':
+        specifier: ^4.1.0
+        version: 4.1.0
       '@fastify/static':
         specifier: ^9.0.0
         version: 9.0.0

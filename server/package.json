@@ -16,25 +16,26 @@
     "reset-password": "tsx src/db/reset-first-user-password.ts"
   },
   "dependencies": {
-    "@fastify/static": "^9.0.0",
+    "@aws-sdk/client-s3": "^3.985.0",
     "@fastify/cookie": "^10.0.1",
     "@fastify/cors": "^10.0.1",
     "@fastify/jwt": "^9.0.1",
     "@fastify/multipart": "^9.4.0",
+    "@fastify/send": "^4.1.0",
+    "@fastify/static": "^9.0.0",
     "@harborfm/shared": "workspace:*",
+    "argon2": "^0.44.0",
     "better-sqlite3": "^12.6.2",
     "fastify": "^5.7.4",
-    "@aws-sdk/client-s3": "^3.985.0",
-    "argon2": "^0.44.0",
     "nanoid": "^5.1.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",
+    "eslint": "^9",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "@eslint/js": "^9",
-    "eslint": "^9",
     "typescript-eslint": "^8.54.0"
   }
 }

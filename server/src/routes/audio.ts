@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { createReadStream, statSync, unlinkSync } from 'fs';
-import { extname } from 'path';
+import { extname, dirname, basename } from 'path';
+import send from '@fastify/send';
 import { existsSync } from 'fs';
 import { db } from '../db/index.js';
 import { requireAuth } from '../plugins/auth.js';
@@ -235,46 +236,30 @@ export async function audioRoutes(app: FastifyInstance) {
 
       const allowedBase = processedDir(podcastId.trim(), episodeId.trim());
       const safePath = assertPathUnder(path, allowedBase);
-      
-      const stats = statSync(safePath);
-      const fileSize = stats.size;
-      const range = request.headers.range;
       const mime = (episode.audio_mime as string) || 'audio/mpeg';
 
-      // Support Range requests for seeking
-      if (range) {
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        
-        // Validate range
-        if (isNaN(start) || isNaN(end) || start > end || start < 0 || end >= fileSize) {
-          return reply
-            .code(416)
-            .header('Content-Range', `bytes */${fileSize}`)
-            .send({ error: 'Range Not Satisfiable' });
-        }
-        
-        const chunksize = (end - start) + 1;
-        const stream = createReadStream(safePath, { start, end });
+      const result = await send(request.raw, basename(safePath), {
+        root: dirname(safePath),
+        contentType: false, // set manually from episode.audio_mime
+        maxAge: 3600,
+        acceptRanges: true,
+        cacheControl: true,
+      });
 
-        return reply
-          .code(206)
-          .header('Content-Range', `bytes ${start}-${end}/${fileSize}`)
-          .header('Accept-Ranges', 'bytes')
-          .header('Content-Length', chunksize)
-          .header('Content-Type', mime)
-          .header('Cache-Control', 'public, max-age=3600')
-          .send(stream);
-      } else {
-        // No range request, send full file
-        return reply
-          .header('Content-Type', mime)
-          .header('Content-Length', fileSize)
-          .header('Accept-Ranges', 'bytes')
-          .header('Cache-Control', 'public, max-age=3600')
-          .send(createReadStream(safePath));
+      if (result.type === 'error') {
+        const err = result.metadata.error as Error & { status?: number };
+        const status = err.status ?? 500;
+        const message = err.message ?? 'Internal Server Error';
+        return reply.status(status).send({ error: message });
       }
+
+      reply.code(result.statusCode);
+      const headers = result.headers as Record<string, string>;
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== undefined) reply.header(key, value);
+      }
+      reply.header('Content-Type', mime);
+      return reply.send(result.stream);
     }
   );
 }
