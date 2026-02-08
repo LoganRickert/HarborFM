@@ -1,32 +1,10 @@
 import { useEffect } from 'react';
-import { slugify } from './utils';
+import { slugify, type EpisodeForm } from './utils';
 import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeDetailsFormProps {
-  title: string;
-  setTitle: (v: string) => void;
-  slug: string;
-  setSlug: (v: string) => void;
-  description: string;
-  setDescription: (v: string) => void;
-  artworkUrl: string;
-  setArtworkUrl: (v: string) => void;
-  seasonNumber: string;
-  setSeasonNumber: (v: string) => void;
-  episodeNumber: string;
-  setEpisodeNumber: (v: string) => void;
-  status: string;
-  setStatus: (v: string) => void;
-  publishAt: string;
-  setPublishAt: (v: string) => void;
-  explicit: boolean;
-  setExplicit: (v: boolean) => void;
-  episodeType: string;
-  setEpisodeType: (v: 'full' | 'trailer' | 'bonus' | '') => void;
-  episodeLink: string;
-  setEpisodeLink: (v: string) => void;
-  guidIsPermalink: boolean;
-  setGuidIsPermalink: (v: boolean) => void;
+  form: EpisodeForm;
+  setForm: React.Dispatch<React.SetStateAction<EpisodeForm>>;
   descriptionTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
   slugDisabled?: boolean;
   onSave: () => void;
@@ -37,30 +15,8 @@ export interface EpisodeDetailsFormProps {
 }
 
 export function EpisodeDetailsForm({
-  title,
-  setTitle,
-  slug,
-  setSlug,
-  description,
-  setDescription,
-  artworkUrl,
-  setArtworkUrl,
-  seasonNumber,
-  setSeasonNumber,
-  episodeNumber,
-  setEpisodeNumber,
-  status,
-  setStatus,
-  publishAt,
-  setPublishAt,
-  explicit,
-  setExplicit,
-  episodeType,
-  setEpisodeType,
-  episodeLink,
-  setEpisodeLink,
-  guidIsPermalink,
-  setGuidIsPermalink,
+  form,
+  setForm,
   descriptionTextareaRef,
   slugDisabled,
   onSave,
@@ -74,7 +30,7 @@ export function EpisodeDetailsForm({
       descriptionTextareaRef.current.style.height = 'auto';
       descriptionTextareaRef.current.style.height = `${descriptionTextareaRef.current.scrollHeight}px`;
     }
-  }, [description, descriptionTextareaRef]);
+  }, [form.description, descriptionTextareaRef]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -89,10 +45,14 @@ export function EpisodeDetailsForm({
         Title
         <input
           type="text"
-          value={title}
+          value={form.title}
           onChange={(e) => {
-            setTitle(e.target.value);
-            if (!slug || slug === slugify(title)) setSlug(slugify(e.target.value));
+            const v = e.target.value;
+            setForm((prev) => ({
+              ...prev,
+              title: v,
+              ...((!prev.slug || prev.slug === slugify(prev.title)) ? { slug: slugify(v) } : {}),
+            }));
           }}
           className={styles.input}
           required
@@ -103,8 +63,8 @@ export function EpisodeDetailsForm({
         <span className={styles.labelHint}>Used in URLs — lowercase, numbers, hyphens only</span>
         <input
           type="text"
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
+          value={form.slug}
+          onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))}
           className={styles.input}
           placeholder="auto-generated-from-title"
           pattern="[a-z0-9\-]+"
@@ -116,10 +76,10 @@ export function EpisodeDetailsForm({
         Description
         <textarea
           ref={descriptionTextareaRef}
-          value={description}
+          value={form.description}
           onChange={(e) => {
-            setDescription(e.target.value);
             const ta = e.target;
+            setForm((prev) => ({ ...prev, description: ta.value }));
             ta.style.height = 'auto';
             ta.style.height = `${ta.scrollHeight}px`;
           }}
@@ -130,17 +90,37 @@ export function EpisodeDetailsForm({
       </label>
       <label className={styles.label}>
         Cover Image URL
-        <input type="url" value={artworkUrl} onChange={(e) => setArtworkUrl(e.target.value)} className={styles.input} placeholder="https://example.com/image.jpg" />
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>URL for the episode cover image (optional)</p>
+        <input
+          type="url"
+          value={form.artworkUrl}
+          onChange={(e) => setForm((prev) => ({ ...prev, artworkUrl: e.target.value }))}
+          className={styles.input}
+          placeholder="https://example.com/image.jpg"
+        />
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+          URL for the episode cover image (optional)
+        </p>
       </label>
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <label className={styles.label} style={{ flex: '1 1 80px' }}>
           Season
-          <input type="number" min={0} value={seasonNumber} onChange={(e) => setSeasonNumber(e.target.value)} className={styles.input} />
+          <input
+            type="number"
+            min={0}
+            value={form.seasonNumber}
+            onChange={(e) => setForm((prev) => ({ ...prev, seasonNumber: e.target.value }))}
+            className={styles.input}
+          />
         </label>
         <label className={styles.label} style={{ flex: '1 1 80px' }}>
           Episode
-          <input type="number" min={0} value={episodeNumber} onChange={(e) => setEpisodeNumber(e.target.value)} className={styles.input} />
+          <input
+            type="number"
+            min={0}
+            value={form.episodeNumber}
+            onChange={(e) => setForm((prev) => ({ ...prev, episodeNumber: e.target.value }))}
+            className={styles.input}
+          />
         </label>
       </div>
       <label className={styles.label}>
@@ -150,9 +130,9 @@ export function EpisodeDetailsForm({
             <button
               key={s}
               type="button"
-              className={status === s ? styles.statusToggleActive : styles.statusToggleBtn}
-              onClick={() => setStatus(s)}
-              aria-pressed={status === s}
+              className={form.status === s ? styles.statusToggleActive : styles.statusToggleBtn}
+              onClick={() => setForm((prev) => ({ ...prev, status: s }))}
+              aria-pressed={form.status === s}
             >
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
@@ -161,16 +141,31 @@ export function EpisodeDetailsForm({
       </label>
       <label className={styles.label}>
         Publish at (optional)
-        <input type="datetime-local" value={publishAt} onChange={(e) => setPublishAt(e.target.value)} className={styles.input} />
+        <input
+          type="datetime-local"
+          value={form.publishAt}
+          onChange={(e) => setForm((prev) => ({ ...prev, publishAt: e.target.value }))}
+          className={styles.input}
+        />
       </label>
       <label className="toggle">
-        <input type="checkbox" checked={explicit} onChange={(e) => setExplicit(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={form.explicit}
+          onChange={(e) => setForm((prev) => ({ ...prev, explicit: e.target.checked }))}
+        />
         <span className="toggle__track" aria-hidden="true" />
         <span>Explicit</span>
       </label>
       <label className={styles.label}>
         Episode Type
-        <select value={episodeType || 'full'} onChange={(e) => setEpisodeType(e.target.value as 'full' | 'trailer' | 'bonus' | '')} className={styles.input}>
+        <select
+          value={form.episodeType || 'full'}
+          onChange={(e) =>
+            setForm((prev) => ({ ...prev, episodeType: e.target.value as 'full' | 'trailer' | 'bonus' | '' }))
+          }
+          className={styles.input}
+        >
           <option value="full">Full</option>
           <option value="trailer">Trailer</option>
           <option value="bonus">Bonus</option>
@@ -178,11 +173,23 @@ export function EpisodeDetailsForm({
       </label>
       <label className={styles.label}>
         Episode Link
-        <input type="url" value={episodeLink} onChange={(e) => setEpisodeLink(e.target.value)} className={styles.input} placeholder="https://example.com/episode-page" />
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>URL to the episode's web page (optional)</p>
+        <input
+          type="url"
+          value={form.episodeLink}
+          onChange={(e) => setForm((prev) => ({ ...prev, episodeLink: e.target.value }))}
+          className={styles.input}
+          placeholder="https://example.com/episode-page"
+        />
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+          URL to the episode's web page (optional)
+        </p>
       </label>
       <label className="toggle">
-        <input type="checkbox" checked={guidIsPermalink} onChange={(e) => setGuidIsPermalink(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={form.guidIsPermalink}
+          onChange={(e) => setForm((prev) => ({ ...prev, guidIsPermalink: e.target.checked }))}
+        />
         <span className="toggle__track" aria-hidden="true" />
         <span>GUID is permalink</span>
       </label>
