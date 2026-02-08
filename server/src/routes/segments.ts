@@ -310,28 +310,42 @@ export async function segmentRoutes(app: FastifyInstance) {
       const ext = audio.path.toLowerCase().endsWith('.webm') ? 'webm' : audio.path.toLowerCase().endsWith('.wav') ? 'wav' : 'mp3';
       const contentType = ext === 'webm' ? 'audio/webm' : ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
       const stat = statSync(safePath);
-      const range = request.headers.range;
+      const range = typeof request.headers.range === 'string' ? request.headers.range.trim() : undefined;
+      // Safari often sends bytes=0-1 as a probe; sending 2 bytes breaks playback. Treat tiny ranges as full file.
+      const MIN_RANGE_BYTES = 64 * 1024;
+      let start = 0;
+      let end = stat.size - 1;
       if (range) {
-        const match = /bytes=(\d*)-(\d*)/.exec(range);
-        if (!match) return reply.status(416).send();
-        const start = match[1] ? parseInt(match[1], 10) : 0;
-        const end = match[2] ? parseInt(match[2], 10) : stat.size - 1;
-        if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= stat.size) {
-          return reply.status(416).send();
+        const suffixMatch = /^bytes=-(\d+)$/.exec(range);
+        if (suffixMatch) {
+          const suffix = parseInt(suffixMatch[1], 10);
+          if (Number.isNaN(suffix) || suffix <= 0) return reply.status(416).send();
+          start = Math.max(0, stat.size - suffix);
+          end = stat.size - 1;
+        } else {
+          const match = /^bytes=(\d*)-(\d*)/.exec(range);
+          if (!match) return reply.status(416).send();
+          start = match[1] !== '' ? parseInt(match[1], 10) : 0;
+          end = match[2] !== '' ? parseInt(match[2], 10) : stat.size - 1;
+          if (Number.isNaN(start) || start < 0 || start > end) return reply.status(416).send();
+          end = Math.min(end, stat.size - 1);
         }
-        reply
-          .status(206)
-          .header('Content-Type', contentType)
-          .header('Accept-Ranges', 'bytes')
-          .header('Content-Range', `bytes ${start}-${end}/${stat.size}`)
-          .header('Content-Length', String(end - start + 1));
-        return reply.send(createReadStream(safePath, { start, end }));
+        if (start > end || start >= stat.size) return reply.status(416).send();
+        const requestedLength = end - start + 1;
+        if (requestedLength < MIN_RANGE_BYTES) {
+          start = 0;
+          end = stat.size - 1;
+        }
       }
-      return reply
+      const contentLength = end - start + 1;
+      reply
+        .status(206)
         .header('Content-Type', contentType)
         .header('Accept-Ranges', 'bytes')
-        .header('Content-Length', String(stat.size))
-        .send(createReadStream(safePath));
+        .header('Content-Range', `bytes ${start}-${end}/${stat.size}`)
+        .header('Content-Length', String(contentLength))
+        .header('Cache-Control', 'private, no-transform');
+      return reply.send(createReadStream(safePath, { start, end }));
     }
   );
 

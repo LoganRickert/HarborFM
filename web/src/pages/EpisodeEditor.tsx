@@ -2066,6 +2066,7 @@ function SegmentRow({
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressTrackRef = useRef<HTMLDivElement>(null);
+  const loadedSegmentIdRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const durationSec = segment.duration_sec ?? 0;
@@ -2075,6 +2076,10 @@ function SegmentRow({
   useEffect(() => {
     setLocalName(segment.name ?? '');
   }, [segment.name]);
+
+  useEffect(() => {
+    loadedSegmentIdRef.current = null;
+  }, [episodeId, segment.id]);
 
   function handleNameBlur() {
     const trimmed = localName.trim();
@@ -2089,7 +2094,11 @@ function SegmentRow({
       el.pause();
     } else {
       onPlayRequest(segment.id);
-      el.src = segmentStreamUrl(episodeId, segment.id);
+      // Only set src when we don't already have this segment loaded so seeking then play keeps position
+      if (loadedSegmentIdRef.current !== segment.id) {
+        loadedSegmentIdRef.current = segment.id;
+        el.src = segmentStreamUrl(episodeId, segment.id);
+      }
       el.play().catch(() => {});
     }
   }
@@ -2105,7 +2114,10 @@ function SegmentRow({
     if (!el || !track || durationSec <= 0) return;
     const rect = track.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const time = frac * durationSec;
+    let time = frac * durationSec;
+    if (Number.isFinite(el.duration) && el.duration > 0) {
+      time = Math.min(time, el.duration);
+    }
     el.currentTime = time;
     setCurrentTime(time);
   }
