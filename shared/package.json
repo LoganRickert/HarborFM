@@ -18,7 +18,7 @@
     "test": "echo \"No tests yet\""
   },
   "dependencies": {
-    "zod": "^3.25.69"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

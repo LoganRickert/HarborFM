@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const emptyStringToNull = <T extends z.ZodTypeAny>(schema: T) =>
+const emptyStringToNull = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (v === '' ? null : v), schema);
 
 const nullableOptionalString = emptyStringToNull(z.string().nullable().optional());
@@ -8,8 +8,8 @@ const nullableOptionalUrl = emptyStringToNull(z.string().url().nullable().option
 const nullableOptionalUuid = emptyStringToNull(z.string().uuid().nullable().optional());
 
 export const podcastCreateSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  slug: z.string().min(1).regex(/^[a-z0-9-]+$/, 'Slug: lowercase letters, numbers, hyphens only'),
+  title: z.string().min(1, { message: 'Title is required' }),
+  slug: z.string().min(1).regex(/^[a-z0-9-]+$/, { message: 'Slug: lowercase letters, numbers, hyphens only' }),
   description: z.string().default(''),
   language: z.string().length(2).default('en'),
   author_name: z.string().default(''),

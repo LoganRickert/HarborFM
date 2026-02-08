@@ -56,6 +56,14 @@ function formatLibraryDate(createdAt: string): string {
   }
 }
 
+/** Format ISO date string for datetime-local input (local time, with seconds for Safari). */
+function toDateTimeLocalValue(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 export function EpisodeEditor() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -207,7 +215,7 @@ export function EpisodeEditor() {
         }
       }, 0);
       setExplicit(!!episode.explicit);
-      setPublishAt(episode.publish_at ? episode.publish_at.slice(0, 16) : '');
+      setPublishAt(episode.publish_at ? toDateTimeLocalValue(episode.publish_at) : '');
       setEditing(true);
     }
   }, [episode]);
