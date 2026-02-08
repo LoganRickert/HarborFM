@@ -2207,6 +2207,7 @@ function RecordModal({
   const [seconds, setSeconds] = useState(0);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [sectionName, setSectionName] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [playbackCurrentTime, setPlaybackCurrentTime] = useState(0);
   const [playbackDuration, setPlaybackDuration] = useState(0);
@@ -2229,6 +2230,14 @@ function RecordModal({
       wakeLockRef.current = null;
     }
   }
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    setIsMobile(mq.matches);
+    const handler = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -2447,6 +2456,9 @@ function RecordModal({
               ■
             </button>
           </>
+        )}
+        {isMobile && !blob && (
+          <p className={styles.recordMobileNote}>Please do not navigate away from this page or the recording may be stopped or lost.</p>
         )}
         {blob && !recording && (
           <>

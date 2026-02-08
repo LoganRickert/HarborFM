@@ -696,6 +696,13 @@
   color: var(--text-muted);
 }
 
+.recordMobileNote {
+  margin: 1.5rem 0 1rem;
+  font-size: 0.875rem;
+  font-weight: bold;
+  color: var(--text-muted);
+}
+
 .recordLabel {
   display: flex;
   flex-direction: column;
