@@ -73,8 +73,17 @@ export function updateSegment(episodeId: string, segmentId: string, payload: { n
   });
 }
 
-export function segmentStreamUrl(episodeId: string, segmentId: string): string {
-  return `${BASE}/episodes/${episodeId}/segments/${segmentId}/stream`;
+/** Include audioPath to bust cache when the segment file changes (e.g. after trim → new .wav). */
+export function segmentStreamUrl(episodeId: string, segmentId: string, audioPath?: string | null): string {
+  const url = `${BASE}/episodes/${episodeId}/segments/${segmentId}/stream`;
+  if (audioPath) {
+    return `${url}?v=${encodeURIComponent(audioPath)}`;
+  }
+  return url;
+}
+
+export function segmentWaveformUrl(episodeId: string, segmentId: string): string {
+  return `${BASE}/episodes/${episodeId}/segments/${segmentId}/waveform`;
 }
 
 export function getSegmentTranscript(episodeId: string, segmentId: string): Promise<{ text: string }> {

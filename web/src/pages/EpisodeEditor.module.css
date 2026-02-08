@@ -236,6 +236,14 @@
   margin-bottom: 1.5rem;
 }
 
+.sectionsPanel {
+  margin-bottom: 1.5rem;
+}
+
+.sectionsPanelHeader {
+  margin-bottom: 1rem;
+}
+
 .sectionTitle {
   margin: 0 0 0.5rem;
   font-size: 1rem;
@@ -348,12 +356,23 @@
 
 .segmentBlock {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.75rem 1rem;
   background: var(--bg-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+.segmentBlockTop {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.segmentWaveformRow {
+  width: 100%;
+  min-width: 0;
 }
 
 .segmentIcon {
@@ -403,6 +422,13 @@
   color: var(--text-muted);
 }
 
+/* Prevent iOS zoom on focus: inputs with font-size < 16px trigger zoom */
+@media (max-width: 768px) {
+  .segmentNameInput {
+    font-size: 16px;
+  }
+}
+
 .segmentMeta {
   font-size: 0.8125rem;
   color: var(--text-muted);
@@ -410,9 +436,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.segmentWaveformRow .segmentProgressTrack {
+  margin-top: 0;
+}
+
 .segmentProgressTrack {
   height: 6px;
-  margin-top: 0.5rem;
+  margin-top: 0;
   background: var(--bg-elevated);
   border-radius: 3px;
   cursor: pointer;
@@ -431,6 +461,33 @@
   transition: width 0.1s linear;
 }
 
+.segmentWaveformRow .waveformTrack {
+  margin-top: 0;
+}
+
+.waveformTrack {
+  margin-top: 0;
+  height: 32px;
+  min-height: 32px;
+  width: 100%;
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.waveformTrack:hover {
+  border-color: var(--accent);
+}
+
+.waveformCanvas {
+  display: block;
+  width: 100%;
+  height: 32px;
+  vertical-align: top;
+}
+
 .segmentActions {
   display: flex;
   align-items: center;
@@ -438,12 +495,12 @@
 }
 
 @media (max-width: 600px) {
-  .segmentBlock {
+  .segmentBlockTop {
     flex-wrap: wrap;
   }
-  .segmentActions {
+  .segmentBlockTop .segmentActions {
     flex-basis: 100%;
-    margin-top: 0.5rem;
+    margin-top: 0.25rem;
     margin-left: 0;
     justify-content: center;
   }
@@ -455,20 +512,103 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--success);
   border-radius: var(--radius);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.segmentBtn:hover {
-  color: var(--text);
+.segmentBtn:hover:not(:disabled) {
+  color: var(--success);
   background: var(--bg-elevated);
 }
 .segmentBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  color: var(--success);
+}
+
+/* Generate final bar — prominent at top of sections */
+.generateBar {
+  margin-bottom: 1.25rem;
+  padding: 1.5rem;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 212, 170, 0.35);
+  background: linear-gradient(135deg, rgba(0, 212, 170, 0.08), rgba(0, 0, 0, 0)), var(--bg-elevated);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+
+.generateBar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(120deg, rgba(0, 212, 170, 0.5), rgba(0, 0, 0, 0));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.generateBarHeader {
+  margin-bottom: 1rem;
+}
+
+.generateBarTitle {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.generateBarSub {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.generateBarPlayback {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  min-height: 32px;
+}
+
+.generateBarWaveform {
+  flex: 1;
+  min-width: 0;
+}
+
+.generateBarProgressPlaceholder {
+  flex: 1;
+  min-height: 32px;
+  background: var(--bg-muted);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.generateBarInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.generateBarActions {
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .renderRow {
@@ -741,10 +881,10 @@
   justify-content: center;
   font-size: 1.5rem;
   margin: 0 auto 1rem;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: box-shadow 0.15s;
 }
 .recordBtn:hover:not(:disabled) {
-  transform: scale(1.05);
+  box-shadow: 0 0 32px rgba(255, 107, 107, 0.55);
 }
 .recordBtn.record {
   background: var(--error);
@@ -766,6 +906,37 @@
   font-size: 1.25rem;
   color: var(--text-muted);
   margin-bottom: 1rem;
+}
+
+.recordLevelWrap {
+  margin-bottom: 1rem;
+}
+
+.recordLevelBar {
+  height: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.recordLevelFill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.05s ease-out;
+}
+
+.recordLevelHint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.recordLevelHint:empty {
+  display: none;
 }
 
 .recordPlaybackWrap {
@@ -1151,6 +1322,37 @@
 }
 .dialogContentWide {
   max-width: 420px;
+  max-height: min(90vh, 720px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.dialogContentWide .dialogTitle {
+  flex-shrink: 0;
+}
+.dialogBodyScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  margin: 0 -0.25rem 0 0;
+  padding-right: 0.25rem;
+}
+.dialogBodyScroll::-webkit-scrollbar {
+  width: 8px;
+}
+.dialogBodyScroll::-webkit-scrollbar-track {
+  background: var(--bg-muted);
+  border-radius: 4px;
+}
+.dialogBodyScroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.dialogBodyScroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 @media (min-width: 640px) {
   .dialogContentWide {
@@ -1547,4 +1749,86 @@
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Details summary card (compact, click to edit) */
+.detailsSummaryCard {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: var(--bg-elevated);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.detailsSummaryMain {
+  min-width: 0;
+  flex: 1;
+}
+
+.detailsSummaryTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.detailsSummaryMeta {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.detailsSummaryEditBtn {
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.detailsSummaryEditBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* Mobile: reduce padding so content isn’t squeezed by multiple cards */
+@media (max-width: 640px) {
+  .page {
+    padding: 0.75rem 1rem;
+  }
+
+  .card {
+    padding: 1.25rem 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .detailsSummaryCard {
+    padding: 0.875rem 1rem;
+  }
+
+  .generateBar {
+    padding: 1.25rem 1rem;
+  }
+
+  .generateBarInner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .generateBarActions {
+    justify-content: center;
+  }
 }

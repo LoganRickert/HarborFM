@@ -1,12 +1,27 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { statSync } from 'fs';
-import { join, dirname, extname } from 'path';
+import { statSync, unlinkSync } from 'fs';
+import { join, dirname, extname, basename, resolve, sep } from 'path';
+import { tmpdir } from 'os';
 import { processedDir, uploadsDir, getDataDir, assertPathUnder, ensureDir } from './paths.js';
+
+/** Allow output to allowedBaseDir or to os.tmpdir(); ensures output dir is under one of them. */
+function prepareOutputPath(outputPath: string, allowedBaseDir: string): void {
+  const outDir = dirname(outputPath);
+  ensureDir(outDir);
+  const resolvedOut = resolve(outDir);
+  const resolvedTmp = resolve(tmpdir());
+  if (resolvedOut === resolvedTmp || resolvedOut.startsWith(resolvedTmp + sep)) {
+    assertPathUnder(outDir, tmpdir());
+    return;
+  }
+  assertPathUnder(outDir, allowedBaseDir);
+}
 
 const exec = promisify(execFile);
 const FFPROBE = process.env.FFPROBE_PATH ?? 'ffprobe';
 const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg';
+const AUDIOWAVEFORM = process.env.AUDIOWAVEFORM_PATH ?? 'audiowaveform';
 
 export interface ProbeResult {
   durationSec: number;
@@ -95,6 +110,59 @@ export async function probeAudio(filePath: string, allowedBaseDir: string): Prom
     sizeBytes: stat.size,
     mime,
   };
+}
+
+/**
+ * Normalize an uploaded audio file: if it's not MP3 or WAV, re-encode to MP3 with ffmpeg
+ * and return the path to the MP3 (original file is removed). If it's already MP3 or WAV,
+ * return the path unchanged.
+ */
+export async function normalizeUploadToMp3OrWav(
+  inputPath: string,
+  inputExt: string,
+  allowedBaseDir: string
+): Promise<{ path: string; mime: string; ext: string }> {
+  const ext = inputExt.toLowerCase().replace(/^\./, '');
+  if (ext === 'mp3') {
+    return { path: assertPathUnder(inputPath, allowedBaseDir), mime: 'audio/mpeg', ext: 'mp3' };
+  }
+  if (ext === 'wav') {
+    return { path: assertPathUnder(inputPath, allowedBaseDir), mime: 'audio/wav', ext: 'wav' };
+  }
+  const safeIn = assertPathUnder(inputPath, allowedBaseDir);
+  const outPath = join(dirname(safeIn), basename(safeIn, extname(safeIn)) + '.mp3');
+  ensureDir(dirname(outPath));
+  await exec(FFMPEG, [
+    '-i', safeIn,
+    '-acodec', 'libmp3lame',
+    '-b:a', '128k',
+    '-y',
+    outPath,
+  ], { maxBuffer: 1024 * 1024 });
+  try {
+    unlinkSync(safeIn);
+  } catch {
+    // best-effort remove original
+  }
+  return { path: assertPathUnder(outPath, allowedBaseDir), mime: 'audio/mpeg', ext: 'mp3' };
+}
+
+/**
+ * Generate a waveform JSON file alongside an audio file using audiowaveform.
+ * Output path: same directory, same base name, extension .waveform.json.
+ * Input path must be under allowedBaseDir; output is validated the same way.
+ */
+export async function generateWaveformFile(audioPath: string, allowedBaseDir: string): Promise<string> {
+  const safeIn = assertPathUnder(audioPath, allowedBaseDir);
+  const outPath = join(dirname(safeIn), basename(safeIn, extname(safeIn)) + '.waveform.json');
+  assertPathUnder(dirname(outPath), allowedBaseDir);
+  await exec(AUDIOWAVEFORM, [
+    '-i', safeIn,
+    '-o', outPath,
+    '--pixels-per-second', '4',
+    '--bits', '8',
+  ], { maxBuffer: 4 * 1024 * 1024 });
+  return assertPathUnder(outPath, allowedBaseDir);
 }
 
 export function getFinalOutputPath(podcastId: string, episodeId: string, format: FinalAudioFormat): string {
@@ -332,11 +400,9 @@ export async function trimAudioToWav(
   outputPath: string
 ): Promise<string> {
   const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
-  const outDir = dirname(outputPath);
-  ensureDir(outDir);
-  assertPathUnder(outDir, allowedBaseDir);
+  prepareOutputPath(outputPath, allowedBaseDir);
   const safeOut = outputPath;
-  
+
   // Get total duration if we need to calculate endSec
   let totalDurationSec: number | undefined;
   if (endSec === undefined) {
@@ -383,11 +449,9 @@ export async function removeSilenceFromWav(
   outputPath: string
 ): Promise<string> {
   const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
-  const outDir = dirname(outputPath);
-  ensureDir(outDir);
-  assertPathUnder(outDir, allowedBaseDir);
+  prepareOutputPath(outputPath, allowedBaseDir);
   const safeOut = outputPath;
-  
+
   // First, detect silence periods using silencedetect filter
   // silencedetect outputs: silence_start, silence_end, silence_duration
   const { stderr } = await exec(FFMPEG, [
@@ -555,9 +619,7 @@ export async function applyNoiseSuppressionToWav(
   outputPath: string
 ): Promise<string> {
   const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
-  const outDir = dirname(outputPath);
-  ensureDir(outDir);
-  assertPathUnder(outDir, allowedBaseDir);
+  prepareOutputPath(outputPath, allowedBaseDir);
   const safeOut = outputPath;
   const clampedNf = Math.max(AFFTDN_NF_MIN, Math.min(AFFTDN_NF_MAX, nf));
   const ext = extname(outputPath);

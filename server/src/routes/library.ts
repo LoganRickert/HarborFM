@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { createReadStream, existsSync, statSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { dirname, basename } from 'path';
 import send from '@fastify/send';
 import { nanoid } from 'nanoid';
@@ -8,7 +8,7 @@ import { requireAuth, requireAdmin } from '../plugins/auth.js';
 import { libraryDir, libraryAssetPath } from '../services/paths.js';
 import { assertPathUnder } from '../services/paths.js';
 import * as audioService from '../services/audio.js';
-import { FileTooLargeError, streamToFileWithLimit } from '../services/uploads.js';
+import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/ogg'];
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB per library asset
@@ -48,7 +48,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       const name = (data.fields?.name as { value?: string })?.value?.trim() || data.filename?.replace(/\.[^.]+$/, '') || 'Untitled';
       const tag = (data.fields?.tag as { value?: string })?.value?.trim() || null;
       const id = nanoid();
-      const ext = mimetype.includes('wav') ? 'wav' : mimetype.includes('webm') ? 'webm' : mimetype.includes('ogg') ? 'ogg' : 'mp3';
+      const ext = extensionFromAudioMimetype(mimetype);
       const destPath = libraryAssetPath(request.userId, id, ext);
       let bytesWritten = 0;
       try {
@@ -61,10 +61,26 @@ export async function libraryRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
-      let durationSec = 0;
       const dir = libraryDir(request.userId);
+      let finalPath = destPath;
       try {
-        const probe = await audioService.probeAudio(destPath, dir);
+        const normalized = await audioService.normalizeUploadToMp3OrWav(destPath, ext, dir);
+        finalPath = normalized.path;
+        bytesWritten = statSync(finalPath).size;
+      } catch (err) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Failed to process audio file' });
+      }
+
+      try {
+        await audioService.generateWaveformFile(finalPath, dir);
+      } catch (err) {
+        request.log.warn({ err, finalPath }, 'Waveform generation failed (upload succeeded)');
+      }
+
+      let durationSec = 0;
+      try {
+        const probe = await audioService.probeAudio(finalPath, dir);
         durationSec = probe.durationSec;
       } catch {
         // keep 0
@@ -73,7 +89,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       db.prepare(
         `INSERT INTO reusable_assets (id, owner_user_id, name, tag, audio_path, duration_sec)
          VALUES (?, ?, ?, ?, ?, ?)`
-      ).run(id, request.userId, name, tag, destPath, durationSec);
+      ).run(id, request.userId, name, tag, finalPath, durationSec);
 
       // Track disk usage (best-effort)
       db.prepare(

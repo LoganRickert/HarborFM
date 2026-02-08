@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth';
 import { getEpisode, updateEpisode } from '../api/episodes';
@@ -23,46 +23,21 @@ import {
   applyNoiseSuppressionToSegment,
   type EpisodeSegment,
 } from '../api/segments';
-import { listLibrary, createLibraryAsset, type LibraryAsset } from '../api/library';
 import { getLlmAvailable, askLlm } from '../api/llm';
 import { getAsrAvailable } from '../api/asr';
-import { RotateCcw, PlusCircle, Mic, Library, Play, Pause, FileAudio, Upload, ArrowDown, ArrowUp, Info, FileText, Trash2, Plus, Minus } from 'lucide-react';
+import { Play, Pause, FileText, Trash2, Plus, Minus } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { FullPageLoading } from '../components/Loading';
+import { toDateTimeLocalValue, slugify, formatDuration } from './EpisodeEditor/utils';
+import { EpisodeDetailsSummaryCard } from './EpisodeEditor/EpisodeDetailsSummaryCard';
+import { EpisodeDetailsForm } from './EpisodeEditor/EpisodeDetailsForm';
+import { GenerateFinalBar } from './EpisodeEditor/GenerateFinalBar';
+import { EpisodeSectionsPanel } from './EpisodeEditor/EpisodeSectionsPanel';
+import { RecordModal } from './EpisodeEditor/RecordModal';
+import { LibraryModal } from './EpisodeEditor/LibraryModal';
+import { DeleteSegmentDialog } from './EpisodeEditor/DeleteSegmentDialog';
+import { DeleteTranscriptSegmentDialog } from './EpisodeEditor/DeleteTranscriptSegmentDialog';
 import styles from './EpisodeEditor.module.css';
-
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-}
-
-function formatDuration(sec: number): string {
-  if (!Number.isFinite(sec) || sec < 0) return '0:00';
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function formatLibraryDate(createdAt: string): string {
-  try {
-    const d = new Date(createdAt);
-    return Number.isFinite(d.getTime()) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : createdAt;
-  } catch {
-    return createdAt;
-  }
-}
-
-/** Format ISO date string for datetime-local input (local time, with seconds for Safari). */
-function toDateTimeLocalValue(iso: string): string {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return '';
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
 
 export function EpisodeEditor() {
   const { id } = useParams<{ id: string }>();
@@ -112,19 +87,12 @@ export function EpisodeEditor() {
   const [guidIsPermalink, setGuidIsPermalink] = useState(false);
   const [showRecord, setShowRecord] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const editTab = searchParams.get('tab') === 'sections' ? 'sections' : 'details';
-  const setEditTab = useCallback((tab: 'details' | 'sections') => {
-    setSearchParams(tab === 'details' ? {} : { tab: 'sections' });
-  }, [setSearchParams]);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [segmentToDelete, setSegmentToDelete] = useState<string | null>(null);
   const [segmentIdForInfo, setSegmentIdForInfo] = useState<string | null>(null);
   const [transcriptEntryToDelete, setTranscriptEntryToDelete] = useState<{ episodeId: string; segmentId: string; entryIndex: number } | null>(null);
-  const [previewingFinal, setPreviewingFinal] = useState(false);
-  const [previewIndex, setPreviewIndex] = useState(0);
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
   const playingSegmentIdRef = useRef<string | null>(null);
-  const finalPreviewRef = useRef<HTMLAudioElement | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
   const handleSegmentPlayRequest = useCallback((segmentId: string) => {
     const current = playingSegmentIdRef.current;
@@ -138,62 +106,6 @@ export function EpisodeEditor() {
     segmentPauseRef.current.delete(id);
     if (playingSegmentIdRef.current === id) playingSegmentIdRef.current = null;
   }, []);
-
-  useEffect(() => {
-    if (editTab !== 'sections' && previewingFinal) {
-      setPreviewingFinal(false);
-      setPreviewIndex(0);
-      const el = finalPreviewRef.current;
-      if (el) {
-        el.pause();
-        el.src = '';
-      }
-    }
-  }, [editTab, previewingFinal]);
-
-  useEffect(() => {
-    const el = finalPreviewRef.current;
-    if (!el) return;
-    if (!previewingFinal) {
-      el.pause();
-      el.src = '';
-      return;
-    }
-    const seg = segments[previewIndex];
-    if (!seg || !id) {
-      setPreviewingFinal(false);
-      setPreviewIndex(0);
-      el.pause();
-      el.src = '';
-      return;
-    }
-    const onEnded = () => {
-      const next = previewIndex + 1;
-      if (next >= segments.length) {
-        setPreviewingFinal(false);
-        setPreviewIndex(0);
-        return;
-      }
-      setPreviewIndex(next);
-    };
-    const onError = () => {
-      setPreviewingFinal(false);
-      setPreviewIndex(0);
-    };
-    el.addEventListener('ended', onEnded);
-    el.addEventListener('error', onError);
-    el.pause();
-    el.src = segmentStreamUrl(id, seg.id);
-    el.load();
-    el.play().catch(() => {
-      setPreviewingFinal(false);
-      setPreviewIndex(0);
-    });
-    return () => {
-      el.removeEventListener('ended', onEnded);
-      el.removeEventListener('error', onError);
-    };
-  }, [previewingFinal, previewIndex, segments, id]);
 
   useEffect(() => {
     if (episode) {
@@ -220,18 +132,6 @@ export function EpisodeEditor() {
     }
   }, [episode]);
 
-  // Recalculate textarea height when switching to details tab
-  useEffect(() => {
-    if (editTab === 'details') {
-      setTimeout(() => {
-        if (descriptionTextareaRef.current) {
-          descriptionTextareaRef.current.style.height = 'auto';
-          descriptionTextareaRef.current.style.height = `${descriptionTextareaRef.current.scrollHeight}px`;
-        }
-      }, 0);
-    }
-  }, [editTab]);
-
   const updateMutation = useMutation({
     mutationFn: () =>
       updateEpisode(id!, {
@@ -252,6 +152,7 @@ export function EpisodeEditor() {
       queryClient.invalidateQueries({ queryKey: ['episode', id] });
       queryClient.invalidateQueries({ queryKey: ['episodes', episode?.podcast_id] });
       setEditing(false);
+      setDetailsDialogOpen(false);
     },
   });
 
@@ -294,11 +195,6 @@ export function EpisodeEditor() {
     },
   });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    updateMutation.mutate();
-  }
-
   function handleMoveUp(index: number) {
     if (index <= 0) return;
     const newOrder = [...segments];
@@ -311,22 +207,6 @@ export function EpisodeEditor() {
     const newOrder = [...segments];
     [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
     reorderMutation.mutate(newOrder.map((s) => s.id));
-  }
-
-  function startPreviewSequence() {
-    if (segments.length === 0) return;
-    setPreviewIndex(0);
-    setPreviewingFinal(true);
-  }
-
-  function stopPreviewSequence() {
-    setPreviewingFinal(false);
-    setPreviewIndex(0);
-    const el = finalPreviewRef.current;
-    if (el) {
-      el.pause();
-      el.src = '';
-    }
   }
 
   if (!id) return null;
@@ -405,309 +285,87 @@ export function EpisodeEditor() {
 
       {editing && (
         <>
-          <nav className={styles.editTabs} aria-label="Edit episode">
-            <button
-              type="button"
-              className={editTab === 'details' ? styles.editTabActive : styles.editTab}
-              onClick={() => setEditTab('details')}
-              aria-label="Edit episode details"
-              aria-pressed={editTab === 'details'}
-            >
-              Details
-            </button>
-            <button
-              type="button"
-              className={editTab === 'sections' ? styles.editTabActive : styles.editTab}
-              onClick={() => setEditTab('sections')}
-              aria-label="Edit episode sections"
-              aria-pressed={editTab === 'sections'}
-            >
-              Sections
-            </button>
-          </nav>
+          <EpisodeDetailsSummaryCard
+            title={title}
+            status={status}
+            seasonNumber={seasonNumber === '' ? null : parseInt(seasonNumber, 10) || null}
+            episodeNumber={episodeNumber === '' ? null : parseInt(episodeNumber, 10) || null}
+            onEditClick={() => setDetailsDialogOpen(true)}
+          />
 
-          {editTab === 'details' && (
           <div className={styles.card}>
-            <form onSubmit={handleSubmit} className={styles.form}>
-              {updateMutation.isError && (
-                <p className={styles.error}>{updateMutation.error?.message}</p>
-              )}
-              {updateMutation.isSuccess && (
-                <p className={styles.success}>Saved.</p>
-              )}
-              <label className={styles.label}>
-                Title
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                    // Auto-generate slug from title if slug is empty or was auto-generated
-                    if (!slug || slug === slugify(title)) {
-                      setSlug(slugify(e.target.value));
-                    }
-                  }}
-                  className={styles.input}
-                  required
-                />
-              </label>
-              <label className={styles.label}>
-                Slug
-                <span className={styles.labelHint}>Used in URLs — lowercase, numbers, hyphens only</span>
-                <input
-                  type="text"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  className={styles.input}
-                  placeholder="auto-generated-from-title"
-                  pattern="[a-z0-9\-]+"
-                  required
-                  disabled={user?.role !== 'admin'}
-                />
-              </label>
-              <label className={styles.label}>
-                Description
-                <textarea
-                  ref={descriptionTextareaRef}
-                  value={description}
-                  onChange={(e) => {
-                    setDescription(e.target.value);
-                    // Auto-resize textarea
-                    const textarea = e.target;
-                    textarea.style.height = 'auto';
-                    textarea.style.height = `${textarea.scrollHeight}px`;
-                  }}
-                  className={styles.textarea}
-                  rows={4}
-                  style={{ minHeight: '80px', overflow: 'hidden' }}
-                />
-              </label>
-              <label className={styles.label}>
-                Cover Image URL
-                <input
-                  type="url"
-                  value={artworkUrl}
-                  onChange={(e) => setArtworkUrl(e.target.value)}
-                  className={styles.input}
-                  placeholder="https://example.com/image.jpg"
-                />
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-                  URL for the episode cover image (optional)
-                </p>
-              </label>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                <label className={styles.label} style={{ flex: '1 1 80px' }}>
-                  Season
-                  <input
-                    type="number"
-                    min={0}
-                    value={seasonNumber}
-                    onChange={(e) => setSeasonNumber(e.target.value)}
-                    className={styles.input}
-                  />
-                </label>
-                <label className={styles.label} style={{ flex: '1 1 80px' }}>
-                  Episode
-                  <input
-                    type="number"
-                    min={0}
-                    value={episodeNumber}
-                    onChange={(e) => setEpisodeNumber(e.target.value)}
-                    className={styles.input}
-                  />
-                </label>
-              </div>
-              <label className={styles.label}>
-                Status
-                <div className={styles.statusToggle} role="group" aria-label="Episode status">
-                  <button
-                    type="button"
-                    className={status === 'draft' ? styles.statusToggleActive : styles.statusToggleBtn}
-                    onClick={() => setStatus('draft')}
-                    aria-label="Set status to Draft"
-                    aria-pressed={status === 'draft'}
-                  >
-                    Draft
-                  </button>
-                  <button
-                    type="button"
-                    className={status === 'scheduled' ? styles.statusToggleActive : styles.statusToggleBtn}
-                    onClick={() => setStatus('scheduled')}
-                    aria-label="Set status to Scheduled"
-                    aria-pressed={status === 'scheduled'}
-                  >
-                    Scheduled
-                  </button>
-                  <button
-                    type="button"
-                    className={status === 'published' ? styles.statusToggleActive : styles.statusToggleBtn}
-                    onClick={() => setStatus('published')}
-                    aria-label="Set status to Published"
-                    aria-pressed={status === 'published'}
-                  >
-                    Published
-                  </button>
-                </div>
-              </label>
-              <label className={styles.label}>
-                Publish at (optional)
-                <input
-                  type="datetime-local"
-                  value={publishAt}
-                  onChange={(e) => setPublishAt(e.target.value)}
-                  className={styles.input}
-                />
-              </label>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={explicit}
-                  onChange={(e) => setExplicit(e.target.checked)}
-                />
-                <span className="toggle__track" aria-hidden="true" />
-                <span>Explicit</span>
-              </label>
-              <label className={styles.label}>
-                Episode Type
-                <select
-                  value={episodeType || 'full'}
-                  onChange={(e) => setEpisodeType(e.target.value as 'full' | 'trailer' | 'bonus' | '')}
-                  className={styles.input}
-                >
-                  <option value="full">Full</option>
-                  <option value="trailer">Trailer</option>
-                  <option value="bonus">Bonus</option>
-                </select>
-              </label>
-              <label className={styles.label}>
-                Episode Link
-                <input
-                  type="url"
-                  value={episodeLink}
-                  onChange={(e) => setEpisodeLink(e.target.value)}
-                  className={styles.input}
-                  placeholder="https://example.com/episode-page"
-                />
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-                  URL to the episode's web page (optional)
-                </p>
-              </label>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={guidIsPermalink}
-                  onChange={(e) => setGuidIsPermalink(e.target.checked)}
-                />
-                <span className="toggle__track" aria-hidden="true" />
-                <span>GUID is permalink</span>
-              </label>
-              <div className={styles.actions}>
-                <button type="button" className={styles.cancel} onClick={() => setEditing(false)} aria-label="Cancel editing episode">
-                  Cancel
-                </button>
-                <button type="submit" className={styles.submit} disabled={updateMutation.isPending} aria-label="Save episode changes">
-                  {updateMutation.isPending ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </form>
+            <EpisodeSectionsPanel
+              episodeId={id!}
+              segments={segments}
+              segmentsLoading={segmentsLoading}
+              onAddRecord={() => setShowRecord(true)}
+              onAddLibrary={() => setShowLibrary(true)}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
+              onDeleteRequest={setSegmentToDelete}
+              onUpdateSegmentName={(segmentId, name) => updateSegmentMutation.mutate({ segmentId, name })}
+              isDeletingSegment={deleteSegmentMutation.isPending}
+              deletingSegmentId={deleteSegmentMutation.variables ?? null}
+              onSegmentPlayRequest={handleSegmentPlayRequest}
+              onSegmentMoreInfo={setSegmentIdForInfo}
+              registerSegmentPause={registerSegmentPause}
+              unregisterSegmentPause={unregisterSegmentPause}
+            />
           </div>
-          )}
 
-          {editTab === 'sections' && (
-          <div className={styles.card}>
-            <h2 className={styles.sectionTitle}>Build your episode</h2>
-            <p className={styles.sectionSub}>
-              Add sections in order: record new audio or insert from your reuse library (ads, intros, etc.). Then build the final MP3 below.
-            </p>
-            <div className={styles.addSectionChoiceRow}>
-              <button
-                type="button"
-                className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary}`}
-                onClick={() => setShowRecord(true)}
-              >
-                <Mic size={24} strokeWidth={2} aria-hidden />
-                <span>Record new section</span>
-              </button>
-              <button
-                type="button"
-                className={styles.addSectionChoiceBtn}
-                onClick={() => setShowLibrary(true)}
-              >
-                <Library size={24} strokeWidth={2} aria-hidden />
-                <span>Insert from library</span>
-              </button>
-            </div>
+          <GenerateFinalBar
+            episodeId={id!}
+            segmentCount={segments.length}
+            onBuild={() => renderMutation.mutate()}
+            isBuilding={renderMutation.isPending}
+            hasFinalAudio={Boolean(episode.audio_final_path)}
+            finalDurationSec={episode.audio_duration_sec ?? 0}
+          />
+          {renderMutation.isError && <p className={styles.error}>{renderMutation.error?.message}</p>}
 
-            {segmentsLoading ? (
-              <p className={styles.success}>Loading sections…</p>
-            ) : segments.length === 0 ? (
-              <p className={styles.success}>No sections yet. Record or add from library above.</p>
-            ) : (
-              <ul className={styles.segmentList}>
-                {segments.map((seg, index) => (
-                <SegmentRow
-                  key={seg.id}
-                  episodeId={id!}
-                  segment={seg}
-                  index={index}
-                  total={segments.length}
-                  onMoveUp={() => handleMoveUp(index)}
-                  onMoveDown={() => handleMoveDown(index)}
-                  onDeleteRequest={() => setSegmentToDelete(seg.id)}
-                  onUpdateName={(segmentId, name) => updateSegmentMutation.mutate({ segmentId, name })}
-                  isDeleting={deleteSegmentMutation.isPending && deleteSegmentMutation.variables === seg.id}
-                  onPlayRequest={handleSegmentPlayRequest}
-                  onMoreInfo={() => setSegmentIdForInfo(seg.id)}
-                  registerPause={registerSegmentPause}
-                  unregisterPause={unregisterSegmentPause}
+          <Dialog.Root open={detailsDialogOpen} onOpenChange={(o) => !o && setDetailsDialogOpen(false)}>
+            <Dialog.Portal>
+              <Dialog.Overlay className={styles.dialogOverlay} />
+              <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide}`}>
+                <Dialog.Title className={styles.dialogTitle}>Episode details</Dialog.Title>
+                <div className={styles.dialogBodyScroll}>
+                <EpisodeDetailsForm
+                  title={title}
+                  setTitle={setTitle}
+                  slug={slug}
+                  setSlug={setSlug}
+                  description={description}
+                  setDescription={setDescription}
+                  artworkUrl={artworkUrl}
+                  setArtworkUrl={setArtworkUrl}
+                  seasonNumber={seasonNumber}
+                  setSeasonNumber={setSeasonNumber}
+                  episodeNumber={episodeNumber}
+                  setEpisodeNumber={setEpisodeNumber}
+                  status={status}
+                  setStatus={setStatus}
+                  publishAt={publishAt}
+                  setPublishAt={setPublishAt}
+                  explicit={explicit}
+                  setExplicit={setExplicit}
+                  episodeType={episodeType}
+                  setEpisodeType={setEpisodeType}
+                  episodeLink={episodeLink}
+                  setEpisodeLink={setEpisodeLink}
+                  guidIsPermalink={guidIsPermalink}
+                  setGuidIsPermalink={setGuidIsPermalink}
+                  descriptionTextareaRef={descriptionTextareaRef}
+                  slugDisabled={user?.role !== 'admin'}
+                  onSave={() => updateMutation.mutate()}
+                  onCancel={() => setDetailsDialogOpen(false)}
+                  isSaving={updateMutation.isPending}
+                  saveError={updateMutation.isError ? (updateMutation.error as Error)?.message ?? null : null}
+                  saveSuccess={updateMutation.isSuccess}
                 />
-                ))}
-              </ul>
-            )}
-
-            <div className={styles.renderRow}>
-              <div className={styles.renderCard}>
-                <div className={styles.renderHeader}>
-                  <div>
-                    <h3 className={styles.renderTitle}>Generate final episode</h3>
-                    <p className={styles.renderSub}>
-                      When you are ready, generate the final audio file from your sections. This will rebuild the episode audio.
-                    </p>
-                  </div>
                 </div>
-                <div className={styles.renderActions}>
-                  <button
-                    type="button"
-                    className={styles.renderBtnSecondary}
-                    onClick={previewingFinal ? stopPreviewSequence : startPreviewSequence}
-                    disabled={segments.length === 0}
-                  >
-                    {previewingFinal ? <Pause size={18} strokeWidth={2} aria-hidden /> : <Play size={18} strokeWidth={2} aria-hidden />}
-                    <span>{previewingFinal ? 'Stop preview' : 'Preview sections'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.renderBtnPrimary}
-                    onClick={() => renderMutation.mutate()}
-                    disabled={segments.length === 0 || renderMutation.isPending}
-                  >
-                    <FileAudio size={20} strokeWidth={2} aria-hidden />
-                    <span>{renderMutation.isPending ? 'Building…' : 'Build Final Episode'}</span>
-                  </button>
-                  {episode.audio_final_path && (
-                    <a href={downloadEpisodeUrl(id, 'final')} download className={styles.renderDownload}>
-                      Download final audio
-                    </a>
-                  )}
-                </div>
-                {renderMutation.isError && (
-                  <span className={styles.error}>{renderMutation.error?.message}</span>
-                )}
-              </div>
-            </div>
-            <audio ref={finalPreviewRef} style={{ display: 'none' }} />
-          </div>
-          )}
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
         </>
       )}
 
@@ -734,6 +392,7 @@ export function EpisodeEditor() {
           segmentId={segmentIdForInfo}
           segmentName={segments.find((s) => s.id === segmentIdForInfo)?.name?.trim() || 'Section'}
           segmentDuration={segments.find((s) => s.id === segmentIdForInfo)?.duration_sec ?? 0}
+          segmentAudioPath={segments.find((s) => s.id === segmentIdForInfo)?.audio_path}
           asrAvailable={Boolean(asrAvail?.available)}
           onClose={() => setSegmentIdForInfo(null)}
           onDeleteEntry={(entryIndex) => {
@@ -769,40 +428,26 @@ export function EpisodeEditor() {
         isDeleting={false}
       />
 
-      <Dialog.Root open={!!segmentToDelete} onOpenChange={(open) => !open && setSegmentToDelete(null)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={styles.dialogContent}>
-            <Dialog.Title className={styles.dialogTitle}>Remove section?</Dialog.Title>
-            <p className={styles.dialogDescription}>
-              {segmentToDelete && (() => {
+      <DeleteSegmentDialog
+        open={!!segmentToDelete}
+        onOpenChange={(open) => !open && setSegmentToDelete(null)}
+        description={
+          segmentToDelete
+            ? (() => {
                 const seg = segments.find((s) => s.id === segmentToDelete);
                 const name = seg?.name?.trim() || (seg?.type === 'recorded' ? 'Recorded section' : seg?.asset_name) || 'This section';
                 return `"${name}" will be removed. This cannot be undone.`;
-              })()}
-            </p>
-            <div className={styles.dialogActions}>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.cancel} aria-label="Cancel removing section">Cancel</button>
-              </Dialog.Close>
-              <button
-                type="button"
-                className={styles.dialogConfirmRemove}
-                onClick={() => {
-                  if (segmentToDelete) {
-                    deleteSegmentMutation.mutate(segmentToDelete);
-                    setSegmentToDelete(null);
-                  }
-                }}
-                disabled={deleteSegmentMutation.isPending}
-                aria-label="Confirm remove section"
-              >
-                {deleteSegmentMutation.isPending && deleteSegmentMutation.variables === segmentToDelete ? 'Removing…' : 'Remove'}
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+              })()
+            : ''
+        }
+        onConfirm={() => {
+          if (segmentToDelete) {
+            deleteSegmentMutation.mutate(segmentToDelete);
+            setSegmentToDelete(null);
+          }
+        }}
+        isDeleting={deleteSegmentMutation.isPending && deleteSegmentMutation.variables === segmentToDelete}
+      />
     </div>
   );
 }
@@ -812,6 +457,7 @@ function TranscriptModal({
   segmentId,
   segmentName,
   segmentDuration,
+  segmentAudioPath,
   asrAvailable,
   onClose,
   onDeleteEntry,
@@ -820,6 +466,7 @@ function TranscriptModal({
   segmentId: string;
   segmentName: string;
   segmentDuration: number;
+  segmentAudioPath?: string | null;
   asrAvailable: boolean;
   onClose: () => void;
   onDeleteEntry?: (entryIndex: number) => void;
@@ -1159,7 +806,7 @@ function TranscriptModal({
         // Reset and load new source
         el.pause();
         el.currentTime = 0;
-        const audioUrl = segmentStreamUrl(episodeId, segmentId);
+        const audioUrl = segmentStreamUrl(episodeId, segmentId, segmentAudioPath);
         el.src = audioUrl;
         el.load(); // Force reload
         
@@ -1261,7 +908,7 @@ function TranscriptModal({
         };
         
         el.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
-        el.src = segmentStreamUrl(episodeId, segmentId);
+        el.src = segmentStreamUrl(episodeId, segmentId, segmentAudioPath);
         if (el.readyState >= 2) {
           onLoadedMetadata();
         }
@@ -1412,7 +1059,7 @@ function TranscriptModal({
       };
       timeUpdateHandlerRef.current = onTimeUpdate;
       el.addEventListener('timeupdate', onTimeUpdate);
-      el.src = segmentStreamUrl(episodeId, segmentId);
+      el.src = segmentStreamUrl(episodeId, segmentId, segmentAudioPath);
       const cleanup = () => {
         if (timeUpdateHandlerRef.current) {
           el.removeEventListener('timeupdate', timeUpdateHandlerRef.current);
@@ -2008,876 +1655,3 @@ function TranscriptModal({
   );
 }
 
-function DeleteTranscriptSegmentDialog({
-  open,
-  onOpenChange,
-  onConfirm,
-  isDeleting,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-  isDeleting: boolean;
-}) {
-  const handleCancel = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onOpenChange(false);
-  };
-
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) {
-      onOpenChange(false);
-    }
-  };
-
-  return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange} modal={true}>
-      <Dialog.Portal>
-        <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content 
-          className={styles.dialogContent}
-          onEscapeKeyDown={(e) => {
-            e.preventDefault();
-            onOpenChange(false);
-          }}
-          onPointerDownOutside={(e) => {
-            e.preventDefault();
-          }}
-          onInteractOutside={(e) => {
-            e.preventDefault();
-          }}
-        >
-          <Dialog.Title className={styles.dialogTitle}>Delete transcript segment?</Dialog.Title>
-          <p className={styles.dialogDescription}>
-            This will remove the segment from both the audio file and transcript. This cannot be undone.
-          </p>
-          <div className={styles.dialogActions}>
-            <button
-              type="button"
-              className={styles.cancel}
-              onClick={handleCancel}
-              aria-label="Cancel deleting transcript segment"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={styles.dialogConfirmRemove}
-              onClick={onConfirm}
-              disabled={isDeleting}
-              aria-label="Confirm delete transcript segment"
-            >
-              {isDeleting ? 'Deleting…' : 'Delete'}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function SegmentRow({
-  episodeId,
-  segment,
-  index,
-  total,
-  onMoveUp,
-  onMoveDown,
-  onDeleteRequest,
-  onUpdateName,
-  isDeleting,
-  onPlayRequest,
-  onMoreInfo,
-  registerPause,
-  unregisterPause,
-}: {
-  episodeId: string;
-  segment: EpisodeSegment;
-  index: number;
-  total: number;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  onDeleteRequest: () => void;
-  onUpdateName: (segmentId: string, name: string | null) => void;
-  isDeleting: boolean;
-  onPlayRequest: (segmentId: string) => void;
-  onMoreInfo: () => void;
-  registerPause: (id: string, pause: () => void) => void;
-  unregisterPause: (id: string) => void;
-}) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const progressTrackRef = useRef<HTMLDivElement>(null);
-  const loadedSegmentIdRef = useRef<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const durationSec = segment.duration_sec ?? 0;
-  const isRecorded = segment.type === 'recorded';
-  const defaultName = isRecorded ? 'Recorded section' : (segment.asset_name ?? 'Library clip');
-  const [localName, setLocalName] = useState(segment.name ?? '');
-  useEffect(() => {
-    setLocalName(segment.name ?? '');
-  }, [segment.name]);
-
-  useEffect(() => {
-    loadedSegmentIdRef.current = null;
-  }, [episodeId, segment.id]);
-
-  function handleNameBlur() {
-    const trimmed = localName.trim();
-    const current = (segment.name ?? '').trim();
-    if (trimmed !== current) onUpdateName(segment.id, trimmed || null);
-  }
-
-  function togglePlay() {
-    const el = audioRef.current;
-    if (!el) return;
-    if (isPlaying) {
-      el.pause();
-    } else {
-      onPlayRequest(segment.id);
-      // Only set src when we don't already have this segment loaded so seeking then play keeps position
-      if (loadedSegmentIdRef.current !== segment.id) {
-        loadedSegmentIdRef.current = segment.id;
-        el.src = segmentStreamUrl(episodeId, segment.id);
-      }
-      el.play().catch(() => {});
-    }
-  }
-
-  useEffect(() => {
-    registerPause(segment.id, () => audioRef.current?.pause());
-    return () => unregisterPause(segment.id);
-  }, [segment.id, registerPause, unregisterPause]);
-
-  function handleProgressClick(e: React.MouseEvent<HTMLDivElement>) {
-    const el = audioRef.current;
-    const track = progressTrackRef.current;
-    if (!el || !track || durationSec <= 0) return;
-    const rect = track.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    let time = frac * durationSec;
-    if (Number.isFinite(el.duration) && el.duration > 0) {
-      time = Math.min(time, el.duration);
-    }
-    el.currentTime = time;
-    setCurrentTime(time);
-  }
-
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    const onEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(durationSec);
-    };
-    const onTimeUpdate = () => setCurrentTime(el.currentTime);
-    const onLoadedMetadata = () => setCurrentTime(el.currentTime);
-    el.addEventListener('play', onPlay);
-    el.addEventListener('pause', onPause);
-    el.addEventListener('ended', onEnded);
-    el.addEventListener('timeupdate', onTimeUpdate);
-    el.addEventListener('loadedmetadata', onLoadedMetadata);
-    return () => {
-      el.removeEventListener('play', onPlay);
-      el.removeEventListener('pause', onPause);
-      el.removeEventListener('ended', onEnded);
-      el.removeEventListener('timeupdate', onTimeUpdate);
-      el.removeEventListener('loadedmetadata', onLoadedMetadata);
-    };
-  }, [durationSec]);
-
-  const progress = durationSec > 0 ? Math.min(1, currentTime / durationSec) : 0;
-
-  return (
-    <li className={styles.segmentBlock}>
-      <span className={styles.segmentIcon} title={isRecorded ? 'Recorded' : 'From library'}>
-        {isRecorded ? <Mic size={18} strokeWidth={2} aria-hidden /> : <Library size={18} strokeWidth={2} aria-hidden />}
-      </span>
-      <div className={styles.segmentBody}>
-        <input
-          type="text"
-          className={styles.segmentNameInput}
-          value={localName}
-          onChange={(e) => setLocalName(e.target.value)}
-          onBlur={handleNameBlur}
-          placeholder={defaultName}
-          aria-label="Section name"
-        />
-        <div className={styles.segmentMeta}>
-          {formatDuration(Math.floor(currentTime))} / {formatDuration(segment.duration_sec)}
-        </div>
-        {durationSec > 0 && (
-          <div
-            ref={progressTrackRef}
-            className={styles.segmentProgressTrack}
-            onClick={handleProgressClick}
-            role="progressbar"
-            aria-valuenow={Math.round(currentTime)}
-            aria-valuemin={0}
-            aria-valuemax={durationSec}
-            aria-label="Playback position"
-          >
-            <div className={styles.segmentProgressFill} style={{ width: `${progress * 100}%` }} />
-          </div>
-        )}
-      </div>
-      <audio ref={audioRef} style={{ display: 'none' }} />
-      <div className={styles.segmentActions}>
-        <button type="button" className={styles.segmentBtn} onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'} aria-label={isPlaying ? 'Pause segment' : 'Play segment'}>
-          {isPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
-        </button>
-        <button type="button" className={styles.segmentBtn} onClick={onMoreInfo} title="More info" aria-label="Show more information">
-          <Info size={18} aria-hidden />
-        </button>
-        <button type="button" className={styles.segmentBtn} onClick={onMoveUp} disabled={index === 0} title="Move up" aria-label="Move segment up">
-          ↑
-        </button>
-        <button type="button" className={styles.segmentBtn} onClick={onMoveDown} disabled={index === total - 1} title="Move down" aria-label="Move segment down">
-          ↓
-        </button>
-        <button type="button" className={styles.segmentBtn} onClick={onDeleteRequest} disabled={isDeleting} title="Remove" aria-label="Remove segment">
-          ✕
-        </button>
-      </div>
-    </li>
-  );
-}
-
-function RecordModal({
-  onClose,
-  onAdd,
-  isAdding,
-  error,
-}: {
-  onClose: () => void;
-  onAdd: (file: File, name?: string | null) => void;
-  isAdding: boolean;
-  error?: string;
-}) {
-  const [recording, setRecording] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [blob, setBlob] = useState<Blob | null>(null);
-  const [sectionName, setSectionName] = useState('');
-  const [isMobile, setIsMobile] = useState(false);
-  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
-  const [playbackCurrentTime, setPlaybackCurrentTime] = useState(0);
-  const [playbackDuration, setPlaybackDuration] = useState(0);
-  const [isPlaybackPlaying, setIsPlaybackPlaying] = useState(false);
-  const streamRef = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const playbackAudioRef = useRef<HTMLAudioElement>(null);
-  const recordProgressTrackRef = useRef<HTMLDivElement>(null);
-  const recordCardRef = useRef<HTMLDivElement>(null);
-  const recordButtonRef = useRef<HTMLButtonElement>(null);
-  const stopButtonRef = useRef<HTMLButtonElement>(null);
-  const cancelButtonRef = useRef<HTMLButtonElement>(null);
-  const wakeLockRef = useRef<{ release(): Promise<void> } | null>(null);
-
-  function releaseWakeLock() {
-    if (wakeLockRef.current) {
-      wakeLockRef.current.release().catch(() => {});
-      wakeLockRef.current = null;
-    }
-  }
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)');
-    setIsMobile(mq.matches);
-    const handler = () => setIsMobile(mq.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-      releaseWakeLock();
-    };
-  }, []);
-
-  // Focus management: focus first focusable element when modal opens
-  useEffect(() => {
-    // Small delay to ensure DOM is ready
-    const timeout = setTimeout(() => {
-      if (!recording && !blob && recordButtonRef.current) {
-        recordButtonRef.current.focus();
-      } else if (recording && stopButtonRef.current) {
-        stopButtonRef.current.focus();
-      } else if (blob && cancelButtonRef.current) {
-        cancelButtonRef.current.focus();
-      }
-    }, 0);
-    return () => clearTimeout(timeout);
-  }, [recording, blob]);
-
-  // Focus trapping: prevent tabbing outside modal
-  useEffect(() => {
-    const card = recordCardRef.current;
-    if (!card) return;
-
-    function handleKeyDown(e: KeyboardEvent) {
-      const currentCard = recordCardRef.current;
-      if (!currentCard) return;
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        requestClose();
-        return;
-      }
-
-      if (e.key !== 'Tab') return;
-
-      const focusableElements = Array.from(currentCard.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      )).filter(el => {
-        // Filter out elements that are not visible
-        const style = window.getComputedStyle(el);
-        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-      });
-
-      if (focusableElements.length === 0) return;
-
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement as HTMLElement;
-
-      if (e.shiftKey) {
-        // Shift + Tab
-        if (activeElement === firstElement || !currentCard.contains(activeElement)) {
-          e.preventDefault();
-          lastElement?.focus();
-        }
-      } else {
-        // Tab
-        if (activeElement === lastElement || !currentCard.contains(activeElement)) {
-          e.preventDefault();
-          firstElement?.focus();
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [recording, blob]);
-
-  useEffect(() => {
-    if (!blob) {
-      setPlaybackUrl(null);
-      setPlaybackCurrentTime(0);
-      setPlaybackDuration(0);
-      setIsPlaybackPlaying(false);
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    setPlaybackUrl(url);
-    setPlaybackDuration(seconds);
-    setPlaybackCurrentTime(0);
-    return () => URL.revokeObjectURL(url);
-  }, [blob, seconds]);
-
-  useEffect(() => {
-    const el = playbackAudioRef.current;
-    if (!el || !playbackUrl) return;
-    const onTimeUpdate = () => setPlaybackCurrentTime(Number.isFinite(el.currentTime) ? el.currentTime : 0);
-    const onLoadedMetadata = () => {
-      const d = el.duration;
-      if (Number.isFinite(d) && d > 0) setPlaybackDuration(d);
-    };
-    const onPlay = () => setIsPlaybackPlaying(true);
-    const onPause = () => setIsPlaybackPlaying(false);
-    const onEnded = () => {
-      setIsPlaybackPlaying(false);
-      setPlaybackCurrentTime(Number.isFinite(el.currentTime) ? el.currentTime : 0);
-    };
-    el.addEventListener('timeupdate', onTimeUpdate);
-    el.addEventListener('loadedmetadata', onLoadedMetadata);
-    el.addEventListener('play', onPlay);
-    el.addEventListener('pause', onPause);
-    el.addEventListener('ended', onEnded);
-    return () => {
-      el.removeEventListener('timeupdate', onTimeUpdate);
-      el.removeEventListener('loadedmetadata', onLoadedMetadata);
-      el.removeEventListener('play', onPlay);
-      el.removeEventListener('pause', onPause);
-      el.removeEventListener('ended', onEnded);
-    };
-  }, [playbackUrl]);
-
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      chunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      recorderRef.current = recorder;
-      recorder.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
-      recorder.onstop = () => {
-        const b = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
-        setBlob(b);
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      };
-      recorder.start(1000);
-      setRecording(true);
-      setSeconds(0);
-      setBlob(null);
-      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-      // Keep screen on during recording (e.g. on phones) so recording isn't interrupted
-      try {
-        if ('wakeLock' in navigator && typeof (navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock?.request === 'function') {
-          wakeLockRef.current = await (navigator as Navigator & { wakeLock: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock.request('screen');
-        }
-      } catch {
-        // Wake Lock not supported or failed (e.g. low battery); recording continues
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Could not access microphone.');
-    }
-  }
-
-  function stopRecording() {
-    if (recorderRef.current && recording) {
-      recorderRef.current.stop();
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      releaseWakeLock();
-      setRecording(false);
-    }
-  }
-
-  function handleAdd() {
-    if (!blob) return;
-    const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('ogg') ? 'ogg' : 'webm';
-    const file = new File([blob], `recording.${ext}`, { type: blob.type });
-    onAdd(file, sectionName.trim() || null);
-  }
-
-  function togglePlayback() {
-    const el = playbackAudioRef.current;
-    if (!el) return;
-    if (isPlaybackPlaying) el.pause();
-    else el.play().catch(() => {});
-  }
-
-  function handleRecordProgressClick(e: React.MouseEvent<HTMLDivElement>) {
-    const el = playbackAudioRef.current;
-    const track = recordProgressTrackRef.current;
-    if (!el || !track || playbackDuration <= 0) return;
-    const rect = track.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const time = frac * playbackDuration;
-    el.currentTime = time;
-    setPlaybackCurrentTime(time);
-  }
-
-  const recordProgress = playbackDuration > 0 ? Math.min(1, playbackCurrentTime / playbackDuration) : 0;
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-
-  function requestClose() {
-    setShowCloseConfirm(true);
-  }
-
-  function confirmClose() {
-    setShowCloseConfirm(false);
-    onClose();
-  }
-
-  return (
-    <div className={styles.recordOverlay} onClick={(e) => e.target === e.currentTarget && requestClose()}>
-      <div ref={recordCardRef} className={styles.recordCard} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="record-title">
-        <h3 id="record-title" className={styles.recordTitle}>Record a section</h3>
-        <p className={styles.recordSub}>Use your microphone. When done, stop and add to the episode.</p>
-        {!recording && !blob && (
-          <button ref={recordButtonRef} type="button" className={`${styles.recordBtn} ${styles.record}`} onClick={startRecording} aria-label="Start recording">
-            ●
-          </button>
-        )}
-        {recording && (
-          <>
-            <div className={styles.recordTime}>{formatDuration(seconds)}</div>
-            <button ref={stopButtonRef} type="button" className={`${styles.recordBtn} ${styles.stop}`} onClick={stopRecording} aria-label="Stop recording">
-              ■
-            </button>
-          </>
-        )}
-        {isMobile && !blob && (
-          <p className={styles.recordMobileNote}>Please do not navigate away from this page or the recording may be stopped or lost.</p>
-        )}
-        {blob && !recording && (
-          <>
-            <label className={styles.recordLabel}>
-              Section name (optional)
-              <input
-                type="text"
-                className={styles.recordNameInput}
-                value={sectionName}
-                onChange={(e) => setSectionName(e.target.value)}
-                placeholder="e.g. Intro, Ad read"
-              />
-            </label>
-            {playbackUrl && (
-              <div className={styles.recordPlaybackWrap}>
-                <audio ref={playbackAudioRef} key={playbackUrl} src={playbackUrl} preload="metadata" style={{ display: 'none' }} />
-                <div className={styles.recordPlaybackRow}>
-                  <button type="button" className={styles.segmentBtn} onClick={togglePlayback} title={isPlaybackPlaying ? 'Pause' : 'Play'} aria-label={isPlaybackPlaying ? 'Pause playback' : 'Play playback'}>
-                    {isPlaybackPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
-                  </button>
-                  <div className={styles.recordPlaybackInfo}>
-                    <div className={styles.segmentMeta}>
-                      {formatDuration(Math.floor(playbackCurrentTime))} / {formatDuration(Math.floor(playbackDuration))}
-                    </div>
-                    <div
-                      ref={recordProgressTrackRef}
-                      className={styles.segmentProgressTrack}
-                      onClick={handleRecordProgressClick}
-                      role="progressbar"
-                      aria-valuenow={Math.round(playbackCurrentTime)}
-                      aria-valuemin={0}
-                      aria-valuemax={Math.round(playbackDuration)}
-                      aria-label="Playback position"
-                    >
-                      <div className={styles.segmentProgressFill} style={{ width: `${recordProgress * 100}%` }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className={styles.recordChoiceRow}>
-              <button type="button" className={styles.recordChoiceBtn} onClick={() => { setBlob(null); setSeconds(0); }} aria-label="Record again">
-                <RotateCcw size={24} strokeWidth={2} aria-hidden />
-                <span>Record again</span>
-              </button>
-              <button type="button" className={`${styles.recordChoiceBtn} ${styles.recordChoiceBtnPrimary}`} onClick={handleAdd} disabled={isAdding} aria-label={isAdding ? 'Adding to episode' : 'Add to episode'}>
-                <PlusCircle size={24} strokeWidth={2} aria-hidden />
-                <span>{isAdding ? 'Adding…' : 'Add to episode'}</span>
-              </button>
-            </div>
-          </>
-        )}
-        {error && <p className={styles.error} style={{ marginTop: '0.5rem' }}>{error}</p>}
-        <div className={styles.recordActions} style={{ marginTop: '1rem' }}>
-          <button ref={cancelButtonRef} type="button" className={styles.libraryClose} onClick={requestClose} aria-label="Cancel recording">Cancel</button>
-        </div>
-      </div>
-
-      <Dialog.Root open={showCloseConfirm} onOpenChange={(open) => !open && setShowCloseConfirm(false)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={styles.dialogContent}>
-            <Dialog.Title className={styles.dialogTitle}>Discard recording?</Dialog.Title>
-            <p className={styles.dialogDescription}>Your recording will not be saved.</p>
-            <div className={styles.dialogActions}>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.cancel} aria-label="Stay and continue recording">Stay</button>
-              </Dialog.Close>
-              <button type="button" className={styles.dialogConfirmRemove} onClick={confirmClose} aria-label="Discard recording">
-                Discard
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-    </div>
-  );
-}
-
-const LIBRARY_TAGS = ['Ad', 'Intro', 'Outro', 'Bumper', 'Other'] as const;
-const LIBRARY_PAGE_SIZE = 10;
-const EMPTY_LIBRARY_ASSETS: LibraryAsset[] = [];
-
-function LibraryModal({
-  onClose,
-  onSelect,
-  isAdding,
-  error,
-}: {
-  onClose: () => void;
-  onSelect: (assetId: string) => void;
-  isAdding: boolean;
-  error?: string;
-}) {
-  const queryClient = useQueryClient();
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [uploadName, setUploadName] = useState('');
-  const [uploadTag, setUploadTag] = useState<string>('');
-  const [customTag, setCustomTag] = useState('');
-  const [filterTag, setFilterTag] = useState<string>('');
-  const [filterQuery, setFilterQuery] = useState('');
-  const [sortNewestFirst, setSortNewestFirst] = useState(true);
-  const [page, setPage] = useState(1);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { data, isLoading } = useQuery({
-    queryKey: ['library'],
-    queryFn: () => listLibrary(),
-  });
-  const uploadMutation = useMutation({
-    mutationFn: ({ file, name, tag }: { file: File; name: string; tag?: string | null }) =>
-      createLibraryAsset(file, name, tag || undefined),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['library'] });
-      setPendingFile(null);
-      setUploadName('');
-      setUploadTag('');
-      setCustomTag('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    },
-  });
-  const assets = useMemo(() => data?.assets ?? EMPTY_LIBRARY_ASSETS, [data?.assets]);
-
-  const tagOptions = useMemo(() => {
-    const preset = new Set<string>(LIBRARY_TAGS);
-    const fromData = new Set<string>();
-    assets.forEach((a) => { if (a.tag) fromData.add(a.tag); });
-    const ordered = [...LIBRARY_TAGS.filter((t) => t !== 'Other'), ...Array.from(fromData).filter((t) => !preset.has(t)).sort()];
-    return ordered;
-  }, [assets]);
-
-  const filteredAndSorted = useMemo(() => {
-    const q = filterQuery.trim().toLowerCase();
-    let list = assets.filter((a) => {
-      if (filterTag && a.tag !== filterTag) return false;
-      if (q && !a.name.toLowerCase().includes(q)) return false;
-      return true;
-    });
-    list = [...list].sort((a, b) => {
-      const ta = new Date(a.created_at).getTime();
-      const tb = new Date(b.created_at).getTime();
-      return sortNewestFirst ? tb - ta : ta - tb;
-    });
-    return list;
-  }, [assets, filterTag, filterQuery, sortNewestFirst]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / LIBRARY_PAGE_SIZE));
-  const pageClamped = Math.max(1, Math.min(page, totalPages));
-  const paginatedAssets = useMemo(
-    () => filteredAndSorted.slice((pageClamped - 1) * LIBRARY_PAGE_SIZE, pageClamped * LIBRARY_PAGE_SIZE),
-    [filteredAndSorted, pageClamped]
-  );
-
-  useEffect(() => {
-    setPage((p) => (p > totalPages ? Math.max(1, totalPages) : p));
-  }, [totalPages]);
-
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPendingFile(file);
-    setUploadName(file.name.replace(/\.[^.]+$/, ''));
-    setUploadTag('');
-  }
-
-  function handleAddToLibrary() {
-    if (!pendingFile) return;
-    const name = uploadName.trim() || pendingFile.name.replace(/\.[^.]+$/, '');
-    const tag = uploadTag === 'Other' ? (customTag.trim() || null) : (uploadTag || null);
-    uploadMutation.mutate({ file: pendingFile, name, tag });
-  }
-
-  function clearPending() {
-    setPendingFile(null);
-    setUploadName('');
-    setUploadTag('');
-    setCustomTag('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  }
-
-  return (
-    <div className={styles.libraryOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.libraryCard} onClick={(e) => e.stopPropagation()}>
-        <h3 className={styles.libraryTitle}>Insert from library</h3>
-        <p className={styles.librarySub}>Reusable clips (ads, intros, outros) you can use in any episode.</p>
-
-        {!pendingFile ? (
-          <button
-            type="button"
-            className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary} ${styles.libraryChooseFileBtn}`}
-            style={{ width: '100%', marginBottom: '1rem' }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload size={24} strokeWidth={2} aria-hidden />
-            <span>Choose file to add to library</span>
-          </button>
-        ) : (
-          <div className={styles.libraryUploadForm}>
-            <p className={styles.libraryPendingFile}>{pendingFile.name}</p>
-            <label className={styles.recordLabel}>
-              Name
-              <input
-                type="text"
-                className={styles.recordNameInput}
-                placeholder="e.g. Mid-roll ad, Show intro"
-                value={uploadName}
-                onChange={(e) => setUploadName(e.target.value)}
-              />
-            </label>
-            <label className={styles.recordLabel}>
-              Tag
-              <select
-                className={styles.select}
-                value={uploadTag}
-                onChange={(e) => setUploadTag(e.target.value)}
-              >
-                <option value="">None</option>
-                {LIBRARY_TAGS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </label>
-            {uploadTag === 'Other' && (
-              <label className={styles.recordLabel}>
-                Custom tag
-                <input
-                  type="text"
-                  className={styles.recordNameInput}
-                  placeholder="e.g. Promo, Transition"
-                  value={customTag}
-                  onChange={(e) => setCustomTag(e.target.value)}
-                />
-              </label>
-            )}
-            <div className={styles.libraryUploadActions}>
-              <button type="button" className={styles.cancel} onClick={clearPending} aria-label="Cancel adding to library">
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={styles.submit}
-                onClick={handleAddToLibrary}
-                disabled={uploadMutation.isPending}
-                aria-label="Add file to library"
-              >
-                {uploadMutation.isPending ? 'Adding…' : 'Add to library'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="audio/mpeg,audio/mp3,audio/wav,audio/wave,audio/x-wav,audio/mp4,audio/webm,audio/ogg,.mp3,.wav,.m4a,.webm,.ogg"
-          style={{ display: 'none' }}
-          onChange={handleFileSelect}
-        />
-
-        {uploadMutation.isError && (
-          <p className={styles.error} style={{ marginBottom: '0.5rem' }}>{uploadMutation.error?.message}</p>
-        )}
-
-        {!pendingFile && !isLoading && assets.length > 0 && (
-          <div className={styles.libraryFilters}>
-            <input
-              type="search"
-              className={styles.input}
-              placeholder="Search by name…"
-              value={filterQuery}
-              onChange={(e) => { setFilterQuery(e.target.value); setPage(1); }}
-              aria-label="Filter by name"
-            />
-            <select
-              className={styles.select}
-              value={filterTag}
-              onChange={(e) => { setFilterTag(e.target.value); setPage(1); }}
-              aria-label="Filter by tag"
-            >
-              <option value="">All tags</option>
-              {tagOptions.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-            <div className={styles.librarySortToggle} role="group" aria-label="Sort order">
-              <button
-                type="button"
-                className={sortNewestFirst ? styles.librarySortBtnActive : styles.librarySortBtn}
-                onClick={() => { setSortNewestFirst(true); setPage(1); }}
-                title="Newest first"
-                aria-label="Newest first"
-              >
-                <ArrowDown size={16} aria-hidden />
-              </button>
-              <button
-                type="button"
-                className={!sortNewestFirst ? styles.librarySortBtnActive : styles.librarySortBtn}
-                onClick={() => { setSortNewestFirst(false); setPage(1); }}
-                title="Oldest first"
-                aria-label="Oldest first"
-              >
-                <ArrowUp size={16} aria-hidden />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!pendingFile && (isLoading ? (
-          <p className={styles.libraryEmpty}>Loading…</p>
-        ) : assets.length === 0 ? (
-          <p className={styles.libraryEmpty}>No library clips yet. Choose a file above to add one.</p>
-        ) : filteredAndSorted.length === 0 ? (
-          <p className={styles.libraryEmpty}>No clips match your filters.</p>
-        ) : (
-          <>
-            <ul className={styles.libraryList}>
-              {paginatedAssets.map((asset: LibraryAsset) => (
-                <li
-                  key={asset.id}
-                  className={styles.libraryItem}
-                  onClick={() => !isAdding && onSelect(asset.id)}
-                >
-                  <div className={styles.libraryItemContent}>
-                    <div className={styles.libraryItemName}>
-                      {asset.name}
-                      {asset.tag && <span className={styles.libraryItemTag}>{asset.tag}</span>}
-                    </div>
-                    <div className={styles.libraryItemMeta}>
-                      {formatDuration(asset.duration_sec)}
-                      <span className={styles.libraryItemDate}> · {formatLibraryDate(asset.created_at)}</span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {totalPages > 1 && (
-              <div className={styles.libraryPagination}>
-                <span className={styles.libraryPaginationLabel}>
-                  Page {pageClamped} of {totalPages}
-                </span>
-                <div className={styles.libraryPaginationBtns}>
-                  <button
-                    type="button"
-                    className={styles.libraryPageBtn}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={pageClamped <= 1}
-                    aria-label="Previous page"
-                  >
-                    ←
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.libraryPageBtn}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={pageClamped >= totalPages}
-                    aria-label="Next page"
-                  >
-                    →
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        ))}
-        {error && <p className={styles.error} style={{ marginTop: '0.5rem' }}>{error}</p>}
-        <button type="button" className={styles.libraryClose} onClick={onClose} aria-label="Close library">Close</button>
-      </div>
-    </div>
-  );
-}

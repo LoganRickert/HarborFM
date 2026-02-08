@@ -20,10 +20,25 @@ RUN pnpm run build
 # Runtime stage: Node + ffmpeg, single image
 FROM node:22-bookworm-slim
 
-# Install ffmpeg, tini, and build deps for native modules (e.g. better-sqlite3)
+ARG TARGETARCH
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg tini build-essential python3 \
+    ffmpeg tini build-essential python3 ca-certificates wget libmad0 \
+    libid3tag0 libboost-program-options1.74.0 \
   && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+  if [ "$TARGETARCH" = "amd64" ]; then \
+    DEB_ARCH="amd64"; \
+  elif [ "$TARGETARCH" = "arm64" ]; then \
+    DEB_ARCH="arm64"; \
+  else \
+    echo "Unsupported arch: $TARGETARCH"; exit 1; \
+  fi; \
+  wget -O /tmp/audiowaveform.deb \
+    https://github.com/bbc/audiowaveform/releases/download/1.10.2/audiowaveform_1.10.2-1-12_${DEB_ARCH}.deb; \
+  dpkg -i /tmp/audiowaveform.deb || apt-get update && apt-get -f install -y; \
+  rm -f /tmp/audiowaveform.deb
 
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 WORKDIR /app

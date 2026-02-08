@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { createReadStream, statSync, unlinkSync } from 'fs';
+import { statSync, unlinkSync, readFileSync } from 'fs';
 import { extname, dirname, basename } from 'path';
 import send from '@fastify/send';
 import { existsSync } from 'fs';
@@ -7,7 +7,7 @@ import { db } from '../db/index.js';
 import { requireAuth } from '../plugins/auth.js';
 import { uploadsDir, processedDir, assertPathUnder } from '../services/paths.js';
 import * as audioService from '../services/audio.js';
-import { FileTooLargeError, streamToFileWithLimit } from '../services/uploads.js';
+import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 import { readSettings } from './settings.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
 
@@ -43,7 +43,7 @@ export async function audioRoutes(app: FastifyInstance) {
       if (!ALLOWED_MIME.includes(mimetype) && !mimetype.startsWith('audio/')) {
         return reply.status(400).send({ error: 'Invalid file type. Use WAV or MP3.' });
       }
-      const ext = mimetype.includes('wav') ? 'wav' : 'mp3';
+      const ext = extensionFromAudioMimetype(mimetype);
       const dir = uploadsDir(podcastId, episodeId);
       const destPath = `${dir}/source.${ext}`;
       // Remove any previous source files to avoid orphaned disk usage.
@@ -164,6 +164,27 @@ export async function audioRoutes(app: FastifyInstance) {
   );
 
   app.get(
+    '/api/episodes/:id/final-waveform',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const { id: episodeId } = request.params as { id: string };
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      const episode = db.prepare('SELECT audio_final_path FROM episodes WHERE id = ?').get(episodeId) as { audio_final_path: string | null } | undefined;
+      const audioPath = episode?.audio_final_path;
+      if (!audioPath || !existsSync(audioPath)) return reply.status(404).send({ error: 'Final audio not found' });
+      const base = processedDir(access.podcastId, episodeId);
+      assertPathUnder(audioPath, base);
+      const waveformPath = audioPath.replace(/\.[^.]+$/, '.waveform.json');
+      if (!existsSync(waveformPath)) return reply.status(404).send({ error: 'Waveform not found' });
+      assertPathUnder(waveformPath, base);
+      const json = readFileSync(waveformPath, 'utf-8');
+      reply.header('Content-Type', 'application/json').header('Cache-Control', 'private, max-age=3600');
+      return reply.send(json);
+    }
+  );
+
+  app.get(
     '/api/episodes/:id/download',
     { preHandler: [requireAuth] },
     async (request, reply) => {
@@ -184,10 +205,29 @@ export async function audioRoutes(app: FastifyInstance) {
       const ext = extname(safePath) || (type === 'source' ? '' : '.mp3');
       const filename = type === 'source' ? `episode-source-${episodeId}${ext}` : `episode-${episodeId}${ext}`;
       const mime = type === 'source' ? (episode.audio_mime as string) || 'audio/mpeg' : (episode.audio_mime as string) || 'audio/mpeg';
-      return reply
-        .header('Content-Disposition', `attachment; filename="${filename}"`)
-        .type(mime)
-        .send(createReadStream(safePath));
+
+      const result = await send(request.raw, basename(safePath), {
+        root: dirname(safePath),
+        contentType: false,
+        maxAge: 3600,
+        acceptRanges: true,
+        cacheControl: true,
+      });
+
+      if (result.type === 'error') {
+        const err = result.metadata.error as Error & { status?: number };
+        return reply.status(err.status ?? 500).send({ error: err.message ?? 'Internal Server Error' });
+      }
+
+      reply.code(result.statusCode);
+      const headers = result.headers as Record<string, string>;
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== undefined) reply.header(key, value);
+      }
+      reply
+        .header('Content-Type', mime)
+        .header('Content-Disposition', `attachment; filename="${filename}"`);
+      return reply.send(result.stream);
     }
   );
 

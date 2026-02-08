@@ -34,3 +34,7 @@ export async function processEpisodeAudio(episodeId: string): Promise<unknown> {
 export function downloadEpisodeUrl(episodeId: string, type: 'source' | 'final' = 'final'): string {
   return `${BASE}/episodes/${episodeId}/download?type=${type}`;
 }
+
+export function finalEpisodeWaveformUrl(episodeId: string): string {
+  return `${BASE}/episodes/${episodeId}/final-waveform`;
+}

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { copyFileSync, createReadStream, existsSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
+import { copyFileSync, existsSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
+import { tmpdir } from 'os';
 import { dirname, join, extname, basename } from 'path';
 import send from '@fastify/send';
 import { execFile } from 'child_process';
@@ -8,10 +9,10 @@ import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import { requireAuth } from '../plugins/auth.js';
 import { readSettings } from './settings.js';
-import { uploadsDir, segmentPath, getDataDir, libraryDir, assertPathUnder } from '../services/paths.js';
+import { uploadsDir, segmentPath, getDataDir, libraryDir, processedDir, assertPathUnder } from '../services/paths.js';
 import * as audioService from '../services/audio.js';
 import { writeRssFile } from '../services/rss.js';
-import { FileTooLargeError, streamToFileWithLimit } from '../services/uploads.js';
+import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
 
 const exec = promisify(execFile);
@@ -20,6 +21,10 @@ const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg';
 
 function transcriptPath(audioPath: string): string {
   return audioPath.replace(/\.[^.]+$/, '.txt');
+}
+
+function waveformPath(audioPath: string): string {
+  return audioPath.replace(/\.[^.]+$/, '.waveform.json');
 }
 
 function formatSrtTime(seconds: number): string {
@@ -213,7 +218,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid file type. Use WAV, MP3, or WebM.' });
       }
       const segmentName = (data.fields?.name as { value?: string })?.value?.trim() || null;
-      const ext = mimetype.includes('wav') ? 'wav' : mimetype.includes('webm') ? 'webm' : mimetype.includes('ogg') ? 'ogg' : 'mp3';
+      const ext = extensionFromAudioMimetype(mimetype);
       const segmentId = nanoid();
       const destPath = segmentPath(podcastId, episodeId, segmentId, ext);
       let bytesWritten = 0;
@@ -227,10 +232,26 @@ export async function segmentRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
-      let durationSec = 0;
       const segmentBase = uploadsDir(podcastId, episodeId);
+      let finalPath = destPath;
       try {
-        const probe = await audioService.probeAudio(destPath, segmentBase);
+        const normalized = await audioService.normalizeUploadToMp3OrWav(destPath, ext, segmentBase);
+        finalPath = normalized.path;
+        bytesWritten = statSync(finalPath).size;
+      } catch (err) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Failed to process audio file' });
+      }
+
+      try {
+        await audioService.generateWaveformFile(finalPath, segmentBase);
+      } catch (err) {
+        request.log.warn({ err, finalPath }, 'Waveform generation failed (upload succeeded)');
+      }
+
+      let durationSec = 0;
+      try {
+        const probe = await audioService.probeAudio(finalPath, segmentBase);
         durationSec = Math.max(0, probe.durationSec);
       } catch {
         // keep 0 if probe fails
@@ -242,7 +263,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       db.prepare(
         `INSERT INTO episode_segments (id, episode_id, position, type, name, audio_path, duration_sec)
          VALUES (?, ?, ?, 'recorded', ?, ?, ?)`
-      ).run(segmentId, episodeId, maxPos.pos, segmentName, destPath, durationSec);
+      ).run(segmentId, episodeId, maxPos.pos, segmentName, finalPath, durationSec);
 
       // Track disk usage (best-effort)
       db.prepare(
@@ -330,6 +351,28 @@ export async function segmentRoutes(app: FastifyInstance) {
       }
       reply.header('Content-Type', contentType).header('Cache-Control', 'private, no-transform');
       return reply.send(result.stream);
+    }
+  );
+
+  app.get(
+    '/api/episodes/:episodeId/segments/:segmentId/waveform',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      const segment = db
+        .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
+        .get(segmentId, episodeId) as Record<string, unknown> | undefined;
+      if (!segment) return reply.status(404).send({ error: 'Segment not found' });
+      const audio = getSegmentAudioPath(segment, access.podcastId, episodeId);
+      if (!audio || !existsSync(audio.path)) return reply.status(404).send({ error: 'Segment audio not found' });
+      const wavPath = waveformPath(audio.path);
+      if (!existsSync(wavPath)) return reply.status(404).send({ error: 'Waveform not found' });
+      assertPathUnder(wavPath, audio.base);
+      const json = readFileSync(wavPath, 'utf-8');
+      reply.header('Content-Type', 'application/json').header('Cache-Control', 'private, max-age=3600');
+      return reply.send(json);
     }
   );
 
@@ -500,43 +543,42 @@ export async function segmentRoutes(app: FastifyInstance) {
       if (newStartSec < 0 || newEndSec <= newStartSec || newEndSec > currentDurationSec) {
         return reply.status(400).send({ error: 'Invalid trim range' });
       }
-      
-      // Create new trimmed audio file
-      const { nanoid } = await import('nanoid');
+
       const dir = dirname(audio.path);
       assertPathUnder(dir, audio.base);
-      const newAudioPath = join(dir, `${nanoid()}.wav`);
-      
+      const tempPath = join(tmpdir(), `${nanoid()}.wav`);
+      const outputExt = '.wav';
+      const finalPath = join(dir, basename(audio.path, extname(audio.path)) + outputExt);
+
       try {
-        await audioService.trimAudioToWav(audio.path, audio.base, newStartSec, newEndSec, newAudioPath);
-        
-        // Verify the new file was created
-        if (!existsSync(newAudioPath)) {
-          throw new Error('Trimmed audio file was not created');
+        await audioService.trimAudioToWav(audio.path, audio.base, newStartSec, newEndSec, tempPath);
+
+        if (!existsSync(tempPath) || statSync(tempPath).size === 0) {
+          throw new Error('Trimmed audio file was not created or is empty');
         }
-        
+        copyFileSync(tempPath, finalPath);
+        unlinkSync(tempPath);
+
+        try {
+          await audioService.generateWaveformFile(finalPath, audio.base);
+        } catch (err) {
+          request.log.warn({ err, finalPath }, 'Waveform generation failed after trim');
+        }
+
         // Update transcript if it exists (adjust timings)
         const txtPath = transcriptPath(audio.path);
         if (existsSync(txtPath)) {
           assertPathUnder(txtPath, audio.base);
           const srtText = readFileSync(txtPath, 'utf-8');
           const entries = parseSrt(srtText);
-          
-          // Adjust timings: subtract startSec from all entries, remove entries outside range
+
           const adjustedEntries = entries
             .map((entry) => {
               const entryStartSec = parseSrtTime(entry.start);
               const entryEndSec = parseSrtTime(entry.end);
-              
-              // Skip entries completely outside the trimmed range
-              if (entryEndSec <= newStartSec || entryStartSec >= newEndSec) {
-                return null;
-              }
-              
-              // Adjust timings relative to new start
+              if (entryEndSec <= newStartSec || entryStartSec >= newEndSec) return null;
               const adjustedStart = Math.max(0, entryStartSec - newStartSec);
               const adjustedEnd = Math.min(newEndSec - newStartSec, entryEndSec - newStartSec);
-              
               return {
                 ...entry,
                 start: formatSrtTime(adjustedStart),
@@ -544,42 +586,34 @@ export async function segmentRoutes(app: FastifyInstance) {
               };
             })
             .filter((e): e is SrtEntry => e !== null);
-          
-          // Renumber and save transcript
-          const newTxtPath = transcriptPath(newAudioPath);
+
+          const newTxtPath = transcriptPath(finalPath);
           const updatedSrt = adjustedEntries
-            .map((entry, i) => {
-              return `${i + 1}\n${entry.start} --> ${entry.end}\n${entry.text}\n`;
-            })
+            .map((entry, i) => `${i + 1}\n${entry.start} --> ${entry.end}\n${entry.text}\n`)
             .join('\n');
           writeFileSync(newTxtPath, updatedSrt, 'utf-8');
         }
-        
-        // Update database first so we never delete the original file if this fails
+
         const newDurationSec = newEndSec - newStartSec;
         db.prepare('UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?').run(
-          newAudioPath,
+          finalPath,
           newDurationSec,
           segmentId,
           episodeId
         );
-        
-        // Now safe to remove old files; segment already points to new path
-        if (audio.path !== newAudioPath) {
-          unlinkSync(audio.path);
-        }
+
+        if (audio.path !== finalPath) unlinkSync(audio.path);
         const txtPathToRemove = transcriptPath(audio.path);
-        if (existsSync(txtPathToRemove) && txtPathToRemove !== transcriptPath(newAudioPath)) {
+        if (existsSync(txtPathToRemove) && txtPathToRemove !== transcriptPath(finalPath)) {
           unlinkSync(txtPathToRemove);
         }
-        
+
         return reply.status(204).send();
       } catch (err) {
-        // Clean up new file if it exists
         try {
-          if (existsSync(newAudioPath)) unlinkSync(newAudioPath);
+          if (existsSync(tempPath)) unlinkSync(tempPath);
         } catch {
-          // ignore
+          /* ignore */
         }
         request.log.error(err);
         return reply.status(500).send({ error: 'Failed to trim audio' });
@@ -620,25 +654,30 @@ export async function segmentRoutes(app: FastifyInstance) {
       
       const audio = getSegmentAudioPath(segment, access.podcastId, episodeId);
       if (!audio || !existsSync(audio.path)) return reply.status(404).send({ error: 'Segment audio not found' });
-      
-      // Create new audio file with silence removed
-      const { nanoid } = await import('nanoid');
+
       const dir = dirname(audio.path);
       assertPathUnder(dir, audio.base);
-      const newAudioPath = join(dir, `${nanoid()}.wav`);
-      
+      const tempPath = join(tmpdir(), `${nanoid()}.wav`);
+      const finalPath = join(dir, basename(audio.path, extname(audio.path)) + '.wav');
+
       try {
-        await audioService.removeSilenceFromWav(audio.path, audio.base, thresholdSeconds, silenceThresholdDb, newAudioPath);
-        
-        // Verify the new file was created
-        if (!existsSync(newAudioPath)) {
-          throw new Error('Audio file with silence removed was not created');
+        await audioService.removeSilenceFromWav(audio.path, audio.base, thresholdSeconds, silenceThresholdDb, tempPath);
+
+        if (!existsSync(tempPath) || statSync(tempPath).size === 0) {
+          throw new Error('Audio file with silence removed was not created or is empty');
         }
-        
-        // Get new duration
-        const probe = await audioService.probeAudio(newAudioPath, audio.base);
+        copyFileSync(tempPath, finalPath);
+        unlinkSync(tempPath);
+
+        try {
+          await audioService.generateWaveformFile(finalPath, audio.base);
+        } catch (err) {
+          request.log.warn({ err, finalPath }, 'Waveform generation failed after remove-silence');
+        }
+
+        const probe = await audioService.probeAudio(finalPath, audio.base);
         const newDurationSec = probe.durationSec;
-        
+
         // Update transcript if it exists (adjust timings based on removed silence)
         const txtPath = transcriptPath(audio.path);
         if (existsSync(txtPath)) {
@@ -719,40 +758,32 @@ export async function segmentRoutes(app: FastifyInstance) {
               return endSec > startSec && startSec >= 0;
             });
           
-          // Renumber and save transcript
-          const newTxtPath = transcriptPath(newAudioPath);
+          const newTxtPath = transcriptPath(finalPath);
           const updatedSrt = adjustedEntries
-            .map((entry, i) => {
-              return `${i + 1}\n${entry.start} --> ${entry.end}\n${entry.text}\n`;
-            })
+            .map((entry, i) => `${i + 1}\n${entry.start} --> ${entry.end}\n${entry.text}\n`)
             .join('\n');
           writeFileSync(newTxtPath, updatedSrt, 'utf-8');
         }
-        
-        // Update database first so we never delete the original file if this fails
+
         db.prepare('UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?').run(
-          newAudioPath,
+          finalPath,
           newDurationSec,
           segmentId,
           episodeId
         );
-        
-        // Now safe to remove old files; segment already points to new path
-        if (audio.path !== newAudioPath) {
-          unlinkSync(audio.path);
-        }
+
+        if (audio.path !== finalPath) unlinkSync(audio.path);
         const txtPathToRemove = transcriptPath(audio.path);
-        if (existsSync(txtPathToRemove) && txtPathToRemove !== transcriptPath(newAudioPath)) {
+        if (existsSync(txtPathToRemove) && txtPathToRemove !== transcriptPath(finalPath)) {
           unlinkSync(txtPathToRemove);
         }
-        
+
         return reply.status(204).send();
       } catch (err) {
-        // Clean up new file if it exists
         try {
-          if (existsSync(newAudioPath)) unlinkSync(newAudioPath);
+          if (existsSync(tempPath)) unlinkSync(tempPath);
         } catch {
-          // ignore
+          /* ignore */
         }
         request.log.error(err);
         return reply.status(500).send({ error: 'Failed to remove silence' });
@@ -785,47 +816,50 @@ export async function segmentRoutes(app: FastifyInstance) {
       const dir = dirname(audio.path);
       assertPathUnder(dir, audio.base);
       const ext = extname(audio.path) || '.wav';
-      const newAudioPath = join(dir, `${nanoid()}${ext}`);
+      const tempPath = join(tmpdir(), `${nanoid()}${ext}`);
+      const finalPath = join(dir, basename(audio.path));
 
       try {
-        await audioService.applyNoiseSuppressionToWav(audio.path, audio.base, nf, newAudioPath);
+        await audioService.applyNoiseSuppressionToWav(audio.path, audio.base, nf, tempPath);
 
-        if (!existsSync(newAudioPath)) {
-          throw new Error('Noise-suppressed audio file was not created');
+        if (!existsSync(tempPath) || statSync(tempPath).size === 0) {
+          throw new Error('Noise-suppressed audio file was not created or is empty');
+        }
+        copyFileSync(tempPath, finalPath);
+        unlinkSync(tempPath);
+
+        try {
+          await audioService.generateWaveformFile(finalPath, audio.base);
+        } catch (err) {
+          request.log.warn({ err, finalPath }, 'Waveform generation failed after noise-suppression');
         }
 
-        const probe = await audioService.probeAudio(newAudioPath, audio.base);
+        const probe = await audioService.probeAudio(finalPath, audio.base);
         const newDurationSec = probe.durationSec;
 
         const oldTxtPath = transcriptPath(audio.path);
-        const newTxtPath = transcriptPath(newAudioPath);
+        const newTxtPath = transcriptPath(finalPath);
         if (existsSync(oldTxtPath)) {
           assertPathUnder(oldTxtPath, audio.base);
           copyFileSync(oldTxtPath, newTxtPath);
         }
 
-        // Update database first so we never delete the original file if this fails
         db.prepare('UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?').run(
-          newAudioPath,
+          finalPath,
           newDurationSec,
           segmentId,
           episodeId
         );
 
-        // Now safe to remove old files; segment already points to new path
-        if (audio.path !== newAudioPath) {
-          unlinkSync(audio.path);
-        }
-        if (existsSync(oldTxtPath) && oldTxtPath !== newTxtPath) {
-          unlinkSync(oldTxtPath);
-        }
+        if (audio.path !== finalPath) unlinkSync(audio.path);
+        if (existsSync(oldTxtPath) && oldTxtPath !== newTxtPath) unlinkSync(oldTxtPath);
 
         return reply.status(204).send();
       } catch (err) {
         try {
-          if (existsSync(newAudioPath)) unlinkSync(newAudioPath);
+          if (existsSync(tempPath)) unlinkSync(tempPath);
         } catch {
-          // ignore
+          /* ignore */
         }
         request.log.error(err);
         return reply.status(500).send({ error: 'Failed to apply noise suppression' });
@@ -1091,8 +1125,12 @@ export async function segmentRoutes(app: FastifyInstance) {
         try {
           writeRssFile(podcastId, null);
         } catch (err) {
-          // RSS regeneration is non-fatal, but log for debugging
           request.log.warn({ err, podcastId }, 'Failed to regenerate RSS feed after episode render');
+        }
+        try {
+          await audioService.generateWaveformFile(outPath, processedDir(podcastId, episodeId));
+        } catch (err) {
+          request.log.warn({ err, episodeId }, 'Waveform generation failed after render');
         }
         const row = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episodeId) as Record<string, unknown>;
         return row;
