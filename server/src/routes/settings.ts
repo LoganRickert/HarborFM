@@ -273,7 +273,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
       if (provider === 'ollama') {
         try {
-          const base = ollama_url.replace(/\/$/, '');
+          const base = validateOllamaBaseUrl(ollama_url);
           const res = await fetch(`${base}/api/tags`, { method: 'GET' });
           if (!res.ok) {
             const text = await res.text();
