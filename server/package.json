@@ -22,7 +22,7 @@
     "@fastify/jwt": "^9.0.1",
     "@fastify/multipart": "^9.4.0",
     "@harborfm/shared": "workspace:*",
-    "better-sqlite3": "^11.6.0",
+    "better-sqlite3": "^12.6.2",
     "fastify": "^5.7.4",
     "@aws-sdk/client-s3": "^3.985.0",
     "argon2": "^0.44.0",
