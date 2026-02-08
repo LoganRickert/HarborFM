@@ -14,6 +14,32 @@ function normalizeHostname(input: string): string {
   return v.replace(/\/+$/, '');
 }
 
+function validateOllamaBaseUrl(input: string): string {
+  const raw = (input || '').trim() || 'http://localhost:11434';
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('Invalid Ollama URL');
+  }
+
+  // Allow only http/https schemes
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Ollama URL must use http or https');
+  }
+
+  // Basic safeguard: disallow URLs without a hostname
+  if (!url.hostname) {
+    throw new Error('Ollama URL must include a hostname');
+  }
+
+  // Normalize by removing any trailing slash from pathname
+  const normalized = new URL(url.toString());
+  normalized.pathname = normalized.pathname.replace(/\/+$/, '');
+
+  return normalized.toString();
+}
+
 function normalizeWhisperUrl(input: string): string {
   const v = input.trim();
   if (!v) return '';
@@ -241,7 +267,13 @@ export async function settingsRoutes(app: FastifyInstance) {
       const body = request.body as Partial<AppSettings> | undefined;
       const current = readSettings();
       const provider = body?.llm_provider ?? current.llm_provider;
-      const ollama_url = (body?.ollama_url ?? current.ollama_url).trim() || 'http://localhost:11434';
+      let ollama_url: string;
+      try {
+        ollama_url = validateOllamaBaseUrl(body?.ollama_url ?? current.ollama_url);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Invalid Ollama URL';
+        return reply.send({ ok: false, error: msg });
+      }
       const openai_api_key = body?.openai_api_key !== undefined && body.openai_api_key !== '(set)'
         ? String(body.openai_api_key).trim()
         : current.openai_api_key;
