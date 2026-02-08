@@ -75,7 +75,11 @@ export function EpisodeEditor() {
     queryFn: () => listSegments(id!),
     enabled: !!id,
   });
-  const segments = segmentsData?.segments ?? [];
+  const emptySegmentsRef = useRef<EpisodeSegment[]>([]);
+  const segments = useMemo(
+    () => segmentsData?.segments ?? emptySegmentsRef.current,
+    [segmentsData?.segments]
+  );
 
   const { data: asrAvail } = useQuery({
     queryKey: ['asrAvailable'],
@@ -910,11 +914,12 @@ function TranscriptModal({
       }
     }
     const previewEl = previewAudioRef.current;
+    const previewHandler = previewTimeHandlerRef.current;
     if (previewEl) {
       previewEl.pause();
       previewEl.src = '';
-      if (previewTimeHandlerRef.current) {
-        previewEl.removeEventListener('timeupdate', previewTimeHandlerRef.current);
+      if (previewHandler) {
+        previewEl.removeEventListener('timeupdate', previewHandler);
         previewTimeHandlerRef.current = null;
       }
     }
@@ -929,13 +934,12 @@ function TranscriptModal({
       })
       .finally(() => setLoading(false));
     return () => {
-      // Cleanup on unmount or segment change
-      const cleanupPreviewEl = previewAudioRef.current;
-      if (cleanupPreviewEl) {
-        cleanupPreviewEl.pause();
-        cleanupPreviewEl.src = '';
-        if (previewTimeHandlerRef.current) {
-          cleanupPreviewEl.removeEventListener('timeupdate', previewTimeHandlerRef.current);
+      // Cleanup on unmount or segment change (use captured ref values)
+      if (previewEl) {
+        previewEl.pause();
+        previewEl.src = '';
+        if (previewHandler) {
+          previewEl.removeEventListener('timeupdate', previewHandler);
           previewTimeHandlerRef.current = null;
         }
       }
@@ -2498,6 +2502,7 @@ function RecordModal({
 
 const LIBRARY_TAGS = ['Ad', 'Intro', 'Outro', 'Bumper', 'Other'] as const;
 const LIBRARY_PAGE_SIZE = 10;
+const EMPTY_LIBRARY_ASSETS: LibraryAsset[] = [];
 
 function LibraryModal({
   onClose,
@@ -2536,7 +2541,7 @@ function LibraryModal({
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
   });
-  const assets = data?.assets ?? [];
+  const assets = useMemo(() => data?.assets ?? EMPTY_LIBRARY_ASSETS, [data?.assets]);
 
   const tagOptions = useMemo(() => {
     const preset = new Set<string>(LIBRARY_TAGS);
