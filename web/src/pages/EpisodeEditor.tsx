@@ -1413,20 +1413,61 @@ function TranscriptModal({
       timeUpdateHandlerRef.current = onTimeUpdate;
       el.addEventListener('timeupdate', onTimeUpdate);
       el.src = segmentStreamUrl(episodeId, segmentId);
-      const onLoadedMetadata = () => {
-        el.currentTime = startSec;
-        el.play().catch(() => {
-          setPlayingEntryIndex(null);
-          if (timeUpdateHandlerRef.current) {
-            el.removeEventListener('timeupdate', timeUpdateHandlerRef.current);
-            timeUpdateHandlerRef.current = null;
-          }
-        });
-        el.removeEventListener('loadedmetadata', onLoadedMetadata);
+      const cleanup = () => {
+        if (timeUpdateHandlerRef.current) {
+          el.removeEventListener('timeupdate', timeUpdateHandlerRef.current);
+          timeUpdateHandlerRef.current = null;
+        }
+        setPlayingEntryIndex(null);
       };
-      el.addEventListener('loadedmetadata', onLoadedMetadata);
+      const startPlayback = () => {
+        el.play().catch(cleanup);
+      };
+      const isSafari = /^((?!chrome|android).)*safari|iPhone|iPad|Macintosh/i.test(navigator.userAgent) || (navigator as { vendor?: string }).vendor?.includes('Apple');
+      const trySeekThenPlay = () => {
+        let targetTime = startSec;
+        if (el.seekable.length > 0) {
+          const maxSeekable = el.seekable.end(0);
+          targetTime = Math.min(startSec, maxSeekable);
+        }
+        if (isSafari) {
+          // Safari often ignores currentTime when set before first play. Workaround: play (muted), then set currentTime on 'playing'.
+          const savedVolume = el.volume;
+          el.volume = 0;
+          el.play().catch(() => {
+            el.volume = savedVolume;
+            cleanup();
+          });
+          const onPlaying = () => {
+            el.removeEventListener('playing', onPlaying);
+            el.currentTime = targetTime;
+            el.volume = savedVolume;
+          };
+          el.addEventListener('playing', onPlaying, { once: true });
+        } else {
+          let seekedFired = false;
+          const fallback = setTimeout(() => {
+            if (!seekedFired && el.paused) startPlayback();
+          }, 800);
+          const onSeeked = () => {
+            seekedFired = true;
+            clearTimeout(fallback);
+            el.removeEventListener('seeked', onSeeked);
+            startPlayback();
+          };
+          el.addEventListener('seeked', onSeeked, { once: true });
+          el.currentTime = targetTime;
+        }
+      };
+      const onReady = () => {
+        el.removeEventListener('loadeddata', onReady);
+        el.removeEventListener('canplay', onReady);
+        trySeekThenPlay();
+      };
+      el.addEventListener('loadeddata', onReady);
+      el.addEventListener('canplay', onReady);
       if (el.readyState >= 2) {
-        onLoadedMetadata();
+        onReady();
       }
     }
   }

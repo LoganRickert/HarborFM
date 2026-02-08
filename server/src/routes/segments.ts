@@ -569,19 +569,9 @@ export async function segmentRoutes(app: FastifyInstance) {
             })
             .join('\n');
           writeFileSync(newTxtPath, updatedSrt, 'utf-8');
-          
-          // Delete old transcript
-          if (txtPath !== newTxtPath) {
-            unlinkSync(txtPath);
-          }
         }
         
-        // Replace old audio file
-        if (audio.path !== newAudioPath) {
-          unlinkSync(audio.path);
-        }
-        
-        // Update database
+        // Update database first so we never delete the original file if this fails
         const newDurationSec = newEndSec - newStartSec;
         db.prepare('UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?').run(
           newAudioPath,
@@ -589,6 +579,15 @@ export async function segmentRoutes(app: FastifyInstance) {
           segmentId,
           episodeId
         );
+        
+        // Now safe to remove old files; segment already points to new path
+        if (audio.path !== newAudioPath) {
+          unlinkSync(audio.path);
+        }
+        const txtPathToRemove = transcriptPath(audio.path);
+        if (existsSync(txtPathToRemove) && txtPathToRemove !== transcriptPath(newAudioPath)) {
+          unlinkSync(txtPathToRemove);
+        }
         
         return reply.status(204).send();
       } catch (err) {
@@ -744,25 +743,24 @@ export async function segmentRoutes(app: FastifyInstance) {
             })
             .join('\n');
           writeFileSync(newTxtPath, updatedSrt, 'utf-8');
-          
-          // Delete old transcript
-          if (txtPath !== newTxtPath) {
-            unlinkSync(txtPath);
-          }
         }
         
-        // Replace old audio file
-        if (audio.path !== newAudioPath) {
-          unlinkSync(audio.path);
-        }
-        
-        // Update database
+        // Update database first so we never delete the original file if this fails
         db.prepare('UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?').run(
           newAudioPath,
           newDurationSec,
           segmentId,
           episodeId
         );
+        
+        // Now safe to remove old files; segment already points to new path
+        if (audio.path !== newAudioPath) {
+          unlinkSync(audio.path);
+        }
+        const txtPathToRemove = transcriptPath(audio.path);
+        if (existsSync(txtPathToRemove) && txtPathToRemove !== transcriptPath(newAudioPath)) {
+          unlinkSync(txtPathToRemove);
+        }
         
         return reply.status(204).send();
       } catch (err) {
@@ -820,21 +818,23 @@ export async function segmentRoutes(app: FastifyInstance) {
         if (existsSync(oldTxtPath)) {
           assertPathUnder(oldTxtPath, audio.base);
           copyFileSync(oldTxtPath, newTxtPath);
-          if (oldTxtPath !== newTxtPath) {
-            unlinkSync(oldTxtPath);
-          }
         }
 
-        if (audio.path !== newAudioPath) {
-          unlinkSync(audio.path);
-        }
-
+        // Update database first so we never delete the original file if this fails
         db.prepare('UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?').run(
           newAudioPath,
           newDurationSec,
           segmentId,
           episodeId
         );
+
+        // Now safe to remove old files; segment already points to new path
+        if (audio.path !== newAudioPath) {
+          unlinkSync(audio.path);
+        }
+        if (existsSync(oldTxtPath) && oldTxtPath !== newTxtPath) {
+          unlinkSync(oldTxtPath);
+        }
 
         return reply.status(204).send();
       } catch (err) {
