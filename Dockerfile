@@ -20,8 +20,9 @@ RUN pnpm run build
 # Runtime stage: Node + ffmpeg, single image
 FROM node:22-bookworm-slim
 
-# Install ffmpeg for audio processing (segments, concat, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg tini \
+# Install ffmpeg, tini, and build deps for native modules (e.g. better-sqlite3)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg tini build-essential python3 \
   && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate

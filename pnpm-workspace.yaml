@@ -1,4 +1,7 @@
 packages:
-  - 'server'
-  - 'web'
-  - 'shared'
+  - server
+  - web
+  - shared
+
+ignoredBuiltDependencies:
+  - argon2
