@@ -1,0 +1,18 @@
+{
+  "name": "HarborFM",
+  "short_name": "HarborFM",
+  "description": "Create and manage your podcast with ease. Record, edit, and publish episodes.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0e12",
+  "theme_color": "#00d4aa",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

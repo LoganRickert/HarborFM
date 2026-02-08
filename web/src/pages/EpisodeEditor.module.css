@@ -762,7 +762,8 @@
 }
 
 .recordPlaybackWrap {
-  margin-top: 0.5rem;
+  margin-top: 2rem;
+  margin-bottom: 2.75rem;
 }
 
 .recordPlaybackRow {
@@ -1010,6 +1011,9 @@
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .libraryItemTag {

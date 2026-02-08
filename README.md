@@ -4,6 +4,8 @@
 
 Open source podcast creator. Build episodes from segments: record or upload clips, pull in intros and bumpers from a library, trim and reorder, then export a single audio file and RSS feed.
 
+The app also has PWA so you can add it to your server to your home screen.
+
 **License:** MIT
 
 **Source:** [https://github.com/LoganRickert/harborfm](https://github.com/LoganRickert/harborfm)
@@ -120,7 +122,6 @@ You can view, edit, and delete audio files in your library on the library page.
 You can view a list of users on the users page. You can view the list of podcasts for a user, their library, and edit their information from this page. You can change their password or disable/enable their account.
 
 ![HarborFM](screenshots/screenshot_17.jpg)
-
 
 ---
 

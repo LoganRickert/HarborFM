@@ -2669,7 +2669,7 @@ function LibraryModal({
         <input
           ref={fileInputRef}
           type="file"
-          accept="audio/*"
+          accept="audio/mpeg,audio/mp3,audio/wav,audio/wave,audio/x-wav,audio/mp4,audio/webm,audio/ogg,.mp3,.wav,.m4a,.webm,.ogg"
           style={{ display: 'none' }}
           onChange={handleFileSelect}
         />

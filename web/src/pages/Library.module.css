@@ -272,6 +272,8 @@
 .itemName {
   font-weight: 600;
   color: var(--text);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .itemTag {

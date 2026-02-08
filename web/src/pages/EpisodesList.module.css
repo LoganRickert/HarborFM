@@ -58,12 +58,32 @@
   text-decoration: none;
 }
 
-.subtitle {
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
   margin: 0 0 1.5rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
   padding-bottom: 1.5rem;
   border-bottom: 1px solid var(--border);
+}
+
+.summaryItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.summaryCount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.summaryLabel {
+  text-transform: lowercase;
 }
 
 .muted {

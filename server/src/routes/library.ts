@@ -221,6 +221,46 @@ export async function libraryRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
+  function libraryStreamContentType(path: string): string {
+    const lower = path.toLowerCase();
+    if (lower.endsWith('.wav')) return 'audio/wav';
+    if (lower.endsWith('.webm')) return 'audio/webm';
+    if (lower.endsWith('.ogg')) return 'audio/ogg';
+    if (lower.endsWith('.m4a') || lower.endsWith('.mp4')) return 'audio/mp4';
+    return 'audio/mpeg';
+  }
+
+  function sendLibraryStream(
+    request: import('fastify').FastifyRequest,
+    reply: import('fastify').FastifyReply,
+    safePath: string,
+    contentType: string
+  ) {
+    const stat = statSync(safePath);
+    const range = request.headers.range;
+    if (range) {
+      const match = /bytes=(\d*)-(\d*)/.exec(range);
+      if (!match) return reply.status(416).send();
+      const start = match[1] ? parseInt(match[1], 10) : 0;
+      const end = match[2] ? parseInt(match[2], 10) : stat.size - 1;
+      if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= stat.size) {
+        return reply.status(416).send();
+      }
+      reply
+        .status(206)
+        .header('Content-Type', contentType)
+        .header('Accept-Ranges', 'bytes')
+        .header('Content-Range', `bytes ${start}-${end}/${stat.size}`)
+        .header('Content-Length', String(end - start + 1));
+      return reply.send(createReadStream(safePath, { start, end }));
+    }
+    reply
+      .header('Content-Type', contentType)
+      .header('Accept-Ranges', 'bytes')
+      .header('Content-Length', String(stat.size));
+    return reply.send(createReadStream(safePath));
+  }
+
   app.get(
     '/api/library/:id/stream',
     { preHandler: [requireAuth] },
@@ -234,9 +274,8 @@ export async function libraryRoutes(app: FastifyInstance) {
       if (!path || !existsSync(path)) return reply.status(404).send({ error: 'File not found' });
       const base = libraryDir(request.userId);
       const safePath = assertPathUnder(path, base);
-      return reply
-        .header('Content-Type', 'audio/mpeg')
-        .send(createReadStream(safePath));
+      const contentType = libraryStreamContentType(path);
+      return sendLibraryStream(request, reply, safePath, contentType);
     }
   );
 
@@ -253,9 +292,8 @@ export async function libraryRoutes(app: FastifyInstance) {
       if (!path || !existsSync(path)) return reply.status(404).send({ error: 'File not found' });
       const base = libraryDir(userId);
       const safePath = assertPathUnder(path, base);
-      return reply
-        .header('Content-Type', 'audio/mpeg')
-        .send(createReadStream(safePath));
+      const contentType = libraryStreamContentType(path);
+      return sendLibraryStream(request, reply, safePath, contentType);
     }
   );
 }

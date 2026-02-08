@@ -4,7 +4,18 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
-    window.scrollTo(0, 0);
+    // Defer until after React has committed and the browser has painted the new route.
+    // Fixes mobile (e.g. iOS Safari) where scrolling in the same tick often has no effect.
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.documentElement.scrollLeft = 0;
+        document.body.scrollTop = 0;
+        document.body.scrollLeft = 0;
+      });
+    });
+    return () => cancelAnimationFrame(id);
   }, [pathname]);
   return null;
 }

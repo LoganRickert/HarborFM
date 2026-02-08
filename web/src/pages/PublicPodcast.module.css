@@ -172,6 +172,26 @@
   margin-bottom: 1.5rem;
 }
 
+@media (max-width: 640px) {
+  .episodesControls {
+    flex-wrap: wrap;
+  }
+  .episodesControls .searchInput {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .episodesControls .sortToggle {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .episodesControls .sortToggle .sortToggleBtn,
+  .episodesControls .sortToggle .sortToggleActive {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+  }
+}
+
 .searchInput {
   flex: 1;
   padding: 0.5rem 0.75rem;

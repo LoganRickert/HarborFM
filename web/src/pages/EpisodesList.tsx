@@ -18,8 +18,9 @@ export function EpisodesList() {
     enabled: !!id,
   });
 
-  const draftCount = episodes.filter((e) => e.status === 'draft').length;
   const publishedCount = episodes.filter((e) => e.status === 'published').length;
+  const scheduledCount = episodes.filter((e) => e.status === 'scheduled').length;
+  const draftCount = episodes.filter((e) => e.status === 'draft').length;
 
   if (!id) return null;
   if (podcastLoading) return <FullPageLoading />;
@@ -36,9 +37,20 @@ export function EpisodesList() {
             New episode
           </Link>
         </div>
-        <p className={styles.subtitle}>
-          {draftCount} draft · {publishedCount} published
-        </p>
+        <div className={styles.summary}>
+          <span className={styles.summaryItem}>
+            <span className={styles.summaryCount}>{publishedCount}</span>
+            <span className={styles.summaryLabel}>published</span>
+          </span>
+          <span className={styles.summaryItem}>
+            <span className={styles.summaryCount}>{scheduledCount}</span>
+            <span className={styles.summaryLabel}>scheduled</span>
+          </span>
+          <span className={styles.summaryItem}>
+            <span className={styles.summaryCount}>{draftCount}</span>
+            <span className={styles.summaryLabel}>draft</span>
+          </span>
+        </div>
         {episodesLoading && (
           <p className={styles.muted}>
             <InlineLoading label="Loading episodes" />
