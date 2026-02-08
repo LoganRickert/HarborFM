@@ -251,6 +251,40 @@
   opacity: 0.6;
 }
 
+/* Button toggle (e.g. iTunes Type) */
+.statusToggle {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+.statusToggleBtn,
+.statusToggleActive {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.statusToggleBtn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.statusToggleActive {
+  background: var(--accent);
+  color: var(--bg);
+}
+.statusToggleActive:hover {
+  background: var(--accent-dim);
+  color: var(--bg);
+}
+
 .textarea {
   resize: vertical;
   min-height: 100px;

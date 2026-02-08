@@ -26,18 +26,20 @@ export function Dashboard() {
   return (
     <div className={styles.dashboard}>
       <header className={styles.header}>
-        <div>
+        <div className={styles.headerLeft}>
           <h1 className={styles.title}>
-            {isAdminView ? `Podcasts (${selectedUser?.email ?? userId})` : 'Podcasts'}
+            {isAdminView ? `Podcasts (${selectedUser?.email ?? userId})` : 'Your shows'}
           </h1>
           <p className={styles.subtitle}>
-            Manage your shows and publish episodes
+            {podcasts.length > 0
+              ? `${podcasts.length} show${podcasts.length === 1 ? '' : 's'} · Manage and publish episodes`
+              : 'Manage your shows and publish episodes'}
           </p>
         </div>
         {!isAdminView && (
           <Link to="/podcasts/new" className={styles.createBtn}>
             <Plus size={18} strokeWidth={2.5} />
-            New Show
+            New show
           </Link>
         )}
       </header>
@@ -75,72 +77,72 @@ export function Dashboard() {
       )}
 
       {!isLoading && !isError && podcasts.length > 0 && (
-        <div className={styles.list}>
+        <div className={styles.grid}>
           {podcasts.map((p) => (
             <article key={p.id} className={styles.card}>
-              <div className={styles.cardMain}>
+              <Link to={`/podcasts/${p.id}`} className={styles.cardLink}>
                 <div className={styles.cardArtworkWrapper}>
                   {p.artwork_url ? (
-                    <img src={p.artwork_url} alt={`${p.title} artwork`} className={styles.cardArtwork} />
+                    <img src={p.artwork_url} alt="" className={styles.cardArtwork} />
                   ) : (
                     <div className={styles.cardArtworkPlaceholder}>
-                      <Radio size={28} strokeWidth={1.5} />
+                      <Radio size={32} strokeWidth={1.5} />
                     </div>
                   )}
                 </div>
-                <div className={styles.cardContent}>
-                  <div className={styles.cardHeader}>
-                    <Link to={`/podcasts/${p.id}`} className={styles.cardTitleLink}>
-                      <h2 className={styles.cardTitle}>{p.title}</h2>
-                      <ArrowUpRight className={styles.cardTitleIcon} size={16} strokeWidth={2} aria-hidden="true" />
-                    </Link>
-                    {!isAdminView && (
-                      <button
-                        type="button"
-                        className={styles.cardSettings}
-                        aria-label={`Edit show details for ${p.title}`}
-                        onClick={() => setEditingPodcastId(p.id)}
-                      >
-                        <Settings size={18} strokeWidth={2} />
-                      </button>
-                    )}
-                  </div>
+                <div className={styles.cardBody}>
+                  <h2 className={styles.cardTitle}>{p.title}</h2>
                   <p className={styles.cardSlug}>{p.slug}</p>
                   {p.description && (
                     <p className={styles.cardDesc}>
-                      {p.description.slice(0, 150)}{p.description.length > 150 ? '…' : ''}
+                      {p.description.slice(0, 120)}{p.description.length > 120 ? '…' : ''}
                     </p>
                   )}
                 </div>
-              </div>
+                <span className={styles.cardArrow}>
+                  <ArrowUpRight size={18} strokeWidth={2} aria-hidden="true" />
+                </span>
+              </Link>
               <div className={styles.cardFooter}>
-                {(p.author_name || p.category_primary) && (
-                  <span className={styles.cardMeta}>
-                    {[p.author_name, p.category_primary].filter(Boolean).join(' · ')}
-                  </span>
-                )}
                 <div className={styles.cardActions}>
-                  <Link 
-                    to={`/feed/${p.slug}`} 
+                  {!isAdminView && (
+                    <button
+                      type="button"
+                      className={styles.cardSettings}
+                      aria-label={`Edit show settings for ${p.title}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setEditingPodcastId(p.id);
+                      }}
+                    >
+                      <Settings size={16} strokeWidth={2} aria-hidden />
+                      <span className={styles.cardActionLabel}>Settings</span>
+                    </button>
+                  )}
+                  <Link
+                    to={`/feed/${p.slug}`}
                     className={styles.cardAction}
+                    aria-label={`RSS feed for ${p.title}`}
                   >
-                    <Rss size={16} strokeWidth={2} />
-                    Feed
+                    <Rss size={16} strokeWidth={2} aria-hidden />
+                    <span className={styles.cardActionLabel}>Feed</span>
                   </Link>
-                  <Link 
-                    to={`/podcasts/${p.id}/episodes`} 
+                  <Link
+                    to={`/podcasts/${p.id}/episodes`}
                     className={styles.cardAction}
+                    aria-label={`Episodes for ${p.title}`}
                   >
-                    <List size={16} strokeWidth={2} />
-                    Episodes
+                    <List size={16} strokeWidth={2} aria-hidden />
+                    <span className={styles.cardActionLabel}>Episodes</span>
                   </Link>
                   {!isAdminView && (
-                    <Link 
-                      to={`/podcasts/${p.id}/episodes/new`} 
+                    <Link
+                      to={`/podcasts/${p.id}/episodes/new`}
                       className={styles.cardActionPrimary}
+                      aria-label={`Create new episode for ${p.title}`}
                     >
-                      <Mic2 size={16} strokeWidth={2} />
-                      New Episode
+                      <Mic2 size={16} strokeWidth={2} aria-hidden />
+                      <span className={styles.cardActionLabel}>New episode</span>
                     </Link>
                   )}
                 </div>

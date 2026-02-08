@@ -204,7 +204,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     value={form.copyright ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, copyright: e.target.value || null }))}
                     className={styles.input}
-                    placeholder="e.g. Copyright 2025"
+                    placeholder="e.g. Copyright 2026"
                   />
                 </label>
                 <label className={styles.label}>
@@ -232,14 +232,19 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                 </label>
                 <label className={styles.label}>
                   iTunes Type
-                  <select
-                    value={form.itunes_type ?? 'episodic'}
-                    onChange={(e) => setForm((f) => ({ ...f, itunes_type: e.target.value as 'episodic' | 'serial' }))}
-                    className={styles.input}
-                  >
-                    <option value="episodic">Episodic</option>
-                    <option value="serial">Serial</option>
-                  </select>
+                  <div className={styles.statusToggle} role="group" aria-label="iTunes type">
+                    {(['episodic', 'serial'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className={(form.itunes_type ?? 'episodic') === t ? styles.statusToggleActive : styles.statusToggleBtn}
+                        onClick={() => setForm((f) => ({ ...f, itunes_type: t }))}
+                        aria-pressed={(form.itunes_type ?? 'episodic') === t}
+                      >
+                        {t === 'episodic' ? 'Episodic' : 'Serial'}
+                      </button>
+                    ))}
+                  </div>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
                     Episodic: episodes can be listened to in any order. Serial: episodes should be listened to in order.
                   </p>
