@@ -20,6 +20,7 @@ import styles from './Library.module.css';
 
 const LIBRARY_PAGE_SIZE = 25;
 const LIBRARY_TAGS = ['Ad', 'Intro', 'Outro', 'Bumper', 'Other'] as const;
+const EMPTY_ASSETS: LibraryAsset[] = [];
 
 function formatDuration(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -50,7 +51,7 @@ export function Library() {
     queryKey: ['library', userId],
     queryFn: () => (userId ? listLibraryForUser(userId) : listLibrary()),
   });
-  const assets = data?.assets ?? [];
+  const assets = useMemo(() => data?.assets ?? EMPTY_ASSETS, [data?.assets]);
 
   const [filterQuery, setFilterQuery] = useState('');
   const [filterTag, setFilterTag] = useState('');
