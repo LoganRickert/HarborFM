@@ -41,7 +41,6 @@ JWT_SECRET=$(openssl rand -base64 32)
 
 docker run --name harborfm -p 3001:3001 \
   -v harborfm-data:/data \
-  -v harborfm-secrets:/secrets \
   -e HARBORFM_SECRETS_KEY="$HARBORFM_SECRETS_KEY" \
   -e JWT_SECRET="$JWT_SECRET" \
   ghcr.io/loganrickert/harborfm:latest
