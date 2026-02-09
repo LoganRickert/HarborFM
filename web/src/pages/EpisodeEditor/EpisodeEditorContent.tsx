@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Breadcrumb } from '../../components/Breadcrumb';
 import { useAuthStore } from '../../store/auth';
 import { updateEpisode } from '../../api/episodes';
 import { downloadEpisodeUrl } from '../../api/audio';
@@ -162,11 +162,16 @@ export function EpisodeEditorContent({
     reorderMutation.mutate(newOrder.map((s) => s.id));
   }
 
+  const breadcrumbItems = [
+    { label: 'Home', href: '/' },
+    { label: podcast?.title ?? 'Show', href: `/podcasts/${podcastId}`, mobileLabel: 'Podcast' },
+    { label: 'Episodes', href: `/podcasts/${podcastId}/episodes` },
+    { label: episode.title, hideOnMobile: true },
+  ];
+
   return (
     <div className={styles.page}>
-      <Link to={`/podcasts/${podcastId}/episodes`} className={styles.back}>
-        ← {podcast?.title ?? 'Episodes'}
-      </Link>
+      <Breadcrumb items={breadcrumbItems} />
       {!editing && (
         <div className={styles.card}>
           <div className={styles.cardHeader}>

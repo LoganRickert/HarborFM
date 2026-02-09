@@ -109,6 +109,14 @@ export function Dashboard() {
               </Link>
               <div className={styles.cardFooter}>
                 <div className={styles.cardActions}>
+                  <Link
+                    to={`/feed/${p.slug}`}
+                    className={styles.cardAction}
+                    aria-label={`RSS feed for ${p.title}`}
+                  >
+                    <Rss size={16} strokeWidth={2} aria-hidden />
+                    <span className={styles.cardActionLabel}>Feed</span>
+                  </Link>
                   {!isAdminView && (
                     <button
                       type="button"
@@ -123,14 +131,6 @@ export function Dashboard() {
                       <span className={styles.cardActionLabel}>Settings</span>
                     </button>
                   )}
-                  <Link
-                    to={`/feed/${p.slug}`}
-                    className={styles.cardAction}
-                    aria-label={`RSS feed for ${p.title}`}
-                  >
-                    <Rss size={16} strokeWidth={2} aria-hidden />
-                    <span className={styles.cardActionLabel}>Feed</span>
-                  </Link>
                   <Link
                     to={`/podcasts/${p.id}/episodes`}
                     className={styles.cardAction}
@@ -156,11 +156,13 @@ export function Dashboard() {
         </div>
       )}
 
-      <EditShowDetailsDialog
-        open={editingPodcastId !== null}
-        podcastId={editingPodcastId}
-        onClose={() => setEditingPodcastId(null)}
-      />
+      {editingPodcastId != null && (
+        <EditShowDetailsDialog
+          open
+          podcastId={editingPodcastId}
+          onClose={() => setEditingPodcastId(null)}
+        />
+      )}
     </div>
   );
 }

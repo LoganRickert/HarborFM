@@ -1,19 +1,6 @@
 .wrap {
   max-width: var(--max-content);
   margin: 0 auto;
-  padding: 2rem;
-}
-
-.back {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  display: block;
-  margin-bottom: 1rem;
-  text-decoration: none;
-}
-.back:hover {
-  color: var(--accent);
-  text-decoration: none;
 }
 
 .card {

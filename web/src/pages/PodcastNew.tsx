@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createPodcast } from '../api/podcasts';
+import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './PodcastNew.module.css';
 
 function slugify(s: string): string {
@@ -46,6 +47,7 @@ export function PodcastNew() {
 
   return (
     <div className={styles.page}>
+      <Breadcrumb items={[{ label: 'Home', href: '/' }, { label: 'New show' }]} />
       <header className={styles.hero}>
         <h1 className={styles.heroTitle}>
           New show

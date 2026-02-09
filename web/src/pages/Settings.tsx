@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSettings, updateSettings, testLlmConnection, type AppSettings } from '../api/settings';
 import { FullPageLoading } from '../components/Loading';
@@ -94,9 +93,6 @@ export function Settings() {
 
   return (
     <div className={styles.page}>
-      <Link to="/" className={styles.back}>
-        ← Home
-      </Link>
       <header className={styles.hero}>
         <h1 className={styles.heroTitle}>Settings</h1>
         <p className={styles.heroSub}>Control your server configuration and access settings.</p>

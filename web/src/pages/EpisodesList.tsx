@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { getPodcast } from '../api/podcasts';
 import { listEpisodes } from '../api/episodes';
 import { FullPageLoading, InlineLoading } from '../components/Loading';
+import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './EpisodesList.module.css';
 
 export function EpisodesList() {
@@ -26,11 +27,15 @@ export function EpisodesList() {
   if (!id) return null;
   if (podcastLoading) return <FullPageLoading />;
 
+  const breadcrumbItems = [
+    { label: 'Home', href: '/' },
+    { label: podcast?.title ?? 'Show', href: `/podcasts/${id}`, mobileLabel: 'Podcast' },
+    { label: 'Episodes' },
+  ];
+
   return (
     <div className={styles.wrap}>
-      <Link to={`/podcasts/${id}`} className={styles.back}>
-        ← {podcast?.title ?? 'Show'}
-      </Link>
+      <Breadcrumb items={breadcrumbItems} />
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <h1 className={styles.cardTitle}>Episodes</h1>

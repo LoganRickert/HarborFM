@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { createEpisode } from '../api/episodes';
 import { getPodcast } from '../api/podcasts';
+import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './PodcastNew.module.css';
 
 export function EpisodeNew() {
@@ -38,11 +39,16 @@ export function EpisodeNew() {
 
   if (!id) return null;
 
+  const breadcrumbItems = [
+    { label: 'Home', href: '/' },
+    { label: podcast?.title ?? 'Show', href: `/podcasts/${id}`, mobileLabel: 'Podcast' },
+    { label: 'Episodes', href: `/podcasts/${id}/episodes` },
+    { label: 'New episode', hideOnMobile: true },
+  ];
+
   return (
     <div className={styles.page}>
-      <Link to={`/podcasts/${id}/episodes`} className={styles.back}>
-        ← {podcast?.title ?? 'Episodes'}
-      </Link>
+      <Breadcrumb items={breadcrumbItems} />
       <header className={styles.hero}>
         <h1 className={styles.heroTitle}>
           New episode

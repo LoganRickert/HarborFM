@@ -8,6 +8,7 @@ import { getAuthRssPreviewUrl } from '../api/rss';
 import { listExports, createExport, updateExport, testExport, deployExport, type Export } from '../api/exports';
 import { FullPageLoading } from '../components/Loading';
 import { EditShowDetailsDialog } from './EditShowDetailsDialog';
+import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './PodcastSettings.module.css';
 
 export function PodcastSettings() {
@@ -24,11 +25,14 @@ export function PodcastSettings() {
   if (isLoading || (!podcast && isFetching)) return <FullPageLoading />;
   if (isError || !podcast) return <p className={styles.error}>Podcast not found.</p>;
 
+  const breadcrumbItems = [
+    { label: 'Home', href: '/' },
+    { label: podcast.title, mobileLabel: 'Podcast' },
+  ];
+
   return (
     <div className={styles.page}>
-      <Link to="/" className={styles.back}>
-        ← Back to shows
-      </Link>
+      <Breadcrumb items={breadcrumbItems} />
 
       <div className={styles.card}>
         <div className={styles.cardHeader}>
@@ -113,11 +117,13 @@ export function PodcastSettings() {
           </div>
         </div>
 
-      <EditShowDetailsDialog
-        open={detailsDialogOpen}
-        podcastId={id}
-        onClose={() => setDetailsDialogOpen(false)}
-      />
+      {detailsDialogOpen && (
+        <EditShowDetailsDialog
+          open
+          podcastId={id}
+          onClose={() => setDetailsDialogOpen(false)}
+        />
+      )}
 
       <>
           <div className={styles.card}>

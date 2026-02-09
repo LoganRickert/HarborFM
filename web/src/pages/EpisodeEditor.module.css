@@ -1,19 +1,6 @@
 .page {
   max-width: var(--max-content);
   margin: 0 auto;
-  padding: 2rem;
-}
-
-.back {
-  display: inline-block;
-  margin-bottom: 1rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-.back:hover {
-  color: var(--accent);
-  text-decoration: none;
 }
 
 .hero {
@@ -1860,21 +1847,19 @@
 
 /* Mobile: reduce padding so content isn’t squeezed by multiple cards */
 @media (max-width: 640px) {
-  .page {
-    padding: 0.75rem 1rem;
-  }
-
   .card {
-    padding: 1.25rem 1rem;
+    padding: 1.25rem 2rem;
     margin-bottom: 1rem;
   }
 
   .detailsSummaryCard {
-    padding: 0.875rem 1rem;
+    padding: 0.875rem 2rem;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .generateBar {
-    padding: 1.25rem 1rem;
+    padding: 1.25rem 2rem;
   }
 
   .generateBarInner {

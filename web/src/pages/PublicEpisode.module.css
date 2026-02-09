@@ -11,7 +11,7 @@
 .container {
   max-width: 800px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: calc(2rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) calc(2rem + env(safe-area-inset-bottom, 0px)) calc(1rem + env(safe-area-inset-left, 0px));
 }
 
 .card {
@@ -26,11 +26,12 @@
   border-bottom: 1px solid var(--border);
   margin-left: calc(-50vw + 50%);
   margin-right: calc(-50vw + 50%);
-  margin-top: -2rem;
+  margin-top: calc(-2rem - env(safe-area-inset-top, 0px));
   margin-bottom: 2rem;
   width: 100vw;
-  padding-left: max(1rem, calc(50vw - 400px));
-  padding-right: max(1rem, calc(50vw - 400px));
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(calc(1rem + env(safe-area-inset-left, 0px)), calc(50vw - 400px));
+  padding-right: max(calc(1rem + env(safe-area-inset-right, 0px)), calc(50vw - 400px));
 }
 
 .siteHeaderContent {
