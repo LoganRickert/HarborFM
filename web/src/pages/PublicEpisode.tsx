@@ -143,7 +143,9 @@ export function PublicEpisode() {
       el.pause();
       setIsPlaying(false);
     } else {
-      el.src = audioUrl;
+      if (!el.src || el.ended) {
+        el.src = audioUrl;
+      }
       el.play().catch(() => setIsPlaying(false));
     }
   }

@@ -117,7 +117,9 @@ function EpisodePlayer({
       onPause();
     } else {
       onPlay();
-      el.src = audioUrl;
+      if (!el.src || el.ended) {
+        el.src = audioUrl;
+      }
       el.play().catch(() => onPause());
     }
   }
