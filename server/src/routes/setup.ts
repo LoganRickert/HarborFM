@@ -1,4 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { readFile, writeFile } from 'fs/promises';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import argon2 from 'argon2';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
@@ -6,6 +9,12 @@ import { consumeSetupToken, getOrCreateSetupToken, isSetupComplete, readSetupTok
 import { readSettings } from './settings.js';
 import { getClientIp, getIpBan, getUserAgent, recordFailureAndMaybeBan } from '../services/loginAttempts.js';
 import { normalizeHostname } from '../utils/url.js';
+import { libraryDir, libraryAssetPath } from '../services/paths.js';
+import * as audioService from '../services/audio.js';
+import { existsSync, statSync } from 'fs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const INITIAL_ASSETS_PATH = join(__dirname, '..', '..', 'initial-assets.json');
 
 function writeSetting(key: string, value: string): void {
   db.prepare(
@@ -100,13 +109,14 @@ export async function setupRoutes(app: FastifyInstance) {
     }
 
     const body = request.body as
-      | { email?: string; password?: string; hostname?: string; registration_enabled?: boolean; public_feeds_enabled?: boolean }
+      | { email?: string; password?: string; hostname?: string; registration_enabled?: boolean; public_feeds_enabled?: boolean; import_pixabay_assets?: boolean }
       | undefined;
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const password = typeof body?.password === 'string' ? body.password : '';
     const hostname = typeof body?.hostname === 'string' ? normalizeHostname(body.hostname) : '';
     const registrationEnabled = typeof body?.registration_enabled === 'boolean' ? body.registration_enabled : false;
     const publicFeedsEnabled = typeof body?.public_feeds_enabled === 'boolean' ? body.public_feeds_enabled : true;
+    const importPixabayAssets = typeof body?.import_pixabay_assets === 'boolean' ? body.import_pixabay_assets : false;
 
     if (!email || !email.includes('@')) {
       return reply.status(400).send({ error: 'Valid email is required' });
@@ -145,10 +155,85 @@ export async function setupRoutes(app: FastifyInstance) {
     writeSetting('public_feeds_enabled', String(publicFeedsEnabled));
     writeSetting('setup_completed', 'true');
 
+    if (importPixabayAssets) {
+      try {
+        await importPixabayAssetsIntoLibrary(id, request.log);
+      } catch (err) {
+        request.log.warn({ err }, 'Pixabay assets import failed (setup completed)');
+      }
+    }
+
     // Consume token last so transient failures don't burn the setup URL.
     consumeSetupToken(token);
 
     return reply.status(201).send({ ok: true, user: { id, email, role: 'admin' as const } });
   });
+}
+
+type InitialAsset = { name: string; tag?: string | null; copyright?: string | null; license?: string | null; download: string; source: string };
+
+async function importPixabayAssetsIntoLibrary(
+  ownerUserId: string,
+  log: FastifyInstance['log']
+): Promise<void> {
+  if (!existsSync(INITIAL_ASSETS_PATH)) {
+    log.info('initial-assets.json not found, skipping Pixabay import');
+    return;
+  }
+  const raw = await readFile(INITIAL_ASSETS_PATH, 'utf8');
+  const list = raw.trim() ? (JSON.parse(raw) as unknown) : [];
+  const assets = Array.isArray(list) ? (list as InitialAsset[]) : [];
+  if (assets.length === 0) return;
+
+  const dir = libraryDir(ownerUserId);
+  let totalBytes = 0;
+  for (const asset of assets) {
+    const downloadUrl = typeof asset.download === 'string' ? asset.download : '';
+    const name = typeof asset.name === 'string' ? asset.name : 'Untitled';
+    const tag = typeof asset.tag === 'string' ? asset.tag : null;
+    const copyright = typeof asset.copyright === 'string' ? asset.copyright : null;
+    const license = typeof asset.license === 'string' ? asset.license : null;
+    const source = typeof asset.source === 'string' ? asset.source : null;
+    if (!downloadUrl) continue;
+    const assetId = nanoid();
+    const destPath = libraryAssetPath(ownerUserId, assetId, 'mp3');
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) {
+        log.warn({ url: downloadUrl, status: res.status }, 'Pixabay asset download failed');
+        continue;
+      }
+      const buf = await res.arrayBuffer();
+      await writeFile(destPath, new Uint8Array(buf));
+      const bytesWritten = statSync(destPath).size;
+      totalBytes += bytesWritten;
+      let durationSec = 0;
+      try {
+        const probe = await audioService.probeAudio(destPath, dir);
+        durationSec = probe.durationSec;
+      } catch {
+        // keep 0
+      }
+      try {
+        await audioService.generateWaveformFile(destPath, dir);
+      } catch (err) {
+        log.warn({ err, path: destPath }, 'Waveform generation failed for Pixabay asset');
+      }
+      db.prepare(
+        `INSERT INTO reusable_assets (id, owner_user_id, name, tag, audio_path, duration_sec, global_asset, copyright, license, source_url)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+      ).run(assetId, ownerUserId, name, tag, destPath, durationSec, copyright, license, source);
+    } catch (err) {
+      log.warn({ err, url: downloadUrl }, 'Pixabay asset import failed');
+    }
+
+    // Rate limit to avoid overwhelming the server.
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (totalBytes > 0) {
+    db.prepare(
+      `UPDATE users SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ? WHERE id = ?`
+    ).run(totalBytes, ownerUserId);
+  }
 }
 

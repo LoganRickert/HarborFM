@@ -17,6 +17,7 @@ export function completeSetup(
     hostname: string;
     registration_enabled: boolean;
     public_feeds_enabled: boolean;
+    import_pixabay_assets?: boolean;
   }
 ) {
   const q = new URLSearchParams({ id });

@@ -21,6 +21,8 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState('');
   const [uploadTag, setUploadTag] = useState('');
+  const [uploadCopyright, setUploadCopyright] = useState('');
+  const [uploadLicense, setUploadLicense] = useState('');
   const [customTag, setCustomTag] = useState('');
   const [filterTag, setFilterTag] = useState('');
   const [filterQuery, setFilterQuery] = useState('');
@@ -34,13 +36,27 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
   });
 
   const uploadMutation = useMutation({
-    mutationFn: ({ file, name, tag }: { file: File; name: string; tag?: string | null }) =>
-      createLibraryAsset(file, name, tag || undefined),
+    mutationFn: ({
+      file,
+      name,
+      tag,
+      copyright,
+      license,
+    }: {
+      file: File;
+      name: string;
+      tag?: string | null;
+      copyright?: string | null;
+      license?: string | null;
+    }) =>
+      createLibraryAsset(file, name, tag || undefined, copyright || undefined, license || undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['library'] });
       setPendingFile(null);
       setUploadName('');
       setUploadTag('');
+      setUploadCopyright('');
+      setUploadLicense('');
       setCustomTag('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
@@ -95,13 +111,17 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
     if (!pendingFile) return;
     const name = uploadName.trim() || pendingFile.name.replace(/\.[^.]+$/, '');
     const tag = uploadTag === 'Other' ? (customTag.trim() || null) : (uploadTag || null);
-    uploadMutation.mutate({ file: pendingFile, name, tag });
+    const copyright = uploadCopyright.trim() || null;
+    const license = uploadLicense.trim() || null;
+    uploadMutation.mutate({ file: pendingFile, name, tag, copyright, license });
   }
 
   function clearPending() {
     setPendingFile(null);
     setUploadName('');
     setUploadTag('');
+    setUploadCopyright('');
+    setUploadLicense('');
     setCustomTag('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -112,6 +132,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
         <h3 className={styles.libraryTitle}>Insert from library</h3>
         <p className={styles.librarySub}>Reusable clips (ads, intros, outros) you can use in any episode.</p>
 
+        <div className={styles.libraryCardBodyScroll}>
         {!pendingFile ? (
           <button
             type="button"
@@ -159,6 +180,26 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
                 />
               </label>
             )}
+            <label className={styles.recordLabel}>
+              <span>Copyright <span className={styles.optional}>(optional)</span></span>
+              <input
+                type="text"
+                className={styles.recordNameInput}
+                placeholder="e.g. 2026 Acme Media"
+                value={uploadCopyright}
+                onChange={(e) => setUploadCopyright(e.target.value)}
+              />
+            </label>
+            <label className={styles.recordLabel}>
+              <span>License <span className={styles.optional}>(optional)</span></span>
+              <input
+                type="text"
+                className={styles.recordNameInput}
+                placeholder="e.g. CC BY 4.0, All rights reserved"
+                value={uploadLicense}
+                onChange={(e) => setUploadLicense(e.target.value)}
+              />
+            </label>
             <div className={styles.libraryUploadActions}>
               <button type="button" className={styles.cancel} onClick={clearPending} aria-label="Cancel adding to library">
                 Cancel
@@ -275,6 +316,8 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
             {error}
           </p>
         )}
+        </div>
+
         <button type="button" className={styles.libraryClose} onClick={onClose} aria-label="Close library">
           Close
         </button>

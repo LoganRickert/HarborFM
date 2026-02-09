@@ -840,6 +840,12 @@
   color: var(--text);
 }
 
+.recordLabel .optional {
+  font-weight: 400;
+  opacity: 0.75;
+  font-size: 0.8em;
+}
+
 .recordNameInput {
   padding: 0.5rem 0.75rem;
   font-size: 0.9375rem;
@@ -1020,16 +1026,47 @@
   padding: 1.5rem;
   max-width: 420px;
   width: 100%;
-  max-height: 80vh;
+  height: min(90vh, 720px);
+  max-height: 90vh;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 @media (min-width: 640px) {
   .libraryCard {
     max-width: 560px;
   }
+}
+
+.libraryCardBodyScroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  margin: 0 -0.25rem 0 0;
+  padding-right: 0.25rem;
+}
+.libraryCardBodyScroll::-webkit-scrollbar {
+  width: 8px;
+}
+.libraryCardBodyScroll::-webkit-scrollbar-track {
+  background: var(--bg-muted);
+  border-radius: 4px;
+}
+.libraryCardBodyScroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.libraryCardBodyScroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.libraryCardBodyScroll .libraryList {
+  flex: none;
+  min-height: unset;
+  overflow-y: visible;
 }
 
 .libraryTitle {

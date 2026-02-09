@@ -95,17 +95,6 @@ export function EpisodeEditorContent({
   }, [episode]);
 
   useEffect(() => {
-    if (detailsDialogOpen) {
-      setDialogForm(episodeForm);
-      setCoverMode(episode.artwork_filename ? 'upload' : 'url');
-      setPendingArtworkFile(null);
-      setDebouncedArtworkUrl((episodeForm.artworkUrl ?? '').trim());
-      updateMutation.reset();
-      uploadArtworkMutation.reset();
-    }
-  }, [detailsDialogOpen, episodeForm, episode.artwork_filename, episodeForm.artworkUrl]);
-
-  useEffect(() => {
     const raw = (dialogForm.artworkUrl ?? '').trim();
     if (!raw) {
       setDebouncedArtworkUrl('');
@@ -147,6 +136,19 @@ export function EpisodeEditorContent({
       setCoverUploadKey((k) => k + 1);
     },
   });
+
+  useEffect(() => {
+    if (detailsDialogOpen) {
+      setDialogForm(episodeForm);
+      setCoverMode(episode.artwork_filename ? 'upload' : 'url');
+      setPendingArtworkFile(null);
+      setDebouncedArtworkUrl((episodeForm.artworkUrl ?? '').trim());
+      updateMutation.reset();
+      uploadArtworkMutation.reset();
+    }
+    // Intentionally omit updateMutation/uploadArtworkMutation — .reset() can change refs and cause an infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailsDialogOpen, episodeForm, episode.artwork_filename, episodeForm.artworkUrl]);
 
   const addRecordedMutation = useMutation({
     mutationFn: ({ file, name }: { file: File; name?: string | null }) => addRecordedSegment(id, file, name),
@@ -303,7 +305,8 @@ export function EpisodeEditorContent({
                     try {
                       await uploadArtworkMutation.mutateAsync(fileToUpload);
                       setPendingArtworkFile(null);
-                      const { artwork_url: _u, ...rest } = payload;
+                      const { artwork_url: _artworkUrl, ...rest } = payload;
+                      void _artworkUrl;
                       updateMutation.mutate(rest);
                     } catch {
                       // error surfaced via uploadArtworkMutation
@@ -311,7 +314,7 @@ export function EpisodeEditorContent({
                     return;
                   }
                   const finalPayload =
-                    coverMode === 'upload' ? (() => { const { artwork_url: _u, ...rest } = payload; return rest; })() : payload;
+                    coverMode === 'upload' ? (() => { const { artwork_url: _artworkUrl, ...rest } = payload; void _artworkUrl; return rest; })() : payload;
                   updateMutation.mutate(finalPayload);
                 }}
                 onCancel={() => setDetailsDialogOpen(false)}

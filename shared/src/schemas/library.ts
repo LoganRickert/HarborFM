@@ -8,12 +8,16 @@ export const libraryAssetSchema = z.object({
   duration_sec: z.number(),
   created_at: z.string(),
   global_asset: z.union([z.literal(0), z.literal(1), z.boolean()]).optional(),
+  copyright: z.string().nullable().optional(),
+  license: z.string().nullable().optional(),
 });
 
 export const libraryUpdateSchema = z.object({
   name: z.string().min(1, { message: 'Name is required' }).optional(),
   tag: z.string().nullable().optional(),
   global_asset: z.boolean().optional(),
+  copyright: z.string().nullable().optional(),
+  license: z.string().nullable().optional(),
 });
 
 export type LibraryAsset = z.infer<typeof libraryAssetSchema>;

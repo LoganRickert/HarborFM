@@ -12,7 +12,8 @@
     "test": "echo \"No tests yet\"",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:clear-ip-bans": "tsx src/db/clear-ip-bans.ts",
-    "reset-password": "tsx src/db/reset-first-user-password.ts"
+    "reset-password": "tsx src/db/reset-first-user-password.ts",
+    "assets:pixabay": "node scripts/pixabay-import.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.985.0",
@@ -26,6 +27,7 @@
     "@harborfm/shared": "workspace:*",
     "argon2": "^0.44.0",
     "better-sqlite3": "^12.6.2",
+    "dotenv": "^17.2.4",
     "fastify": "^5.7.4",
     "nanoid": "^5.1.6"
   },

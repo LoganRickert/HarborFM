@@ -93,7 +93,7 @@ async function main() {
   });
 
   await app.register(rateLimit, {
-    max: 50,
+    max: 100,
     timeWindow: '1 minute',
     allowList: (req) => {
       const path = req.url.split('?')[0];

@@ -48,6 +48,7 @@ export function Setup() {
   const [hostname, setHostname] = useState(defaultHostname);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const [publicFeedsEnabled, setPublicFeedsEnabled] = useState(true);
+  const [importPixabayAssets, setImportPixabayAssets] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -57,6 +58,7 @@ export function Setup() {
         hostname: hostname.trim().replace(/\/+$/, ''),
         registration_enabled: registrationEnabled,
         public_feeds_enabled: publicFeedsEnabled,
+        import_pixabay_assets: importPixabayAssets,
       }),
     onSuccess: async () => {
       // Prevent SetupGuard from using stale cached setupRequired=true.
@@ -250,6 +252,19 @@ export function Setup() {
           </label>
           <p className={styles.toggleHelp}>
             When enabled, anyone can view your podcast feed pages and RSS. When disabled, feed pages are hidden.
+          </p>
+
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={importPixabayAssets}
+              onChange={(e) => setImportPixabayAssets(e.target.checked)}
+            />
+            <span className="toggle__track" aria-hidden="true" />
+            <span>Import Pixabay Assets</span>
+          </label>
+          <p className={styles.toggleHelp}>
+            Imports a list of curated Pixabay assets into your global library.
           </p>
 
           {mutation.isError && <p className={styles.error}>{mutation.error?.message}</p>}

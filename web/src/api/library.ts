@@ -10,6 +10,8 @@ export interface LibraryAsset {
   duration_sec: number;
   created_at: string;
   global_asset?: boolean | number;
+  copyright?: string | null;
+  license?: string | null;
 }
 
 export function listLibrary(): Promise<{ assets: LibraryAsset[] }> {
@@ -26,10 +28,30 @@ export function listLibraryForUser(userId: string): Promise<{ assets: LibraryAss
   });
 }
 
-export function createLibraryAsset(file: File, name: string, tag?: string | null): Promise<LibraryAsset> {
+export function importFromPixabay(url: string): Promise<LibraryAsset> {
+  return fetch(`${BASE}/library/import-pixabay`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ url }),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json();
+  });
+}
+
+export function createLibraryAsset(
+  file: File,
+  name: string,
+  tag?: string | null,
+  copyright?: string | null,
+  license?: string | null
+): Promise<LibraryAsset> {
   const form = new FormData();
   form.append('name', name);
   if (tag) form.append('tag', tag);
+  if (copyright) form.append('copyright', copyright);
+  if (license) form.append('license', license);
   form.append('file', file);
   const res = fetch(`${BASE}/library`, {
     method: 'POST',
@@ -43,7 +65,10 @@ export function createLibraryAsset(file: File, name: string, tag?: string | null
   });
 }
 
-export function updateLibraryAsset(id: string, data: { name?: string; tag?: string | null; global_asset?: boolean }): Promise<LibraryAsset> {
+export function updateLibraryAsset(
+  id: string,
+  data: { name?: string; tag?: string | null; global_asset?: boolean; copyright?: string | null; license?: string | null }
+): Promise<LibraryAsset> {
   return fetch(`${BASE}/library/${id}`, {
     method: 'PATCH',
     credentials: 'include',
@@ -55,7 +80,11 @@ export function updateLibraryAsset(id: string, data: { name?: string; tag?: stri
   });
 }
 
-export function updateLibraryAssetForUser(userId: string, id: string, data: { name?: string; tag?: string | null; global_asset?: boolean }): Promise<LibraryAsset> {
+export function updateLibraryAssetForUser(
+  userId: string,
+  id: string,
+  data: { name?: string; tag?: string | null; global_asset?: boolean; copyright?: string | null; license?: string | null }
+): Promise<LibraryAsset> {
   return fetch(`${BASE}/library/user/${userId}/${id}`, {
     method: 'PATCH',
     credentials: 'include',
@@ -85,4 +114,12 @@ export function libraryStreamUrl(id: string): string {
 
 export function libraryStreamUrlForUser(userId: string, id: string): string {
   return `${BASE}/library/user/${userId}/${id}/stream`;
+}
+
+export function libraryWaveformUrl(id: string): string {
+  return `${BASE}/library/${id}/waveform`;
+}
+
+export function libraryWaveformUrlForUser(userId: string, id: string): string {
+  return `${BASE}/library/user/${userId}/${id}/waveform`;
 }

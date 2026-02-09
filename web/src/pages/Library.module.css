@@ -77,6 +77,13 @@
   font-size: 0.9rem;
 }
 
+.uploadChooseRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
 .uploadChooseBtn {
   display: inline-flex;
   align-items: center;
@@ -90,6 +97,27 @@
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.pixabayImportForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+  min-width: 0;
+  flex: 1 1 100%;
+}
+
+.pixabayImportForm .input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.pixabayImportActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .uploadChooseBtn:hover {
@@ -115,6 +143,12 @@
   gap: 0.35rem;
   font-size: 0.85rem;
   color: var(--text);
+}
+
+.optional {
+  font-weight: 400;
+  opacity: 0.75;
+  font-size: 0.8em;
 }
 
 .uploadActions {
@@ -290,6 +324,50 @@
   margin-top: 0.35rem;
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+.itemWaveformRow {
+  width: 100%;
+  min-width: 0;
+  margin-top: 0.6rem;
+}
+
+.itemWaveform {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  width: 100%;
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.itemWaveform:hover {
+  border-color: var(--accent);
+}
+
+.itemWaveformPlaceholder {
+  height: 32px;
+  min-height: 32px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.itemWaveformPlaceholder:hover {
+  border-color: var(--accent);
+}
+
+.itemWaveformPlaceholderFill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.1s linear;
 }
 
 .itemActions {
@@ -537,5 +615,11 @@
 
   .item {
     padding: 1rem;
+  }
+
+  .pixabayImportActions button {
+    min-height: 44px;
+    flex: 1;
+    min-width: 120px;
   }
 }

@@ -107,9 +107,12 @@ export const up = (db: { exec: (sql: string) => void }) => {
       duration_sec INTEGER NOT NULL,
       tag TEXT,
       global_asset INTEGER DEFAULT 0,
+      copyright TEXT,
+      license TEXT,
+      source_url TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-
+    
     CREATE TABLE IF NOT EXISTS episode_segments (
       id TEXT PRIMARY KEY,
       episode_id TEXT NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,

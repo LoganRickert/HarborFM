@@ -7,14 +7,18 @@ import {
   createLibraryAsset,
   deleteLibraryAsset,
   deleteLibraryAssetForUser,
+  importFromPixabay,
   libraryStreamUrl,
   libraryStreamUrlForUser,
+  libraryWaveformUrl,
+  libraryWaveformUrlForUser,
   listLibrary,
   listLibraryForUser,
   updateLibraryAsset,
   updateLibraryAssetForUser,
   type LibraryAsset,
 } from '../api/library';
+import { WaveformCanvas, type WaveformData } from './EpisodeEditor/WaveformCanvas';
 import { me } from '../api/auth';
 import { getUser } from '../api/users';
 import styles from './Library.module.css';
@@ -22,6 +26,74 @@ import styles from './Library.module.css';
 const LIBRARY_PAGE_SIZE = 25;
 const LIBRARY_TAGS = ['Ad', 'Intro', 'Outro', 'Bumper', 'Other'] as const;
 const EMPTY_ASSETS: LibraryAsset[] = [];
+
+function LibraryItemWaveform({
+  asset,
+  waveformUrl,
+  currentTime,
+  onSeek,
+  onPlayPause,
+}: {
+  asset: LibraryAsset;
+  waveformUrl: string;
+  currentTime: number;
+  onSeek: (asset: LibraryAsset, time: number) => void;
+  onPlayPause: () => void;
+}) {
+  const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
+  const durationSec = asset.duration_sec ?? 0;
+
+  useEffect(() => {
+    if (durationSec <= 0) {
+      setWaveformData(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(waveformUrl, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.data?.length) setWaveformData(data as WaveformData);
+        else if (!cancelled) setWaveformData(null);
+      })
+      .catch(() => {
+        if (!cancelled) setWaveformData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [waveformUrl, durationSec]);
+
+  if (durationSec <= 0) return null;
+  return (
+    <div className={styles.itemWaveformRow}>
+      {waveformData ? (
+        <WaveformCanvas
+          data={waveformData}
+          durationSec={durationSec}
+          currentTime={currentTime}
+          onSeek={(time) => onSeek(asset, time)}
+          onPlayPause={onPlayPause}
+          className={styles.itemWaveform}
+        />
+      ) : (
+        <div
+          className={styles.itemWaveformPlaceholder}
+          role="progressbar"
+          aria-valuenow={Math.round(currentTime)}
+          aria-valuemin={0}
+          aria-valuemax={durationSec}
+          aria-label="Playback position"
+          onClick={() => onPlayPause()}
+        >
+          <div
+            className={styles.itemWaveformPlaceholderFill}
+            style={{ width: `${durationSec > 0 ? (currentTime / durationSec) * 100 : 0}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatDuration(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -49,9 +121,15 @@ export function Library() {
     enabled: !!userId,
   });
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
-  const currentUser = meData?.user;
-  const isAdmin = currentUser?.role === 'admin';
-  const currentUserId = currentUser?.id;
+  // Cache may hold full response { user } or just the user (from App.tsx me().then(r => r.user))
+  const currentUser =
+    meData && typeof meData === 'object' && 'user' in meData
+      ? (meData as { user: { id: string; email: string; role?: string } }).user
+      : meData && typeof meData === 'object' && 'id' in meData
+        ? (meData as { id: string; email: string; role?: string })
+        : null;
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+  const currentUserId = currentUser?.id ?? undefined;
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['library', userId],
@@ -65,18 +143,26 @@ export function Library() {
   const [page, setPage] = useState(1);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editTag, setEditTag] = useState('');
   const [editCustomTag, setEditCustomTag] = useState('');
+  const [editCopyright, setEditCopyright] = useState('');
+  const [editLicense, setEditLicense] = useState('');
   const [editGlobalAsset, setEditGlobalAsset] = useState(false);
   const [assetToDelete, setAssetToDelete] = useState<LibraryAsset | null>(null);
   const [assetToEdit, setAssetToEdit] = useState<LibraryAsset | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState('');
   const [uploadTag, setUploadTag] = useState('');
+  const [uploadCopyright, setUploadCopyright] = useState('');
+  const [uploadLicense, setUploadLicense] = useState('');
   const [customTag, setCustomTag] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPixabayImport, setShowPixabayImport] = useState(false);
+  const [pixabayUrl, setPixabayUrl] = useState('');
 
   useEffect(() => {
     const audio = new Audio();
@@ -84,15 +170,28 @@ export function Library() {
     const handleEnded = () => setIsPlaying(false);
     const handlePause = () => setIsPlaying(false);
     const handlePlay = () => setIsPlaying(true);
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleLoadedMetadata = () => {
+      if (pendingSeekRef.current != null) {
+        const t = pendingSeekRef.current;
+        pendingSeekRef.current = null;
+        audio.currentTime = t;
+        setCurrentTime(t);
+      }
+    };
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('play', handlePlay);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audioRef.current = audio;
     return () => {
       audio.pause();
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audioRef.current = null;
     };
   }, []);
@@ -106,14 +205,24 @@ export function Library() {
       id,
       name,
       tag,
+      copyright,
+      license,
       global_asset,
     }: {
       id: string;
       name: string;
       tag: string;
+      copyright?: string | null;
+      license?: string | null;
       global_asset?: boolean;
     }) => {
-      const payload = { name, tag: tag || null, ...(global_asset !== undefined && { global_asset }) };
+      const payload = {
+        name,
+        tag: tag || null,
+        copyright: copyright === '' ? null : copyright ?? undefined,
+        license: license === '' ? null : license ?? undefined,
+        ...(global_asset !== undefined && { global_asset }),
+      };
       return userId
         ? updateLibraryAssetForUser(userId, id, payload)
         : updateLibraryAsset(id, payload);
@@ -123,20 +232,45 @@ export function Library() {
       setEditName('');
       setEditTag('');
       setEditCustomTag('');
+      setEditCopyright('');
+      setEditLicense('');
       setEditGlobalAsset(false);
       setAssetToEdit(null);
     },
   });
   const uploadMutation = useMutation({
-    mutationFn: ({ file, name, tag }: { file: File; name: string; tag?: string | null }) =>
-      createLibraryAsset(file, name, tag || undefined),
+    mutationFn: ({
+      file,
+      name,
+      tag,
+      copyright,
+      license,
+    }: {
+      file: File;
+      name: string;
+      tag?: string | null;
+      copyright?: string | null;
+      license?: string | null;
+    }) =>
+      createLibraryAsset(file, name, tag || undefined, copyright || undefined, license || undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['library', userId] });
       setPendingFile(null);
       setUploadName('');
       setUploadTag('');
+      setUploadCopyright('');
+      setUploadLicense('');
       setCustomTag('');
       if (fileInputRef.current) fileInputRef.current.value = '';
+    },
+  });
+
+  const pixabayImportMutation = useMutation({
+    mutationFn: (url: string) => importFromPixabay(url),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['library', userId] });
+      setShowPixabayImport(false);
+      setPixabayUrl('');
     },
   });
 
@@ -186,10 +320,26 @@ export function Library() {
     if (playingId !== asset.id) {
       audio.src = userId ? libraryStreamUrlForUser(userId, asset.id) : libraryStreamUrl(asset.id);
       setPlayingId(asset.id);
+      setCurrentTime(0);
     }
     audio.play().catch(() => {
       setIsPlaying(false);
     });
+  }
+
+  function handleSeek(asset: LibraryAsset, time: number) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playingId === asset.id) {
+      audio.currentTime = time;
+      setCurrentTime(time);
+      return;
+    }
+    pendingSeekRef.current = time;
+    setPlayingId(asset.id);
+    setCurrentTime(0);
+    audio.src = userId ? libraryStreamUrlForUser(userId, asset.id) : libraryStreamUrl(asset.id);
+    audio.load();
   }
 
   function handleDeleteConfirm() {
@@ -208,8 +358,8 @@ export function Library() {
   }
 
   function canEditAsset(asset: LibraryAsset): boolean {
-    const ownerId = asset.owner_user_id ?? (userId || currentUserId);
-    return ownerId === currentUserId || isAdmin === true;
+    const ownerId = asset.owner_user_id ?? (userId ?? currentUserId);
+    return (currentUserId != null && String(ownerId) === String(currentUserId)) || Boolean(isAdmin);
   }
 
   function canDeleteAsset(asset: LibraryAsset): boolean {
@@ -219,6 +369,8 @@ export function Library() {
   function handleEditStart(asset: LibraryAsset) {
     setAssetToEdit(asset);
     setEditName(asset.name);
+    setEditCopyright(asset.copyright ?? '');
+    setEditLicense(asset.license ?? '');
     setEditGlobalAsset(Boolean(asset.global_asset));
     if (!asset.tag) {
       setEditTag('');
@@ -236,6 +388,8 @@ export function Library() {
     setEditName('');
     setEditTag('');
     setEditCustomTag('');
+    setEditCopyright('');
+    setEditLicense('');
     setEditGlobalAsset(false);
     setAssetToEdit(null);
   }
@@ -245,8 +399,10 @@ export function Library() {
     const name = editName.trim();
     if (!name) return;
     const tag = editTag === 'Other' ? (editCustomTag.trim() || '') : editTag.trim();
+    const copyright = editCopyright.trim() || null;
+    const license = editLicense.trim() || null;
     const global_asset = isAdmin ? editGlobalAsset : undefined;
-    editMutation.mutate({ id: assetToEdit.id, name, tag, global_asset });
+    editMutation.mutate({ id: assetToEdit.id, name, tag, copyright, license, global_asset });
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -261,13 +417,17 @@ export function Library() {
     if (!pendingFile) return;
     const name = uploadName.trim() || pendingFile.name.replace(/\.[^.]+$/, '');
     const tag = uploadTag === 'Other' ? (customTag.trim() || null) : (uploadTag || null);
-    uploadMutation.mutate({ file: pendingFile, name, tag });
+    const copyright = uploadCopyright.trim() || null;
+    const license = uploadLicense.trim() || null;
+    uploadMutation.mutate({ file: pendingFile, name, tag, copyright, license });
   }
 
   function clearPending() {
     setPendingFile(null);
     setUploadName('');
     setUploadTag('');
+    setUploadCopyright('');
+    setUploadLicense('');
     setCustomTag('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -292,14 +452,62 @@ export function Library() {
             <p className={styles.uploadSub}>Upload a reusable clip you can insert into any episode.</p>
           </div>
           {!pendingFile ? (
-            <button
-              type="button"
-              className={styles.uploadChooseBtn}
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Choose audio file to add to library"
-            >
-              Choose audio file
-            </button>
+            <>
+              <div className={styles.uploadChooseRow}>
+                <button
+                  type="button"
+                  className={styles.uploadChooseBtn}
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label="Choose audio file to add to library"
+                >
+                  Choose audio file
+                </button>
+                {isAdmin && (
+                  !showPixabayImport ? (
+                    <button
+                      type="button"
+                      className={styles.uploadChooseBtn}
+                      onClick={() => setShowPixabayImport(true)}
+                      aria-label="Import from Pixabay"
+                    >
+                      Import from Pixabay
+                    </button>
+                  ) : (
+                    <div className={styles.pixabayImportForm}>
+                      <input
+                        type="url"
+                        inputMode="url"
+                        autoComplete="url"
+                        className={styles.input}
+                        placeholder="https://pixabay.com/sound-effects/..."
+                        value={pixabayUrl}
+                        onChange={(e) => setPixabayUrl(e.target.value)}
+                        aria-label="Pixabay sound effect URL"
+                      />
+                      <div className={styles.pixabayImportActions}>
+                        <button
+                          type="button"
+                          className={styles.uploadCancel}
+                          onClick={() => { setShowPixabayImport(false); setPixabayUrl(''); }}
+                          aria-label="Cancel Pixabay import"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.uploadSubmit}
+                          onClick={() => pixabayImportMutation.mutate(pixabayUrl.trim())}
+                          disabled={!pixabayUrl.trim() || pixabayImportMutation.isPending}
+                          aria-label="Import from Pixabay"
+                        >
+                          {pixabayImportMutation.isPending ? 'Importing…' : 'Import'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            </>
           ) : (
             <div className={styles.uploadForm}>
               <p className={styles.uploadPendingFile}>{pendingFile.name}</p>
@@ -338,6 +546,26 @@ export function Library() {
                   />
                 </label>
               )}
+              <label className={styles.uploadLabel}>
+                <span>Copyright <span className={styles.optional}>(optional)</span></span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="e.g. 2026 Acme Media"
+                  value={uploadCopyright}
+                  onChange={(e) => setUploadCopyright(e.target.value)}
+                />
+              </label>
+              <label className={styles.uploadLabel}>
+                <span>License <span className={styles.optional}>(optional)</span></span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="e.g. CC BY 4.0, All rights reserved"
+                  value={uploadLicense}
+                  onChange={(e) => setUploadLicense(e.target.value)}
+                />
+              </label>
               <div className={styles.uploadActions}>
                 <button type="button" className={styles.uploadCancel} onClick={clearPending} aria-label="Cancel adding to library">
                   Cancel
@@ -363,6 +591,9 @@ export function Library() {
           />
           {uploadMutation.isError && (
             <p className={styles.uploadError}>{uploadMutation.error?.message}</p>
+          )}
+          {pixabayImportMutation.isError && (
+            <p className={styles.uploadError}>{pixabayImportMutation.error?.message}</p>
           )}
         </section>
       )}
@@ -451,7 +682,7 @@ export function Library() {
                     <div className={styles.itemTitleRow}>
                       <span className={styles.itemName}>{asset.name}</span>
                       {asset.tag && <span className={styles.itemTag}>{asset.tag}</span>}
-                      {asset.global_asset && (
+                      {Boolean(asset.global_asset) && (
                         <span className={styles.itemTag} title="Visible to everyone in the library">
                           Global
                         </span>
@@ -460,6 +691,13 @@ export function Library() {
                     <div className={styles.itemMeta}>
                       {formatDuration(asset.duration_sec)} · {formatLibraryDate(asset.created_at)}
                     </div>
+                    <LibraryItemWaveform
+                      asset={asset}
+                      waveformUrl={userId ? libraryWaveformUrlForUser(userId, asset.id) : libraryWaveformUrl(asset.id)}
+                      currentTime={playingId === asset.id ? currentTime : 0}
+                      onSeek={handleSeek}
+                      onPlayPause={() => handlePlay(asset)}
+                    />
                   </div>
                   <div className={styles.itemActions}>
                     <button
@@ -596,6 +834,26 @@ export function Library() {
                   />
                 </label>
               )}
+              <label className={styles.dialogLabel}>
+                <span>Copyright <span className={styles.optional}>(optional)</span></span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="e.g. 2026 Acme Media"
+                  value={editCopyright}
+                  onChange={(e) => setEditCopyright(e.target.value)}
+                />
+              </label>
+              <label className={styles.dialogLabel}>
+                <span>License <span className={styles.optional}>(optional)</span></span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="e.g. CC BY 4.0, All rights reserved"
+                  value={editLicense}
+                  onChange={(e) => setEditLicense(e.target.value)}
+                />
+              </label>
               {isAdmin && (
                 <label className="toggle" style={{ marginTop: '0.5rem' }}>
                   <input

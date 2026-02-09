@@ -1,5 +1,7 @@
-import type { FastifyInstance } from 'fastify';
-import { existsSync, statSync } from 'fs';
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import { execFileSync } from 'child_process';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import { dirname, basename } from 'path';
 import send from '@fastify/send';
 import { nanoid } from 'nanoid';
@@ -8,18 +10,100 @@ import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../plugins/auth.js';
 import { libraryDir, libraryAssetPath } from '../services/paths.js';
 import { assertPathUnder } from '../services/paths.js';
+import { normalizeHostname } from '../utils/url.js';
 import * as audioService from '../services/audio.js';
 import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/ogg'];
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB per library asset
 
+function libraryWaveformPath(audioPath: string): string {
+  return audioPath.replace(/\.[^.]+$/, '.waveform.json');
+}
+
+function sendLibraryWaveform(reply: FastifyReply, audioPath: string, baseDir: string): FastifyReply {
+  const wavPath = libraryWaveformPath(audioPath);
+  if (!existsSync(wavPath)) return reply.status(404).send({ error: 'Waveform not found' });
+  assertPathUnder(wavPath, baseDir);
+  const json = readFileSync(wavPath, 'utf-8');
+  reply.header('Content-Type', 'application/json').header('Cache-Control', 'private, max-age=3600');
+  return reply.send(json);
+}
+
+function fetchPixabayHtml(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+  if (parsed.origin !== 'https://pixabay.com') {
+    throw new Error('URL must be from https://pixabay.com');
+  }
+  const args = [
+    '-q', '-O', '-',
+    '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    '--header=Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    '--header=Accept-Language: en-US,en;q=0.9',
+    '--header=Cache-Control: no-cache',
+    '--header=Pragma: no-cache',
+    '--header=Upgrade-Insecure-Requests: 1',
+    '--compression=auto',
+    url,
+  ];
+  try {
+    return execFileSync('wget', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+  } catch (e) {
+    const status = e && typeof e === 'object' && 'status' in e ? (e as { status?: number }).status : undefined;
+    if (status !== undefined) throw new Error(`Failed to fetch page (exit ${status})`);
+    throw e;
+  }
+}
+
+function extractPixabayLdJson(html: string): {
+  name?: string;
+  contentUrl?: string;
+  creator?: { name?: string };
+  datePublished?: string;
+} {
+  const regex = /<script\s+type=["']application\/ld\+json["']\s*>([\s\S]*?)<\/script>/gi;
+  const matches = [...html.matchAll(regex)];
+  for (const m of matches) {
+    const raw = m[1].trim();
+    if (!raw) continue;
+    try {
+      const data = JSON.parse(raw) as { '@type'?: string; contentUrl?: string; name?: string; creator?: { name?: string }; datePublished?: string };
+      if (data['@type'] === 'AudioObject' && data.contentUrl) return data;
+    } catch {
+      // skip invalid JSON
+    }
+  }
+  throw new Error('No AudioObject ld+json with contentUrl found in page');
+}
+
+function pixabayLdToAsset(
+  ld: { name?: string; contentUrl?: string; creator?: { name?: string }; datePublished?: string },
+  sourceUrl: string
+): { name: string; tag: string; copyright: string; license: string; download: string; source: string } {
+  const year = ld.datePublished ? new Date(ld.datePublished).getFullYear() : '';
+  const creatorName = ld.creator && typeof ld.creator === 'object' ? ld.creator.name : '';
+  const copyright = [creatorName, year].filter(Boolean).join(' ') || 'Pixabay';
+  return {
+    name: ld.name ?? 'Untitled',
+    tag: 'Bumper',
+    copyright,
+    license: 'Pixabay Content License',
+    download: (ld.contentUrl ?? '').split('?')[0],
+    source: normalizeHostname(sourceUrl),
+  };
+}
+
 export async function libraryRoutes(app: FastifyInstance) {
   app.get('/api/library', { preHandler: [requireAuth] }, async (request) => {
     const rows = db
       .prepare(
         `SELECT id, owner_user_id, name, tag, duration_sec, created_at,
-                COALESCE(global_asset, 0) AS global_asset
+                COALESCE(global_asset, 0) AS global_asset, copyright, license
          FROM reusable_assets
          WHERE owner_user_id = ? OR global_asset = 1
          ORDER BY name`
@@ -33,13 +117,74 @@ export async function libraryRoutes(app: FastifyInstance) {
     const rows = db
       .prepare(
         `SELECT id, owner_user_id, name, tag, duration_sec, created_at,
-                COALESCE(global_asset, 0) AS global_asset
+                COALESCE(global_asset, 0) AS global_asset, copyright, license
          FROM reusable_assets
          WHERE owner_user_id = ? ORDER BY name`
       )
       .all(userId) as Record<string, unknown>[];
     return { assets: rows };
   });
+
+  app.post(
+    '/api/library/import-pixabay',
+    { preHandler: [requireAuth, requireAdmin] },
+    async (request, reply) => {
+      const body = request.body as { url?: string } | undefined;
+      const url = typeof body?.url === 'string' ? body.url.trim() : '';
+      if (!url) return reply.status(400).send({ error: 'URL is required' });
+      try {
+        const html = fetchPixabayHtml(url);
+        const ld = extractPixabayLdJson(html);
+        const assetMeta = pixabayLdToAsset(ld, url);
+        const downloadUrl = assetMeta.download;
+        if (!downloadUrl) return reply.status(400).send({ error: 'No download URL in page' });
+
+        const normalizedSource = normalizeHostname(assetMeta.source);
+        const existing = db
+          .prepare(`SELECT id FROM reusable_assets WHERE source_url = ?`)
+          .get(normalizedSource) as { id: string } | undefined;
+        if (existing) {
+          return reply.status(409).send({ error: 'This asset is already in the library' });
+        }
+
+        const assetId = nanoid();
+        const dir = libraryDir(request.userId);
+        const destPath = libraryAssetPath(request.userId, assetId, 'mp3');
+        const res = await fetch(downloadUrl);
+        if (!res.ok) {
+          return reply.status(502).send({ error: `Download failed (${res.status})` });
+        }
+        const buf = await res.arrayBuffer();
+        await writeFile(destPath, new Uint8Array(buf));
+        const bytesWritten = statSync(destPath).size;
+        let durationSec = 0;
+        try {
+          const probe = await audioService.probeAudio(destPath, dir);
+          durationSec = probe.durationSec;
+        } catch {
+          // keep 0
+        }
+        try {
+          await audioService.generateWaveformFile(destPath, dir);
+        } catch (err) {
+          request.log.warn({ err, path: destPath }, 'Waveform generation failed for Pixabay import');
+        }
+        db.prepare(
+          `INSERT INTO reusable_assets (id, owner_user_id, name, tag, audio_path, duration_sec, global_asset, copyright, license, source_url)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`
+        ).run(assetId, request.userId, assetMeta.name, assetMeta.tag, destPath, durationSec, assetMeta.copyright, assetMeta.license, normalizedSource);
+        db.prepare(
+          `UPDATE users SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ? WHERE id = ?`
+        ).run(bytesWritten, request.userId);
+        const row = db.prepare('SELECT * FROM reusable_assets WHERE id = ?').get(assetId) as Record<string, unknown>;
+        return reply.status(201).send(row);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Import failed';
+        request.log.warn({ err, url }, 'Pixabay import failed');
+        return reply.status(400).send({ error: msg });
+      }
+    }
+  );
 
   app.post(
     '/api/library',
@@ -53,6 +198,8 @@ export async function libraryRoutes(app: FastifyInstance) {
       }
       const name = (data.fields?.name as { value?: string })?.value?.trim() || data.filename?.replace(/\.[^.]+$/, '') || 'Untitled';
       const tag = (data.fields?.tag as { value?: string })?.value?.trim() || null;
+      const copyright = (data.fields?.copyright as { value?: string })?.value?.trim() || null;
+      const license = (data.fields?.license as { value?: string })?.value?.trim() || null;
       const id = nanoid();
       const ext = extensionFromAudioMimetype(mimetype);
       const destPath = libraryAssetPath(request.userId, id, ext);
@@ -93,9 +240,9 @@ export async function libraryRoutes(app: FastifyInstance) {
       }
 
       db.prepare(
-        `INSERT INTO reusable_assets (id, owner_user_id, name, tag, audio_path, duration_sec)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).run(id, request.userId, name, tag, finalPath, durationSec);
+        `INSERT INTO reusable_assets (id, owner_user_id, name, tag, audio_path, duration_sec, copyright, license)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(id, request.userId, name, tag, finalPath, durationSec, copyright, license);
 
       // Track disk usage (best-effort)
       db.prepare(
@@ -118,7 +265,7 @@ export async function libraryRoutes(app: FastifyInstance) {
     }
     const body = parse.data;
     const asset = db
-      .prepare('SELECT id, owner_user_id, name, tag, COALESCE(global_asset, 0) AS global_asset FROM reusable_assets WHERE id = ?')
+      .prepare('SELECT id, owner_user_id, name, tag, COALESCE(global_asset, 0) AS global_asset, copyright, license FROM reusable_assets WHERE id = ?')
       .get(id) as { owner_user_id: string; global_asset: number } | undefined;
     if (!asset) return reply.status(404).send({ error: 'Asset not found' });
 
@@ -143,6 +290,14 @@ export async function libraryRoutes(app: FastifyInstance) {
       updates.push('global_asset = ?');
       values.push(body.global_asset ? 1 : 0);
     }
+    if (body.copyright !== undefined) {
+      updates.push('copyright = ?');
+      values.push(body.copyright === null ? null : body.copyright.trim() || null);
+    }
+    if (body.license !== undefined) {
+      updates.push('license = ?');
+      values.push(body.license === null ? null : body.license.trim() || null);
+    }
 
     if (updates.length === 0) {
       return reply.status(400).send({ error: 'No fields to update' });
@@ -157,7 +312,7 @@ export async function libraryRoutes(app: FastifyInstance) {
     }
     const row = db
       .prepare(
-        `SELECT id, owner_user_id, name, tag, duration_sec, created_at, COALESCE(global_asset, 0) AS global_asset
+        `SELECT id, owner_user_id, name, tag, duration_sec, created_at, COALESCE(global_asset, 0) AS global_asset, copyright, license
          FROM reusable_assets WHERE id = ?`
       )
       .get(id) as Record<string, unknown>;
@@ -229,6 +384,14 @@ export async function libraryRoutes(app: FastifyInstance) {
       updates.push('global_asset = ?');
       values.push(body.global_asset ? 1 : 0);
     }
+    if (body.copyright !== undefined) {
+      updates.push('copyright = ?');
+      values.push(body.copyright === null ? null : body.copyright.trim() || null);
+    }
+    if (body.license !== undefined) {
+      updates.push('license = ?');
+      values.push(body.license === null ? null : body.license.trim() || null);
+    }
 
     if (updates.length === 0) {
       return reply.status(400).send({ error: 'No fields to update' });
@@ -239,7 +402,7 @@ export async function libraryRoutes(app: FastifyInstance) {
     db.prepare(`UPDATE reusable_assets SET ${updates.join(', ')} WHERE id = ? AND owner_user_id = ?`).run(...values);
     const row = db
       .prepare(
-        `SELECT id, owner_user_id, name, tag, duration_sec, created_at, COALESCE(global_asset, 0) AS global_asset
+        `SELECT id, owner_user_id, name, tag, duration_sec, created_at, COALESCE(global_asset, 0) AS global_asset, copyright, license
          FROM reusable_assets WHERE id = ? AND owner_user_id = ?`
       )
       .get(id, userId) as Record<string, unknown> | undefined;
@@ -320,6 +483,24 @@ export async function libraryRoutes(app: FastifyInstance) {
   }
 
   app.get(
+    '/api/library/:id/waveform',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const row = db
+        .prepare(
+          'SELECT * FROM reusable_assets WHERE id = ? AND (owner_user_id = ? OR global_asset = 1)'
+        )
+        .get(id, request.userId) as Record<string, unknown> | undefined;
+      if (!row) return reply.status(404).send({ error: 'Asset not found' });
+      const path = row.audio_path as string;
+      if (!path || !existsSync(path)) return reply.status(404).send({ error: 'File not found' });
+      const base = libraryDir(row.owner_user_id as string);
+      return sendLibraryWaveform(reply, path, base);
+    }
+  );
+
+  app.get(
     '/api/library/:id/stream',
     { preHandler: [requireAuth] },
     async (request, reply) => {
@@ -337,6 +518,21 @@ export async function libraryRoutes(app: FastifyInstance) {
       const safePath = assertPathUnder(path, base);
       const contentType = libraryStreamContentType(path);
       return sendLibraryStream(request, reply, safePath, contentType);
+    }
+  );
+
+  app.get(
+    '/api/library/user/:userId/:id/waveform',
+    { preHandler: [requireAdmin] },
+    async (request, reply) => {
+      const { id, userId } = request.params as { id: string; userId: string };
+      const row = db
+        .prepare('SELECT * FROM reusable_assets WHERE id = ? AND owner_user_id = ?')
+        .get(id, userId) as Record<string, unknown> | undefined;
+      if (!row) return reply.status(404).send({ error: 'Asset not found' });
+      const path = row.audio_path as string;
+      if (!path || !existsSync(path)) return reply.status(404).send({ error: 'File not found' });
+      return sendLibraryWaveform(reply, path, libraryDir(userId));
     }
   );
 
