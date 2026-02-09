@@ -580,7 +580,11 @@
   flex-shrink: 0;
 }
 
-/* Edit podcast details: grid layout so scroll area gets stable 1fr, no flex/overflow shrink */
+.dialogContent.dialogShowDetailsGrid {
+  overflow-y: visible;
+  overflow-x: visible;
+}
+
 .dialogShowDetailsGrid {
   height: min(90vh, 720px);
   display: grid;

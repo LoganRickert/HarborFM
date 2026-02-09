@@ -1316,7 +1316,7 @@
 .dialogContentWide .dialogTitle {
   flex-shrink: 0;
 }
-/* Episode details: grid layout so scroll area gets stable 1fr, no flex/overflow shrink */
+
 .dialogDetailsGrid {
   height: min(90vh, 720px);
   display: grid;

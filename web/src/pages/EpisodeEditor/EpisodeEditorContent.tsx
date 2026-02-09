@@ -321,7 +321,7 @@ export function EpisodeEditorContent({
                   </button>
                 </Dialog.Close>
                 <Dialog.Title className={styles.dialogTitle}>
-                  Episode details
+                  Episode Details
                 </Dialog.Title>
                 <Dialog.Description className={styles.dialogDescription}>
                   Edit the episode title, description, and publish settings.
