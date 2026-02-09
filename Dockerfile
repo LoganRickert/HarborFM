@@ -22,6 +22,14 @@ FROM node:22-bookworm-slim
 
 ARG TARGETARCH
 
+# enable contrib (needed for geoipupdate on bookworm)
+RUN set -eux; \
+  if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+    sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources; \
+  else \
+    sed -i 's/ main$/ main contrib/' /etc/apt/sources.list; \
+  fi
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg tini build-essential python3 ca-certificates wget libmad0 \
     libid3tag0 libboost-program-options1.74.0 geoipupdate \
@@ -50,18 +58,17 @@ COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/server/package.json ./server/
 COPY --from=builder /app/web/package.json ./web/
 
-RUN pnpm install --frozen-lockfile --prod && pnpm rebuild
-
-COPY --from=builder /app/server/dist ./server/dist
-COPY --from=builder /app/server/initial-assets.json ./server/
-COPY --from=builder /app/web/dist ./server/public
-
-RUN mkdir -p /data /secrets
-
-RUN useradd -m -u 10001 appuser \
+RUN mkdir -p /data /secrets \
+  && useradd -m -u 10001 appuser \
   && chown -R appuser:appuser /app /data /secrets
 
 USER appuser
+
+RUN pnpm install --frozen-lockfile --prod && pnpm rebuild
+
+COPY --chown=appuser:appuser --from=builder /app/server/dist ./server/dist
+COPY --chown=appuser:appuser --from=builder /app/server/initial-assets.json ./server/
+COPY --chown=appuser:appuser --from=builder /app/web/dist ./server/public
 
 # Server runs from /app/server, serves web from server/public
 WORKDIR /app/server
