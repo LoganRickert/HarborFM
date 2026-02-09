@@ -2,9 +2,9 @@
 
 ![HarborFM](web/public/og-image.png)
 
-Open source podcast creator. Build episodes from segments: record or upload clips, pull in intros and bumpers from a library, trim and reorder, then export a single audio file and RSS feed.
+Open source podcast creation tool designed as a modern replacement for Anchor.fm. Build episodes from segments: record or upload clips, pull in intros and bumpers from a library, trim and reorder, then export a single audio file and RSS feed.
 
-The app also has PWA so you can add your server to your home screen.
+The app has PWA, so you can add it to your home screen and connect to your server.
 
 **License:** MIT
 
