@@ -53,8 +53,9 @@ export function PublicPodcast() {
     queryKey: ['public-podcast', podcastSlug],
     queryFn: () => getPublicPodcast(podcastSlug!),
     enabled: !!podcastSlug,
+    refetchOnMount: 'always',
   });
-  
+
   const {
     data,
     fetchNextPage,
@@ -65,6 +66,7 @@ export function PublicPodcast() {
     queryKey: ['public-episodes', podcastSlug],
     queryFn: ({ pageParam = 0 }) => getPublicEpisodes(podcastSlug!, 50, pageParam),
     enabled: !!podcastSlug,
+    refetchOnMount: 'always',
     getNextPageParam: (lastPage) => {
       if (lastPage.hasMore) {
         return lastPage.offset + lastPage.episodes.length;

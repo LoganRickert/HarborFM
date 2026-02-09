@@ -60,7 +60,7 @@ export function getSecretsKey(): Buffer {
     // Best-effort: chmod may fail on some FS / platforms.
   }
   console.warn(
-    `[security] ${SECRETS_KEY_ENV} is not set; generated and persisted a secrets key at ${path}. ` +
+    `[security] ${SECRETS_KEY_ENV} is not set; generated and persisted a secrets key. ` +
       `Persist SECRETS_DIR to avoid losing access to encrypted credentials.`
   );
   cachedKey = raw;

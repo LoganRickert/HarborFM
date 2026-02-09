@@ -6,7 +6,7 @@ import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import { requireAdmin, requireAuth } from '../plugins/auth.js';
 import { db } from '../db/index.js';
 import { podcastCreateSchema, podcastUpdateSchema } from '@harborfm/shared';
-import { assertPathUnder, artworkDir } from '../services/paths.js';
+import { assertPathUnder, assertResolvedPathUnder, artworkDir } from '../services/paths.js';
 import { MIMETYPE_TO_EXT } from '../utils/artwork.js';
 import { writeRssFile } from '../services/rss.js';
 
@@ -285,6 +285,7 @@ export async function podcastRoutes(app: FastifyInstance) {
     const destPath = join(dir, filename);
     const buffer = await data.toBuffer();
     if (buffer.length > 5 * 1024 * 1024) return reply.status(400).send({ error: 'Image too large (max 5MB)' });
+    assertResolvedPathUnder(destPath, dir);
     writeFileSync(destPath, buffer);
     db.prepare('UPDATE podcasts SET artwork_path = ?, artwork_url = NULL, updated_at = datetime(\'now\') WHERE id = ?').run(destPath, id);
     const oldPath = existing.artwork_path;

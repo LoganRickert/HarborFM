@@ -31,6 +31,7 @@ function generateTimestampedFilename(id: string, ext: string): string {
 
 /**
  * Resolve path to real path and assert it is under allowedBase. Throws if path escapes or doesn't exist.
+ * Use this when the path already exists (e.g. before read/delete). For paths that don't exist yet (e.g. before write), use assertResolvedPathUnder.
  */
 export function assertPathUnder(pathToCheck: string, allowedBase: string): string {
   const base = resolve(realpathSync(allowedBase));
@@ -43,8 +44,9 @@ export function assertPathUnder(pathToCheck: string, allowedBase: string): strin
 
 /**
  * Asserts that pathToCheck, when resolved, is under allowedBase. Does not require pathToCheck to exist.
+ * Use this before creating/writing a file. For existing paths use assertPathUnder (which uses realpathSync).
  */
-function assertResolvedPathUnder(pathToCheck: string, allowedBase: string): void {
+export function assertResolvedPathUnder(pathToCheck: string, allowedBase: string): void {
   const base = resolve(allowedBase);
   const resolved = resolve(pathToCheck);
   if (resolved !== base && !resolved.startsWith(base + sep)) {

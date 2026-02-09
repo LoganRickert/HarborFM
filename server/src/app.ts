@@ -58,7 +58,7 @@ function loadOrCreateJwtSecret(): string {
   }
 
   console.warn(
-    `[security] JWT_SECRET is not set in the environment; generated and persisted a secret at ${secretPath}. ` +
+    `[security] JWT_SECRET is not set in the environment; generated and persisted a secret. ` +
       `Persist SECRETS_DIR to keep sessions stable across restarts, or (recommended) set JWT_SECRET via env.`
   );
   return secret;
@@ -93,7 +93,7 @@ async function main() {
   });
 
   await app.register(rateLimit, {
-    max: 30,
+    max: 50,
     timeWindow: '1 minute',
     allowList: (req) => {
       const path = req.url.split('?')[0];

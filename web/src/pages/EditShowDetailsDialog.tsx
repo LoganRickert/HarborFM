@@ -12,6 +12,17 @@ export interface EditShowDetailsDialogProps {
   onClose: () => void;
 }
 
+/** Only allow URLs safe for img src: http(s), blob, or same-origin path. Avoids CodeQL "DOM text reinterpreted as HTML". */
+function safeImageSrc(url: string | null | undefined): string {
+  if (url == null || typeof url !== 'string') return '';
+  const s = url.trim();
+  if (!s) return '';
+  const lower = s.toLowerCase();
+  if (lower.startsWith('https://') || lower.startsWith('http://') || lower.startsWith('blob:')) return s;
+  if (s.startsWith('/') && !s.startsWith('//')) return s;
+  return '';
+}
+
 export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDetailsDialogProps) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -410,15 +421,14 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     <p style={{ marginTop: '0.75rem', marginBottom: 0, display: 'flex', justifyContent: 'center' }}>
                       <img
                         key={coverMode === 'url' ? `url-${debouncedArtworkUrl}` : `upload-${podcast?.artwork_filename ?? ''}-${Boolean(pendingArtworkPreviewUrl)}`}
-                        src={
+                        src={safeImageSrc(
                           coverMode === 'url'
                             ? debouncedArtworkUrl
-                            : pendingArtworkPreviewUrl
-                              ? pendingArtworkPreviewUrl
-                              : podcast?.artwork_filename
+                            : pendingArtworkPreviewUrl ??
+                              (podcast?.artwork_filename && podcastId
                                 ? `/api/public/artwork/${podcastId}/${encodeURIComponent(podcast.artwork_filename)}`
-                                : ''
-                        }
+                                : '')
+                        )}
                         alt="Cover preview"
                         style={{ maxWidth: '160px', maxHeight: '160px', borderRadius: '8px', border: '1px solid var(--border)', objectFit: 'cover' }}
                       />
