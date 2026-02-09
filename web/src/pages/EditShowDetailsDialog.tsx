@@ -12,14 +12,25 @@ export interface EditShowDetailsDialogProps {
   onClose: () => void;
 }
 
-/** Only allow URLs safe for img src: http(s), blob, or same-origin path. Avoids CodeQL "DOM text reinterpreted as HTML". */
 function safeImageSrc(url: string | null | undefined): string {
-  if (url == null || typeof url !== 'string') return '';
+  if (!url) return '';
   const s = url.trim();
   if (!s) return '';
-  const lower = s.toLowerCase();
-  if (lower.startsWith('https://') || lower.startsWith('http://') || lower.startsWith('blob:')) return s;
+
+  // Explicitly allow same-origin absolute-path URLs without parsing quirks.
   if (s.startsWith('/') && !s.startsWith('//')) return s;
+
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'https://x';
+    const parsed = new URL(s, base);
+    const protocol = parsed.protocol.toLowerCase();
+
+    if (protocol === 'https:' || protocol === 'http:' || protocol === 'blob:') {
+      return parsed.href;
+    }
+  } catch {
+    // ignore
+  }
   return '';
 }
 

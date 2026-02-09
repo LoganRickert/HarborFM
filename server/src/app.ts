@@ -41,7 +41,7 @@ function loadOrCreateJwtSecret(): string {
   if (existsSync(secretPath)) {
     console.warn(
       `[security] JWT_SECRET is not set in the environment. ` +
-        `Using the persisted secret at ${secretPath}. ` +
+        `Using the persisted secret. ` +
         `Set JWT_SECRET via env (Docker/PM2) for explicit, manageable deployments.`
     );
     const existing = readFileSync(secretPath, 'utf8').trim();
