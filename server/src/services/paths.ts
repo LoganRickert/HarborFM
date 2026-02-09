@@ -7,7 +7,7 @@ const SECRETS_DIR = resolve(process.env.SECRETS_DIR ?? join(process.cwd(), 'secr
 /** Only allow IDs that cannot be used for path traversal (nanoid-style: alphanumeric, hyphen, underscore). */
 const SAFE_ID = /^[a-zA-Z0-9_-]+$/;
 
-function assertSafeId(id: string, name: string): void {
+export function assertSafeId(id: string, name: string): void {
   if (!SAFE_ID.test(id)) {
     throw new Error(`Invalid ${name}: disallowed characters`);
   }

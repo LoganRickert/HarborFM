@@ -149,8 +149,12 @@ export function PublicPodcast() {
       <main>
         <div className={styles.card}>
         <div className={styles.header}>
-          {podcast.artwork_url && (
-            <img src={podcast.artwork_url} alt={podcast.title} className={styles.artwork} />
+          {(podcast.artwork_url || podcast.artwork_filename) && (
+            <img
+              src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}` : '')}
+              alt={podcast.title}
+              className={styles.artwork}
+            />
           )}
           <div className={styles.headerContent}>
             <div className={styles.headerTop}>

@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
+import { createReadStream } from 'fs';
+import { basename, extname } from 'path';
 import { db } from '../db/index.js';
+import { assertPathUnder, assertSafeId, artworkDir } from '../services/paths.js';
+import { EXT_DOT_TO_MIMETYPE } from '../utils/artwork.js';
 import { generateRss } from '../services/rss.js';
 import { readSettings } from './settings.js';
 
@@ -15,6 +19,7 @@ export async function publicRoutes(app: FastifyInstance) {
   }
 
   function publicPodcastDto(row: Record<string, unknown>) {
+    const path = row.artwork_path as string | null | undefined;
     return {
       id: row.id,
       title: row.title,
@@ -23,6 +28,8 @@ export async function publicRoutes(app: FastifyInstance) {
       language: row.language ?? 'en',
       author_name: row.author_name ?? '',
       artwork_url: row.artwork_url ?? null,
+      artwork_uploaded: Boolean(path),
+      artwork_filename: path ? basename(path) : null,
       site_url: row.site_url ?? null,
       explicit: row.explicit ?? 0,
     };
@@ -53,6 +60,40 @@ export async function publicRoutes(app: FastifyInstance) {
     };
   }
 
+  // Safe filename for artwork: nanoid.ext (alphanumeric, hyphen, underscore + .png|.webp|.jpg)
+  const ARTWORK_FILENAME_REGEX = /^[a-zA-Z0-9_-]+\.(png|webp|jpg)$/i;
+
+  // Serve uploaded podcast cover image (public so feed and edit preview can use it). URL includes filename so cache busts on new upload.
+  app.get('/api/public/artwork/:podcastId/:filename', async (request, reply) => {
+    const { podcastId, filename } = request.params as { podcastId: string; filename: string };
+    try {
+      assertSafeId(podcastId, 'podcastId');
+    } catch {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    if (!ARTWORK_FILENAME_REGEX.test(filename)) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    const row = db
+      .prepare('SELECT artwork_path FROM podcasts WHERE id = ?')
+      .get(podcastId) as { artwork_path: string | null } | undefined;
+    if (!row?.artwork_path || basename(row.artwork_path) !== filename) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    try {
+      const safePath = assertPathUnder(row.artwork_path, artworkDir(podcastId));
+      const ext = extname(safePath).toLowerCase();
+      const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? 'image/jpeg';
+      const stream = createReadStream(safePath);
+      return reply
+        .header('Content-Type', contentType)
+        .header('Cache-Control', 'public, max-age=86400')
+        .send(stream);
+    } catch {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+  });
+
   // Public config (no auth): used by the web client to gate /feed routes.
   app.get('/api/public/config', async (_request, reply) => {
     const settings = readSettings();
@@ -65,7 +106,7 @@ export async function publicRoutes(app: FastifyInstance) {
     const { slug } = request.params as { slug: string };
     const row = db
       .prepare(
-        `SELECT id, title, slug, description, language, author_name, artwork_url, site_url, explicit
+        `SELECT id, title, slug, description, language, author_name, artwork_url, artwork_path, site_url, explicit
          FROM podcasts WHERE slug = ?`
       )
       .get(slug) as Record<string, unknown> | undefined;

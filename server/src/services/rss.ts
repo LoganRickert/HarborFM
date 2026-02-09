@@ -1,7 +1,14 @@
 import { writeFileSync } from 'fs';
-import { extname } from 'path';
+import { basename, extname } from 'path';
 import { db } from '../db/index.js';
 import { rssDir } from './paths.js';
+import { EXT_DOT_TO_EXT } from '../utils/artwork.js';
+
+function artworkExt(artworkPath: string | null | undefined): string {
+  if (!artworkPath) return 'jpg';
+  const ext = extname(String(artworkPath)).toLowerCase();
+  return EXT_DOT_TO_EXT[ext] ?? 'jpg';
+}
 
 function escapeXml(s: string): string {
   return s
@@ -124,8 +131,15 @@ export function generateRss(podcastId: string, publicBaseUrl?: string | null): s
   if (podcast.artwork_url) {
     artworkUrl = sanitizeHttpUrl(podcast.artwork_url);
   } else if (podcast.artwork_path && publicBaseNoSlash) {
-    // In feed we can only put a URL; if no public base, use placeholder
-    artworkUrl = `${publicBaseNoSlash}/artwork/${encodeURIComponent(podcastId)}.jpg`;
+    if (exportPrefix != null) {
+      const ext = artworkExt(podcast.artwork_path as string);
+      artworkUrl = exportPrefix
+        ? `${publicBaseNoSlash}/${exportPrefix}/cover.${ext}`
+        : `${publicBaseNoSlash}/cover.${ext}`;
+    } else {
+      const filename = basename(podcast.artwork_path as string);
+      artworkUrl = `${publicBaseNoSlash}/api/public/artwork/${encodeURIComponent(podcastId)}/${encodeURIComponent(filename)}`;
+    }
   }
 
   // Build RSS feed URL (atom:link rel="self"): S3 feed URL when deployed there, else app API URL

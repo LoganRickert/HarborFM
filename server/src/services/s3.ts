@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import { S3Client, PutObjectCommand, HeadBucketCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { assertPathUnder, getDataDir } from './paths.js';
+import { EXT_DOT_TO_EXT, EXT_TO_MIMETYPE } from '../utils/artwork.js';
 
 export interface S3Config {
   bucket: string;
@@ -116,9 +118,10 @@ export async function uploadFile(
 
 export async function deployPodcastToS3(
   config: S3Config,
-  publicBaseUrl: string | null,
+  _publicBaseUrl: string | null,
   rssXml: string,
-  episodes: { id: string; audio_final_path: string | null; audio_mime?: string | null }[]
+  episodes: { id: string; audio_final_path: string | null; audio_mime?: string | null }[],
+  artworkPath?: string | null
 ): Promise<{ uploaded: number; skipped: number; errors: string[] }> {
   const errors: string[] = [];
   let uploaded = 0;
@@ -132,6 +135,27 @@ export async function deployPodcastToS3(
   } else {
     await uploadFile(config, 'feed.xml', feedBody, 'application/xml');
     uploaded += 1;
+  }
+
+  if (artworkPath) {
+    try {
+      const safePath = assertPathUnder(artworkPath, join(getDataDir(), 'artwork'));
+      const body = readFileSync(safePath);
+      const extFromPath = extname(safePath).toLowerCase();
+      const ext = EXT_DOT_TO_EXT[extFromPath] ?? 'jpg';
+      const key = `cover.${ext}`;
+      const contentType = EXT_TO_MIMETYPE[ext] ?? 'image/jpeg';
+      const contentHash = md5Hex(body);
+      const existingETag = await getObjectETag(config, key);
+      if (existingETag === contentHash) {
+        skipped += 1;
+      } else {
+        await uploadFile(config, key, body, contentType);
+        uploaded += 1;
+      }
+    } catch (e) {
+      errors.push(`Cover image: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   for (const ep of episodes) {

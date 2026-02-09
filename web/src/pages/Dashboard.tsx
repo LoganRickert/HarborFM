@@ -82,8 +82,12 @@ export function Dashboard() {
             <article key={p.id} className={styles.card}>
               <Link to={`/podcasts/${p.id}`} className={styles.cardLink}>
                 <div className={styles.cardArtworkWrapper}>
-                  {p.artwork_url ? (
-                    <img src={p.artwork_url} alt="" className={styles.cardArtwork} />
+                  {p.artwork_url || p.artwork_filename ? (
+                    <img
+                      src={p.artwork_url ?? (p.artwork_filename ? `/api/public/artwork/${p.id}/${encodeURIComponent(p.artwork_filename)}` : '')}
+                      alt=""
+                      className={styles.cardArtwork}
+                    />
                   ) : (
                     <div className={styles.cardArtworkPlaceholder}>
                       <Radio size={32} strokeWidth={1.5} />

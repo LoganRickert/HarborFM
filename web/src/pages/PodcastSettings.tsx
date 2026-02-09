@@ -84,13 +84,13 @@ export function PodcastSettings() {
                 <span className={styles.showMetaValue}>{podcast.category_primary}</span>
               </div>
             )}
-            {podcast.artwork_url && (
+            {(podcast.artwork_url || podcast.artwork_filename) && (
               <div className={styles.showMetaItem}>
                 <span className={styles.showMetaLabel}>Cover Image</span>
                 <div style={{ marginTop: '0.5rem' }}>
-                  <img 
-                    src={podcast.artwork_url} 
-                    alt={`${podcast.title} cover`} 
+                  <img
+                    src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}` : '')}
+                    alt={`${podcast.title} cover`}
                     style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '4px' }}
                   />
                 </div>

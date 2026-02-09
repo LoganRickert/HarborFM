@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useAuthStore } from '../store/auth';
-import { getPodcast, updatePodcast, type Podcast } from '../api/podcasts';
+import { getPodcast, updatePodcast, uploadPodcastArtwork, type Podcast } from '../api/podcasts';
 import styles from './PodcastSettings.module.css';
 
 export interface EditShowDetailsDialogProps {
@@ -23,10 +23,25 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
 
   const [form, setForm] = useState<Partial<Podcast>>({});
   const formRef = useRef(form);
+  const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
+  const [pendingArtworkFile, setPendingArtworkFile] = useState<File | null>(null);
+  const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
+  const [coverUploadKey, setCoverUploadKey] = useState(0);
+  const [debouncedArtworkUrl, setDebouncedArtworkUrl] = useState('');
 
   useEffect(() => {
     formRef.current = form;
   }, [form]);
+
+  useEffect(() => {
+    const raw = (form.artwork_url ?? '').trim();
+    if (!raw) {
+      setDebouncedArtworkUrl('');
+      return;
+    }
+    const t = setTimeout(() => setDebouncedArtworkUrl(raw), 400);
+    return () => clearTimeout(t);
+  }, [form.artwork_url]);
 
   useEffect(() => {
     if (podcast) {
@@ -34,6 +49,9 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         ...podcast,
         artwork_url: podcast.artwork_url ?? null,
       });
+      setDebouncedArtworkUrl((podcast.artwork_url ?? '').trim());
+      setCoverMode(podcast.artwork_filename ? 'upload' : 'url');
+      setPendingArtworkFile(null);
     }
   }, [podcast]);
 
@@ -43,8 +61,30 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         ...podcast,
         artwork_url: podcast.artwork_url ?? null,
       });
+      setDebouncedArtworkUrl((podcast.artwork_url ?? '').trim());
+      setPendingArtworkFile(null);
     }
   }, [open, podcast]);
+
+  useEffect(() => {
+    if (!open) {
+      mutation.reset();
+      uploadArtworkMutation.reset();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!pendingArtworkFile) {
+      setPendingArtworkPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(pendingArtworkFile);
+    setPendingArtworkPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingArtworkFile]);
 
   const mutation = useMutation({
     mutationFn: (payload: Partial<Podcast>) => updatePodcast(podcastId!, payload),
@@ -55,9 +95,27 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
     },
   });
 
-  function handleSubmit(e: React.FormEvent) {
+  const uploadArtworkMutation = useMutation({
+    mutationFn: (file: File) => uploadPodcastArtwork(podcastId!, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['podcast', podcastId] });
+      queryClient.invalidateQueries({ queryKey: ['podcasts'] });
+      setCoverUploadKey((k) => k + 1);
+    },
+  });
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const currentForm = formRef.current;
+    const fileToUpload = pendingArtworkFile;
+    if (fileToUpload) {
+      try {
+        await uploadArtworkMutation.mutateAsync(fileToUpload);
+        setPendingArtworkFile(null);
+      } catch {
+        return;
+      }
+    }
     const payload: Partial<Podcast> = {
       title: currentForm.title,
       slug: currentForm.slug,
@@ -71,7 +129,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       category_tertiary: currentForm.category_tertiary,
       explicit: currentForm.explicit,
       site_url: currentForm.site_url,
-      artwork_url: currentForm.artwork_url !== undefined ? currentForm.artwork_url : null,
+      artwork_url: fileToUpload ? null : (currentForm.artwork_url !== undefined ? currentForm.artwork_url : null),
       copyright: currentForm.copyright,
       podcast_guid: currentForm.podcast_guid,
       locked: currentForm.locked,
@@ -94,7 +152,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
               type="button"
               className={styles.dialogClose}
               aria-label="Close"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || uploadArtworkMutation.isPending}
             >
               <X size={18} strokeWidth={2} aria-hidden="true" />
             </button>
@@ -275,20 +333,94 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   <span>Locked (prevent other platforms from importing)</span>
                 </label>
                 <label className={styles.label}>
-                  Cover Image URL
-                  <input
-                    type="text"
-                    value={form.artwork_url ?? ''}
-                    onChange={(e) => {
-                      const value = e.target.value.trim();
-                      setForm((f) => ({ ...f, artwork_url: value === '' ? null : value }));
-                    }}
-                    className={styles.input}
-                    placeholder="https://example.com/image.jpg"
-                  />
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-                    URL for the podcast cover image (optional)
-                  </p>
+                  Cover image
+                  <div className={styles.statusToggle} role="group" aria-label="Cover image source">
+                    <button
+                      type="button"
+                      className={coverMode === 'url' ? styles.statusToggleActive : styles.statusToggleBtn}
+                      onClick={() => setCoverMode('url')}
+                      aria-pressed={coverMode === 'url'}
+                    >
+                      URL
+                    </button>
+                    <button
+                      type="button"
+                      className={coverMode === 'upload' ? styles.statusToggleActive : styles.statusToggleBtn}
+                      onClick={() => setCoverMode('upload')}
+                      aria-pressed={coverMode === 'upload'}
+                    >
+                      Upload
+                    </button>
+                  </div>
+                  {coverMode === 'url' && (
+                    <>
+                      <input
+                        type="url"
+                        value={form.artwork_url ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value.trim();
+                          setForm((f) => ({ ...f, artwork_url: value === '' ? null : value }));
+                        }}
+                        className={styles.input}
+                        placeholder="https://example.com/cover.jpg"
+                        style={{ marginTop: '0.5rem' }}
+                      />
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+                        Public URL for the podcast cover (optional)
+                      </p>
+                    </>
+                  )}
+                  {coverMode === 'upload' && (
+                    <>
+                      <input
+                        key={coverUploadKey}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className={styles.input}
+                        style={{ marginTop: '0.5rem' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) setPendingArtworkFile(file);
+                        }}
+                        disabled={mutation.isPending}
+                        aria-label="Choose cover image"
+                      />
+                      {pendingArtworkFile && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', margin: '0.25rem 0 0 0' }}>
+                          {pendingArtworkFile.name} will be uploaded when you save.
+                        </p>
+                      )}
+                      {uploadArtworkMutation.isError && (
+                        <p className={styles.error} style={{ marginTop: '0.25rem' }}>
+                          {uploadArtworkMutation.error?.message}
+                        </p>
+                      )}
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+                        JPG, PNG or WebP, max 5MB. Uploads when you click Save changes.
+                      </p>
+                    </>
+                  )}
+                  {(coverMode === 'url'
+                    ? debouncedArtworkUrl && (debouncedArtworkUrl.startsWith('http://') || debouncedArtworkUrl.startsWith('https://'))
+                    : (pendingArtworkFile || podcast?.artwork_filename)
+                  ) && (
+                    <p style={{ marginTop: '0.75rem', marginBottom: 0, display: 'flex', justifyContent: 'center' }}>
+                      <img
+                        key={coverMode === 'url' ? `url-${debouncedArtworkUrl}` : `upload-${podcast?.artwork_filename ?? ''}-${Boolean(pendingArtworkPreviewUrl)}`}
+                        src={
+                          coverMode === 'url'
+                            ? debouncedArtworkUrl
+                            : pendingArtworkPreviewUrl
+                              ? pendingArtworkPreviewUrl
+                              : podcast?.artwork_filename
+                                ? `/api/public/artwork/${podcastId}/${encodeURIComponent(podcast.artwork_filename)}`
+                                : ''
+                        }
+                        alt="Cover preview"
+                        style={{ maxWidth: '160px', maxHeight: '160px', borderRadius: '8px', border: '1px solid var(--border)', objectFit: 'cover' }}
+                      />
+                    </p>
+                  )}
                 </label>
                 <label className={styles.label}>
                   Site URL
@@ -322,8 +454,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   <button type="button" className={styles.cancel} onClick={onClose} aria-label="Cancel editing show">
                     Cancel
                   </button>
-                  <button type="submit" className={styles.submit} disabled={mutation.isPending} aria-label="Save show changes">
-                    {mutation.isPending ? 'Saving…' : 'Save changes'}
+                  <button type="submit" className={styles.submit} disabled={mutation.isPending || uploadArtworkMutation.isPending} aria-label="Save show changes">
+                    {uploadArtworkMutation.isPending ? 'Uploading…' : mutation.isPending ? 'Saving…' : 'Save changes'}
                   </button>
                 </div>
               </form>

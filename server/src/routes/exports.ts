@@ -293,13 +293,22 @@ export async function exportRoutes(app: FastifyInstance) {
       ).run(runId, exportId, podcastId);
       try {
         const xml = generateRss(podcastId, publicBaseUrl);
+        const podcastRow = db
+          .prepare('SELECT artwork_path FROM podcasts WHERE id = ?')
+          .get(podcastId) as { artwork_path: string | null } | undefined;
         const episodes = db
           .prepare(
             `SELECT id, audio_final_path, audio_mime FROM episodes WHERE podcast_id = ? AND status = 'published'
              AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))`
           )
           .all(podcastId) as { id: string; audio_final_path: string | null; audio_mime?: string | null }[];
-        const { uploaded, skipped, errors } = await deployPodcastToS3(config, publicBaseUrl, xml, episodes);
+        const { uploaded, skipped, errors } = await deployPodcastToS3(
+          config,
+          publicBaseUrl,
+          xml,
+          episodes,
+          podcastRow?.artwork_path ?? null
+        );
         const log =
           errors.length > 0
             ? `Uploaded ${uploaded}, skipped ${skipped}. Errors: ${errors.join('; ')}`

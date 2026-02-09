@@ -8,9 +8,10 @@ export interface PublicPodcast {
   language: string;
   author_name: string;
   artwork_url: string | null;
+  artwork_uploaded?: boolean;
+  artwork_filename?: string | null;
   site_url: string | null;
   explicit: number;
-  /** When set, RSS button should link here (S3 public feed) instead of app RSS endpoint */
   rss_url?: string | null;
 }
 

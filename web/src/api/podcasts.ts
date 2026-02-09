@@ -1,4 +1,6 @@
-import { apiGet, apiPost, apiPatch } from './client';
+import { apiGet, apiPost, apiPatch, csrfHeaders } from './client';
+
+const BASE = '/api';
 
 export interface Podcast {
   id: string;
@@ -15,6 +17,7 @@ export interface Podcast {
   category_tertiary: string | null;
   explicit: number;
   artwork_path: string | null;
+  artwork_filename: string | null;
   artwork_url: string | null;
   site_url: string | null;
   copyright: string | null;
@@ -65,6 +68,22 @@ export function createPodcast(body: {
   medium?: 'podcast' | 'music' | 'video' | 'film' | 'audiobook' | 'newsletter' | 'blog';
 }) {
   return apiPost<Podcast>('/podcasts', body);
+}
+
+export async function uploadPodcastArtwork(podcastId: string, file: File): Promise<Podcast> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/podcasts/${podcastId}/artwork`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? res.statusText);
+  }
+  return res.json();
 }
 
 export function updatePodcast(
