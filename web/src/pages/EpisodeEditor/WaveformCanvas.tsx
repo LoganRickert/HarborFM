@@ -17,6 +17,7 @@ export interface WaveformCanvasProps {
   durationSec: number;
   currentTime: number;
   onSeek: (timeSec: number) => void;
+  onPlayPause?: () => void;
   className?: string;
 }
 
@@ -35,7 +36,7 @@ function getThemeColor(variable: string, fallback: string): string {
   return value || fallback;
 }
 
-export function WaveformCanvas({ data, durationSec, currentTime, onSeek, className }: WaveformCanvasProps) {
+export function WaveformCanvas({ data, durationSec, currentTime, onSeek, onPlayPause, className }: WaveformCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -126,16 +127,24 @@ export function WaveformCanvas({ data, durationSec, currentTime, onSeek, classNa
     onSeek(frac * durationSec);
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== ' ' || !onPlayPause) return;
+    e.preventDefault();
+    onPlayPause();
+  }
+
   return (
     <div
       ref={containerRef}
       className={className ?? styles.waveformTrack}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      tabIndex={onPlayPause != null ? 0 : undefined}
       role="progressbar"
       aria-valuenow={Math.round(currentTime)}
       aria-valuemin={0}
       aria-valuemax={durationSec}
-      aria-label="Playback position"
+      aria-label={'Playback position'}
     >
       <canvas ref={canvasRef} className={styles.waveformCanvas} />
     </div>

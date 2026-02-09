@@ -201,6 +201,7 @@ export function SegmentRow({
                   setCurrentTime(time);
                 }
               }}
+              onPlayPause={togglePlay}
             />
           ) : (
             <div

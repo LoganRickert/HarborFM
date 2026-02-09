@@ -89,8 +89,12 @@ export function Layout() {
       {/* Mobile menu overlay */}
       {menuOpen && <div className={styles.menuOverlay} onClick={() => setMenuOpen(false)} />}
 
-      {/* Mobile slide-out menu */}
-      <div ref={menuRef} className={`${styles.mobileMenu} ${menuOpen ? styles.mobileMenuOpen : ''}`}>
+      {/* Mobile slide-out menu — inert when closed so it's skipped in tab order */}
+      <div
+        ref={menuRef}
+        className={`${styles.mobileMenu} ${menuOpen ? styles.mobileMenuOpen : ''}`}
+        inert={!menuOpen ? true : undefined}
+      >
         <div className={styles.mobileMenuHeader}>
           <span className={styles.mobileUser}>{user?.email}</span>
           <button

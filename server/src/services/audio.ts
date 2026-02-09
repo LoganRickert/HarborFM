@@ -1,20 +1,23 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { statSync, unlinkSync } from 'fs';
+import { statSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname, extname, basename, resolve, sep } from 'path';
 import { tmpdir } from 'os';
-import { processedDir, uploadsDir, getDataDir, assertPathUnder, ensureDir } from './paths.js';
+import { processedDir, uploadsDir, getDataDir, assertPathUnder, ensureDir, assertResolvedPathUnder } from './paths.js';
 
 /** Allow output to allowedBaseDir or to os.tmpdir(); ensures output dir is under one of them. */
 function prepareOutputPath(outputPath: string, allowedBaseDir: string): void {
   const outDir = dirname(outputPath);
-  ensureDir(outDir);
   const resolvedOut = resolve(outDir);
   const resolvedTmp = resolve(tmpdir());
   if (resolvedOut === resolvedTmp || resolvedOut.startsWith(resolvedTmp + sep)) {
-    assertPathUnder(outDir, tmpdir());
+    assertResolvedPathUnder(outDir, tmpdir());
+    if (!existsSync(outDir)) {
+      mkdirSync(outDir, { recursive: true });
+    }
     return;
   }
+  ensureDir(outDir);
   assertPathUnder(outDir, allowedBaseDir);
 }
 
