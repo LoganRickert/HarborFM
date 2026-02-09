@@ -62,3 +62,7 @@ export function getPublicEpisodes(podcastSlug: string, limit = 50, offset = 0) {
 export function getPublicEpisode(podcastSlug: string, episodeSlug: string) {
   return apiGet<PublicEpisode>(`/public/podcasts/${podcastSlug}/episodes/${episodeSlug}`);
 }
+
+export function publicEpisodeWaveformUrl(podcastSlug: string, episodeSlug: string): string {
+  return `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/episodes/${encodeURIComponent(episodeSlug)}/waveform`;
+}

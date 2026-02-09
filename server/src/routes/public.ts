@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { createReadStream } from 'fs';
+import { createReadStream, existsSync, readFileSync } from 'fs';
 import { basename, extname } from 'path';
 import { db } from '../db/index.js';
-import { assertPathUnder, assertSafeId, artworkDir } from '../services/paths.js';
+import { assertPathUnder, assertSafeId, artworkDir, processedDir } from '../services/paths.js';
 import { EXT_DOT_TO_MIMETYPE } from '../utils/artwork.js';
 import { generateRss } from '../services/rss.js';
 import { readSettings } from './settings.js';
@@ -193,6 +193,39 @@ export async function publicRoutes(app: FastifyInstance) {
       .get(podcast.id, episodeSlug) as Record<string, unknown> | undefined;
     if (!row) return reply.status(404).send({ error: 'Episode not found' });
     return publicEpisodeDto(podcast.id, row);
+  });
+
+  // Get episode waveform by podcast slug and episode slug (public, no auth required)
+  app.get('/api/public/podcasts/:podcastSlug/episodes/:episodeSlug/waveform', async (request, reply) => {
+    if (!ensurePublicFeedsEnabled(reply)) return;
+    const { podcastSlug, episodeSlug } = request.params as { podcastSlug: string; episodeSlug: string };
+    const podcast = db
+      .prepare('SELECT id FROM podcasts WHERE slug = ?')
+      .get(podcastSlug) as { id: string } | undefined;
+    if (!podcast) return reply.status(404).send({ error: 'Podcast not found' });
+
+    const row = db
+      .prepare(
+        `SELECT id, audio_final_path FROM episodes
+         WHERE podcast_id = ? AND slug = ? AND status = 'published'
+         AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))`
+      )
+      .get(podcast.id, episodeSlug) as { id: string; audio_final_path: string | null } | undefined;
+    if (!row || !row.audio_final_path || !existsSync(row.audio_final_path)) {
+      return reply.status(404).send({ error: 'Waveform not found' });
+    }
+    const waveformPath = row.audio_final_path.replace(/\.[^.]+$/, '.waveform.json');
+    if (!existsSync(waveformPath)) return reply.status(404).send({ error: 'Waveform not found' });
+    try {
+      assertPathUnder(waveformPath, processedDir(podcast.id, row.id));
+    } catch {
+      return reply.status(404).send({ error: 'Waveform not found' });
+    }
+    const json = readFileSync(waveformPath, 'utf-8');
+    return reply
+      .header('Content-Type', 'application/json')
+      .header('Cache-Control', 'public, max-age=3600')
+      .send(json);
   });
 
   // Get RSS feed by podcast slug (public, no auth required)

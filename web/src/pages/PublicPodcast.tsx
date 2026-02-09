@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { ArrowRight, ArrowDown, ArrowUp, Rss } from 'lucide-react';
-import { getPublicPodcast, getPublicEpisodes } from '../api/public';
+import { ArrowRight, ArrowDown, ArrowUp, Rss, Play, Pause } from 'lucide-react';
+import { getPublicPodcast, getPublicEpisodes, publicEpisodeWaveformUrl } from '../api/public';
+import type { PublicEpisode } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
 import { useMeta } from '../hooks/useMeta';
+import { WaveformCanvas, type WaveformData } from './EpisodeEditor/WaveformCanvas';
 import styles from './PublicPodcast.module.css';
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -44,6 +46,138 @@ function formatSeasonEpisode(seasonNumber: number | null | undefined, episodeNum
   return '';
 }
 
+function EpisodePlayer({
+  episode,
+  podcastSlug,
+  isPlaying,
+  onPlay,
+  onPause,
+}: {
+  episode: PublicEpisode;
+  podcastSlug: string;
+  isPlaying: boolean;
+  onPlay: () => void;
+  onPause: () => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const audioUrl = episode.audio_url ?? null;
+  const durationSec = episode.audio_duration_sec ?? 0;
+  const hasWaveform = Boolean(waveformData && durationSec > 0);
+
+  useEffect(() => {
+    if (!podcastSlug || !episode.slug || durationSec <= 0 || !audioUrl) {
+      setWaveformData(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(publicEpisodeWaveformUrl(podcastSlug, episode.slug))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.data?.length) setWaveformData(data as WaveformData);
+        else if (!cancelled) setWaveformData(null);
+      })
+      .catch(() => {
+        if (!cancelled) setWaveformData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [podcastSlug, episode.slug, durationSec, audioUrl]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !audioUrl) return;
+    const onPauseEvt = () => onPause();
+    const onEnded = () => {
+      setCurrentTime(0);
+      onPause();
+    };
+    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onLoadedMetadata = () => setCurrentTime(el.currentTime);
+    el.addEventListener('pause', onPauseEvt);
+    el.addEventListener('ended', onEnded);
+    el.addEventListener('timeupdate', onTimeUpdate);
+    el.addEventListener('loadedmetadata', onLoadedMetadata);
+    return () => {
+      el.removeEventListener('pause', onPauseEvt);
+      el.removeEventListener('ended', onEnded);
+      el.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('loadedmetadata', onLoadedMetadata);
+    };
+  }, [audioUrl, onPause]);
+
+  function togglePlay() {
+    const el = audioRef.current;
+    if (!el || !audioUrl) return;
+    if (isPlaying) {
+      el.pause();
+      onPause();
+    } else {
+      onPlay();
+      el.src = audioUrl;
+      el.play().catch(() => onPause());
+    }
+  }
+
+  if (!audioUrl) return null;
+
+  return (
+    <div className={styles.episodePlayer}>
+      {hasWaveform ? (
+        <div className={styles.playbackRow}>
+          <button
+            type="button"
+            className={styles.playPauseBtn}
+            onClick={togglePlay}
+            title={isPlaying ? 'Pause' : 'Play'}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? <Pause size={22} aria-hidden /> : <Play size={22} aria-hidden />}
+          </button>
+          <WaveformCanvas
+            data={waveformData!}
+            durationSec={durationSec}
+            currentTime={currentTime}
+            onSeek={(time) => {
+              const el = audioRef.current;
+              if (el) {
+                el.currentTime = time;
+                setCurrentTime(time);
+              }
+            }}
+            className={styles.waveform}
+          />
+        </div>
+      ) : null}
+      {hasWaveform ? (
+        <audio
+          ref={audioRef}
+          id={`audio-${episode.id}`}
+          preload="metadata"
+          style={{ display: 'none' }}
+        >
+          <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+        </audio>
+      ) : (
+        <audio
+          ref={audioRef}
+          id={`audio-${episode.id}`}
+          src={audioUrl}
+          controls
+          className={styles.audio}
+          preload="metadata"
+          onPlay={onPlay}
+          onPause={onPause}
+          onEnded={onPause}
+        />
+      )}
+    </div>
+  );
+}
+
 export function PublicPodcast() {
   const { podcastSlug } = useParams<{ podcastSlug: string }>();
   const [playingEpisodeId, setPlayingEpisodeId] = useState<string | null>(null);
@@ -81,21 +215,22 @@ export function PublicPodcast() {
     return data?.pages.flatMap((page) => page.episodes) ?? [];
   }, [data]);
 
-  const handlePlay = (episodeId: string) => {
-    // Stop any currently playing episode
-    if (playingEpisodeId && playingEpisodeId !== episodeId) {
-      const audio = document.getElementById(`audio-${playingEpisodeId}`) as HTMLAudioElement;
-      if (audio) {
-        audio.pause();
-        audio.currentTime = 0;
+  const handlePlay = useCallback((episodeId: string) => {
+    setPlayingEpisodeId((prev) => {
+      if (prev && prev !== episodeId) {
+        const audio = document.getElementById(`audio-${prev}`) as HTMLAudioElement;
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
       }
-    }
-    setPlayingEpisodeId(episodeId);
-  };
+      return episodeId;
+    });
+  }, []);
 
-  const handlePause = () => {
+  const handlePause = useCallback(() => {
     setPlayingEpisodeId(null);
-  };
+  }, []);
 
   // Filter and sort episodes (client-side filtering on loaded episodes)
   const filteredAndSortedEpisodes = useMemo(() => {
@@ -228,9 +363,7 @@ export function PublicPodcast() {
         {!episodesLoading && filteredAndSortedEpisodes.length > 0 && (
           <>
             <ul className={styles.episodesList}>
-              {filteredAndSortedEpisodes.map((ep) => {
-                const audioUrl = ep.audio_url;
-                return (
+              {filteredAndSortedEpisodes.map((ep) => (
                   <li key={ep.id} className={styles.episode}>
                     <div className={styles.episodeHeader}>
                       <div className={styles.episodeHeaderContent}>
@@ -259,23 +392,17 @@ export function PublicPodcast() {
                     {ep.description && (
                       <p className={styles.episodeDescription}>{ep.description}</p>
                     )}
-                    {audioUrl && (
-                      <div className={styles.episodePlayer}>
-                        <audio
-                          id={`audio-${ep.id}`}
-                          src={audioUrl}
-                          controls
-                          className={styles.audio}
-                          preload="metadata"
-                          onPlay={() => handlePlay(ep.id)}
-                          onPause={() => handlePause()}
-                          onEnded={() => handlePause()}
-                        />
-                      </div>
+                    {ep.audio_url && (
+                      <EpisodePlayer
+                        episode={ep}
+                        podcastSlug={podcastSlug}
+                        isPlaying={playingEpisodeId === ep.id}
+                        onPlay={() => handlePlay(ep.id)}
+                        onPause={handlePause}
+                      />
                     )}
                   </li>
-                );
-              })}
+              ))}
             </ul>
             {hasNextPage && (
               <div className={styles.loadMoreContainer}>

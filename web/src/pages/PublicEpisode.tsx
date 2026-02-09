@@ -1,8 +1,11 @@
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { Play, Pause } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { getPublicPodcast, getPublicEpisode } from '../api/public';
+import { getPublicPodcast, getPublicEpisode, publicEpisodeWaveformUrl } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
 import { useMeta } from '../hooks/useMeta';
+import { WaveformCanvas, type WaveformData } from './EpisodeEditor/WaveformCanvas';
 import styles from './PublicEpisode.module.css';
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -61,6 +64,60 @@ export function PublicEpisode() {
     description: episode?.description || (episode && podcast ? `Listen to ${episode.title} from ${podcast.title}${podcast.author_name ? ` by ${podcast.author_name}` : ''} on HarborFM.` : undefined),
   });
 
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const audioUrl = episode?.audio_url ?? null;
+  const durationSec = episode?.audio_duration_sec ?? 0;
+  const hasWaveform = Boolean(waveformData && durationSec > 0);
+
+  useEffect(() => {
+    if (!podcastSlug || !episodeSlug || durationSec <= 0 || !audioUrl) {
+      setWaveformData(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(publicEpisodeWaveformUrl(podcastSlug, episodeSlug))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.data?.length) setWaveformData(data as WaveformData);
+        else if (!cancelled) setWaveformData(null);
+      })
+      .catch(() => {
+        if (!cancelled) setWaveformData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [podcastSlug, episodeSlug, durationSec, audioUrl]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !audioUrl) return;
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onLoadedMetadata = () => setCurrentTime(el.currentTime);
+    el.addEventListener('play', onPlay);
+    el.addEventListener('pause', onPause);
+    el.addEventListener('ended', onEnded);
+    el.addEventListener('timeupdate', onTimeUpdate);
+    el.addEventListener('loadedmetadata', onLoadedMetadata);
+    return () => {
+      el.removeEventListener('play', onPlay);
+      el.removeEventListener('pause', onPause);
+      el.removeEventListener('ended', onEnded);
+      el.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('loadedmetadata', onLoadedMetadata);
+    };
+  }, [audioUrl]);
+
   if (!podcastSlug || !episodeSlug) return null;
 
   if (podcastLoading || episodeLoading) {
@@ -79,7 +136,17 @@ export function PublicEpisode() {
     );
   }
 
-  const audioUrl = episode.audio_url;
+  function togglePlay() {
+    const el = audioRef.current;
+    if (!el || !audioUrl) return;
+    if (isPlaying) {
+      el.pause();
+      setIsPlaying(false);
+    } else {
+      el.src = audioUrl;
+      el.play().catch(() => setIsPlaying(false));
+    }
+  }
 
   return (
     <div className={styles.wrapper}>
@@ -126,10 +193,42 @@ export function PublicEpisode() {
 
         {audioUrl && (
           <div className={styles.player}>
-            <audio controls className={styles.audio} preload="metadata">
-              <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
-              Your browser does not support the audio element.
-            </audio>
+            {hasWaveform && (
+              <div className={styles.playbackRow}>
+                <button
+                  type="button"
+                  className={styles.playPauseBtn}
+                  onClick={togglePlay}
+                  title={isPlaying ? 'Pause' : 'Play'}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPlaying ? <Pause size={22} aria-hidden /> : <Play size={22} aria-hidden />}
+                </button>
+                <WaveformCanvas
+                  data={waveformData!}
+                  durationSec={durationSec}
+                  currentTime={currentTime}
+                  onSeek={(time) => {
+                    const el = audioRef.current;
+                    if (el) {
+                      el.currentTime = time;
+                      setCurrentTime(time);
+                    }
+                  }}
+                  className={styles.waveform}
+                />
+              </div>
+            )}
+            {hasWaveform ? (
+              <audio ref={audioRef} preload="metadata" style={{ display: 'none' }}>
+                <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+              </audio>
+            ) : (
+              <audio ref={audioRef} controls className={styles.audio} preload="metadata">
+                <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+                Your browser does not support the audio element.
+              </audio>
+            )}
           </div>
         )}
 
