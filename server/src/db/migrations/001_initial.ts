@@ -2,6 +2,7 @@
  * Initial schema: full consolidated schema as of latest migrations
  */
 export const up = (db: { exec: (sql: string) => void }) => {
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -13,7 +14,8 @@ export const up = (db: { exec: (sql: string) => void }) => {
       disk_bytes_used INTEGER DEFAULT 0,
       last_login_at TEXT,
       last_login_ip TEXT,
-      last_login_user_agent TEXT
+      last_login_user_agent TEXT,
+      last_login_location TEXT
     );
 
     CREATE TABLE IF NOT EXISTS podcasts (

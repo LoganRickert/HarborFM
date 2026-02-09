@@ -25,6 +25,7 @@
     "@fastify/send": "^4.1.0",
     "@fastify/static": "^9.0.0",
     "@harborfm/shared": "workspace:*",
+    "@maxmind/geoip2-node": "6.3.4",
     "argon2": "^0.44.0",
     "better-sqlite3": "^12.6.2",
     "dotenv": "^17.2.4",

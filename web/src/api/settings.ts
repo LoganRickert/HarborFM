@@ -12,6 +12,8 @@ export interface AppSettings {
   final_bitrate_kbps: number;
   final_channels: 'mono' | 'stereo';
   final_format: 'mp3' | 'm4a';
+  maxmind_account_id: string;
+  maxmind_license_key: string;
 }
 
 export function getSettings(): Promise<AppSettings> {

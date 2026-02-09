@@ -8,6 +8,7 @@ import { readSettings } from './settings.js';
 import { randomBytes } from 'crypto';
 import { getCookieSecureFlag } from '../services/cookies.js';
 import { clearFailures, getClientIp, getIpBan, getUserAgent, recordFailureAndMaybeBan } from '../services/loginAttempts.js';
+import { getLocationForIp } from '../services/geolocation.js';
 
 const COOKIE_NAME = 'harborfm_jwt';
 const CSRF_COOKIE_NAME = 'harborfm_csrf';
@@ -66,9 +67,10 @@ export async function authRoutes(app: FastifyInstance) {
     // Record initial login metadata (register returns an auth cookie, so treat as a login).
     const ip = getClientIp(request);
     const userAgent = getUserAgent(request);
+    const location = await getLocationForIp(ip).catch(() => null);
     db.prepare(
-      `UPDATE users SET last_login_at = datetime('now'), last_login_ip = ?, last_login_user_agent = ? WHERE id = ?`
-    ).run(ip, userAgent, id);
+      `UPDATE users SET last_login_at = datetime('now'), last_login_ip = ?, last_login_user_agent = ?, last_login_location = ? WHERE id = ?`
+    ).run(ip, userAgent, location ?? null, id);
     const token = app.jwt.sign(
       { sub: id, email },
       { expiresIn: '7d' }
@@ -118,9 +120,10 @@ export async function authRoutes(app: FastifyInstance) {
 
     // Record last login metadata (best-effort).
     try {
+      const location = await getLocationForIp(ip).catch(() => null);
       db.prepare(
-        `UPDATE users SET last_login_at = datetime('now'), last_login_ip = ?, last_login_user_agent = ? WHERE id = ?`
-      ).run(ip, userAgent, row.id);
+        `UPDATE users SET last_login_at = datetime('now'), last_login_ip = ?, last_login_user_agent = ?, last_login_location = ? WHERE id = ?`
+      ).run(ip, userAgent, location ?? null, row.id);
     } catch {
       // ignore
     }

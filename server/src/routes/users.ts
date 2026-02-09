@@ -10,6 +10,9 @@ export interface User {
   role: 'user' | 'admin';
   disabled: number; // SQLite uses INTEGER for booleans (0 = false, 1 = true)
   disk_bytes_used: number;
+  last_login_at: string | null;
+  last_login_ip: string | null;
+  last_login_location: string | null;
 }
 
 export async function usersRoutes(app: FastifyInstance) {
@@ -39,7 +42,7 @@ export async function usersRoutes(app: FastifyInstance) {
       const total = totalCount.count;
 
       // Get paginated users (oldest to newest by default)
-      const queryStr = `SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used FROM users ${whereClause} ORDER BY created_at ASC LIMIT ? OFFSET ?`;
+      const queryStr = `SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location FROM users ${whereClause} ORDER BY created_at ASC LIMIT ? OFFSET ?`;
       const rows = search
         ? db.prepare(queryStr).all(searchParam, limit, offset) as User[]
         : db.prepare(queryStr).all(limit, offset) as User[];
@@ -108,7 +111,7 @@ export async function usersRoutes(app: FastifyInstance) {
       db.prepare(sql).run(...values);
 
       // Return updated user
-      const updated = db.prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used FROM users WHERE id = ?').get(userId) as User;
+      const updated = db.prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location FROM users WHERE id = ?').get(userId) as User;
       return updated;
     }
   );
@@ -119,7 +122,7 @@ export async function usersRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       const user = db
-        .prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used FROM users WHERE id = ?')
+        .prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location FROM users WHERE id = ?')
         .get(userId) as User | undefined;
       if (!user) {
         return reply.code(404).send({ error: 'User not found' });

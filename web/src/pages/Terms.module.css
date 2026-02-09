@@ -1,0 +1,74 @@
+.page {
+  min-height: 100vh;
+  background-color: var(--bg);
+  background-image: url('/radio-bg.svg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.wrap {
+  padding: 2rem 1.5rem 3rem;
+  max-width: 42rem;
+  margin: 0 auto;
+}
+
+.card {
+  padding: 2rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.header {
+  margin-bottom: 1.5rem;
+}
+
+.back {
+  display: inline-block;
+  font-size: 0.875rem;
+  color: var(--accent);
+  text-decoration: none;
+  margin-bottom: 1rem;
+}
+
+.back:hover {
+  color: var(--accent-dim);
+}
+
+.title {
+  margin: 0 0 0.25rem;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.updated {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.content {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.content p {
+  margin: 0 0 1rem;
+}
+
+.content h2 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.content h2:first-of-type {
+  margin-top: 0.5rem;
+}

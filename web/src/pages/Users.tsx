@@ -195,6 +195,15 @@ export function Users() {
                       {' • '}
                       Storage {formatBytes(user.disk_bytes_used ?? 0)}
                     </p>
+                    {(user.last_login_at != null || user.last_login_ip != null || user.last_login_location) && (
+                      <p className={styles.userCardFooter}>
+                        Last login: {user.last_login_at != null ? new Date(user.last_login_at).toLocaleString() : '—'}
+                        {user.last_login_ip != null && <> · {user.last_login_ip}</>}
+                        {user.last_login_location != null && user.last_login_location !== '' && (
+                          <> · {user.last_login_location}</>
+                        )}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

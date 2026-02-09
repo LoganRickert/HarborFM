@@ -24,7 +24,7 @@ ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg tini build-essential python3 ca-certificates wget libmad0 \
-    libid3tag0 libboost-program-options1.74.0 \
+    libid3tag0 libboost-program-options1.74.0 geoipupdate \
   && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
@@ -53,6 +53,7 @@ COPY --from=builder /app/web/package.json ./web/
 RUN pnpm install --frozen-lockfile --prod && pnpm rebuild
 
 COPY --from=builder /app/server/dist ./server/dist
+COPY --from=builder /app/server/initial-assets.json ./server/
 COPY --from=builder /app/web/dist ./server/public
 
 RUN mkdir -p /data /secrets

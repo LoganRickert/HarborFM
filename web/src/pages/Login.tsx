@@ -89,6 +89,11 @@ export function Login() {
           Forgot your password? <Link to="/reset-password">Reset password</Link>
         </p>
         </div>
+        <p className={styles.footerBelowCard}>
+          <Link to="/privacy">Privacy Policy</Link>
+          <span className={styles.footerBelowCardSep} aria-hidden />
+          <Link to="/terms">Terms of Service</Link>
+        </p>
       </div>
     </main>
   );

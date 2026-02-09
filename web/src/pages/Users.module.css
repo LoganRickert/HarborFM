@@ -119,6 +119,12 @@
   gap: 0.25rem;
 }
 
+.userCardFooter {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .userCardActions {
   display: flex;
   gap: 0.5rem;

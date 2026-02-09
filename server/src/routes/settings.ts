@@ -6,6 +6,7 @@ import { requireAdmin } from '../plugins/auth.js';
 import { db } from '../db/index.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
 import { normalizeHostname } from '../utils/url.js';
+import { runGeoIPUpdate } from '../services/geoipupdate.js';
 
 const SETTINGS_FILENAME = 'settings.json';
 
@@ -47,6 +48,8 @@ export interface AppSettings {
   final_bitrate_kbps: number;
   final_channels: 'mono' | 'stereo';
   final_format: 'mp3' | 'm4a';
+  maxmind_account_id: string;
+  maxmind_license_key: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -61,6 +64,8 @@ const DEFAULTS: AppSettings = {
   final_bitrate_kbps: 128,
   final_channels: 'mono',
   final_format: 'mp3',
+  maxmind_account_id: '',
+  maxmind_license_key: '',
 };
 
 const OPENAI_DEFAULT_MODEL = 'gpt5-mini';
@@ -107,7 +112,9 @@ export function migrateSettingsFromFile(): void {
     stmt.run('final_bitrate_kbps', String(settings.final_bitrate_kbps ?? DEFAULTS.final_bitrate_kbps));
     stmt.run('final_channels', settings.final_channels ?? DEFAULTS.final_channels);
     stmt.run('final_format', settings.final_format ?? DEFAULTS.final_format);
-    
+    stmt.run('maxmind_account_id', settings.maxmind_account_id ?? '');
+    stmt.run('maxmind_license_key', settings.maxmind_license_key ?? '');
+
     console.log('Migrated settings from file to database');
   } catch (err) {
     // Table might not exist yet, that's okay
@@ -142,6 +149,8 @@ export function readSettings(): AppSettings {
     }
     else if (row.key === 'final_channels') settings.final_channels = row.value as AppSettings['final_channels'];
     else if (row.key === 'final_format') settings.final_format = row.value as AppSettings['final_format'];
+    else if (row.key === 'maxmind_account_id') settings.maxmind_account_id = row.value;
+    else if (row.key === 'maxmind_license_key') settings.maxmind_license_key = row.value;
   }
   
   return {
@@ -153,6 +162,8 @@ export function readSettings(): AppSettings {
     registration_enabled: settings.registration_enabled ?? DEFAULTS.registration_enabled,
     public_feeds_enabled: settings.public_feeds_enabled ?? DEFAULTS.public_feeds_enabled,
     hostname: settings.hostname ?? DEFAULTS.hostname,
+    maxmind_account_id: settings.maxmind_account_id ?? DEFAULTS.maxmind_account_id,
+    maxmind_license_key: settings.maxmind_license_key ?? DEFAULTS.maxmind_license_key,
   };
 }
 
@@ -169,6 +180,8 @@ function writeSettings(settings: AppSettings): void {
   stmt.run('final_bitrate_kbps', String(settings.final_bitrate_kbps));
   stmt.run('final_channels', settings.final_channels);
   stmt.run('final_format', settings.final_format);
+  stmt.run('maxmind_account_id', settings.maxmind_account_id);
+  stmt.run('maxmind_license_key', settings.maxmind_license_key);
 }
 
 /** Redact API keys from error messages before sending to client. */
@@ -182,6 +195,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     return {
       ...settings,
       openai_api_key: settings.openai_api_key ? '(set)' : '',
+      maxmind_license_key: settings.maxmind_license_key ? '(set)' : '',
     };
   });
 
@@ -225,6 +239,13 @@ export async function settingsRoutes(app: FastifyInstance) {
         body.final_channels === 'stereo' ? 'stereo' : body.final_channels === 'mono' ? 'mono' : current.final_channels;
       const final_format =
         body.final_format === 'm4a' ? 'm4a' : body.final_format === 'mp3' ? 'mp3' : current.final_format;
+      const maxmind_account_id =
+        body.maxmind_account_id !== undefined ? String(body.maxmind_account_id).trim() : current.maxmind_account_id;
+      let maxmind_license_key = current.maxmind_license_key;
+      if (body.maxmind_license_key !== undefined) {
+        const v = String(body.maxmind_license_key).trim();
+        maxmind_license_key = v === '(set)' ? current.maxmind_license_key : v;
+      }
 
       const next: AppSettings = {
         whisper_asr_url,
@@ -240,11 +261,31 @@ export async function settingsRoutes(app: FastifyInstance) {
         final_bitrate_kbps,
         final_channels,
         final_format,
+        maxmind_account_id,
+        maxmind_license_key,
       };
+      const maxmindKeysChanged =
+        next.maxmind_account_id !== current.maxmind_account_id ||
+        next.maxmind_license_key !== current.maxmind_license_key;
+
       writeSettings(next);
+
+      if (maxmindKeysChanged && next.maxmind_account_id && next.maxmind_license_key) {
+        runGeoIPUpdate(next.maxmind_account_id, next.maxmind_license_key)
+          .then((result) => {
+            if (result.ok) {
+              console.log('GeoLite2 databases (Country, City) updated successfully in', getDataDir());
+            } else {
+              console.error('GeoLite2 update failed:', result.error);
+            }
+          })
+          .catch((err) => console.error('GeoLite2 update error:', err));
+      }
+
       return {
         ...next,
         openai_api_key: next.openai_api_key ? '(set)' : '',
+        maxmind_license_key: next.maxmind_license_key ? '(set)' : '',
       };
     }
   );

@@ -1,6 +1,10 @@
 User-agent: *
 Disallow: /
 
+# Allow legal pages
+Allow: /privacy
+Allow: /terms
+
 # Allow public podcast feeds and episodes (web pages)
 Allow: /feed/
 

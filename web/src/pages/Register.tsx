@@ -78,6 +78,11 @@ export function Register() {
           Already have an account? <Link to="/login">Sign in</Link>
         </p>
         </div>
+        <p className={styles.footerBelowCard}>
+          <Link to="/privacy">Privacy Policy</Link>
+          <span className={styles.footerBelowCardSep} aria-hidden />
+          <Link to="/terms">Terms of Service</Link>
+        </p>
       </div>
     </main>
   );

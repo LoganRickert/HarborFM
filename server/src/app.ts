@@ -67,7 +67,10 @@ function loadOrCreateJwtSecret(): string {
 const JWT_SECRET = loadOrCreateJwtSecret();
 
 async function main() {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: true,
+    trustProxy: true,
+  });
 
   // Validate/init secrets key at startup so missing ENV is visible in logs.
   // (Otherwise we'd only touch it when creating/testing/deploying exports.)

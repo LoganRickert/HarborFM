@@ -27,6 +27,8 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Setup } from './pages/Setup';
 import { ResetPassword } from './pages/ResetPassword';
+import { Privacy } from './pages/Privacy';
+import { Terms } from './pages/Terms';
 import { Dashboard } from './pages/Dashboard';
 import { PodcastNew } from './pages/PodcastNew';
 import { PodcastSettings } from './pages/PodcastSettings';
@@ -210,6 +212,8 @@ export default function App() {
         <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
         <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />
         <Route path="/reset-password" element={<SetupGuard><RequireGuest><ResetPassword /></RequireGuest></SetupGuard>} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><PublicPodcast /></PublicFeedsGuard>} />
         <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><PublicEpisode /></PublicFeedsGuard>} />
         <Route

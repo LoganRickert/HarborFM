@@ -9,6 +9,9 @@ export interface User {
   role: 'user' | 'admin';
   disabled: number; // 0 = false, 1 = true
   disk_bytes_used: number; // bytes
+  last_login_at?: string | null;
+  last_login_ip?: string | null;
+  last_login_location?: string | null;
 }
 
 export interface UsersResponse {

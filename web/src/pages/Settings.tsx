@@ -34,6 +34,8 @@ export function Settings() {
     final_bitrate_kbps: 128,
     final_channels: 'mono',
     final_format: 'mp3',
+    maxmind_account_id: '',
+    maxmind_license_key: '',
   });
 
   useEffect(() => {
@@ -54,6 +56,8 @@ export function Settings() {
         final_bitrate_kbps: form.final_bitrate_kbps,
         final_channels: form.final_channels,
         final_format: form.final_format,
+        maxmind_account_id: form.maxmind_account_id.trim(),
+        maxmind_license_key: form.maxmind_license_key === '(set)' ? undefined : form.maxmind_license_key,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -100,19 +104,6 @@ export function Settings() {
 
       <div className={styles.card}>
         <form onSubmit={handleSubmit} className={styles.form}>
-          {saveNotice?.type === 'success' && (
-            <div className={styles.noticeSuccess} role="status" aria-live="polite">
-              <span className={styles.noticeTitle}>Success</span>
-              <p className={styles.noticeBody}>{saveNotice.message}</p>
-            </div>
-          )}
-          {saveNotice?.type === 'error' && (
-            <div className={styles.noticeError} role="alert" aria-live="polite">
-              <span className={styles.noticeTitle}>Error</span>
-              <p className={styles.noticeBody}>{saveNotice.message}</p>
-            </div>
-          )}
-
           <label className="toggle">
             <input
               type="checkbox"
@@ -209,6 +200,47 @@ export function Settings() {
                 </button>
               </div>
             </div>
+          </div>
+
+          <hr className={styles.divider} />
+
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>GeoLite2 / MaxMind</h2>
+            <p className={styles.sectionSub}>
+              Optional. When Account ID and License Key are set and saved, the server will run the GeoIP Update program
+              to download GeoLite2-Country and GeoLite2-City into the data folder. Requires{' '}
+              <a
+                href="https://github.com/maxmind/geoipupdate/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', textDecoration: 'none' }}
+              >
+                geoipupdate
+              </a>{' '}
+              to be installed on the server.
+            </p>
+            <label className={styles.label}>
+              MaxMind Account ID
+              <input
+                type="text"
+                className={styles.input}
+                placeholder="123456"
+                value={form.maxmind_account_id}
+                onChange={(e) => setForm((f) => ({ ...f, maxmind_account_id: e.target.value }))}
+                autoComplete="off"
+              />
+            </label>
+            <label className={styles.label} style={{ marginTop: '15px' }}>
+              MaxMind License Key
+              <input
+                type="password"
+                className={styles.input}
+                placeholder={form.maxmind_license_key === '(set)' ? '(saved)' : 'Enter license key'}
+                value={form.maxmind_license_key === '(set)' ? '' : form.maxmind_license_key}
+                onChange={(e) => setForm((f) => ({ ...f, maxmind_license_key: e.target.value }))}
+                autoComplete="off"
+              />
+            </label>
           </div>
 
           <hr className={styles.divider} />
@@ -312,6 +344,19 @@ export function Settings() {
                 )}
               </div>
             </>
+          )}
+
+          {saveNotice?.type === 'success' && (
+            <div className={styles.noticeSuccess} role="status" aria-live="polite">
+              <span className={styles.noticeTitle}>Success</span>
+              <p className={styles.noticeBody}>{saveNotice.message}</p>
+            </div>
+          )}
+          {saveNotice?.type === 'error' && (
+            <div className={styles.noticeError} role="alert" aria-live="polite">
+              <span className={styles.noticeTitle}>Error</span>
+              <p className={styles.noticeBody}>{saveNotice.message}</p>
+            </div>
           )}
 
           <div className={styles.actions}>
