@@ -118,6 +118,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
             className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary} ${styles.libraryChooseFileBtn}`}
             style={{ width: '100%', marginBottom: '1rem' }}
             onClick={() => fileInputRef.current?.click()}
+            aria-label="Choose file to add to library"
           >
             <Upload size={24} strokeWidth={2} aria-hidden />
             <span>Choose file to add to Library</span>

@@ -296,6 +296,7 @@ export function Library() {
               type="button"
               className={styles.uploadChooseBtn}
               onClick={() => fileInputRef.current?.click()}
+              aria-label="Choose audio file to add to library"
             >
               Choose audio file
             </button>
@@ -338,7 +339,7 @@ export function Library() {
                 </label>
               )}
               <div className={styles.uploadActions}>
-                <button type="button" className={styles.uploadCancel} onClick={clearPending}>
+                <button type="button" className={styles.uploadCancel} onClick={clearPending} aria-label="Cancel adding to library">
                   Cancel
                 </button>
                 <button
@@ -346,6 +347,7 @@ export function Library() {
                   className={styles.uploadSubmit}
                   onClick={handleAddToLibrary}
                   disabled={uploadMutation.isPending}
+                  aria-label="Add file to library"
                 >
                   {uploadMutation.isPending ? 'Adding…' : 'Add to Library'}
                 </button>
@@ -389,6 +391,7 @@ export function Library() {
           <button
             type="button"
             className={sortNewestFirst ? styles.sortBtnActive : styles.sortBtn}
+            aria-label="Sort newest first"
             onClick={() => { setSortNewestFirst(true); setPage(1); }}
           >
             <ArrowDown size={16} strokeWidth={2} aria-hidden />
@@ -397,6 +400,7 @@ export function Library() {
           <button
             type="button"
             className={!sortNewestFirst ? styles.sortBtnActive : styles.sortBtn}
+            aria-label="Sort oldest first"
             onClick={() => { setSortNewestFirst(false); setPage(1); }}
           >
             <ArrowUp size={16} strokeWidth={2} aria-hidden />
@@ -504,7 +508,7 @@ export function Library() {
                   className={styles.pageBtn}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={pageClamped <= 1}
-                  aria-label="Previous page"
+                  aria-label="Previous page of library"
                 >
                   ←
                 </button>
@@ -513,7 +517,7 @@ export function Library() {
                   className={styles.pageBtn}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={pageClamped >= totalPages}
-                  aria-label="Next page"
+                  aria-label="Next page of library"
                 >
                   →
                 </button>
@@ -534,13 +538,14 @@ export function Library() {
             </Dialog.Description>
             <div className={styles.dialogActions}>
               <Dialog.Close asChild>
-                <button type="button" className={styles.cancel}>Cancel</button>
+                <button type="button" className={styles.cancel} aria-label="Cancel deleting library item">Cancel</button>
               </Dialog.Close>
               <button
                 type="button"
                 className={styles.dialogConfirmRemove}
                 onClick={handleDeleteConfirm}
                 disabled={deleteMutation.isPending}
+                aria-label="Confirm delete library item"
               >
                 {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
               </button>
@@ -606,13 +611,14 @@ export function Library() {
             </div>
             <div className={styles.dialogActions}>
               <Dialog.Close asChild>
-                <button type="button" className={styles.cancel}>Cancel</button>
+                <button type="button" className={styles.cancel} aria-label="Cancel editing library item">Cancel</button>
               </Dialog.Close>
               <button
                 type="button"
                 className={styles.dialogConfirm}
                 onClick={handleEditSave}
                 disabled={editMutation.isPending || editName.trim() === ''}
+                aria-label="Save library item"
               >
                 {editMutation.isPending ? 'Saving…' : 'Save'}
               </button>

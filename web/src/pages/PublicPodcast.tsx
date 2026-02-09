@@ -282,6 +282,7 @@ export function PublicPodcast() {
                   onClick={() => fetchNextPage()}
                   disabled={isFetchingNextPage}
                   className={styles.loadMoreBtn}
+                  aria-label="Load more episodes"
                 >
                   {isFetchingNextPage ? 'Loading…' : 'Load more episodes'}
                 </button>

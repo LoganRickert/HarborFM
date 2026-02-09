@@ -48,11 +48,11 @@ export function EpisodeSectionsPanel({
       </header>
 
       <div className={styles.addSectionChoiceRow}>
-        <button type="button" className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary}`} onClick={onAddRecord}>
+        <button type="button" className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary}`} onClick={onAddRecord} aria-label="Record new section">
           <Mic size={24} strokeWidth={2} aria-hidden />
           <span>Record new section</span>
         </button>
-        <button type="button" className={styles.addSectionChoiceBtn} onClick={onAddLibrary}>
+        <button type="button" className={styles.addSectionChoiceBtn} onClick={onAddLibrary} aria-label="Insert from library">
           <Library size={24} strokeWidth={2} aria-hidden />
           <span>Insert from library</span>
         </button>

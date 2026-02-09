@@ -1177,6 +1177,7 @@ export function TranscriptModal({
                     className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary} ${styles.transcriptGenerateBtn}`}
                     onClick={handleGenerate}
                     disabled={generating}
+                    aria-label={generating ? 'Generating transcript' : 'Generate transcript'}
                   >
                     <FileText size={24} strokeWidth={2} aria-hidden />
                     <span>{generating ? 'Generating…' : 'Generate transcript'}</span>

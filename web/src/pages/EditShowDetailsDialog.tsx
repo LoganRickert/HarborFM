@@ -298,6 +298,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         className={(form.itunes_type ?? 'episodic') === t ? styles.statusToggleActive : styles.statusToggleBtn}
                         onClick={() => setForm((f) => ({ ...f, itunes_type: t }))}
                         aria-pressed={(form.itunes_type ?? 'episodic') === t}
+                        aria-label={t === 'episodic' ? 'Episodic' : 'Serial'}
                       >
                         {t === 'episodic' ? 'Episodic' : 'Serial'}
                       </button>
@@ -340,6 +341,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                       className={coverMode === 'url' ? styles.statusToggleActive : styles.statusToggleBtn}
                       onClick={() => setCoverMode('url')}
                       aria-pressed={coverMode === 'url'}
+                      aria-label="Cover image from URL"
                     >
                       URL
                     </button>
@@ -348,6 +350,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                       className={coverMode === 'upload' ? styles.statusToggleActive : styles.statusToggleBtn}
                       onClick={() => setCoverMode('upload')}
                       aria-pressed={coverMode === 'upload'}
+                      aria-label="Upload cover image"
                     >
                       Upload
                     </button>

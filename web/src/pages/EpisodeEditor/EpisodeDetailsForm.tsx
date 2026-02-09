@@ -133,6 +133,7 @@ export function EpisodeDetailsForm({
               className={form.status === s ? styles.statusToggleActive : styles.statusToggleBtn}
               onClick={() => setForm((prev) => ({ ...prev, status: s }))}
               aria-pressed={form.status === s}
+              aria-label={`Status: ${s.charAt(0).toUpperCase() + s.slice(1)}`}
             >
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
@@ -194,10 +195,10 @@ export function EpisodeDetailsForm({
         <span>GUID is permalink</span>
       </label>
       <div className={styles.actions}>
-        <button type="button" className={styles.cancel} onClick={onCancel}>
+        <button type="button" className={styles.cancel} onClick={onCancel} aria-label="Cancel editing episode">
           Cancel
         </button>
-        <button type="submit" className={styles.submit} disabled={isSaving}>
+        <button type="submit" className={styles.submit} disabled={isSaving} aria-label="Save episode details">
           {isSaving ? 'Saving…' : 'Save'}
         </button>
       </div>
