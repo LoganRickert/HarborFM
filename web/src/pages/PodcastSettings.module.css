@@ -581,13 +581,29 @@
 .dialogContentWide {
   max-width: 420px;
   max-height: min(90vh, 720px);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .dialogContentWide .dialogTitle {
   flex-shrink: 0;
+}
+
+/* Edit podcast details: grid layout so scroll area gets stable 1fr, no flex/overflow shrink */
+.dialogShowDetailsGrid {
+  height: min(90vh, 720px);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+}
+.dialogShowDetailsGrid .dialogTitle {
+  grid-row: 1;
+}
+.dialogShowDetailsGrid .dialogDescription {
+  grid-row: 2;
+}
+.dialogShowDetailsGrid .dialogBodyScroll {
+  grid-row: 3;
+  min-height: 0;
 }
 
 .dialogBodyScroll {

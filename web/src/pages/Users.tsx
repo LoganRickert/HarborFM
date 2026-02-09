@@ -35,6 +35,7 @@ export function Users() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['users', page, search],
     queryFn: () => listUsers(page, limit, search || undefined),
+    refetchOnMount: 'always',
   });
 
   const deleteUserMutation = useMutation({

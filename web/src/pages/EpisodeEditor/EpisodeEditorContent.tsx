@@ -22,6 +22,7 @@ import { RecordModal } from './RecordModal';
 import { LibraryModal } from './LibraryModal';
 import { DeleteSegmentDialog } from './DeleteSegmentDialog';
 import * as Dialog from '@radix-ui/react-dialog';
+import { X } from 'lucide-react';
 import { DeleteTranscriptSegmentDialog } from './DeleteTranscriptSegmentDialog';
 import { TranscriptModal } from './TranscriptModal';
 import { deleteSegmentTranscript } from '../../api/segments';
@@ -302,15 +303,25 @@ export function EpisodeEditorContent({
             <Dialog.Portal>
               <Dialog.Overlay className={styles.dialogOverlay} />
               <Dialog.Content
-                className={`${styles.dialogContent} ${styles.dialogContentWide}`}
+                className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogDetailsGrid}`}
               >
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    className={styles.dialogClose}
+                    aria-label="Close"
+                    disabled={updateMutation.isPending}
+                  >
+                    <X size={18} strokeWidth={2} aria-hidden="true" />
+                  </button>
+                </Dialog.Close>
                 <Dialog.Title className={styles.dialogTitle}>
                   Episode details
                 </Dialog.Title>
                 <Dialog.Description className={styles.dialogDescription}>
                   Edit the episode title, description, and publish settings.
                 </Dialog.Description>
-                <div className={styles.dialogBodyScroll}>
+                <div className={`${styles.dialogBodyScroll} ${styles.dialogBodyScrollForm}`}>
                   <EpisodeDetailsForm
                     form={dialogForm}
                     setForm={setDialogForm}

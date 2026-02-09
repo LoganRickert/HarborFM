@@ -133,10 +133,10 @@ export function GenerateFinalBar({
             className={styles.renderBtnPrimary}
             onClick={onBuild}
             disabled={segmentCount === 0 || isBuilding}
-            aria-label={isBuilding ? 'Building…' : 'Build final episode'}
+            aria-label={isBuilding ? 'Building…' : 'Build Final Episode'}
           >
             <FileAudio size={20} strokeWidth={2} aria-hidden />
-            <span>{isBuilding ? 'Building…' : 'Build final episode'}</span>
+            <span>{isBuilding ? 'Building…' : 'Build Final Episode'}</span>
           </button>
           {hasFinalAudio && (
             <a href={downloadEpisodeUrl(episodeId, 'final')} download className={styles.renderDownload}>

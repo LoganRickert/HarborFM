@@ -1,3 +1,4 @@
+import { Settings } from 'lucide-react';
 import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeDetailsSummaryCardProps {
@@ -26,7 +27,8 @@ export function EpisodeDetailsSummaryCard({
         <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
       </div>
       <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
-        Edit details
+        <Settings size={18} strokeWidth={2} aria-hidden />
+        Edit Details
       </button>
     </div>
   );

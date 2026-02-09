@@ -67,13 +67,6 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
   }, [open, podcast]);
 
   useEffect(() => {
-    if (!open) {
-      mutation.reset();
-      uploadArtworkMutation.reset();
-    }
-  }, [open]);
-
-  useEffect(() => {
     if (!pendingArtworkFile) {
       setPendingArtworkPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
@@ -103,6 +96,13 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       setCoverUploadKey((k) => k + 1);
     },
   });
+
+  useEffect(() => {
+    if (!open) {
+      mutation.reset();
+      uploadArtworkMutation.reset();
+    }
+  }, [open, mutation, uploadArtworkMutation]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -146,7 +146,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide}`}>
+        <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogShowDetailsGrid}`}>
           <Dialog.Close asChild>
             <button
               type="button"
@@ -157,7 +157,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
               <X size={18} strokeWidth={2} aria-hidden="true" />
             </button>
           </Dialog.Close>
-          <Dialog.Title className={styles.dialogTitle}>Edit show details</Dialog.Title>
+          <Dialog.Title className={styles.dialogTitle}>Edit Podcast Details</Dialog.Title>
           <Dialog.Description className={styles.dialogDescription}>
             Update the podcast title, slug, and other feed details.
           </Dialog.Description>

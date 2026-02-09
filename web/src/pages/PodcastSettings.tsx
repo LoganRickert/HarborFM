@@ -42,7 +42,7 @@ export function PodcastSettings() {
               type="button"
               className={styles.cardSettings}
               onClick={() => setDetailsDialogOpen(true)}
-              aria-label={`Edit show details for ${podcast.title}`}
+              aria-label={`Edit details for ${podcast.title}`}
             >
               <GearIcon size={18} strokeWidth={2} />
             </button>
@@ -325,6 +325,7 @@ function ExportsSection({ podcastId }: { podcastId: string }) {
               Update the destination settings. Credentials are stored encrypted and cannot be viewed after saving.
             </Dialog.Description>
 
+            <div className={styles.dialogBodyScroll}>
             <ExportForm
               open={dialogOpen}
               mode={export1 ? 'edit' : 'create'}
@@ -341,6 +342,7 @@ function ExportsSection({ podcastId }: { podcastId: string }) {
                     : undefined
               }
             />
+            </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
