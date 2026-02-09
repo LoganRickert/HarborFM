@@ -38,6 +38,7 @@ export async function publicRoutes(app: FastifyInstance) {
   function publicEpisodeDto(podcastId: string, row: Record<string, unknown>) {
     const audioBytes = row.audio_bytes != null ? Number(row.audio_bytes) : null;
     const hasAudio = Boolean(row.audio_final_path) && (audioBytes == null || audioBytes > 0);
+    const path = row.artwork_path as string | null | undefined;
     return {
       id: row.id,
       podcast_id: row.podcast_id,
@@ -51,6 +52,7 @@ export async function publicRoutes(app: FastifyInstance) {
       explicit: row.explicit ?? null,
       publish_at: row.publish_at ?? null,
       artwork_url: row.artwork_url ?? null,
+      artwork_filename: path ? basename(path) : null,
       audio_mime: row.audio_mime ?? null,
       audio_bytes: audioBytes,
       audio_duration_sec: row.audio_duration_sec ?? null,
@@ -60,8 +62,40 @@ export async function publicRoutes(app: FastifyInstance) {
     };
   }
 
-  // Safe filename for artwork: nanoid.ext (alphanumeric, hyphen, underscore + .png|.webp|.jpg)
+  // Safe filename for artwork: nanoid.ext or episodeId.ext (alphanumeric, hyphen, underscore + .png|.webp|.jpg)
   const ARTWORK_FILENAME_REGEX = /^[a-zA-Z0-9_-]+\.(png|webp|jpg)$/i;
+
+  // Serve uploaded episode cover image (public so feed and edit preview can use it).
+  app.get('/api/public/artwork/:podcastId/episodes/:episodeId/:filename', async (request, reply) => {
+    const { podcastId, episodeId, filename } = request.params as { podcastId: string; episodeId: string; filename: string };
+    try {
+      assertSafeId(podcastId, 'podcastId');
+      assertSafeId(episodeId, 'episodeId');
+    } catch {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    if (!ARTWORK_FILENAME_REGEX.test(filename)) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    const row = db
+      .prepare('SELECT artwork_path FROM episodes WHERE id = ? AND podcast_id = ?')
+      .get(episodeId, podcastId) as { artwork_path: string | null } | undefined;
+    if (!row?.artwork_path || basename(row.artwork_path) !== filename) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+    try {
+      const safePath = assertPathUnder(row.artwork_path, artworkDir(podcastId));
+      const ext = extname(safePath).toLowerCase();
+      const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? 'image/jpeg';
+      const stream = createReadStream(safePath);
+      return reply
+        .header('Content-Type', contentType)
+        .header('Cache-Control', 'public, max-age=86400')
+        .send(stream);
+    } catch {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+  });
 
   // Serve uploaded podcast cover image (public so feed and edit preview can use it). URL includes filename so cache busts on new upload.
   app.get('/api/public/artwork/:podcastId/:filename', async (request, reply) => {
@@ -152,7 +186,7 @@ export async function publicRoutes(app: FastifyInstance) {
       .prepare(
         `SELECT id, podcast_id, title, slug, description, guid,
                 season_number, episode_number, episode_type, explicit, publish_at,
-                artwork_url, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
+                artwork_url, artwork_path, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
                 created_at, updated_at
          FROM episodes 
          WHERE podcast_id = ? AND status = 'published'
@@ -184,7 +218,7 @@ export async function publicRoutes(app: FastifyInstance) {
       .prepare(
         `SELECT id, podcast_id, title, slug, description, guid,
                 season_number, episode_number, episode_type, explicit, publish_at,
-                artwork_url, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
+                artwork_url, artwork_path, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
                 created_at, updated_at
          FROM episodes 
          WHERE podcast_id = ? AND slug = ? AND status = 'published'

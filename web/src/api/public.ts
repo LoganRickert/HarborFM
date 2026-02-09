@@ -28,6 +28,7 @@ export interface PublicEpisode {
   explicit: number | null;
   publish_at: string | null;
   artwork_url: string | null;
+  artwork_filename?: string | null;
   audio_mime: string | null;
   audio_bytes: number | null;
   audio_duration_sec: number | null;

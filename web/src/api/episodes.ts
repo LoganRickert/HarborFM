@@ -1,4 +1,6 @@
-import { apiGet, apiPost, apiPatch } from './client';
+import { apiGet, apiPost, apiPatch, csrfHeaders } from './client';
+
+const BASE = '/api';
 
 export interface Episode {
   id: string;
@@ -15,6 +17,8 @@ export interface Episode {
   status: string;
   artwork_path: string | null;
   artwork_url: string | null;
+  /** Present when artwork_path is set (uploaded cover). */
+  artwork_filename?: string | null;
   audio_source_path: string | null;
   audio_final_path: string | null;
   audio_mime: string | null;
@@ -66,4 +70,20 @@ export function updateEpisode(id: string, body: Partial<{
   guid_is_permalink: number;
 }>) {
   return apiPatch<Episode>(`/episodes/${id}`, body);
+}
+
+export async function uploadEpisodeArtwork(podcastId: string, episodeId: string, file: File): Promise<Episode> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/podcasts/${podcastId}/episodes/${episodeId}/artwork`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? res.statusText);
+  }
+  return res.json();
 }

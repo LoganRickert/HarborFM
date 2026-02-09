@@ -6,6 +6,8 @@ export interface EpisodeDetailsSummaryCardProps {
   status: string;
   seasonNumber: number | null;
   episodeNumber: number | null;
+  /** Resolved URL for episode cover image (optional). */
+  artworkUrl?: string | null;
   onEditClick: () => void;
 }
 
@@ -14,6 +16,7 @@ export function EpisodeDetailsSummaryCard({
   status,
   seasonNumber,
   episodeNumber,
+  artworkUrl,
   onEditClick,
 }: EpisodeDetailsSummaryCardProps) {
   const metaParts: string[] = [status];
@@ -22,9 +25,18 @@ export function EpisodeDetailsSummaryCard({
   }
   return (
     <div className={styles.detailsSummaryCard}>
-      <div className={styles.detailsSummaryMain}>
-        <h2 className={styles.detailsSummaryTitle}>{title || 'Untitled episode'}</h2>
-        <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
+      <div className={styles.detailsSummaryRow}>
+        {artworkUrl ? (
+          <img
+            src={artworkUrl}
+            alt=""
+            className={styles.detailsSummaryArtwork}
+          />
+        ) : null}
+        <div className={styles.detailsSummaryMain}>
+          <h2 className={styles.detailsSummaryTitle}>{title || 'Untitled episode'}</h2>
+          <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
+        </div>
       </div>
       <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
         <Settings size={18} strokeWidth={2} aria-hidden />

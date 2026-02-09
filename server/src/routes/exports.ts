@@ -298,10 +298,10 @@ export async function exportRoutes(app: FastifyInstance) {
           .get(podcastId) as { artwork_path: string | null } | undefined;
         const episodes = db
           .prepare(
-            `SELECT id, audio_final_path, audio_mime FROM episodes WHERE podcast_id = ? AND status = 'published'
+            `SELECT id, audio_final_path, audio_mime, artwork_path FROM episodes WHERE podcast_id = ? AND status = 'published'
              AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))`
           )
-          .all(podcastId) as { id: string; audio_final_path: string | null; audio_mime?: string | null }[];
+          .all(podcastId) as { id: string; audio_final_path: string | null; audio_mime?: string | null; artwork_path?: string | null }[];
         const { uploaded, skipped, errors } = await deployPodcastToS3(
           config,
           publicBaseUrl,

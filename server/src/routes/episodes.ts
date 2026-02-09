@@ -1,9 +1,13 @@
 import type { FastifyInstance } from 'fastify';
+import { existsSync, unlinkSync, writeFileSync } from 'fs';
+import { basename, join } from 'path';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../plugins/auth.js';
 import { db } from '../db/index.js';
 import { episodeCreateSchema, episodeUpdateSchema } from '@harborfm/shared';
 import { writeRssFile } from '../services/rss.js';
+import { assertPathUnder, assertResolvedPathUnder, artworkDir } from '../services/paths.js';
+import { MIMETYPE_TO_EXT } from '../utils/artwork.js';
 
 function slugify(s: string): string {
   return s
@@ -24,6 +28,22 @@ function canAccessPodcast(db: import('better-sqlite3').Database, userId: string,
   return !!row;
 }
 
+function episodeRowWithFilename(row: Record<string, unknown>): Record<string, unknown> {
+  const path = row.artwork_path as string | null | undefined;
+  const podcastId = row.podcast_id as string | undefined;
+  let artwork_filename: string | null = null;
+  if (path && podcastId) {
+    try {
+      const dir = artworkDir(podcastId);
+      assertPathUnder(path, dir);
+      artwork_filename = basename(path);
+    } catch {
+      // path invalid or outside allowed dir: don't expose filename
+    }
+  }
+  return { ...row, artwork_filename };
+}
+
 export async function episodeRoutes(app: FastifyInstance) {
   app.get(
     '/api/podcasts/:podcastId/episodes',
@@ -38,7 +58,7 @@ export async function episodeRoutes(app: FastifyInstance) {
           `SELECT * FROM episodes WHERE podcast_id = ? ORDER BY created_at DESC`
         )
         .all(podcastId) as Record<string, unknown>[];
-      return { episodes: rows };
+      return { episodes: rows.map((r) => episodeRowWithFilename(r)) };
     }
   );
 
@@ -93,7 +113,7 @@ export async function episodeRoutes(app: FastifyInstance) {
         // non-fatal
       }
       const row = db.prepare('SELECT * FROM episodes WHERE id = ?').get(id) as Record<string, unknown>;
-      return reply.status(201).send(row);
+      return reply.status(201).send(episodeRowWithFilename(row));
     }
   );
 
@@ -108,7 +128,7 @@ export async function episodeRoutes(app: FastifyInstance) {
       )
       .get(id, userId, userId) as Record<string, unknown> | undefined;
     if (!row) return reply.status(404).send({ error: 'Episode not found' });
-    return row;
+    return episodeRowWithFilename(row);
   });
 
   app.patch('/api/episodes/:id', { preHandler: [requireAuth] }, async (request, reply) => {
@@ -161,6 +181,17 @@ export async function episodeRoutes(app: FastifyInstance) {
       finalSlug = uniqueSlug;
     }
     
+    let oldArtworkPath: string | null = null;
+    if (data.artwork_url !== undefined) {
+      fields.push('artwork_url = ?');
+      values.push(
+        data.artwork_url && String(data.artwork_url).trim() ? data.artwork_url : null
+      );
+      fields.push('artwork_path = NULL');
+      const episodeRow = db.prepare('SELECT artwork_path FROM episodes WHERE id = ?').get(id) as { artwork_path: string | null } | undefined;
+      if (episodeRow?.artwork_path) oldArtworkPath = episodeRow.artwork_path;
+    }
+
     const map: Record<string, unknown> = {
       title: data.title,
       description: data.description,
@@ -171,7 +202,6 @@ export async function episodeRoutes(app: FastifyInstance) {
       explicit: data.explicit,
       publish_at: data.publish_at,
       status: data.status,
-      artwork_url: data.artwork_url,
       episode_link: (data as { episode_link?: string | null }).episode_link,
       guid_is_permalink: (data as { guid_is_permalink?: 0 | 1 }).guid_is_permalink,
     };
@@ -196,6 +226,15 @@ export async function episodeRoutes(app: FastifyInstance) {
       values.push(id);
       db.prepare(`UPDATE episodes SET ${fields.join(', ')} WHERE id = ?`).run(...values);
     }
+    if (oldArtworkPath) {
+      try {
+        const dir = artworkDir(currentEpisode.podcast_id);
+        const safeOld = assertPathUnder(oldArtworkPath, dir);
+        if (existsSync(safeOld)) unlinkSync(safeOld);
+      } catch {
+        // ignore
+      }
+    }
     const row = db.prepare('SELECT * FROM episodes WHERE id = ?').get(id) as Record<string, unknown>;
     const podcastId = (row as { podcast_id: string }).podcast_id;
     try {
@@ -203,6 +242,51 @@ export async function episodeRoutes(app: FastifyInstance) {
     } catch (_) {
       // non-fatal
     }
-    return row;
+    return episodeRowWithFilename(row);
   });
+
+  app.post(
+    '/api/podcasts/:podcastId/episodes/:episodeId/artwork',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const { podcastId, episodeId } = request.params as { podcastId: string; episodeId: string };
+      const existing = db
+        .prepare(
+          `SELECT e.id, e.artwork_path FROM episodes e
+           JOIN podcasts p ON p.id = e.podcast_id
+           WHERE e.id = ? AND e.podcast_id = ? AND p.owner_user_id = ?`
+        )
+        .get(episodeId, podcastId, request.userId) as { id: string; artwork_path: string | null } | undefined;
+      if (!existing) return reply.status(404).send({ error: 'Episode not found' });
+      const data = await request.file();
+      if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+      const mimetype = data.mimetype || '';
+      if (!mimetype.startsWith('image/')) return reply.status(400).send({ error: 'Not an image' });
+      const ext = MIMETYPE_TO_EXT[mimetype] ?? 'jpg';
+      const dir = artworkDir(podcastId);
+      const filename = `${nanoid()}.${ext}`;
+      const destPath = join(dir, filename);
+      const buffer = await data.toBuffer();
+      if (buffer.length > 5 * 1024 * 1024) return reply.status(400).send({ error: 'Image too large (max 5MB)' });
+      assertResolvedPathUnder(destPath, dir);
+      writeFileSync(destPath, buffer);
+      db.prepare('UPDATE episodes SET artwork_path = ?, artwork_url = NULL, updated_at = datetime(\'now\') WHERE id = ?').run(destPath, episodeId);
+      const oldPath = existing.artwork_path;
+      if (oldPath && oldPath !== destPath) {
+        try {
+          const safeOld = assertPathUnder(oldPath, dir);
+          if (existsSync(safeOld)) unlinkSync(safeOld);
+        } catch {
+          // ignore
+        }
+      }
+      try {
+        writeRssFile(podcastId, null);
+      } catch (_) {
+        // non-fatal
+      }
+      const row = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episodeId) as Record<string, unknown>;
+      return episodeRowWithFilename(row);
+    }
+  );
 }

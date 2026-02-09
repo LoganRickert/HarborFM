@@ -120,12 +120,18 @@ export async function deployPodcastToS3(
   config: S3Config,
   _publicBaseUrl: string | null,
   rssXml: string,
-  episodes: { id: string; audio_final_path: string | null; audio_mime?: string | null }[],
+  episodes: {
+    id: string;
+    audio_final_path: string | null;
+    audio_mime?: string | null;
+    artwork_path?: string | null;
+  }[],
   artworkPath?: string | null
 ): Promise<{ uploaded: number; skipped: number; errors: string[] }> {
   const errors: string[] = [];
   let uploaded = 0;
   let skipped = 0;
+  const artworkBase = join(getDataDir(), 'artwork');
 
   const feedBody = Buffer.from(rssXml, 'utf8');
   const feedHash = md5Hex(feedBody);
@@ -139,7 +145,7 @@ export async function deployPodcastToS3(
 
   if (artworkPath) {
     try {
-      const safePath = assertPathUnder(artworkPath, join(getDataDir(), 'artwork'));
+      const safePath = assertPathUnder(artworkPath, artworkBase);
       const body = readFileSync(safePath);
       const extFromPath = extname(safePath).toLowerCase();
       const ext = EXT_DOT_TO_EXT[extFromPath] ?? 'jpg';
@@ -159,21 +165,42 @@ export async function deployPodcastToS3(
   }
 
   for (const ep of episodes) {
-    if (!ep.audio_final_path) continue;
-    try {
-      const body = readFileSync(ep.audio_final_path);
-      const ext = extname(ep.audio_final_path || '') || '.mp3';
-      const key = `episodes/${ep.id}${ext}`;
-      const contentHash = md5Hex(body);
-      const existingETag = await getObjectETag(config, key);
-      if (existingETag === contentHash) {
-        skipped += 1;
-      } else {
-        await uploadFile(config, key, body, ep.audio_mime ?? undefined);
-        uploaded += 1;
+    if (ep.audio_final_path) {
+      try {
+        const body = readFileSync(ep.audio_final_path);
+        const ext = extname(ep.audio_final_path || '') || '.mp3';
+        const key = `episodes/${ep.id}${ext}`;
+        const contentHash = md5Hex(body);
+        const existingETag = await getObjectETag(config, key);
+        if (existingETag === contentHash) {
+          skipped += 1;
+        } else {
+          await uploadFile(config, key, body, ep.audio_mime ?? undefined);
+          uploaded += 1;
+        }
+      } catch (e) {
+        errors.push(`Episode ${ep.id} audio: ${e instanceof Error ? e.message : String(e)}`);
       }
-    } catch (e) {
-      errors.push(`Episode ${ep.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (ep.artwork_path) {
+      try {
+        const safePath = assertPathUnder(ep.artwork_path, artworkBase);
+        const body = readFileSync(safePath);
+        const extFromPath = extname(safePath).toLowerCase();
+        const ext = EXT_DOT_TO_EXT[extFromPath] ?? 'jpg';
+        const key = `episodes/${ep.id}.${ext}`;
+        const contentType = EXT_TO_MIMETYPE[ext] ?? 'image/jpeg';
+        const contentHash = md5Hex(body);
+        const existingETag = await getObjectETag(config, key);
+        if (existingETag === contentHash) {
+          skipped += 1;
+        } else {
+          await uploadFile(config, key, body, contentType);
+          uploaded += 1;
+        }
+      } catch (e) {
+        errors.push(`Episode ${ep.id} artwork: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
   }
   return { uploaded, skipped, errors };

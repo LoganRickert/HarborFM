@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+const emptyStringToNull = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => (v === '' ? null : v), schema);
+
+const nullableOptionalUrl = emptyStringToNull(z.string().url().nullable().optional());
+
 export const episodeTypeSchema = z.enum(['full', 'trailer', 'bonus']).nullable().optional();
 export const episodeStatusSchema = z.enum(['draft', 'scheduled', 'published']);
 
@@ -13,8 +18,8 @@ export const episodeCreateSchema = z.object({
   explicit: z.union([z.literal(0), z.literal(1)]).nullable().optional(),
   publish_at: z.string().datetime({ offset: true }).nullable().optional(),
   status: episodeStatusSchema.default('draft'),
-  artwork_url: z.union([z.string().url(), z.literal(''), z.null(), z.string()]).optional(),
-  episode_link: z.string().url().optional().nullable(),
+  artwork_url: nullableOptionalUrl,
+  episode_link: nullableOptionalUrl,
   guid_is_permalink: z.union([z.literal(0), z.literal(1)]).default(0),
 });
 

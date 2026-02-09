@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, ChevronRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getPublicPodcast, getPublicEpisode, publicEpisodeWaveformUrl } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
@@ -162,16 +162,30 @@ export function PublicEpisode() {
         </div>
       </header>
       <main>
-        <Link to={`/feed/${podcastSlug}`} className={styles.back}>
-          ← Back to {podcast.title}
-        </Link>
+        <nav aria-label="Breadcrumb" className={styles.breadcrumb}>
+          <Link to={`/feed/${podcastSlug}`} className={styles.breadcrumbLink}>{podcast.title}</Link>
+          <ChevronRight size={16} className={styles.breadcrumbSep} aria-hidden />
+          <span className={styles.breadcrumbCurrent} title={episode.title}>
+            {episode.title}
+          </span>
+        </nav>
 
         <div className={styles.card}>
         <div className={styles.header}>
           {episode.artwork_url ? (
             <img src={episode.artwork_url} alt={episode.title} className={styles.artwork} />
-          ) : podcast.artwork_url ? (
-            <img src={podcast.artwork_url} alt={podcast.title} className={styles.artwork} />
+          ) : episode.artwork_filename ? (
+            <img
+              src={`/api/public/artwork/${episode.podcast_id}/episodes/${episode.id}/${encodeURIComponent(episode.artwork_filename)}`}
+              alt={episode.title}
+              className={styles.artwork}
+            />
+          ) : podcast.artwork_url || podcast.artwork_filename ? (
+            <img
+              src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}` : '')}
+              alt={podcast.title}
+              className={styles.artwork}
+            />
           ) : null}
           <div className={styles.headerContent}>
             {(episode.season_number != null || episode.episode_number != null) && (

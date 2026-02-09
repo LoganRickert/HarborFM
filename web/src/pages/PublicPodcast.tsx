@@ -387,7 +387,7 @@ export function PublicPodcast() {
                         </div>
                       </div>
                       <Link to={`/feed/${podcastSlug}/${ep.slug}`} className={styles.viewMoreBtn}>
-                        View episode
+                        View Episode
                         <ArrowRight size={14} strokeWidth={2.5} />
                       </Link>
                     </div>

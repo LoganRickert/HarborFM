@@ -287,10 +287,19 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ''}    </itunes:o
       out += `      <itunes:episode>${episodeNum}</itunes:episode>\n`;
       out += `      <podcast:episode>${episodeNum}</podcast:episode>\n`;
     }
+    let epArtworkUrl = '';
     if (ep.artwork_url) {
-      const epArtworkUrl = sanitizeHttpUrl(ep.artwork_url);
-      if (epArtworkUrl) out += `      <itunes:image href="${escapeXml(epArtworkUrl)}"/>\n`;
+      epArtworkUrl = sanitizeHttpUrl(ep.artwork_url);
+    } else if (ep.artwork_path && publicBaseNoSlash && ep.id) {
+      if (exportPrefix != null) {
+        const ext = artworkExt(ep.artwork_path as string);
+        epArtworkUrl = `${publicBaseNoSlash}/${exportPrefix}/episodes/${String(ep.id)}.${ext}`;
+      } else if (podcastId) {
+        const filename = basename(String(ep.artwork_path));
+        epArtworkUrl = `${publicBaseNoSlash}/api/public/artwork/${encodeURIComponent(podcastId)}/episodes/${encodeURIComponent(String(ep.id))}/${encodeURIComponent(filename)}`;
+      }
     }
+    if (epArtworkUrl) out += `      <itunes:image href="${escapeXml(epArtworkUrl)}"/>\n`;
     out += `      <itunes:explicit>${epExplicit}</itunes:explicit>
       <pubDate>${pubDate}</pubDate>
     </item>

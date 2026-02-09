@@ -2,6 +2,22 @@ import { useEffect } from 'react';
 import { slugify, type EpisodeForm } from './utils';
 import styles from '../EpisodeEditor.module.css';
 
+function safeImageSrc(url: string | null | undefined): string {
+  if (!url) return '';
+  const s = url.trim();
+  if (!s) return '';
+  if (s.startsWith('/') && !s.startsWith('//')) return s;
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'https://x';
+    const parsed = new URL(s, base);
+    const protocol = parsed.protocol.toLowerCase();
+    if (protocol === 'https:' || protocol === 'http:' || protocol === 'blob:') return parsed.href;
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
 export interface EpisodeDetailsFormProps {
   form: EpisodeForm;
   setForm: React.Dispatch<React.SetStateAction<EpisodeForm>>;
@@ -12,6 +28,20 @@ export interface EpisodeDetailsFormProps {
   isSaving: boolean;
   saveError: string | null;
   saveSuccess: boolean;
+  /** When set, show URL vs Upload cover image options and preview. */
+  coverImageConfig?: {
+    podcastId: string;
+    episodeId: string;
+    artworkFilename: string | null;
+    coverMode: 'url' | 'upload';
+    setCoverMode: (m: 'url' | 'upload') => void;
+    pendingArtworkFile: File | null;
+    setPendingArtworkFile: (f: File | null) => void;
+    pendingArtworkPreviewUrl: string | null;
+    coverUploadKey: number;
+    debouncedArtworkUrl: string;
+    uploadArtworkPending: boolean;
+  };
 }
 
 export function EpisodeDetailsForm({
@@ -24,7 +54,11 @@ export function EpisodeDetailsForm({
   isSaving,
   saveError,
   saveSuccess,
+  coverImageConfig,
 }: EpisodeDetailsFormProps) {
+  const cover = coverImageConfig;
+  const savingOrUploading = isSaving || (cover?.uploadArtworkPending ?? false);
+
   useEffect(() => {
     if (descriptionTextareaRef.current) {
       descriptionTextareaRef.current.style.height = 'auto';
@@ -89,17 +123,103 @@ export function EpisodeDetailsForm({
         />
       </label>
       <label className={styles.label}>
-        Cover Image URL
-        <input
-          type="url"
-          value={form.artworkUrl}
-          onChange={(e) => setForm((prev) => ({ ...prev, artworkUrl: e.target.value }))}
-          className={styles.input}
-          placeholder="https://example.com/image.jpg"
-        />
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-          URL for the episode cover image (optional)
-        </p>
+        Cover image
+        {cover ? (
+          <>
+            <div className={styles.statusToggle} role="group" aria-label="Cover image source">
+              <button
+                type="button"
+                className={cover.coverMode === 'url' ? styles.statusToggleActive : styles.statusToggleBtn}
+                onClick={() => cover.setCoverMode('url')}
+                aria-pressed={cover.coverMode === 'url'}
+                aria-label="Cover image from URL"
+              >
+                URL
+              </button>
+              <button
+                type="button"
+                className={cover.coverMode === 'upload' ? styles.statusToggleActive : styles.statusToggleBtn}
+                onClick={() => cover.setCoverMode('upload')}
+                aria-pressed={cover.coverMode === 'upload'}
+                aria-label="Upload cover image"
+              >
+                Upload
+              </button>
+            </div>
+            {cover.coverMode === 'url' && (
+              <>
+                <input
+                  type="url"
+                  value={form.artworkUrl}
+                  onChange={(e) => setForm((prev) => ({ ...prev, artworkUrl: e.target.value }))}
+                  className={styles.input}
+                  placeholder="https://example.com/cover.jpg"
+                  style={{ marginTop: '0.5rem' }}
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+                  Public URL for the episode cover (optional)
+                </p>
+              </>
+            )}
+            {cover.coverMode === 'upload' && (
+              <>
+                <input
+                  key={cover.coverUploadKey}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className={styles.input}
+                  style={{ marginTop: '0.5rem' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) cover.setPendingArtworkFile(file);
+                  }}
+                  disabled={savingOrUploading}
+                  aria-label="Choose cover image"
+                />
+                {cover.pendingArtworkFile && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', margin: '0.25rem 0 0 0' }}>
+                    {cover.pendingArtworkFile.name} will be uploaded when you save.
+                  </p>
+                )}
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+                  JPG, PNG or WebP, max 5MB. Uploads when you click Save.
+                </p>
+              </>
+            )}
+            {(cover.coverMode === 'url'
+              ? cover.debouncedArtworkUrl && (cover.debouncedArtworkUrl.startsWith('http://') || cover.debouncedArtworkUrl.startsWith('https://'))
+              : cover.pendingArtworkFile || cover.artworkFilename) && (
+              <p style={{ marginTop: '0.75rem', marginBottom: 0, display: 'flex', justifyContent: 'center' }}>
+                <img
+                  key={cover.coverMode === 'url' ? `url-${cover.debouncedArtworkUrl}` : `upload-${cover.artworkFilename ?? ''}-${Boolean(cover.pendingArtworkPreviewUrl)}`}
+                  src={safeImageSrc(
+                    cover.coverMode === 'url'
+                      ? cover.debouncedArtworkUrl
+                      : cover.pendingArtworkPreviewUrl ??
+                        (cover.artworkFilename
+                          ? `/api/public/artwork/${cover.podcastId}/episodes/${cover.episodeId}/${encodeURIComponent(cover.artworkFilename)}`
+                          : '')
+                  )}
+                  alt="Cover preview"
+                  style={{ maxWidth: '160px', maxHeight: '160px', borderRadius: '8px', border: '1px solid var(--border)', objectFit: 'cover' }}
+                />
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <input
+              type="url"
+              value={form.artworkUrl}
+              onChange={(e) => setForm((prev) => ({ ...prev, artworkUrl: e.target.value }))}
+              className={styles.input}
+              placeholder="https://example.com/image.jpg"
+            />
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+              URL for the episode cover image (optional)
+            </p>
+          </>
+        )}
       </label>
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <label className={styles.label} style={{ flex: '1 1 80px' }}>
@@ -198,8 +318,8 @@ export function EpisodeDetailsForm({
         <button type="button" className={styles.cancel} onClick={onCancel} aria-label="Cancel editing episode">
           Cancel
         </button>
-        <button type="submit" className={styles.submit} disabled={isSaving} aria-label="Save episode details">
-          {isSaving ? 'Saving…' : 'Save'}
+        <button type="submit" className={styles.submit} disabled={savingOrUploading} aria-label="Save episode details">
+          {cover?.uploadArtworkPending ? 'Uploading…' : isSaving ? 'Saving…' : 'Save'}
         </button>
       </div>
     </form>

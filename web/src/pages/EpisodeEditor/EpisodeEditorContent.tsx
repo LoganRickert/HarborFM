@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb } from '../../components/Breadcrumb';
 import { useAuthStore } from '../../store/auth';
-import { updateEpisode } from '../../api/episodes';
-import { downloadEpisodeUrl } from '../../api/audio';
+import { updateEpisode, uploadEpisodeArtwork } from '../../api/episodes';
 import {
   addRecordedSegment,
   addReusableSegment,
@@ -13,7 +12,7 @@ import {
   renderEpisode,
   type EpisodeSegment,
 } from '../../api/segments';
-import { episodeToForm, formToApiPayload, formatDuration } from './utils';
+import { episodeToForm, formToApiPayload } from './utils';
 import { EpisodeDetailsSummaryCard } from './EpisodeDetailsSummaryCard';
 import { EpisodeDetailsForm } from './EpisodeDetailsForm';
 import { GenerateFinalBar } from './GenerateFinalBar';
@@ -50,7 +49,6 @@ export function EpisodeEditorContent({
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
-  const [editing, setEditing] = useState(true);
   const [episodeForm, setEpisodeForm] = useState(() => episodeToForm(episode));
   const [dialogForm, setDialogForm] = useState(() => episodeToForm(episode));
   const [showRecord, setShowRecord] = useState(false);
@@ -63,6 +61,11 @@ export function EpisodeEditorContent({
     segmentId: string;
     entryIndex: number;
   } | null>(null);
+  const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
+  const [pendingArtworkFile, setPendingArtworkFile] = useState<File | null>(null);
+  const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
+  const [coverUploadKey, setCoverUploadKey] = useState(0);
+  const [debouncedArtworkUrl, setDebouncedArtworkUrl] = useState('');
 
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
   const playingSegmentIdRef = useRef<string | null>(null);
@@ -89,22 +92,59 @@ export function EpisodeEditorContent({
         descriptionTextareaRef.current.style.height = `${descriptionTextareaRef.current.scrollHeight}px`;
       }
     }, 0);
-    setEditing(true);
   }, [episode]);
 
   useEffect(() => {
     if (detailsDialogOpen) {
       setDialogForm(episodeForm);
+      setCoverMode(episode.artwork_filename ? 'upload' : 'url');
+      setPendingArtworkFile(null);
+      setDebouncedArtworkUrl((episodeForm.artworkUrl ?? '').trim());
+      updateMutation.reset();
+      uploadArtworkMutation.reset();
     }
-  }, [detailsDialogOpen, episodeForm]);
+  }, [detailsDialogOpen, episodeForm, episode.artwork_filename, episodeForm.artworkUrl]);
+
+  useEffect(() => {
+    const raw = (dialogForm.artworkUrl ?? '').trim();
+    if (!raw) {
+      setDebouncedArtworkUrl('');
+      return;
+    }
+    const t = setTimeout(() => setDebouncedArtworkUrl(raw), 400);
+    return () => clearTimeout(t);
+  }, [dialogForm.artworkUrl]);
+
+  useEffect(() => {
+    if (!pendingArtworkFile) {
+      setPendingArtworkPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(pendingArtworkFile);
+    setPendingArtworkPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingArtworkFile]);
 
   const updateMutation = useMutation({
     mutationFn: (payload: Parameters<typeof updateEpisode>[1]) => updateEpisode(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['episode', id] });
       queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
-      setEditing(false);
       setDetailsDialogOpen(false);
+      setPendingArtworkFile(null);
+      setCoverUploadKey((k) => k + 1);
+    },
+  });
+
+  const uploadArtworkMutation = useMutation({
+    mutationFn: (file: File) => uploadEpisodeArtwork(podcastId, id, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+      queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
+      setCoverUploadKey((k) => k + 1);
     },
   });
 
@@ -172,103 +212,27 @@ export function EpisodeEditorContent({
   return (
     <div className={styles.page}>
       <Breadcrumb items={breadcrumbItems} />
-      {!editing && (
-        <div className={styles.card}>
-          <div className={styles.cardHeader}>
-            <h1 className={styles.cardTitle}>{episode.title}</h1>
-            <button
-              type="button"
-              className={styles.secondaryBtn}
-              onClick={() => setEditing(true)}
-              aria-label="Edit episode"
-            >
-              Edit episode
-            </button>
-          </div>
-          {episode.description && (
-            <div className={styles.cardDescription}>
-              <p>
-                {episode.description.length > 200
-                  ? episode.description.slice(0, 200) + '…'
-                  : episode.description}
-              </p>
-            </div>
-          )}
-          <div className={styles.showMeta}>
-            <div className={styles.showMetaItem}>
-              <span className={styles.showMetaLabel}>Status</span>
-              <span className={styles.showMetaValue}>{episode.status}</span>
-            </div>
-            {(episode.season_number != null || episode.episode_number != null) && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Season / Episode</span>
-                <span className={styles.showMetaValue}>
-                  S{episode.season_number ?? '?'} E{episode.episode_number ?? '?'}
-                </span>
-              </div>
-            )}
-            {episode.publish_at && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Publish at</span>
-                <span className={styles.showMetaValue}>
-                  {new Date(episode.publish_at).toLocaleString()}
-                </span>
-              </div>
-            )}
-            {episode.explicit ? (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Explicit</span>
-                <span className={styles.showMetaValue}>Yes</span>
-              </div>
-            ) : null}
-            {episode.artwork_url && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Cover Image</span>
-                <div style={{ marginTop: '0.5rem' }}>
-                  <img
-                    src={episode.artwork_url}
-                    alt={`${episode.title} cover`}
-                    style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '4px' }}
-                  />
-                </div>
-              </div>
-            )}
-            {episode.audio_final_path && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Audio</span>
-                <span className={styles.showMetaValue}>
-                  {episode.audio_duration_sec != null &&
-                    formatDuration(episode.audio_duration_sec)}
-                </span>
-                <a
-                  href={downloadEpisodeUrl(id, 'final')}
-                  download
-                  className={styles.renderDownload}
-                >
-                  Download MP3
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <EpisodeDetailsSummaryCard
+        title={episodeForm.title}
+        status={episodeForm.status}
+        seasonNumber={
+          episodeForm.seasonNumber === '' ? null : parseInt(episodeForm.seasonNumber, 10) || null
+        }
+        episodeNumber={
+          episodeForm.episodeNumber === '' ? null : parseInt(episodeForm.episodeNumber, 10) || null
+        }
+        artworkUrl={
+          episode.artwork_url
+            ? episode.artwork_url
+            : episode.artwork_filename
+              ? `/api/public/artwork/${podcastId}/episodes/${id}/${encodeURIComponent(episode.artwork_filename)}`
+              : null
+        }
+        onEditClick={() => setDetailsDialogOpen(true)}
+      />
 
-      {editing && (
-        <>
-          <EpisodeDetailsSummaryCard
-            title={episodeForm.title}
-            status={episodeForm.status}
-            seasonNumber={
-              episodeForm.seasonNumber === '' ? null : parseInt(episodeForm.seasonNumber, 10) || null
-            }
-            episodeNumber={
-              episodeForm.episodeNumber === '' ? null : parseInt(episodeForm.episodeNumber, 10) || null
-            }
-            onEditClick={() => setDetailsDialogOpen(true)}
-          />
-
-          <div className={styles.card}>
-            <EpisodeSectionsPanel
+      <div className={styles.card}>
+        <EpisodeSectionsPanel
               episodeId={id}
               segments={segments}
               segmentsLoading={segmentsLoading}
@@ -284,70 +248,100 @@ export function EpisodeEditorContent({
               deletingSegmentId={deleteSegmentMutation.variables ?? null}
               onSegmentPlayRequest={handleSegmentPlayRequest}
               onSegmentMoreInfo={setSegmentIdForInfo}
-              registerSegmentPause={registerSegmentPause}
-              unregisterSegmentPause={unregisterSegmentPause}
-            />
-          </div>
+          registerSegmentPause={registerSegmentPause}
+          unregisterSegmentPause={unregisterSegmentPause}
+        />
+      </div>
 
-          <GenerateFinalBar
-            episodeId={id}
-            segmentCount={segments.length}
-            onBuild={() => renderMutation.mutate()}
-            isBuilding={renderMutation.isPending}
-            hasFinalAudio={Boolean(episode.audio_final_path)}
-            finalDurationSec={episode.audio_duration_sec ?? 0}
-          />
-          {renderMutation.isError && (
-            <p className={styles.error}>{renderMutation.error?.message}</p>
-          )}
-
-          <Dialog.Root
-            open={detailsDialogOpen}
-            onOpenChange={(o) => !o && setDetailsDialogOpen(false)}
-          >
-            <Dialog.Portal>
-              <Dialog.Overlay className={styles.dialogOverlay} />
-              <Dialog.Content
-                className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogDetailsGrid}`}
-              >
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className={styles.dialogClose}
-                    aria-label="Close"
-                    disabled={updateMutation.isPending}
-                  >
-                    <X size={18} strokeWidth={2} aria-hidden="true" />
-                  </button>
-                </Dialog.Close>
-                <Dialog.Title className={styles.dialogTitle}>
-                  Episode Details
-                </Dialog.Title>
-                <Dialog.Description className={styles.dialogDescription}>
-                  Edit the episode title, description, and publish settings.
-                </Dialog.Description>
-                <div className={`${styles.dialogBodyScroll} ${styles.dialogBodyScrollForm}`}>
-                  <EpisodeDetailsForm
-                    form={dialogForm}
-                    setForm={setDialogForm}
-                    descriptionTextareaRef={descriptionTextareaRef}
-                    slugDisabled={user?.role !== 'admin'}
-                    onSave={() => updateMutation.mutate(formToApiPayload(dialogForm))}
-                    onCancel={() => setDetailsDialogOpen(false)}
-                    isSaving={updateMutation.isPending}
-                    saveError={
-                      updateMutation.isError
-                        ? (updateMutation.error as Error)?.message ?? null
-                        : null
-                    }
-                    saveSuccess={updateMutation.isSuccess}
-                  />
-                </div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-        </>
+      <GenerateFinalBar
+        episodeId={id}
+        segmentCount={segments.length}
+        onBuild={() => renderMutation.mutate()}
+        isBuilding={renderMutation.isPending}
+        hasFinalAudio={Boolean(episode.audio_final_path)}
+        finalDurationSec={episode.audio_duration_sec ?? 0}
+      />
+      {renderMutation.isError && (
+        <p className={styles.error}>{renderMutation.error?.message}</p>
       )}
+
+      <Dialog.Root
+        open={detailsDialogOpen}
+        onOpenChange={(o) => !o && setDetailsDialogOpen(false)}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className={styles.dialogOverlay} />
+          <Dialog.Content
+            className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogDetailsGrid}`}
+          >
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className={styles.dialogClose}
+                aria-label="Close"
+                disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
+              >
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+            <Dialog.Title className={styles.dialogTitle}>
+              Episode Details
+            </Dialog.Title>
+            <Dialog.Description className={styles.dialogDescription}>
+              Edit the episode title, description, and publish settings.
+            </Dialog.Description>
+            <div className={`${styles.dialogBodyScroll} ${styles.dialogBodyScrollForm}`}>
+              <EpisodeDetailsForm
+                form={dialogForm}
+                setForm={setDialogForm}
+                descriptionTextareaRef={descriptionTextareaRef}
+                slugDisabled={user?.role !== 'admin'}
+                onSave={async () => {
+                  const payload = formToApiPayload(dialogForm);
+                  const fileToUpload = pendingArtworkFile;
+                  if (fileToUpload) {
+                    try {
+                      await uploadArtworkMutation.mutateAsync(fileToUpload);
+                      setPendingArtworkFile(null);
+                      const { artwork_url: _u, ...rest } = payload;
+                      updateMutation.mutate(rest);
+                    } catch {
+                      // error surfaced via uploadArtworkMutation
+                    }
+                    return;
+                  }
+                  const finalPayload =
+                    coverMode === 'upload' ? (() => { const { artwork_url: _u, ...rest } = payload; return rest; })() : payload;
+                  updateMutation.mutate(finalPayload);
+                }}
+                onCancel={() => setDetailsDialogOpen(false)}
+                isSaving={updateMutation.isPending}
+                saveError={
+                  updateMutation.isError
+                    ? (updateMutation.error as Error)?.message ?? null
+                    : uploadArtworkMutation.isError
+                      ? (uploadArtworkMutation.error as Error)?.message ?? null
+                      : null
+                }
+                saveSuccess={updateMutation.isSuccess}
+                coverImageConfig={{
+                  podcastId,
+                  episodeId: id,
+                  artworkFilename: episode.artwork_filename ?? null,
+                  coverMode,
+                  setCoverMode,
+                  pendingArtworkFile,
+                  setPendingArtworkFile,
+                  pendingArtworkPreviewUrl,
+                  coverUploadKey,
+                  debouncedArtworkUrl,
+                  uploadArtworkPending: uploadArtworkMutation.isPending,
+                }}
+              />
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {showRecord && (
         <RecordModal
