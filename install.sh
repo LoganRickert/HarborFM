@@ -99,7 +99,14 @@ if [ "${overwrite_env:-false}" = true ]; then
 fi
 
 echo "Ensuring harborfm-docker-data directories exist..."
-mkdir -p harborfm-docker-data/{data,secrets,certbot/webroot,certbot/certs,nginx/logs,redis,whisper/cache}
+mkdir -p \
+  "$INSTALL_DIR/harborfm-docker-data/data" \
+  "$INSTALL_DIR/harborfm-docker-data/secrets" \
+  "$INSTALL_DIR/harborfm-docker-data/certbot/webroot" \
+  "$INSTALL_DIR/harborfm-docker-data/certbot/certs" \
+  "$INSTALL_DIR/harborfm-docker-data/nginx/logs" \
+  "$INSTALL_DIR/harborfm-docker-data/redis" \
+  "$INSTALL_DIR/harborfm-docker-data/whisper/cache"
 
 echo "Starting containers (compose up)..."
 docker compose up -d
