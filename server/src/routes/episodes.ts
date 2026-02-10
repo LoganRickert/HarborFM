@@ -4,6 +4,7 @@ import { basename, join } from 'path';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../plugins/auth.js';
 import { db } from '../db/index.js';
+import { isAdmin, canAccessPodcast } from '../services/access.js';
 import { episodeCreateSchema, episodeUpdateSchema } from '@harborfm/shared';
 import { writeRssFile } from '../services/rss.js';
 import { assertPathUnder, assertResolvedPathUnder, artworkDir } from '../services/paths.js';
@@ -16,16 +17,6 @@ function slugify(s: string): string {
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
-}
-
-function isAdmin(userId: string): boolean {
-  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role: string } | undefined;
-  return user?.role === 'admin';
-}
-
-function canAccessPodcast(db: import('better-sqlite3').Database, userId: string, podcastId: string): boolean {
-  const row = db.prepare('SELECT id FROM podcasts WHERE id = ? AND owner_user_id = ?').get(podcastId, userId);
-  return !!row;
 }
 
 function episodeRowWithFilename(row: Record<string, unknown>): Record<string, unknown> {
@@ -50,7 +41,7 @@ export async function episodeRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth] },
     async (request, reply) => {
       const { podcastId } = request.params as { podcastId: string };
-      if (!canAccessPodcast(db, request.userId, podcastId) && !isAdmin(request.userId)) {
+      if (!canAccessPodcast(request.userId, podcastId) && !isAdmin(request.userId)) {
         return reply.status(404).send({ error: 'Podcast not found' });
       }
       const rows = db
@@ -67,8 +58,20 @@ export async function episodeRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth] },
     async (request, reply) => {
       const { podcastId } = request.params as { podcastId: string };
-      if (!canAccessPodcast(db, request.userId, podcastId)) {
+      if (!canAccessPodcast(request.userId, podcastId)) {
         return reply.status(404).send({ error: 'Podcast not found' });
+      }
+      const userId = request.userId as string;
+      const podcastRow = db.prepare('SELECT max_episodes FROM podcasts WHERE id = ?').get(podcastId) as { max_episodes: number | null } | undefined;
+      const userRow = db.prepare('SELECT max_episodes FROM users WHERE id = ?').get(userId) as { max_episodes: number | null } | undefined;
+      const maxEpisodes = podcastRow?.max_episodes ?? userRow?.max_episodes ?? null;
+      if (maxEpisodes != null && maxEpisodes > 0) {
+        const count = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE podcast_id = ?').get(podcastId) as { count: number };
+        if (count.count >= maxEpisodes) {
+          return reply.status(403).send({
+            error: `This show has reached its limit of ${maxEpisodes} episode${maxEpisodes === 1 ? '' : 's'}. You cannot create more.`,
+          });
+        }
       }
       const parsed = episodeCreateSchema.safeParse(request.body);
       if (!parsed.success) {

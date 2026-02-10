@@ -280,20 +280,19 @@
 }
 
 .item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: 1.25rem;
+  align-items: center;
   padding: 1.1rem 1.25rem;
   border-radius: 14px;
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
-  flex-wrap: wrap;
 }
 
 .itemMain {
-  min-width: 240px;
-  flex: 1;
+  min-width: 0;
 }
 
 .itemTitleRow {
@@ -327,9 +326,37 @@
 }
 
 .itemWaveformRow {
-  width: 100%;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   min-width: 0;
-  margin-top: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.itemPlayPauseBtn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.itemPlayPauseBtn:hover {
+  background: var(--bg-elevated);
+  color: var(--accent);
+}
+
+.itemPlayPauseBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .itemWaveform {
@@ -337,7 +364,6 @@
   min-width: 0;
   height: 32px;
   min-height: 32px;
-  width: 100%;
   cursor: pointer;
   border-radius: 4px;
   overflow: hidden;
@@ -350,6 +376,8 @@
 }
 
 .itemWaveformPlaceholder {
+  flex: 1;
+  min-width: 0;
   height: 32px;
   min-height: 32px;
   border-radius: 4px;
@@ -380,6 +408,7 @@
 .editBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   padding: 0.55rem 0.9rem;
   border-radius: var(--radius);
@@ -390,6 +419,8 @@
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  flex: 1;
+  min-width: 0;
 }
 
 .editBtn:hover {
@@ -398,7 +429,6 @@
   background: var(--accent-glow);
 }
 
-.listenBtn,
 .deleteBtn {
   display: inline-flex;
   align-items: center;
@@ -412,15 +442,6 @@
   font-weight: 600;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-
-.listenBtn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-glow);
-}
-
-.deleteBtn {
   border-color: rgba(255, 76, 76, 0.4);
   color: #ff8a8a;
 }
@@ -614,7 +635,12 @@
   }
 
   .item {
+    grid-template-columns: 1fr;
     padding: 1rem;
+  }
+
+  .itemActions {
+    justify-content: stretch;
   }
 
   .pixabayImportActions button {

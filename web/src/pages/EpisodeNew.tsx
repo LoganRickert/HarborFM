@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createEpisode } from '../api/episodes';
 import { getPodcast } from '../api/podcasts';
 import { Breadcrumb } from '../components/Breadcrumb';
@@ -15,6 +15,9 @@ export function EpisodeNew() {
     queryFn: () => getPodcast(id!),
     enabled: !!id,
   });
+  const maxEpisodes = podcast?.max_episodes ?? null;
+  const episodeCount = Number(podcast?.episode_count ?? 0);
+  const atEpisodeLimit = maxEpisodes != null && maxEpisodes > 0 && episodeCount >= Number(maxEpisodes);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -28,6 +31,7 @@ export function EpisodeNew() {
       }),
     onSuccess: (ep) => {
       queryClient.invalidateQueries({ queryKey: ['episodes', id] });
+      queryClient.invalidateQueries({ queryKey: ['podcast', id] });
       navigate(`/episodes/${ep.id}`);
     },
   });
@@ -81,6 +85,11 @@ export function EpisodeNew() {
               placeholder="What's this episode about? (optional)"
             />
           </label>
+          {atEpisodeLimit && (
+            <p className={styles.error} role="alert">
+              This show has reached its limit of {maxEpisodes} episode{maxEpisodes === 1 ? '' : 's'}. You cannot create more.
+            </p>
+          )}
           {mutation.isError && (
             <p className={styles.error} role="alert">{mutation.error?.message}</p>
           )}
@@ -93,7 +102,12 @@ export function EpisodeNew() {
             >
               Cancel
             </button>
-            <button type="submit" className={styles.submit} disabled={mutation.isPending} aria-label="Create episode">
+            <button
+              type="submit"
+              className={styles.submit}
+              disabled={mutation.isPending || atEpisodeLimit}
+              aria-label="Create episode"
+            >
               {mutation.isPending ? 'Creating…' : 'Create episode'}
             </button>
           </div>

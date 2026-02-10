@@ -1,17 +1,21 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useRef } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth';
 import { login } from '../api/auth';
 import { setupStatus } from '../api/setup';
+import { Captcha, type CaptchaHandle } from '../components/Captcha';
 import styles from './Auth.module.css';
 
 export function Login() {
+  const [searchParams] = useSearchParams();
+  const verified = searchParams.get('verified') === '1';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const setUser = useAuthStore((s) => s.setUser);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const captchaRef = useRef<CaptchaHandle>(null);
   const { data: setup } = useQuery({
     queryKey: ['setupStatus'],
     queryFn: setupStatus,
@@ -20,17 +24,35 @@ export function Login() {
   });
 
   const mutation = useMutation({
-    mutationFn: () => login(email, password),
+    mutationFn: async () => {
+      let captchaToken: string | undefined;
+      if (setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey) {
+        captchaToken = await captchaRef.current?.getToken();
+        if (!captchaToken?.trim()) {
+          console.error('[Login] CAPTCHA enabled but no token from widget', {
+            captchaProvider: setup.captchaProvider,
+            hasRef: !!captchaRef.current,
+          });
+        }
+      }
+      return login(email, password, captchaToken);
+    },
     onSuccess: (data) => {
       setUser(data.user);
       // Invalidate the 'me' query so RequireAuth refetches with the new cookie
       queryClient.invalidateQueries({ queryKey: ['me'] });
       navigate('/');
     },
+    onError: (err: Error) => {
+      console.error('[Login] submit failed', { message: err.message, name: err.name });
+    },
   });
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (verified) {
+      navigate('/login', { replace: true });
+    }
     mutation.mutate();
   }
 
@@ -68,8 +90,18 @@ export function Login() {
               required
             />
           </label>
+          {setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey && (
+            <Captcha ref={captchaRef} provider={setup.captchaProvider} siteKey={setup.captchaSiteKey} />
+          )}
+          {verified && (
+            <div className={styles.verificationCardSuccess}>
+              <p className={styles.verificationCardSuccessText}>Your email is verified. You can sign in now.</p>
+            </div>
+          )}
           {mutation.isError && (
-            <p className={styles.error}>{mutation.error?.message}</p>
+            <div className={styles.verificationCardError}>
+              <p className={styles.verificationCardErrorText}>{mutation.error?.message}</p>
+            </div>
           )}
           <button
             type="submit"

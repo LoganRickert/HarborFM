@@ -31,12 +31,14 @@ function LibraryItemWaveform({
   asset,
   waveformUrl,
   currentTime,
+  isPlaying,
   onSeek,
   onPlayPause,
 }: {
   asset: LibraryAsset;
   waveformUrl: string;
   currentTime: number;
+  isPlaying: boolean;
   onSeek: (asset: LibraryAsset, time: number) => void;
   onPlayPause: () => void;
 }) {
@@ -66,6 +68,15 @@ function LibraryItemWaveform({
   if (durationSec <= 0) return null;
   return (
     <div className={styles.itemWaveformRow}>
+      <button
+        type="button"
+        className={styles.itemPlayPauseBtn}
+        onClick={onPlayPause}
+        title={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? `Pause ${asset.name}` : `Play ${asset.name}`}
+      >
+        {isPlaying ? <Pause size={20} strokeWidth={2} aria-hidden /> : <Play size={20} strokeWidth={2} aria-hidden />}
+      </button>
       {waveformData ? (
         <WaveformCanvas
           data={waveformData}
@@ -120,14 +131,12 @@ export function Library() {
     queryFn: () => getUser(userId!),
     enabled: !!userId,
   });
-  const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
-  // Cache may hold full response { user } or just the user (from App.tsx me().then(r => r.user))
-  const currentUser =
-    meData && typeof meData === 'object' && 'user' in meData
-      ? (meData as { user: { id: string; email: string; role?: string } }).user
-      : meData && typeof meData === 'object' && 'id' in meData
-        ? (meData as { id: string; email: string; role?: string })
-        : null;
+  const { data: meData } = useQuery({
+    queryKey: ['me'],
+    queryFn: me,
+    staleTime: 5 * 60 * 1000,
+  });
+  const currentUser = meData?.user;
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
   const currentUserId = currentUser?.id ?? undefined;
 
@@ -691,24 +700,8 @@ export function Library() {
                     <div className={styles.itemMeta}>
                       {formatDuration(asset.duration_sec)} · {formatLibraryDate(asset.created_at)}
                     </div>
-                    <LibraryItemWaveform
-                      asset={asset}
-                      waveformUrl={userId ? libraryWaveformUrlForUser(userId, asset.id) : libraryWaveformUrl(asset.id)}
-                      currentTime={playingId === asset.id ? currentTime : 0}
-                      onSeek={handleSeek}
-                      onPlayPause={() => handlePlay(asset)}
-                    />
                   </div>
                   <div className={styles.itemActions}>
-                    <button
-                      type="button"
-                      className={styles.listenBtn}
-                      onClick={() => handlePlay(asset)}
-                      aria-label={isThisPlaying ? `Pause ${asset.name}` : `Listen to ${asset.name}`}
-                    >
-                      {isThisPlaying ? <Pause size={16} strokeWidth={2} /> : <Play size={16} strokeWidth={2} />}
-                      {isThisPlaying ? 'Pause' : 'Listen'}
-                    </button>
                     {canEditAsset(asset) && (
                       <button
                         type="button"
@@ -729,10 +722,17 @@ export function Library() {
                         aria-label={`Delete ${asset.name}`}
                       >
                         <Trash2 size={16} strokeWidth={2} />
-                        Delete
                       </button>
                     )}
                   </div>
+                  <LibraryItemWaveform
+                    asset={asset}
+                    waveformUrl={userId ? libraryWaveformUrlForUser(userId, asset.id) : libraryWaveformUrl(asset.id)}
+                    currentTime={playingId === asset.id ? currentTime : 0}
+                    isPlaying={isThisPlaying}
+                    onSeek={handleSeek}
+                    onPlayPause={() => handlePlay(asset)}
+                  />
                 </div>
               );
             })}

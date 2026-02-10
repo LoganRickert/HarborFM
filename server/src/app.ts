@@ -25,6 +25,13 @@ import { llmRoutes } from './routes/llm.js';
 import { usersRoutes } from './routes/users.js';
 import { publicRoutes } from './routes/public.js';
 import { setupRoutes } from './routes/setup.js';
+import { sitemapRoutes } from './routes/sitemap.js';
+import {
+  flush,
+  pruneListenDedup,
+  startFlushInterval,
+  stopFlushInterval,
+} from './services/podcastStats.js';
 import { ensureSecretsDir, getSecretsDir } from './services/paths.js';
 import { getOrCreateSetupToken, isSetupComplete } from './services/setup.js';
 import { getSecretsKey } from './services/secrets.js';
@@ -130,6 +137,14 @@ async function main() {
   await app.register(usersRoutes, { prefix: '/' });
   await app.register(setupRoutes, { prefix: '/' });
   await app.register(publicRoutes, { prefix: '/' });
+  await app.register(sitemapRoutes, { prefix: '/' });
+
+  pruneListenDedup();
+  startFlushInterval();
+  app.addHook('onClose', async () => {
+    stopFlushInterval();
+    flush();
+  });
 
   // In production, serve the web app from PUBLIC_DIR (e.g. Docker copies web dist here)
   const publicDir = process.env.PUBLIC_DIR ?? join(__dirname, '..', 'public');

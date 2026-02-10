@@ -63,6 +63,17 @@
   transform: translateY(0);
 }
 
+.createBtnDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.createBtnDisabled:hover {
+  background: var(--accent);
+  box-shadow: 0 2px 12px rgba(0, 212, 170, 0.25);
+  transform: none;
+}
+
 /* Loading */
 .loading {
   display: flex;
@@ -174,6 +185,17 @@
   transform: translateY(-1px);
   text-decoration: none;
   color: var(--bg);
+}
+
+.emptyBtnDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.emptyBtnDisabled:hover {
+  background: var(--accent);
+  box-shadow: 0 2px 12px rgba(0, 212, 170, 0.25);
+  transform: none;
 }
 
 /* List — cards full width */
@@ -402,6 +424,17 @@
 .cardActionPrimary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.cardActionPrimaryDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cardActionPrimaryDisabled:hover {
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 212, 170, 0.2);
+  transform: none;
 }
 
 /* Responsive */

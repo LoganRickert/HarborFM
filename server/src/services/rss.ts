@@ -1,13 +1,23 @@
-import { writeFileSync } from 'fs';
-import { basename, extname } from 'path';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
+import { basename, extname, join } from 'path';
 import { db } from '../db/index.js';
-import { rssDir } from './paths.js';
+import { assertPathUnder, assertResolvedPathUnder, rssDir } from './paths.js';
 import { EXT_DOT_TO_EXT } from '../utils/artwork.js';
+import { APP_NAME } from '../config.js';
+
+const RSS_FEED_FILENAME = 'feed.xml';
 
 function artworkExt(artworkPath: string | null | undefined): string {
   if (!artworkPath) return 'jpg';
   const ext = extname(String(artworkPath)).toLowerCase();
   return EXT_DOT_TO_EXT[ext] ?? 'jpg';
+}
+
+/** Extension for enclosure URLs (e.g. .mp3, .m4a), from episode audio path or default .mp3 */
+function enclosureExt(audioFinalPath: unknown): string {
+  if (audioFinalPath == null || typeof audioFinalPath !== 'string' || !audioFinalPath.trim()) return '.mp3';
+  const ext = extname(audioFinalPath.trim());
+  return ext || '.mp3';
 }
 
 function escapeXml(s: string): string {
@@ -146,7 +156,7 @@ export function generateRss(podcastId: string, publicBaseUrl?: string | null): s
   let rssFeedUrl = '';
   if (publicBaseNoSlash) {
     if (exportPrefix != null) {
-      rssFeedUrl = exportPrefix ? `${publicBaseNoSlash}/${exportPrefix}/feed.xml` : `${publicBaseNoSlash}/feed.xml`;
+      rssFeedUrl = exportPrefix ? `${publicBaseNoSlash}/${exportPrefix}/${RSS_FEED_FILENAME}` : `${publicBaseNoSlash}/${RSS_FEED_FILENAME}`;
     } else if (slugRaw) {
       rssFeedUrl = `${publicBaseNoSlash}/api/public/podcasts/${encodeURIComponent(slugRaw)}/rss`;
     }
@@ -184,7 +194,7 @@ ${stylesheetPi}<rss xmlns:podcast="https://podcastindex.org/namespace/1.0" xmlns
     out += `    <atom:link href="${escapeXml(rssFeedUrl)}" rel="self" type="application/rss+xml"/>\n`;
   }
   out += `    <description><![CDATA[${description}]]></description>
-    <generator>HarborFM</generator>
+    <generator>${APP_NAME}</generator>
     <lastBuildDate>${lastBuildDate}</lastBuildDate>
     <language>${language}</language>
 `;
@@ -226,7 +236,9 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ''}    </itunes:o
 
   for (const ep of episodes) {
     const epTitle = escapeCdata(String(ep.title ?? ''));
-    const epDesc = escapeCdata(String(ep.description ?? ''));
+    const baseDesc = String(ep.description ?? '');
+    const snapshot = ep.description_copyright_snapshot != null ? String(ep.description_copyright_snapshot).trim() : '';
+    const epDesc = escapeCdata(snapshot ? `${baseDesc}\r\n\r\nMusic:\r\n${snapshot}` : baseDesc);
     const guid = escapeXml(String(ep.guid ?? ep.id));
     const pubDate = ep.publish_at
       ? new Date(String(ep.publish_at)).toUTCString()
@@ -241,15 +253,15 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ''}    </itunes:o
     if (publicBaseNoSlash && ep.id) {
       const validEpisodeId = String(ep.id).trim();
       if (validEpisodeId) {
+        const ext = enclosureExt(ep.audio_final_path);
         if (exportPrefix != null) {
           // S3 export: public base + prefix + episodes/{id}.ext (matches deployPodcastToS3 keys)
-          const ext = ep.audio_final_path ? (extname(String(ep.audio_final_path)) || '.mp3') : '.mp3';
           enclosureUrl = `${publicBaseNoSlash}/${exportPrefix}/episodes/${validEpisodeId}${ext}`;
         } else if (ep.audio_final_path && podcastId) {
-          // Self-hosted: API path (no file extension)
+          // Self-hosted: API path with file extension so enclosure URLs end in .mp3 etc.
           const validPodcastId = String(podcastId).trim();
           if (validPodcastId) {
-            enclosureUrl = `${publicBaseNoSlash}/api/${encodeURIComponent(validPodcastId)}/episodes/${encodeURIComponent(validEpisodeId)}`;
+            enclosureUrl = `${publicBaseNoSlash}/api/${encodeURIComponent(validPodcastId)}/episodes/${encodeURIComponent(validEpisodeId)}${ext}`;
           }
         }
       }
@@ -313,8 +325,34 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ''}    </itunes:o
 
 export function writeRssFile(podcastId: string, publicBaseUrl?: string | null): string {
   const xml = generateRss(podcastId, publicBaseUrl);
+  writeRssToFile(podcastId, xml);
+  return join(rssDir(podcastId), RSS_FEED_FILENAME);
+}
+
+/** Write pre-generated XML to the RSS feed file (data/rss/:podcastId/feed.xml). */
+export function writeRssToFile(podcastId: string, xml: string): void {
   const dir = rssDir(podcastId);
-  const path = `${dir}/feed.xml`;
+  const path = join(dir, RSS_FEED_FILENAME);
+  assertResolvedPathUnder(path, dir);
   writeFileSync(path, xml, 'utf8');
-  return path;
+}
+
+/**
+ * Return cached RSS XML if the feed file exists and is newer than maxAgeMs.
+ * Otherwise return null (caller should generate and save).
+ */
+export function getCachedRssIfFresh(podcastId: string, maxAgeMs: number): string | null {
+  const dir = rssDir(podcastId);
+  const path = join(dir, RSS_FEED_FILENAME);
+  assertResolvedPathUnder(path, dir);
+  if (!existsSync(path)) return null;
+  try {
+    const safePath = assertPathUnder(path, dir);
+    const stat = statSync(safePath);
+    const age = Date.now() - stat.mtimeMs;
+    if (age >= maxAgeMs) return null;
+    return readFileSync(safePath, 'utf8');
+  } catch {
+    return null;
+  }
 }

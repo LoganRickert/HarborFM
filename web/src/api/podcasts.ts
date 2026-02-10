@@ -28,6 +28,8 @@ export interface Podcast {
   medium: 'podcast' | 'music' | 'video' | 'film' | 'audiobook' | 'newsletter' | 'blog';
   created_at: string;
   updated_at: string;
+  max_episodes?: number | null;
+  episode_count?: number;
 }
 
 export interface PodcastsResponse {
@@ -44,6 +46,34 @@ export function listPodcastsForUser(userId: string) {
 
 export function getPodcast(id: string) {
   return apiGet<Podcast>(`/podcasts/${id}`);
+}
+
+export interface PodcastAnalytics {
+  rss_daily: Array<{ stat_date: string; bot_count: number; human_count: number }>;
+  episodes: Array<{ id: string; title: string; slug: string | null }>;
+  episode_daily: Array<{
+    episode_id: string;
+    stat_date: string;
+    bot_count: number;
+    human_count: number;
+  }>;
+  episode_location_daily: Array<{
+    episode_id: string;
+    stat_date: string;
+    location: string;
+    bot_count: number;
+    human_count: number;
+  }>;
+  episode_listens_daily: Array<{
+    episode_id: string;
+    stat_date: string;
+    bot_count: number;
+    human_count: number;
+  }>;
+}
+
+export function getPodcastAnalytics(podcastId: string) {
+  return apiGet<PodcastAnalytics>(`/podcasts/${podcastId}/analytics`);
 }
 
 export function createPodcast(body: {

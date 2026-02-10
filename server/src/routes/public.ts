@@ -2,10 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import { createReadStream, existsSync, readFileSync } from 'fs';
 import { basename, extname } from 'path';
 import { db } from '../db/index.js';
+import { getUserAgent } from '../services/loginAttempts.js';
+import { recordRssRequest } from '../services/podcastStats.js';
 import { assertPathUnder, assertSafeId, artworkDir, processedDir } from '../services/paths.js';
 import { EXT_DOT_TO_MIMETYPE } from '../utils/artwork.js';
-import { generateRss } from '../services/rss.js';
+import { isHumanUserAgent } from '../utils/isBot.js';
+import { generateRss, getCachedRssIfFresh, writeRssToFile } from '../services/rss.js';
 import { readSettings } from './settings.js';
+
+/** Max age (ms) for serving cached public RSS feed from disk before regenerating. From env RSS_CACHE_MAX_AGE_MS or 1 hour. */
+const RSS_CACHE_MAX_AGE_MS = Number(process.env.RSS_CACHE_MAX_AGE_MS) || 60 * 60 * 1000;
 
 export async function publicRoutes(app: FastifyInstance) {
   function ensurePublicFeedsEnabled(reply: import('fastify').FastifyReply): boolean {
@@ -39,12 +45,15 @@ export async function publicRoutes(app: FastifyInstance) {
     const audioBytes = row.audio_bytes != null ? Number(row.audio_bytes) : null;
     const hasAudio = Boolean(row.audio_final_path) && (audioBytes == null || audioBytes > 0);
     const path = row.artwork_path as string | null | undefined;
+    const baseDesc = String(row.description ?? '');
+    const snapshot = row.description_copyright_snapshot != null ? String(row.description_copyright_snapshot).trim() : '';
+    const description = snapshot ? `${baseDesc}\r\n\r\nMusic:\r\n${snapshot}` : baseDesc;
     return {
       id: row.id,
       podcast_id: row.podcast_id,
       title: row.title,
       slug: row.slug,
-      description: row.description ?? '',
+      description,
       guid: row.guid,
       season_number: row.season_number ?? null,
       episode_number: row.episode_number ?? null,
@@ -184,7 +193,7 @@ export async function publicRoutes(app: FastifyInstance) {
     // Get paginated episodes
     const rows = db
       .prepare(
-        `SELECT id, podcast_id, title, slug, description, guid,
+        `SELECT id, podcast_id, title, slug, description, description_copyright_snapshot, guid,
                 season_number, episode_number, episode_type, explicit, publish_at,
                 artwork_url, artwork_path, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
                 created_at, updated_at
@@ -216,7 +225,7 @@ export async function publicRoutes(app: FastifyInstance) {
     
     const row = db
       .prepare(
-        `SELECT id, podcast_id, title, slug, description, guid,
+        `SELECT id, podcast_id, title, slug, description, description_copyright_snapshot, guid,
                 season_number, episode_number, episode_type, explicit, publish_at,
                 artwork_url, artwork_path, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
                 created_at, updated_at
@@ -263,6 +272,8 @@ export async function publicRoutes(app: FastifyInstance) {
   });
 
   // Get RSS feed by podcast slug (public, no auth required)
+  // Serves from data/rss/:podcastId/feed.xml if present and < RSS_CACHE_MAX_AGE_MS; otherwise generates, saves, and serves.
+  // HEAD requests are not counted. 304 Not Modified (if added) should still count as a feed check — record before sending.
   app.get('/api/public/podcasts/:podcastSlug/rss', async (request, reply) => {
     if (!ensurePublicFeedsEnabled(reply)) return;
     const { podcastSlug } = request.params as { podcastSlug: string };
@@ -270,9 +281,23 @@ export async function publicRoutes(app: FastifyInstance) {
       .prepare('SELECT id FROM podcasts WHERE slug = ?')
       .get(podcastSlug) as { id: string } | undefined;
     if (!podcast) return reply.status(404).send({ error: 'Podcast not found' });
-    
+
+    if (request.method === 'GET') {
+      const ua = getUserAgent(request);
+      const isBot = !isHumanUserAgent(ua);
+      recordRssRequest(podcast.id, isBot);
+    }
+
     try {
+      const cached = getCachedRssIfFresh(podcast.id, RSS_CACHE_MAX_AGE_MS);
+      if (cached) {
+        return reply
+          .header('Content-Type', 'application/xml')
+          .header('Cache-Control', 'public, max-age=3600')
+          .send(cached);
+      }
       const xml = generateRss(podcast.id, null);
+      writeRssToFile(podcast.id, xml);
       return reply
         .header('Content-Type', 'application/xml')
         .header('Cache-Control', 'public, max-age=3600')

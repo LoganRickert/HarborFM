@@ -98,6 +98,20 @@ export function rssDir(podcastId: string): string {
   return dir;
 }
 
+/** Directory for sitemap index (data/sitemap). Per-podcast sitemaps live in data/sitemap/:podcastId. */
+export function sitemapIndexDir(): string {
+  const dir = join(DATA_DIR, 'sitemap');
+  ensureDir(dir);
+  return dir;
+}
+
+export function sitemapDir(podcastId: string): string {
+  assertSafeId(podcastId, 'podcastId');
+  const dir = join(DATA_DIR, 'sitemap', podcastId);
+  ensureDir(dir);
+  return dir;
+}
+
 export function artworkDir(podcastId: string): string {
   assertSafeId(podcastId, 'podcastId');
   const dir = join(DATA_DIR, 'artwork', podcastId);

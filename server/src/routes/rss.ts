@@ -1,17 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { db } from '../db/index.js';
 import { requireAuth } from '../plugins/auth.js';
 import { generateRss, writeRssFile } from '../services/rss.js';
-
-function canAccessPodcast(userId: string, podcastId: string): boolean {
-  const row = db.prepare('SELECT id FROM podcasts WHERE id = ? AND owner_user_id = ?').get(podcastId, userId);
-  return !!row;
-}
-
-function isAdmin(userId: string): boolean {
-  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role: string } | undefined;
-  return user?.role === 'admin';
-}
+import { isAdmin, canAccessPodcast } from '../services/access.js';
 
 export async function rssRoutes(app: FastifyInstance) {
   app.get(

@@ -1,0 +1,155 @@
+.wrap {
+  max-width: var(--max-content);
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  margin-bottom: 1.5rem;
+}
+
+.card:last-child {
+  margin-bottom: 0;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+
+.sectionTitle {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sectionSub {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin: 0 0 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.summaryItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.summaryCount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th,
+.table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.table td {
+  color: var(--text);
+}
+
+.table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.episodeLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.episodeLink:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+
+.error {
+  color: var(--error);
+  padding: 1rem 0;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badgeBot {
+  background: rgba(255, 180, 80, 0.15);
+  color: #e6a030;
+}
+
+.badgeHuman {
+  background: rgba(0, 212, 170, 0.12);
+  color: var(--accent);
+}

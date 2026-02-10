@@ -1,0 +1,163 @@
+# Harbor FM stack: app, nginx (80/443 + Let's Encrypt), Whisper ASR, Fail2Ban
+#
+# 1. Copy .env.example to .env and set DOMAIN=yourdomain.com, CERTBOT_EMAIL=you@example.com
+# 2. Point DNS A record for your domain to this host, then: docker compose up -d
+# 3. Get SSL cert (once): docker compose run --rm certbot
+#    Nginx will reload within ~60s when certs appear. Renew with: docker compose run --rm certbot renew
+# 4. Whisper is internal-only; use harborfm:3001, whisper:9000 from other containers.
+
+services:
+  harborfm:
+    image: ghcr.io/loganrickert/harborfm:latest
+    container_name: harborfm
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATA_DIR: /data
+      SECRETS_DIR: /secrets
+    volumes:
+      - harborfm_data:/data
+      - harborfm_secrets:/secrets
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3001/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # Not exposed to host; nginx proxies to this
+
+  nginx:
+    image: nginx:alpine
+    container_name: harborfm-nginx
+    restart: unless-stopped
+    # Public entrypoint: publishes 80/443, also on internal network to proxy to harborfm
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+    volumes:
+      - ./nginx/nginx-80-only.conf.template:/etc/nginx/nginx-80-only.conf.template:ro
+      - ./nginx/nginx-full.conf.template:/etc/nginx/nginx-full.conf.template:ro
+      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+      - certbot_webroot:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+      - nginx_logs:/var/log/nginx
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      harborfm:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # Not started by default (profile: cert). Initial cert: docker compose run --rm certbot
+  # Renew (cron): docker compose run --rm certbot renew
+  certbot:
+    profiles: ["cert"]
+    image: certbot/certbot
+    container_name: harborfm-certbot
+    restart: "no"
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$${CERTBOT_EMAIL}" ] || [ "$${DOMAIN}" = "localhost" ]; then
+          echo "Set DOMAIN and CERTBOT_EMAIL in .env to obtain certificates."
+          echo "Then run: docker compose run --rm certbot"
+          exit 0
+        fi
+        certbot certonly --webroot -w /var/www/certbot -d "$${DOMAIN}" \
+          --email "$${CERTBOT_EMAIL}" --agree-tos --no-eff-email --non-interactive --keep-until-expiring
+        exit $$?
+    networks:
+      - internal
+
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: harborfm-whisper
+    restart: unless-stopped
+    environment:
+      ASR_MODEL: base
+      ASR_ENGINE: openai_whisper
+    # No ports exposed to host; use from harborfm via service name (e.g. http://whisper:9000)
+    volumes:
+      - whisper_cache:/root/.cache
+    networks:
+      - internal
+
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: harborfm-fail2ban
+    restart: unless-stopped
+    network_mode: host
+    # Bans must use DOCKER-USER chain so traffic to published 80/443 is actually blocked (see jail.d)
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./fail2ban/filter.d:/etc/fail2ban/filter.d:ro
+      - ./fail2ban/jail.d:/etc/fail2ban/jail.d:ro
+      - nginx_logs:/var/log/nginx:ro
+    environment:
+      TZ: ${TZ:-UTC}
+      F2B_LOG_LEVEL: info
+    depends_on:
+      - nginx
+
+# Named volumes backed by ./harborfm-docker-data/ (create dirs before first up if needed)
+volumes:
+  harborfm_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./harborfm-docker-data/data
+  harborfm_secrets:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./harborfm-docker-data/secrets
+  certbot_webroot:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./harborfm-docker-data/certbot/webroot
+  certbot_certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./harborfm-docker-data/certbot/certs
+  nginx_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./harborfm-docker-data/nginx/logs
+  whisper_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./harborfm-docker-data/whisper/cache
+
+networks:
+  internal:
+    driver: bridge

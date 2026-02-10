@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb } from '../../components/Breadcrumb';
 import { useAuthStore } from '../../store/auth';
+import { me, canRecordNewSection, RECORD_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
 import { updateEpisode, uploadEpisodeArtwork } from '../../api/episodes';
 import {
   addRecordedSegment,
@@ -48,6 +49,8 @@ export function EpisodeEditorContent({
   const podcastId = episode.podcast_id;
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
+  const canRecord = canRecordNewSection(meData);
 
   const [episodeForm, setEpisodeForm] = useState(() => episodeToForm(episode));
   const [dialogForm, setDialogForm] = useState(() => episodeToForm(episode));
@@ -154,6 +157,7 @@ export function EpisodeEditorContent({
     mutationFn: ({ file, name }: { file: File; name?: string | null }) => addRecordedSegment(id, file, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['segments', id] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
       setShowRecord(false);
     },
   });
@@ -179,7 +183,10 @@ export function EpisodeEditorContent({
 
   const deleteSegmentMutation = useMutation({
     mutationFn: (segmentId: string) => deleteSegment(id, segmentId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['segments', id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['segments', id] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
   });
 
   const renderMutation = useMutation({
@@ -240,6 +247,8 @@ export function EpisodeEditorContent({
               segmentsLoading={segmentsLoading}
               onAddRecord={() => setShowRecord(true)}
               onAddLibrary={() => setShowLibrary(true)}
+              recordDisabled={!canRecord}
+              recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
               onMoveUp={handleMoveUp}
               onMoveDown={handleMoveDown}
               onDeleteRequest={setSegmentToDelete}
@@ -262,6 +271,7 @@ export function EpisodeEditorContent({
         isBuilding={renderMutation.isPending}
         hasFinalAudio={Boolean(episode.audio_final_path)}
         finalDurationSec={episode.audio_duration_sec ?? 0}
+        finalUpdatedAt={episode.updated_at}
       />
       {renderMutation.isError && (
         <p className={styles.error}>{renderMutation.error?.message}</p>

@@ -5,27 +5,26 @@ import send from '@fastify/send';
 import { existsSync } from 'fs';
 import { db } from '../db/index.js';
 import { requireAuth } from '../plugins/auth.js';
+import { canAccessEpisode } from '../services/access.js';
+import { getLocationForIp } from '../services/geolocation.js';
+import { getClientIp, getUserAgent } from '../services/loginAttempts.js';
+import {
+  clientKey,
+  recordEpisodeListenIfNew,
+  recordEpisodeRequest,
+  LISTEN_THRESHOLD_BYTES_EXPORT as LISTEN_THRESHOLD_BYTES,
+} from '../services/podcastStats.js';
 import { uploadsDir, processedDir, assertPathUnder } from '../services/paths.js';
 import * as audioService from '../services/audio.js';
 import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
+import { wouldExceedStorageLimit } from '../services/storageLimit.js';
 import { readSettings } from './settings.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
+import { getSingleRangeRequestedLength } from '../utils/parseRange.js';
+import { isHumanUserAgent } from '../utils/isBot.js';
 
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'];
 const MAX_FILE_BYTES = 500 * 1024 * 1024; // 500 MB
-
-function canAccessEpisode(userId: string, episodeId: string): { episode: Record<string, unknown>; podcastId: string } | null {
-  const row = db
-    .prepare(
-      `SELECT e.* FROM episodes e
-       JOIN podcasts p ON p.id = e.podcast_id
-       WHERE e.id = ? AND p.owner_user_id = ?`
-    )
-    .get(episodeId, userId) as Record<string, unknown> | undefined;
-  if (!row) return null;
-  const podcastId = row.podcast_id as string;
-  return { episode: row, podcastId };
-}
 
 export async function audioRoutes(app: FastifyInstance) {
   app.post(
@@ -84,6 +83,14 @@ export async function audioRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
+      const potentialDelta = bytesWritten - oldDestBytes - bytesRemoved;
+      if (potentialDelta > 0 && wouldExceedStorageLimit(db, request.userId, potentialDelta)) {
+        try { unlinkSync(destPath); } catch { /* ignore */ }
+        return reply.status(403).send({
+          error: 'You have reached your storage limit. Delete some content to free space.',
+        });
+      }
+
       let durationSec = 0;
       let sizeBytes = bytesWritten;
       let audioMime = mimetype;
@@ -130,10 +137,10 @@ export async function audioRoutes(app: FastifyInstance) {
     { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })] },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
-      const access = canAccessEpisode(request.userId, episodeId);
+      const access = canAccessEpisode(request.userId, episodeId, { includeEpisode: true });
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
       const { podcastId, episode } = access;
-      const sourcePath = episode.audio_source_path as string | undefined;
+      const sourcePath = episode!.audio_source_path as string | undefined;
       if (!sourcePath || !existsSync(sourcePath)) {
         return reply.status(400).send({ error: 'No audio uploaded for this episode' });
       }
@@ -232,7 +239,7 @@ export async function audioRoutes(app: FastifyInstance) {
   );
 
   // Public endpoint for serving episode MP3s with podcast ID in path (for RSS feed enclosures)
-  // Format: /api/<podcastId>/episodes/<episodeId>
+  // Format: /api/<podcastId>/episodes/<episodeId> or /api/<podcastId>/episodes/<episodeId>.mp3 (extension optional)
   app.get(
     '/api/:podcastId/episodes/:episodeId',
     async (request, reply) => {
@@ -240,7 +247,9 @@ export async function audioRoutes(app: FastifyInstance) {
       if (!settings.public_feeds_enabled) {
         return reply.status(404).send({ error: 'Not found' });
       }
-      const { podcastId, episodeId } = request.params as { podcastId: string; episodeId: string };
+      const { podcastId, episodeId: rawEpisodeId } = request.params as { podcastId: string; episodeId: string };
+      // Strip optional trailing file extension so enclosure URLs like .../episodes/ID.mp3 resolve to the same episode
+      const episodeId = rawEpisodeId.replace(/\.[a-zA-Z0-9]+$/, '') || rawEpisodeId;
       
       // Validate IDs exist and are non-empty
       if (!podcastId || !podcastId.trim() || !episodeId || !episodeId.trim()) {
@@ -277,6 +286,25 @@ export async function audioRoutes(app: FastifyInstance) {
       const allowedBase = processedDir(podcastId.trim(), episodeId.trim());
       const safePath = assertPathUnder(path, allowedBase);
       const mime = (episode.audio_mime as string) || 'audio/mpeg';
+
+      // Stats: only for GET (not HEAD). Location lookup only for human requests.
+      if (request.method === 'GET') {
+        const ip = getClientIp(request);
+        const ua = getUserAgent(request);
+        const isBot = !isHumanUserAgent(ua);
+        const location = isBot ? null : (await getLocationForIp(ip).catch(() => null)) ?? '(unknown)';
+        recordEpisodeRequest(episodeId.trim(), isBot, location);
+
+        const fileSize = statSync(safePath).size;
+        const r = request.headers['range'];
+        const rangeHeader = typeof r === 'string' ? r : Array.isArray(r) ? r[0] : undefined;
+        const requestedLength = getSingleRangeRequestedLength(rangeHeader, fileSize);
+        if (requestedLength !== null && requestedLength >= LISTEN_THRESHOLD_BYTES) {
+          const acceptLanguage = (request.headers['accept-language'] as string) ?? '';
+          const ck = clientKey(ip, ua, acceptLanguage);
+          recordEpisodeListenIfNew(episodeId.trim(), isBot, ck);
+        }
+      }
 
       const result = await send(request.raw, basename(safePath), {
         root: dirname(safePath),

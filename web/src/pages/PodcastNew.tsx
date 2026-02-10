@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPodcast } from '../api/podcasts';
+import { me } from '../api/auth';
 import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './PodcastNew.module.css';
 
@@ -20,6 +21,10 @@ export function PodcastNew() {
   const [description, setDescription] = useState('');
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
+  const maxPodcasts = meData?.user?.max_podcasts ?? null;
+  const podcastCount = meData?.podcast_count ?? 0;
+  const atPodcastLimit = maxPodcasts != null && maxPodcasts > 0 && podcastCount >= maxPodcasts;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -30,6 +35,7 @@ export function PodcastNew() {
       }),
     onSuccess: (podcast) => {
       queryClient.invalidateQueries({ queryKey: ['podcasts'] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
       navigate(`/podcasts/${podcast.id}`);
     },
   });
@@ -91,6 +97,11 @@ export function PodcastNew() {
               placeholder="What's your show about? (optional)"
             />
           </label>
+          {atPodcastLimit && (
+            <p className={styles.error} role="alert">
+              You have reached your limit of {maxPodcasts} show{maxPodcasts === 1 ? '' : 's'}. You cannot create more.
+            </p>
+          )}
           {mutation.isError && (
             <p className={styles.error} role="alert">{mutation.error?.message}</p>
           )}
@@ -103,7 +114,12 @@ export function PodcastNew() {
             >
               Cancel
             </button>
-            <button type="submit" className={styles.submit} disabled={mutation.isPending} aria-label="Create show">
+            <button
+              type="submit"
+              className={styles.submit}
+              disabled={mutation.isPending || atPodcastLimit}
+              aria-label="Create show"
+            >
               {mutation.isPending ? 'Creating…' : 'Create show'}
             </button>
           </div>

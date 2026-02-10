@@ -12,6 +12,9 @@ export interface User {
   last_login_at?: string | null;
   last_login_ip?: string | null;
   last_login_location?: string | null;
+  max_podcasts?: number | null;
+  max_episodes?: number | null;
+  max_storage_mb?: number | null;
 }
 
 export interface UsersResponse {
@@ -48,7 +51,18 @@ export function getUser(userId: string): Promise<User> {
   });
 }
 
-export function updateUser(userId: string, data: { email?: string; role?: 'user' | 'admin'; disabled?: boolean; password?: string }): Promise<User> {
+export function updateUser(
+  userId: string,
+  data: {
+    email?: string;
+    role?: 'user' | 'admin';
+    disabled?: boolean;
+    password?: string;
+    max_podcasts?: number | null;
+    max_episodes?: number | null;
+    max_storage_mb?: number | null;
+  }
+): Promise<User> {
   return fetch(`${BASE}/users/${userId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },

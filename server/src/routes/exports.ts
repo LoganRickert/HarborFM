@@ -2,17 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../plugins/auth.js';
 import { db } from '../db/index.js';
+import { canAccessPodcast } from '../services/access.js';
 import { exportCreateSchema, exportUpdateSchema } from '@harborfm/shared';
 import { testS3Access } from '../services/s3.js';
 import { generateRss } from '../services/rss.js';
 import { deployPodcastToS3 } from '../services/s3.js';
 import { writeRssFile } from '../services/rss.js';
 import { decryptSecret, encryptSecret, isEncryptedSecret, redactAccessKeyId } from '../services/secrets.js';
-
-function canAccessPodcast(userId: string, podcastId: string): boolean {
-  const row = db.prepare('SELECT id FROM podcasts WHERE id = ? AND owner_user_id = ?').get(podcastId, userId);
-  return !!row;
-}
 
 function getExport(userId: string, exportId: string): Record<string, unknown> | null {
   const row = db

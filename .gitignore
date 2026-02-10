@@ -11,3 +11,4 @@ data
 coverage
 .turbo
 secrets/
+harborfm-docker-data/

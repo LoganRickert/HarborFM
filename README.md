@@ -48,6 +48,16 @@ docker run --name harborfm -p 3001:3001 \
 
 Use nginx+letsencrypt to provide a secure connection.
 
+### Docker Compose Quick Start (Curl)
+
+To run the full stack on a fresh machine (app, nginx, Let's Encrypt, Whisper, Fail2Ban) without cloning the repo:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/loganrickert/harborfm/main/install.sh | bash
+```
+
+The script downloads the compose file and configs, prompts for domain and cert email, then starts the stack. This script assumes you have docker and docker compose installed.
+
 ### Guide and Screenshots 
 
 ![HarborFM](screenshots/screenshot_0.jpg)

@@ -11,6 +11,8 @@ export interface GenerateFinalBarProps {
   isBuilding: boolean;
   hasFinalAudio: boolean;
   finalDurationSec: number;
+  /** When the final was last built (e.g. episode.updated_at). Used to bust cache so new build is played. */
+  finalUpdatedAt?: string | null;
 }
 
 export function GenerateFinalBar({
@@ -20,11 +22,21 @@ export function GenerateFinalBar({
   isBuilding,
   hasFinalAudio,
   finalDurationSec,
+  finalUpdatedAt,
 }: GenerateFinalBarProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+
+  const waveformUrl =
+    hasFinalAudio && episodeId
+      ? `${finalEpisodeWaveformUrl(episodeId)}${finalUpdatedAt ? `?v=${encodeURIComponent(finalUpdatedAt)}` : ''}`
+      : '';
+  const downloadUrl =
+    hasFinalAudio && episodeId
+      ? `${downloadEpisodeUrl(episodeId, 'final')}${finalUpdatedAt ? `&v=${encodeURIComponent(finalUpdatedAt)}` : ''}`
+      : '';
 
   useEffect(() => {
     if (!hasFinalAudio || !episodeId || finalDurationSec <= 0) {
@@ -32,7 +44,7 @@ export function GenerateFinalBar({
       return;
     }
     let cancelled = false;
-    fetch(finalEpisodeWaveformUrl(episodeId), { credentials: 'include' })
+    fetch(waveformUrl, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!cancelled && data?.data?.length) setWaveformData(data as WaveformData);
@@ -44,7 +56,7 @@ export function GenerateFinalBar({
     return () => {
       cancelled = true;
     };
-  }, [episodeId, hasFinalAudio, finalDurationSec]);
+  }, [episodeId, hasFinalAudio, finalDurationSec, waveformUrl]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -79,7 +91,7 @@ export function GenerateFinalBar({
       el.pause();
       setIsPlaying(false);
     } else {
-      el.src = downloadEpisodeUrl(episodeId, 'final');
+      el.src = downloadUrl;
       setIsPlaying(true);
       el.play().catch(() => setIsPlaying(false));
     }
@@ -138,8 +150,8 @@ export function GenerateFinalBar({
             <FileAudio size={20} strokeWidth={2} aria-hidden />
             <span>{isBuilding ? 'Building…' : 'Build Final Episode'}</span>
           </button>
-          {hasFinalAudio && (
-            <a href={downloadEpisodeUrl(episodeId, 'final')} download className={styles.renderDownload}>
+          {hasFinalAudio && downloadUrl && (
+            <a href={downloadUrl} download className={styles.renderDownload}>
               Download final audio
             </a>
           )}

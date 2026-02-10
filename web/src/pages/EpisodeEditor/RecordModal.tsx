@@ -304,7 +304,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     <div className={styles.recordOverlay} onClick={(e) => e.target === e.currentTarget && requestClose()}>
       <div ref={recordCardRef} className={styles.recordCard} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="record-title">
         <h3 id="record-title" className={styles.recordTitle}>
-          Record a section
+          Record A Section
         </h3>
         <p className={styles.recordSub}>Use your microphone. When done, stop and add to the episode.</p>
         {!recording && !blob && (

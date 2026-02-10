@@ -111,6 +111,65 @@
   color: var(--error);
 }
 
+.success {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--success);
+  line-height: 1.4;
+}
+
+.verificationCard {
+  margin-top: 0.5rem;
+  padding: 1.25rem 1.25rem;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.verificationCardText {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.verificationCardFooter {
+  margin: 1rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.verificationCardError {
+  margin-top: 0.5rem;
+  padding: 1.25rem 1.25rem;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+}
+
+.verificationCardErrorText {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.verificationCardSuccess {
+  margin-top: 0.5rem;
+  padding: 1.25rem 1.25rem;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 12px;
+}
+
+.verificationCardSuccessText {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
 .setupNotice {
   margin-top: 0.75rem;
   padding: 0.875rem 1rem;

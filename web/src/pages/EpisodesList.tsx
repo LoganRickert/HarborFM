@@ -19,6 +19,9 @@ export function EpisodesList() {
     queryFn: () => listEpisodes(id!),
     enabled: !!id,
   });
+  const maxEpisodes = podcast?.max_episodes ?? null;
+  const episodeCount = Number(podcast?.episode_count ?? episodes.length);
+  const atEpisodeLimit = maxEpisodes != null && maxEpisodes > 0 && episodeCount >= Number(maxEpisodes);
 
   const publishedCount = episodes.filter((e) => e.status === 'published').length;
   const scheduledCount = episodes.filter((e) => e.status === 'scheduled').length;
@@ -39,9 +42,18 @@ export function EpisodesList() {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <h1 className={styles.cardTitle}>Episodes</h1>
-          <Link to={`/podcasts/${id}/episodes/new`} className={styles.newBtn}>
-            New episode
-          </Link>
+          {atEpisodeLimit ? (
+            <span
+              className={`${styles.newBtn} ${styles.newBtnDisabled}`}
+              title="You're at max episodes for this show"
+            >
+              New episode
+            </span>
+          ) : (
+            <Link to={`/podcasts/${id}/episodes/new`} className={styles.newBtn}>
+              New episode
+            </Link>
+          )}
         </div>
         <div className={styles.summary}>
           <span className={styles.summaryItem}>
@@ -65,9 +77,18 @@ export function EpisodesList() {
         {!episodesLoading && episodes.length === 0 && (
           <div className={styles.empty}>
             <p>No episodes yet.</p>
-            <Link to={`/podcasts/${id}/episodes/new`} className={styles.emptyLink}>
-              Create first episode
-            </Link>
+            {atEpisodeLimit ? (
+              <span
+                className={`${styles.emptyLink} ${styles.emptyLinkDisabled}`}
+                title="You're at max episodes for this show"
+              >
+                Create first episode
+              </span>
+            ) : (
+              <Link to={`/podcasts/${id}/episodes/new`} className={styles.emptyLink}>
+                Create first episode
+              </Link>
+            )}
           </div>
         )}
         {!episodesLoading && episodes.length > 0 && (

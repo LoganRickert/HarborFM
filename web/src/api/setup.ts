@@ -1,7 +1,16 @@
 import { apiGet, apiPost } from './client';
 
+export type CaptchaProvider = 'none' | 'recaptcha_v2' | 'recaptcha_v3' | 'hcaptcha';
+
 export function setupStatus() {
-  return apiGet<{ setupRequired: boolean; registrationEnabled: boolean; publicFeedsEnabled: boolean }>('/setup/status');
+  return apiGet<{
+    setupRequired: boolean;
+    registrationEnabled: boolean;
+    publicFeedsEnabled: boolean;
+    captchaProvider: CaptchaProvider;
+    captchaSiteKey: string;
+    emailConfigured: boolean;
+  }>('/setup/status');
 }
 
 export function validateSetupId(id: string) {

@@ -29,6 +29,9 @@ export function Users() {
   const [editRole, setEditRole] = useState<'user' | 'admin'>('user');
   const [editDisabled, setEditDisabled] = useState(false);
   const [editPassword, setEditPassword] = useState('');
+  const [editMaxPodcasts, setEditMaxPodcasts] = useState<number | null>(null);
+  const [editMaxEpisodes, setEditMaxEpisodes] = useState<number | null>(null);
+  const [editMaxStorageMb, setEditMaxStorageMb] = useState<number | null>(null);
   const limit = 50;
   const queryClient = useQueryClient();
 
@@ -47,8 +50,21 @@ export function Users() {
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: ({ userId, data }: { userId: string; data: { email?: string; role?: 'user' | 'admin'; disabled?: boolean; password?: string } }) =>
-      updateUser(userId, data),
+    mutationFn: ({
+      userId,
+      data,
+    }: {
+      userId: string;
+      data: {
+        email?: string;
+        role?: 'user' | 'admin';
+        disabled?: boolean;
+        password?: string;
+        max_podcasts?: number | null;
+        max_episodes?: number | null;
+        max_storage_mb?: number | null;
+      };
+    }) => updateUser(userId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setUserToEdit(null);
@@ -66,13 +82,24 @@ export function Users() {
     setEditRole(user.role);
     setEditDisabled(user.disabled === 1);
     setEditPassword('');
+    setEditMaxPodcasts(user.max_podcasts ?? null);
+    setEditMaxEpisodes(user.max_episodes ?? null);
+    setEditMaxStorageMb(user.max_storage_mb ?? null);
   }
 
   function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!userToEdit) return;
 
-    const updates: { email?: string; role?: 'user' | 'admin'; disabled?: boolean; password?: string } = {};
+    const updates: {
+      email?: string;
+      role?: 'user' | 'admin';
+      disabled?: boolean;
+      password?: string;
+      max_podcasts?: number | null;
+      max_episodes?: number | null;
+      max_storage_mb?: number | null;
+    } = {};
     if (editEmail !== userToEdit.email) {
       updates.email = editEmail;
     }
@@ -84,6 +111,15 @@ export function Users() {
     }
     if (editPassword.trim() !== '') {
       updates.password = editPassword;
+    }
+    if (editMaxPodcasts !== (userToEdit.max_podcasts ?? null)) {
+      updates.max_podcasts = editMaxPodcasts;
+    }
+    if (editMaxEpisodes !== (userToEdit.max_episodes ?? null)) {
+      updates.max_episodes = editMaxEpisodes;
+    }
+    if (editMaxStorageMb !== (userToEdit.max_storage_mb ?? null)) {
+      updates.max_storage_mb = editMaxStorageMb;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -168,7 +204,7 @@ export function Users() {
                           type="button"
                           className={styles.actionBtn}
                           onClick={() => handleEditClick(user)}
-                          title="Edit user"
+                          title="Edit User"
                           aria-label={`Edit user ${user.email}`}
                         >
                           <Edit size={16} strokeWidth={2} aria-hidden />
@@ -240,12 +276,13 @@ export function Users() {
       <Dialog.Root open={!!userToEdit} onOpenChange={(open) => !open && setUserToEdit(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={styles.dialogContent}>
-            <Dialog.Title className={styles.dialogTitle}>Edit user</Dialog.Title>
+          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentScrollable}`}>
+            <Dialog.Title className={styles.dialogTitle}>Edit User</Dialog.Title>
             <Dialog.Description className={styles.dialogDescription}>
-              Update the user email, password, and role.
+              Update the user email, password, role, and limits.
             </Dialog.Description>
-            <form onSubmit={handleEditSubmit}>
+            <form onSubmit={handleEditSubmit} className={styles.dialogFormWrap}>
+              <div className={styles.dialogBodyScroll}>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>
                   Email
@@ -311,6 +348,57 @@ export function Users() {
                     </button>
                   </div>
                 </label>
+              </div>
+              <div className={styles.formGroup}>
+                <p className={styles.formLabel} style={{ marginBottom: '0.5rem' }}>
+                  Limits (leave empty for no limit)
+                </p>
+                <label className={styles.formLabel}>
+                  Max podcasts
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className={styles.formInput}
+                    placeholder="No limit"
+                    value={editMaxPodcasts ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditMaxPodcasts(v === '' ? null : Number(v));
+                    }}
+                  />
+                </label>
+                <label className={styles.formLabel} style={{ marginTop: '0.5rem' }}>
+                  Max episodes
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className={styles.formInput}
+                    placeholder="No limit"
+                    value={editMaxEpisodes ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditMaxEpisodes(v === '' ? null : Number(v));
+                    }}
+                  />
+                </label>
+                <label className={styles.formLabel} style={{ marginTop: '0.5rem' }}>
+                  Max storage (MB)
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className={styles.formInput}
+                    placeholder="No limit"
+                    value={editMaxStorageMb ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditMaxStorageMb(v === '' ? null : Number(v));
+                    }}
+                  />
+                </label>
+              </div>
               </div>
               {updateUserMutation.isError && (
                 <p className={styles.error} style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>

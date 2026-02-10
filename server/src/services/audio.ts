@@ -26,6 +26,9 @@ const FFPROBE = process.env.FFPROBE_PATH ?? 'ffprobe';
 const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg';
 const AUDIOWAVEFORM = process.env.AUDIOWAVEFORM_PATH ?? 'audiowaveform';
 
+/** Loudness target for final episode (LUFS). Will be configurable per-user later. */
+const DEFAULT_LOUDNESS_TARGET_LUFS = -14;
+
 export interface ProbeResult {
   durationSec: number;
   format: string;
@@ -185,8 +188,10 @@ export async function transcodeToFinal(
   const outPath = getFinalOutputPath(podcastId, episodeId, opts.format);
   const channels = opts.channels === 'stereo' ? 2 : 1;
   const bitrate = `${Math.max(16, opts.bitrateKbps)}k`;
+  const loudnormFilter = `loudnorm=I=${DEFAULT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=11`;
   const args = [
     '-i', safeSource,
+    '-af', loudnormFilter,
     '-ac', String(channels),
   ];
   if (opts.format === 'm4a') {
@@ -264,7 +269,10 @@ export async function concatToFinal(
     assertPathUnder(p, DATA_DIR);
   }
   const n = segmentPaths.length;
-  const filter = segmentPaths.map((_, i) => `[${i}:a]`).join('') + `concat=n=${n}:v=0:a=1[out]`;
+  const loudnormFilter = `loudnorm=I=${DEFAULT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=11`;
+  const filter =
+    segmentPaths.map((_, i) => `[${i}:a]`).join('') +
+    `concat=n=${n}:v=0:a=1[concat];[concat]${loudnormFilter}[out]`;
   const channels = opts.channels === 'stereo' ? 2 : 1;
   const bitrate = `${Math.max(16, opts.bitrateKbps)}k`;
   const args = segmentPaths.flatMap((p) => ['-i', p]).concat([

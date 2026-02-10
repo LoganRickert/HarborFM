@@ -15,6 +15,7 @@ COPY shared ./shared
 COPY server ./server
 COPY web ./web
 
+RUN pnpm run lint
 RUN pnpm run build
 
 # Runtime stage: Node + ffmpeg, single image

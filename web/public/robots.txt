@@ -14,6 +14,9 @@ Allow: /api/public/podcasts/
 # Allow RSS feeds
 Allow: /api/public/podcasts/*/rss
 
+# Allow sitemaps (index and per-podcast)
+Allow: /api/sitemap
+
 # Allow audio files (linked from RSS feeds)
 Allow: /api/*/episodes/*
 
@@ -22,3 +25,6 @@ Disallow: /setup
 Disallow: /login
 Disallow: /register
 Disallow: /reset-password
+
+# Sitemap
+Sitemap: /api/sitemap.xml

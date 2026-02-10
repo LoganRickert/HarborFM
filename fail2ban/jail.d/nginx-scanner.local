@@ -1,0 +1,13 @@
+# Jail: ban IPs that hit common scanner/vuln paths (cgi-bin, PHP, wp-admin, etc.)
+# Traffic to nginx is forwarded by Docker, so we must use DOCKER-USER chain to block.
+
+[nginx-scanner]
+enabled = true
+port = http,https
+filter = nginx-scanner
+logpath = /var/log/nginx/access.log
+maxretry = 1
+findtime = 1d
+bantime = 30m
+chain = DOCKER-USER
+action = iptables-multiport[name=nginx-scanner, port="80,443", protocol=tcp, chain=DOCKER-USER]

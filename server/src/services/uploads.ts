@@ -1,6 +1,7 @@
-import { createWriteStream, existsSync, unlinkSync } from 'fs';
+import { createWriteStream, existsSync, unlinkSync, appendFileSync } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Transform } from 'stream';
+import { createReadStream } from 'fs';
 
 export class FileTooLargeError extends Error {
   constructor(message = 'File too large') {

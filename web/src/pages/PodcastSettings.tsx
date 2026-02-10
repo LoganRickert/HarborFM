@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Rss, ExternalLink, List, Settings as GearIcon, Cloud, X, FlaskConical, UploadCloud } from 'lucide-react';
+import { Rss, ExternalLink, List, Settings as GearIcon, Cloud, X, FlaskConical, UploadCloud, BarChart3 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getPodcast } from '../api/podcasts';
 import { getAuthRssPreviewUrl } from '../api/rss';
@@ -35,87 +35,116 @@ export function PodcastSettings() {
       <Breadcrumb items={breadcrumbItems} />
 
       <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <h1 className={styles.cardTitle}>{podcast.title}</h1>
-          <div className={styles.cardHeaderActions}>
-            <Link to={`/podcasts/${id}/episodes`} className={styles.cardHeaderPrimary}>
-              <List size={16} strokeWidth={2} aria-hidden />
-              Episodes
-            </Link>
-            <button
-              type="button"
-              className={styles.cardSettings}
-              onClick={() => setDetailsDialogOpen(true)}
-              aria-label={`Edit details for ${podcast.title}`}
-            >
-              <GearIcon size={18} strokeWidth={2} />
-            </button>
-          </div>
-          </div>
-          {podcast.description && (
-            <div className={styles.cardDescription}>
-              <p>{podcast.description}</p>
-            </div>
+        <div className={styles.podcastHero}>
+          {(podcast.artwork_url || podcast.artwork_filename) && (
+            <img
+              src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}` : '')}
+              alt=""
+              className={styles.podcastHeroArtwork}
+            />
           )}
-          <div className={styles.showMeta}>
-            <div className={styles.showMetaItem}>
-              <span className={styles.showMetaLabel}>Slug</span>
-              <Link to={`/feed/${podcast.slug}`} className={styles.showMetaValue} style={{ display: 'inline-block', color: 'var(--accent)', textDecoration: 'none' }}>
-                <code>{podcast.slug}</code>
+          <div className={styles.podcastHeroMain}>
+            <h1 className={styles.cardTitle}>{podcast.title}</h1>
+            {podcast.description && (
+              <p className={styles.podcastHeroDescription}>{podcast.description}</p>
+            )}
+            <div className={styles.cardHeaderActions}>
+              <Link to={`/podcasts/${id}/analytics`} className={styles.cardHeaderSecondary}>
+                <BarChart3 size={16} strokeWidth={2} aria-hidden />
+                Analytics
               </Link>
+              <Link to={`/podcasts/${id}/episodes`} className={styles.cardHeaderPrimary}>
+                <List size={16} strokeWidth={2} aria-hidden />
+                Episodes
+              </Link>
+              <button
+                type="button"
+                className={styles.cardSettings}
+                onClick={() => setDetailsDialogOpen(true)}
+                aria-label={`Edit details for ${podcast.title}`}
+              >
+                <GearIcon size={18} strokeWidth={2} />
+              </button>
             </div>
-            {podcast.author_name && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Author name</span>
-                <span className={styles.showMetaValue}>{podcast.author_name}</span>
+          </div>
+        </div>
+
+        <div className={styles.podcastDetails}>
+          <h2 className={styles.podcastDetailsTitle}>Show details</h2>
+          <dl className={styles.podcastDetailsGrid}>
+            <div className={styles.podcastDetailsItem}>
+              <dt className={styles.podcastDetailsTerm}>Public feed</dt>
+              <dd className={styles.podcastDetailsValue}>
+                <Link to={`/feed/${podcast.slug}`} className={styles.podcastDetailsActionLink}>
+                  <Rss size={16} strokeWidth={2} aria-hidden />
+                  View public feed
+                </Link>
+              </dd>
+            </div>
+            {podcast.site_url && (
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Website</dt>
+                <dd className={styles.podcastDetailsValue}>
+                  <a href={podcast.site_url} target="_blank" rel="noopener noreferrer" className={styles.podcastDetailsActionLink}>
+                    <ExternalLink size={16} strokeWidth={2} aria-hidden />
+                    Visit website
+                  </a>
+                </dd>
               </div>
             )}
+            {podcast.author_name && (
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Author</dt>
+                <dd className={styles.podcastDetailsValue}>{podcast.author_name}</dd>
+              </div>
+            )}
+            {[podcast.category_primary, podcast.category_secondary, podcast.category_tertiary].some(Boolean) && (
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Categories</dt>
+                <dd className={styles.podcastDetailsValue}>
+                  {[podcast.category_primary, podcast.category_secondary, podcast.category_tertiary].filter(Boolean).join(', ')}
+                </dd>
+              </div>
+            )}
+            {podcast.language && (
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Language</dt>
+                <dd className={styles.podcastDetailsValue}>{podcast.language}</dd>
+              </div>
+            )}
+            {podcast.medium && (
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Medium</dt>
+                <dd className={styles.podcastDetailsValue}>{podcast.medium}</dd>
+              </div>
+            )}
+            <div className={styles.podcastDetailsItem}>
+              <dt className={styles.podcastDetailsTerm}>Type</dt>
+              <dd className={styles.podcastDetailsValue}>{podcast.itunes_type === 'serial' ? 'Serial' : 'Episodic'}</dd>
+            </div>
             {podcast.owner_name && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Owner name</span>
-                <span className={styles.showMetaValue}>{podcast.owner_name}</span>
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Owner</dt>
+                <dd className={styles.podcastDetailsValue}>{podcast.owner_name}</dd>
               </div>
             )}
             {podcast.email && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Email</span>
-                <span className={styles.showMetaValue}>{podcast.email}</span>
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Email</dt>
+                <dd className={styles.podcastDetailsValue}>
+                  <a href={`mailto:${podcast.email}`} className={styles.podcastDetailsLink}>{podcast.email}</a>
+                </dd>
               </div>
             )}
-            {podcast.category_primary && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Primary category</span>
-                <span className={styles.showMetaValue}>{podcast.category_primary}</span>
+            {!!podcast.explicit && (
+              <div className={styles.podcastDetailsItem}>
+                <dt className={styles.podcastDetailsTerm}>Explicit</dt>
+                <dd className={styles.podcastDetailsValue}>Yes</dd>
               </div>
             )}
-            {(podcast.artwork_url || podcast.artwork_filename) && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Cover Image</span>
-                <div style={{ marginTop: '0.5rem' }}>
-                  <img
-                    src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}` : '')}
-                    alt={`${podcast.title} cover`}
-                    style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '4px' }}
-                  />
-                </div>
-              </div>
-            )}
-            {podcast.site_url && (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Site URL</span>
-                <a href={podcast.site_url} target="_blank" rel="noopener noreferrer" className={styles.showMetaValue} style={{ color: 'var(--accent)' }}>
-                  {podcast.site_url}
-                </a>
-              </div>
-            )}
-            {podcast.explicit ? (
-              <div className={styles.showMetaItem}>
-                <span className={styles.showMetaLabel}>Explicit</span>
-                <span className={styles.showMetaValue}>Yes</span>
-              </div>
-            ) : null}
-          </div>
+          </dl>
         </div>
+      </div>
 
       {detailsDialogOpen && (
         <EditShowDetailsDialog

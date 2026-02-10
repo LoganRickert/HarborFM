@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { execFileSync } from 'child_process';
-import { existsSync, readFileSync, statSync } from 'fs';
+import { existsSync, readFileSync, statSync, unlinkSync } from 'fs';
 import { writeFile } from 'fs/promises';
 import { dirname, basename } from 'path';
 import send from '@fastify/send';
@@ -8,11 +8,13 @@ import { nanoid } from 'nanoid';
 import { libraryUpdateSchema } from '@harborfm/shared';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../plugins/auth.js';
+import { isAdmin } from '../services/access.js';
 import { libraryDir, libraryAssetPath } from '../services/paths.js';
 import { assertPathUnder } from '../services/paths.js';
 import { normalizeHostname } from '../utils/url.js';
 import * as audioService from '../services/audio.js';
 import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
+import { wouldExceedStorageLimit } from '../services/storageLimit.js';
 
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/ogg'];
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB per library asset
@@ -214,6 +216,13 @@ export async function libraryRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
+      if (wouldExceedStorageLimit(db, request.userId, bytesWritten)) {
+        try { unlinkSync(destPath); } catch { /* ignore */ }
+        return reply.status(403).send({
+          error: 'You have reached your storage limit. Delete some content to free space.',
+        });
+      }
+
       const dir = libraryDir(request.userId);
       let finalPath = destPath;
       try {
@@ -269,9 +278,9 @@ export async function libraryRoutes(app: FastifyInstance) {
       .get(id) as { owner_user_id: string; global_asset: number } | undefined;
     if (!asset) return reply.status(404).send({ error: 'Asset not found' });
 
-    const isAdmin = (db.prepare('SELECT role FROM users WHERE id = ?').get(request.userId) as { role: string } | undefined)?.role === 'admin';
+    const userIsAdmin = isAdmin(request.userId);
     const isOwner = asset.owner_user_id === request.userId;
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !userIsAdmin) {
       return reply.status(403).send({ error: 'Only the owner or an administrator can edit this asset.' });
     }
 
@@ -286,7 +295,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       updates.push('tag = ?');
       values.push(body.tag === null ? null : body.tag.trim() || null);
     }
-    if (isAdmin && body.global_asset !== undefined) {
+    if (userIsAdmin && body.global_asset !== undefined) {
       updates.push('global_asset = ?');
       values.push(body.global_asset ? 1 : 0);
     }
@@ -325,9 +334,9 @@ export async function libraryRoutes(app: FastifyInstance) {
       .prepare('SELECT * FROM reusable_assets WHERE id = ?')
       .get(id) as (Record<string, unknown> & { owner_user_id: string; global_asset?: number }) | undefined;
     if (!row) return reply.status(404).send({ error: 'Asset not found' });
-    const isAdmin = (db.prepare('SELECT role FROM users WHERE id = ?').get(request.userId) as { role: string } | undefined)?.role === 'admin';
+    const userIsAdmin = isAdmin(request.userId);
     const isOwner = row.owner_user_id === request.userId;
-    if (!isOwner && !isAdmin) {
+    if (!isOwner && !userIsAdmin) {
       return reply.status(403).send({ error: 'Only the owner or an administrator can delete this asset.' });
     }
     const { unlinkSync } = await import('fs');

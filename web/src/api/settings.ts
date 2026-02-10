@@ -14,6 +14,21 @@ export interface AppSettings {
   final_format: 'mp3' | 'm4a';
   maxmind_account_id: string;
   maxmind_license_key: string;
+  default_max_podcasts: number | null;
+  default_storage_mb: number | null;
+  default_max_episodes: number | null;
+  captcha_provider: 'none' | 'recaptcha_v2' | 'recaptcha_v3' | 'hcaptcha';
+  captcha_site_key: string;
+  captcha_secret_key: string;
+  email_provider: 'none' | 'smtp' | 'sendgrid';
+  smtp_host: string;
+  smtp_port: number;
+  smtp_secure: boolean;
+  smtp_user: string;
+  smtp_password: string;
+  smtp_from: string;
+  sendgrid_api_key: string;
+  sendgrid_from: string;
 }
 
 export function getSettings(): Promise<AppSettings> {
@@ -30,6 +45,33 @@ export function testLlmConnection(settings: {
   openai_api_key?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   return api<{ ok: boolean; error?: string }>('/settings/test-llm', {
+    method: 'POST',
+    json: settings,
+  });
+}
+
+export function testWhisperConnection(whisper_asr_url: string): Promise<{ ok: boolean; error?: string }> {
+  return api<{ ok: boolean; error?: string }>('/settings/test-whisper', {
+    method: 'POST',
+    json: { whisper_asr_url: whisper_asr_url.trim().replace(/\/+$/, '') },
+  });
+}
+
+export function testSmtpConnection(settings: {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_secure: boolean;
+  smtp_user: string;
+  smtp_password: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  return api<{ ok: boolean; error?: string }>('/settings/test-smtp', {
+    method: 'POST',
+    json: settings,
+  });
+}
+
+export function testSendGridConnection(settings: { sendgrid_api_key: string }): Promise<{ ok: boolean; error?: string }> {
+  return api<{ ok: boolean; error?: string }>('/settings/test-sendgrid', {
     method: 'POST',
     json: settings,
   });

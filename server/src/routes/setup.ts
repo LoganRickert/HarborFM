@@ -26,18 +26,24 @@ export async function setupRoutes(app: FastifyInstance) {
   app.get('/api/setup/status', async () => {
     const setupRequired = !isSetupComplete();
     if (setupRequired) {
-      return { setupRequired: true, registrationEnabled: false, publicFeedsEnabled: false };
+      return { setupRequired: true, registrationEnabled: false, publicFeedsEnabled: false, captchaProvider: 'none' as const, captchaSiteKey: '', emailConfigured: false };
     }
     try {
       const settings = readSettings();
+      const captchaProvider = settings.captcha_provider ?? 'none';
+      const captchaSiteKey = captchaProvider !== 'none' ? (settings.captcha_site_key ?? '') : '';
+      const emailConfigured = settings.email_provider === 'smtp' || settings.email_provider === 'sendgrid';
       return {
         setupRequired: false,
         registrationEnabled: Boolean(settings.registration_enabled),
         publicFeedsEnabled: Boolean(settings.public_feeds_enabled),
+        captchaProvider,
+        captchaSiteKey,
+        emailConfigured,
       };
     } catch {
       // Best-effort: if settings can't be read for any reason, default to allowing registration.
-      return { setupRequired: false, registrationEnabled: true, publicFeedsEnabled: true };
+      return { setupRequired: false, registrationEnabled: true, publicFeedsEnabled: true, captchaProvider: 'none' as const, captchaSiteKey: '', emailConfigured: false };
     }
   });
 

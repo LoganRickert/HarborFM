@@ -27,11 +27,13 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Setup } from './pages/Setup';
 import { ResetPassword } from './pages/ResetPassword';
+import { VerifyEmail } from './pages/VerifyEmail';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { Dashboard } from './pages/Dashboard';
 import { PodcastNew } from './pages/PodcastNew';
 import { PodcastSettings } from './pages/PodcastSettings';
+import { PodcastAnalytics } from './pages/PodcastAnalytics';
 import { EpisodesList } from './pages/EpisodesList';
 import { EpisodeNew } from './pages/EpisodeNew';
 import { EpisodeEditor } from './pages/EpisodeEditor';
@@ -48,13 +50,13 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
   const { data, isLoading } = useQuery({
     queryKey: ['me'],
-    queryFn: () => me().then((r) => r.user),
+    queryFn: me,
     retry: false,
     staleTime: 5 * 60 * 1000,
     enabled: !user, // Only run if we don't already have a user
   });
 
-  const resolvedUser = user ?? data;
+  const resolvedUser = user ?? data?.user;
 
   if (isLoading) {
     return (
@@ -76,14 +78,14 @@ function RequireGuest({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
   const { data, isLoading } = useQuery({
     queryKey: ['me'],
-    queryFn: () => me().then((r) => r.user),
+    queryFn: me,
     retry: false,
     staleTime: 5 * 60 * 1000,
     enabled: !user, // Only run if we don't already have a user
   });
 
   // If we have a user (from store or query), redirect to dashboard
-  if (user || data) {
+  if (user || data?.user) {
     return <Navigate to="/" replace />;
   }
 
@@ -105,13 +107,13 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, setUser } = useAuthStore();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['me'],
-    queryFn: () => me().then((r) => r.user),
+    queryFn: me,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
-    if (data) setUser(data);
+    if (data?.user) setUser(data.user);
     // Only clear user on error if we don't already have a user set
     // This prevents clearing the user immediately after login if the query fails
     if (isError && !user) {
@@ -212,6 +214,7 @@ export default function App() {
         <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
         <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />
         <Route path="/reset-password" element={<SetupGuard><RequireGuest><ResetPassword /></RequireGuest></SetupGuard>} />
+        <Route path="/verify-email" element={<SetupGuard><VerifyEmail /></SetupGuard>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><PublicPodcast /></PublicFeedsGuard>} />
@@ -229,6 +232,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="podcasts/new" element={<PodcastNew />} />
           <Route path="podcasts/:id" element={<PodcastSettings />} />
+          <Route path="podcasts/:id/analytics" element={<PodcastAnalytics />} />
           <Route path="podcasts/:id/episodes" element={<EpisodesList />} />
           <Route path="podcasts/:id/episodes/new" element={<EpisodeNew />} />
           <Route path="episodes/:id" element={<EpisodeEditor />} />

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, Settings, List, Mic2, Radio, Rss, ArrowUpRight } from 'lucide-react';
 import { listPodcasts, listPodcastsForUser } from '../api/podcasts';
 import { getUser } from '../api/users';
+import { me } from '../api/auth';
 import { EditShowDetailsDialog } from './EditShowDetailsDialog';
 import styles from './Dashboard.module.css';
 
@@ -20,6 +21,14 @@ export function Dashboard() {
     queryKey: ['podcasts', userId],
     queryFn: () => (userId ? listPodcastsForUser(userId) : listPodcasts()).then((r) => r.podcasts),
   });
+  const { data: meData } = useQuery({
+    queryKey: ['me'],
+    queryFn: me,
+    enabled: !isAdminView,
+  });
+  const maxPodcasts = meData?.user?.max_podcasts ?? null;
+  const podcastCount = meData?.podcast_count ?? 0;
+  const atPodcastLimit = !isAdminView && maxPodcasts != null && maxPodcasts > 0 && podcastCount >= maxPodcasts;
 
   const podcasts = data ?? [];
 
@@ -37,10 +46,20 @@ export function Dashboard() {
           </p>
         </div>
         {!isAdminView && (
-          <Link to="/podcasts/new" className={styles.createBtn}>
-            <Plus size={18} strokeWidth={2.5} />
-            New show
-          </Link>
+          atPodcastLimit ? (
+            <span
+              className={`${styles.createBtn} ${styles.createBtnDisabled}`}
+              title="You're at max shows"
+            >
+              <Plus size={18} strokeWidth={2.5} />
+              New show
+            </span>
+          ) : (
+            <Link to="/podcasts/new" className={styles.createBtn}>
+              <Plus size={18} strokeWidth={2.5} />
+              New show
+            </Link>
+          )
         )}
       </header>
 
@@ -68,10 +87,20 @@ export function Dashboard() {
             Create your first show to get started publishing episodes.
           </p>
           {!isAdminView && (
-            <Link to="/podcasts/new" className={styles.emptyBtn}>
-              <Plus size={18} strokeWidth={2.5} />
-              Create Your First Show
-            </Link>
+            atPodcastLimit ? (
+              <span
+                className={`${styles.emptyBtn} ${styles.emptyBtnDisabled}`}
+                title="You're at max shows"
+              >
+                <Plus size={18} strokeWidth={2.5} />
+                Create Your First Show
+              </span>
+            ) : (
+              <Link to="/podcasts/new" className={styles.emptyBtn}>
+                <Plus size={18} strokeWidth={2.5} />
+                Create Your First Show
+              </Link>
+            )
           )}
         </div>
       )}
@@ -140,14 +169,30 @@ export function Dashboard() {
                     <span className={styles.cardActionLabel}>Episodes</span>
                   </Link>
                   {!isAdminView && (
-                    <Link
-                      to={`/podcasts/${p.id}/episodes/new`}
-                      className={styles.cardActionPrimary}
-                      aria-label={`Create new episode for ${p.title}`}
-                    >
-                      <Mic2 size={16} strokeWidth={2} aria-hidden />
-                      <span className={styles.cardActionLabel}>New episode</span>
-                    </Link>
+                    (() => {
+                      const maxEp = p.max_episodes ?? null;
+                      const epCount = Number(p.episode_count ?? 0);
+                      const atLimit = maxEp != null && maxEp > 0 && epCount >= Number(maxEp);
+                      return atLimit ? (
+                        <span
+                          className={`${styles.cardActionPrimary} ${styles.cardActionPrimaryDisabled}`}
+                          title="You're at max episodes for this show"
+                          aria-label="New episode (at limit)"
+                        >
+                          <Mic2 size={16} strokeWidth={2} aria-hidden />
+                          <span className={styles.cardActionLabel}>New episode</span>
+                        </span>
+                      ) : (
+                        <Link
+                          to={`/podcasts/${p.id}/episodes/new`}
+                          className={styles.cardActionPrimary}
+                          aria-label={`Create new episode for ${p.title}`}
+                        >
+                          <Mic2 size={16} strokeWidth={2} aria-hidden />
+                          <span className={styles.cardActionLabel}>New episode</span>
+                        </Link>
+                      );
+                    })()
                   )}
                 </div>
               </div>

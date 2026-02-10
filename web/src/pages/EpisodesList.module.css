@@ -45,6 +45,15 @@
   text-decoration: none;
 }
 
+.newBtnDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.newBtnDisabled:hover {
+  background: var(--accent);
+}
+
 .summary {
   display: flex;
   align-items: center;
@@ -104,6 +113,15 @@
 .emptyLink:hover {
   background: var(--accent-glow);
   text-decoration: none;
+}
+
+.emptyLinkDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.emptyLinkDisabled:hover {
+  background: transparent;
 }
 
 .list {

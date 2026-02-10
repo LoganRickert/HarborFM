@@ -9,6 +9,10 @@ export interface EpisodeSectionsPanelProps {
   segmentsLoading: boolean;
   onAddRecord: () => void;
   onAddLibrary: () => void;
+  /** When true, disable "Record new section" (e.g. less than 5 MB free). */
+  recordDisabled?: boolean;
+  /** Shown when record is disabled. */
+  recordDisabledMessage?: string;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
   onDeleteRequest: (segmentId: string) => void;
@@ -27,6 +31,8 @@ export function EpisodeSectionsPanel({
   segmentsLoading,
   onAddRecord,
   onAddLibrary,
+  recordDisabled = false,
+  recordDisabledMessage,
   onMoveUp,
   onMoveDown,
   onDeleteRequest,
@@ -48,15 +54,31 @@ export function EpisodeSectionsPanel({
       </header>
 
       <div className={styles.addSectionChoiceRow}>
-        <button type="button" className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary}`} onClick={onAddRecord} aria-label="Record new section">
-          <Mic size={24} strokeWidth={2} aria-hidden />
-          <span>Record new section</span>
-        </button>
+        {recordDisabled ? (
+          <span
+            className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary} ${styles.addSectionChoiceBtnDisabled}`}
+            title={recordDisabledMessage}
+            aria-label={recordDisabledMessage ?? 'Record new section (disabled)'}
+          >
+            <Mic size={24} strokeWidth={2} aria-hidden />
+            <span>Record new section</span>
+          </span>
+        ) : (
+          <button type="button" className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary}`} onClick={onAddRecord} aria-label="Record new section">
+            <Mic size={24} strokeWidth={2} aria-hidden />
+            <span>Record new section</span>
+          </button>
+        )}
         <button type="button" className={styles.addSectionChoiceBtn} onClick={onAddLibrary} aria-label="Insert from library">
           <Library size={24} strokeWidth={2} aria-hidden />
           <span>Insert from library</span>
         </button>
       </div>
+      {recordDisabled && recordDisabledMessage && (
+        <p className={styles.sectionSub} style={{ marginTop: '0.25rem' }}>
+          {recordDisabledMessage}
+        </p>
+      )}
 
       {segmentsLoading ? (
         <p className={styles.sectionSub}>Loading sections…</p>

@@ -293,6 +293,7 @@
   color: var(--accent);
 }
 .addSectionChoiceBtnPrimary:disabled,
+.addSectionChoiceBtnDisabled,
 .buildBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import nodemailer from 'nodemailer';
 import { getDataDir } from '../services/paths.js';
 import { requireAdmin } from '../plugins/auth.js';
 import { db } from '../db/index.js';
@@ -50,6 +51,36 @@ export interface AppSettings {
   final_format: 'mp3' | 'm4a';
   maxmind_account_id: string;
   maxmind_license_key: string;
+  /** Default max podcasts for new users. null/empty = no limit. */
+  default_max_podcasts: number | null;
+  /** Default storage space in MB for new users. null/empty = no limit. */
+  default_storage_mb: number | null;
+  /** Default max episodes for new users. null/empty = no limit. */
+  default_max_episodes: number | null;
+  /** CAPTCHA provider for sign-in and registration. */
+  captcha_provider: 'none' | 'recaptcha_v2' | 'recaptcha_v3' | 'hcaptcha';
+  /** Site key for the selected CAPTCHA provider. */
+  captcha_site_key: string;
+  /** Secret key for the selected CAPTCHA provider. */
+  captcha_secret_key: string;
+  /** Email provider for sending mail (e.g. notifications). */
+  email_provider: 'none' | 'smtp' | 'sendgrid';
+  /** SMTP host. */
+  smtp_host: string;
+  /** SMTP port (e.g. 587). */
+  smtp_port: number;
+  /** SMTP use TLS. */
+  smtp_secure: boolean;
+  /** SMTP username. */
+  smtp_user: string;
+  /** SMTP password. */
+  smtp_password: string;
+  /** From address for SMTP. */
+  smtp_from: string;
+  /** SendGrid API key. */
+  sendgrid_api_key: string;
+  /** From address for SendGrid. */
+  sendgrid_from: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -66,6 +97,21 @@ const DEFAULTS: AppSettings = {
   final_format: 'mp3',
   maxmind_account_id: '',
   maxmind_license_key: '',
+  default_max_podcasts: null,
+  default_storage_mb: null,
+  default_max_episodes: null,
+  captcha_provider: 'none',
+  captcha_site_key: '',
+  captcha_secret_key: '',
+  email_provider: 'none',
+  smtp_host: '',
+  smtp_port: 587,
+  smtp_secure: true,
+  smtp_user: '',
+  smtp_password: '',
+  smtp_from: '',
+  sendgrid_api_key: '',
+  sendgrid_from: '',
 };
 
 const OPENAI_DEFAULT_MODEL = 'gpt5-mini';
@@ -114,6 +160,21 @@ export function migrateSettingsFromFile(): void {
     stmt.run('final_format', settings.final_format ?? DEFAULTS.final_format);
     stmt.run('maxmind_account_id', settings.maxmind_account_id ?? '');
     stmt.run('maxmind_license_key', settings.maxmind_license_key ?? '');
+    stmt.run('default_max_podcasts', settings.default_max_podcasts == null ? '' : String(settings.default_max_podcasts));
+    stmt.run('default_storage_mb', settings.default_storage_mb == null ? '' : String(settings.default_storage_mb));
+    stmt.run('default_max_episodes', settings.default_max_episodes == null ? '' : String(settings.default_max_episodes));
+    stmt.run('captcha_provider', (settings as Partial<AppSettings>).captcha_provider ?? 'none');
+    stmt.run('captcha_site_key', (settings as Partial<AppSettings>).captcha_site_key ?? '');
+    stmt.run('captcha_secret_key', (settings as Partial<AppSettings>).captcha_secret_key ?? '');
+    stmt.run('email_provider', (settings as Partial<AppSettings>).email_provider ?? 'none');
+    stmt.run('smtp_host', (settings as Partial<AppSettings>).smtp_host ?? '');
+    stmt.run('smtp_port', String((settings as Partial<AppSettings>).smtp_port ?? 587));
+    stmt.run('smtp_secure', String((settings as Partial<AppSettings>).smtp_secure ?? true));
+    stmt.run('smtp_user', (settings as Partial<AppSettings>).smtp_user ?? '');
+    stmt.run('smtp_password', (settings as Partial<AppSettings>).smtp_password ?? '');
+    stmt.run('smtp_from', (settings as Partial<AppSettings>).smtp_from ?? '');
+    stmt.run('sendgrid_api_key', (settings as Partial<AppSettings>).sendgrid_api_key ?? '');
+    stmt.run('sendgrid_from', (settings as Partial<AppSettings>).sendgrid_from ?? '');
 
     console.log('Migrated settings from file to database');
   } catch (err) {
@@ -151,6 +212,39 @@ export function readSettings(): AppSettings {
     else if (row.key === 'final_format') settings.final_format = row.value as AppSettings['final_format'];
     else if (row.key === 'maxmind_account_id') settings.maxmind_account_id = row.value;
     else if (row.key === 'maxmind_license_key') settings.maxmind_license_key = row.value;
+    else if (row.key === 'default_max_podcasts') {
+      const v = row.value.trim();
+      settings.default_max_podcasts = v === '' ? null : (Number(row.value) || null);
+    }
+    else if (row.key === 'default_storage_mb') {
+      const v = row.value.trim();
+      settings.default_storage_mb = v === '' ? null : (Number(row.value) || null);
+    }
+    else if (row.key === 'default_max_episodes') {
+      const v = row.value.trim();
+      settings.default_max_episodes = v === '' ? null : (Number(row.value) || null);
+    }
+    else if (row.key === 'captcha_provider') {
+      const v = row.value as AppSettings['captcha_provider'];
+      if (v === 'recaptcha_v2' || v === 'recaptcha_v3' || v === 'hcaptcha' || v === 'none') settings.captcha_provider = v;
+    }
+    else if (row.key === 'captcha_site_key') settings.captcha_site_key = row.value;
+    else if (row.key === 'captcha_secret_key') settings.captcha_secret_key = row.value;
+    else if (row.key === 'email_provider') {
+      const v = row.value as AppSettings['email_provider'];
+      if (v === 'smtp' || v === 'sendgrid' || v === 'none') settings.email_provider = v;
+    }
+    else if (row.key === 'smtp_host') settings.smtp_host = row.value;
+    else if (row.key === 'smtp_port') {
+      const v = Number(row.value);
+      if (!Number.isNaN(v)) settings.smtp_port = v;
+    }
+    else if (row.key === 'smtp_secure') settings.smtp_secure = row.value === 'true';
+    else if (row.key === 'smtp_user') settings.smtp_user = row.value;
+    else if (row.key === 'smtp_password') settings.smtp_password = row.value;
+    else if (row.key === 'smtp_from') settings.smtp_from = row.value;
+    else if (row.key === 'sendgrid_api_key') settings.sendgrid_api_key = row.value;
+    else if (row.key === 'sendgrid_from') settings.sendgrid_from = row.value;
   }
   
   return {
@@ -164,6 +258,21 @@ export function readSettings(): AppSettings {
     hostname: settings.hostname ?? DEFAULTS.hostname,
     maxmind_account_id: settings.maxmind_account_id ?? DEFAULTS.maxmind_account_id,
     maxmind_license_key: settings.maxmind_license_key ?? DEFAULTS.maxmind_license_key,
+    default_max_podcasts: settings.default_max_podcasts ?? DEFAULTS.default_max_podcasts,
+    default_storage_mb: settings.default_storage_mb ?? DEFAULTS.default_storage_mb,
+    default_max_episodes: settings.default_max_episodes ?? DEFAULTS.default_max_episodes,
+    captcha_provider: settings.captcha_provider ?? DEFAULTS.captcha_provider,
+    captcha_site_key: settings.captcha_site_key ?? DEFAULTS.captcha_site_key,
+    captcha_secret_key: settings.captcha_secret_key ?? DEFAULTS.captcha_secret_key,
+    email_provider: settings.email_provider ?? DEFAULTS.email_provider,
+    smtp_host: settings.smtp_host ?? DEFAULTS.smtp_host,
+    smtp_port: settings.smtp_port ?? DEFAULTS.smtp_port,
+    smtp_secure: settings.smtp_secure ?? DEFAULTS.smtp_secure,
+    smtp_user: settings.smtp_user ?? DEFAULTS.smtp_user,
+    smtp_password: settings.smtp_password ?? DEFAULTS.smtp_password,
+    smtp_from: settings.smtp_from ?? DEFAULTS.smtp_from,
+    sendgrid_api_key: settings.sendgrid_api_key ?? DEFAULTS.sendgrid_api_key,
+    sendgrid_from: settings.sendgrid_from ?? DEFAULTS.sendgrid_from,
   };
 }
 
@@ -182,11 +291,62 @@ function writeSettings(settings: AppSettings): void {
   stmt.run('final_format', settings.final_format);
   stmt.run('maxmind_account_id', settings.maxmind_account_id);
   stmt.run('maxmind_license_key', settings.maxmind_license_key);
+  stmt.run('default_max_podcasts', settings.default_max_podcasts == null ? '' : String(settings.default_max_podcasts));
+  stmt.run('default_storage_mb', settings.default_storage_mb == null ? '' : String(settings.default_storage_mb));
+  stmt.run('default_max_episodes', settings.default_max_episodes == null ? '' : String(settings.default_max_episodes));
+  stmt.run('captcha_provider', settings.captcha_provider);
+  stmt.run('captcha_site_key', settings.captcha_site_key);
+  stmt.run('captcha_secret_key', settings.captcha_secret_key);
+  stmt.run('email_provider', settings.email_provider);
+  stmt.run('smtp_host', settings.smtp_host);
+  stmt.run('smtp_port', String(settings.smtp_port));
+  stmt.run('smtp_secure', String(settings.smtp_secure));
+  stmt.run('smtp_user', settings.smtp_user);
+  stmt.run('smtp_password', settings.smtp_password);
+  stmt.run('smtp_from', settings.smtp_from);
+  stmt.run('sendgrid_api_key', settings.sendgrid_api_key);
+  stmt.run('sendgrid_from', settings.sendgrid_from);
 }
 
 /** Redact API keys from error messages before sending to client. */
 export function redactError(msg: string): string {
   return msg.replace(/sk-[a-zA-Z0-9._-]+/gi, '[REDACTED]');
+}
+
+const SMTP_TEST_TIMEOUT_MS = 15_000;
+
+/**
+ * Verify SMTP credentials by connecting, optionally upgrading to TLS via STARTTLS, and authenticating.
+ * Does not send any email. Uses Nodemailer for protocol handling.
+ */
+async function verifySmtpCredentials(options: {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { host, port, secure, user, password } = options;
+  if (!host?.trim() || !user?.trim() || !password) {
+    return { ok: false, error: 'Host, username, and password are required' };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: host.trim(),
+    port,
+    secure: port === 465 ? secure : false,
+    auth: { user: user.trim(), pass: password },
+    connectionTimeout: SMTP_TEST_TIMEOUT_MS,
+    greetingTimeout: SMTP_TEST_TIMEOUT_MS,
+  });
+
+  try {
+    await transporter.verify();
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
 }
 
 export async function settingsRoutes(app: FastifyInstance) {
@@ -196,6 +356,9 @@ export async function settingsRoutes(app: FastifyInstance) {
       ...settings,
       openai_api_key: settings.openai_api_key ? '(set)' : '',
       maxmind_license_key: settings.maxmind_license_key ? '(set)' : '',
+      captcha_secret_key: settings.captcha_secret_key ? '(set)' : '',
+      smtp_password: settings.smtp_password ? '(set)' : '',
+      sendgrid_api_key: settings.sendgrid_api_key ? '(set)' : '',
     };
   });
 
@@ -246,6 +409,55 @@ export async function settingsRoutes(app: FastifyInstance) {
         const v = String(body.maxmind_license_key).trim();
         maxmind_license_key = v === '(set)' ? current.maxmind_license_key : v;
       }
+      const parseOptionalNum = (v: unknown): number | null => {
+        if (v === '' || v == null) return null;
+        const n = Number(v);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      };
+      const default_max_podcasts =
+        body.default_max_podcasts !== undefined ? parseOptionalNum(body.default_max_podcasts) : current.default_max_podcasts;
+      const default_storage_mb =
+        body.default_storage_mb !== undefined ? parseOptionalNum(body.default_storage_mb) : current.default_storage_mb;
+      const default_max_episodes =
+        body.default_max_episodes !== undefined ? parseOptionalNum(body.default_max_episodes) : current.default_max_episodes;
+      const captcha_provider =
+        body.captcha_provider === 'recaptcha_v2' || body.captcha_provider === 'recaptcha_v3' || body.captcha_provider === 'hcaptcha'
+          ? body.captcha_provider
+          : body.captcha_provider === 'none' ? 'none' : current.captcha_provider;
+      let captcha_site_key =
+        body.captcha_site_key !== undefined ? String(body.captcha_site_key).trim() : current.captcha_site_key;
+      let captcha_secret_key = current.captcha_secret_key;
+      if (body.captcha_secret_key !== undefined) {
+        const v = String(body.captcha_secret_key).trim();
+        captcha_secret_key = v === '(set)' ? current.captcha_secret_key : v;
+      }
+      if (captcha_provider === 'none') {
+        captcha_site_key = '';
+        captcha_secret_key = '';
+      }
+      const email_provider =
+        body.email_provider === 'smtp' ? 'smtp'
+          : body.email_provider === 'sendgrid' ? 'sendgrid'
+            : 'none';
+      const smtp_host = body.smtp_host !== undefined ? String(body.smtp_host).trim() : current.smtp_host;
+      const smtp_port =
+        body.smtp_port !== undefined
+          ? Math.min(65535, Math.max(1, Number(body.smtp_port) || DEFAULTS.smtp_port))
+          : current.smtp_port;
+      const smtp_secure = body.smtp_secure !== undefined ? Boolean(body.smtp_secure) : current.smtp_secure;
+      const smtp_user = body.smtp_user !== undefined ? String(body.smtp_user).trim() : current.smtp_user;
+      let smtp_password = current.smtp_password;
+      if (body.smtp_password !== undefined) {
+        const v = String(body.smtp_password).trim();
+        smtp_password = v === '(set)' ? current.smtp_password : v;
+      }
+      const smtp_from = body.smtp_from !== undefined ? String(body.smtp_from).trim() : current.smtp_from;
+      let sendgrid_api_key = current.sendgrid_api_key;
+      if (body.sendgrid_api_key !== undefined) {
+        const v = String(body.sendgrid_api_key).trim();
+        sendgrid_api_key = v === '(set)' ? current.sendgrid_api_key : v;
+      }
+      const sendgrid_from = body.sendgrid_from !== undefined ? String(body.sendgrid_from).trim() : current.sendgrid_from;
 
       const next: AppSettings = {
         whisper_asr_url,
@@ -263,6 +475,21 @@ export async function settingsRoutes(app: FastifyInstance) {
         final_format,
         maxmind_account_id,
         maxmind_license_key,
+        default_max_podcasts,
+        default_storage_mb,
+        default_max_episodes,
+        captcha_provider,
+        captcha_site_key,
+        captcha_secret_key,
+        email_provider,
+        smtp_host,
+        smtp_port,
+        smtp_secure,
+        smtp_user,
+        smtp_password,
+        smtp_from,
+        sendgrid_api_key,
+        sendgrid_from,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||
@@ -286,6 +513,9 @@ export async function settingsRoutes(app: FastifyInstance) {
         ...next,
         openai_api_key: next.openai_api_key ? '(set)' : '',
         maxmind_license_key: next.maxmind_license_key ? '(set)' : '',
+        captcha_secret_key: next.captcha_secret_key ? '(set)' : '',
+        smtp_password: next.smtp_password ? '(set)' : '',
+        sendgrid_api_key: next.sendgrid_api_key ? '(set)' : '',
       };
     }
   );
@@ -297,22 +527,19 @@ export async function settingsRoutes(app: FastifyInstance) {
       const body = request.body as Partial<AppSettings> | undefined;
       const current = readSettings();
       const provider = body?.llm_provider ?? current.llm_provider;
-      let ollama_url: string;
-      try {
-        ollama_url = validateOllamaBaseUrl(body?.ollama_url ?? current.ollama_url);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Invalid Ollama URL';
-        return reply.send({ ok: false, error: msg });
-      }
-      const openai_api_key = body?.openai_api_key !== undefined && body.openai_api_key !== '(set)'
-        ? String(body.openai_api_key).trim()
-        : current.openai_api_key;
 
       if (provider === 'none') {
         return reply.send({ ok: false, error: 'No LLM provider selected' });
       }
 
       if (provider === 'ollama') {
+        let ollama_url: string;
+        try {
+          ollama_url = validateOllamaBaseUrl(body?.ollama_url ?? current.ollama_url);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Invalid Ollama URL';
+          return reply.send({ ok: false, error: msg });
+        }
         try {
           const base = validateOllamaBaseUrl(ollama_url);
           const res = await fetch(`${base}/api/tags`, { method: 'GET' });
@@ -328,6 +555,9 @@ export async function settingsRoutes(app: FastifyInstance) {
       }
 
       if (provider === 'openai') {
+        const openai_api_key = body?.openai_api_key !== undefined && body.openai_api_key !== '(set)'
+          ? String(body.openai_api_key).trim()
+          : current.openai_api_key;
         if (!openai_api_key) {
           return reply.send({ ok: false, error: 'OpenAI API key is not set' });
         }
@@ -349,6 +579,99 @@ export async function settingsRoutes(app: FastifyInstance) {
       }
 
       return reply.send({ ok: false, error: 'Invalid provider' });
+    }
+  );
+
+  app.post(
+    '/api/settings/test-whisper',
+    { preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'whisper', windowMs: 1000 })] },
+    async (request, reply) => {
+      const body = request.body as { whisper_asr_url?: string } | undefined;
+      const current = readSettings();
+      const raw = normalizeHostname(body?.whisper_asr_url ?? current.whisper_asr_url ?? '');
+      if (!raw) {
+        return reply.send({ ok: false, error: 'Whisper ASR URL is not set' });
+      }
+      let openapiUrl: string;
+      try {
+        const u = new URL(raw);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          return reply.send({ ok: false, error: 'Whisper ASR URL must use http or https' });
+        }
+        const path = normalizeHostname(u.pathname || '');
+        u.pathname = path ? `${path}/openapi.json` : '/openapi.json';
+        openapiUrl = u.toString();
+      } catch {
+        return reply.send({ ok: false, error: 'Invalid Whisper ASR URL' });
+      }
+      try {
+        const res = await fetch(openapiUrl, { method: 'HEAD' });
+        if (res.ok) {
+          return reply.send({ ok: true });
+        }
+        return reply.send({ ok: false, error: `openapi.json returned ${res.status}` });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.send({ ok: false, error: msg });
+      }
+    }
+  );
+
+  app.post(
+    '/api/settings/test-smtp',
+    { preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'smtp', windowMs: 2000 })] },
+    async (request, reply) => {
+      const body = request.body as Partial<AppSettings> | undefined;
+      const current = readSettings();
+      const host = (body?.smtp_host !== undefined ? String(body.smtp_host).trim() : current.smtp_host) || '';
+      const port =
+        body?.smtp_port !== undefined
+          ? Math.min(65535, Math.max(1, Number(body.smtp_port) || 587))
+          : current.smtp_port;
+      const secure = body?.smtp_secure !== undefined ? Boolean(body.smtp_secure) : current.smtp_secure;
+      const user = (body?.smtp_user !== undefined ? String(body.smtp_user).trim() : current.smtp_user) || '';
+      let password = current.smtp_password ?? '';
+      if (body?.smtp_password !== undefined && body.smtp_password !== '(set)') {
+        const v = String(body.smtp_password).trim();
+        if (v) password = v;
+      }
+      if (!host || !user || !password) {
+        return reply.send({ ok: false, error: 'Host, username, and password are required' });
+      }
+      const result = await verifySmtpCredentials({ host, port, secure, user, password });
+      return reply.send(result);
+    }
+  );
+
+  app.post(
+    '/api/settings/test-sendgrid',
+    { preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'sendgrid', windowMs: 2000 })] },
+    async (request, reply) => {
+      const body = request.body as Partial<AppSettings> | undefined;
+      const current = readSettings();
+      let apiKey = current.sendgrid_api_key ?? '';
+      if (body?.sendgrid_api_key !== undefined && body.sendgrid_api_key !== '(set)') {
+        const v = String(body.sendgrid_api_key).trim();
+        if (v) apiKey = v;
+      }
+      if (!apiKey) {
+        return reply.send({ ok: false, error: 'SendGrid API key is required' });
+      }
+      try {
+        const res = await fetch('https://api.sendgrid.com/v3/scopes', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (res.ok) {
+          return reply.send({ ok: true });
+        }
+        const data = await res.json().catch(() => ({}));
+        const msg = (data as { errors?: Array<{ message?: string }> })?.errors?.[0]?.message ?? res.statusText ?? `SendGrid returned ${res.status}`;
+        return reply.send({ ok: false, error: msg });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.send({ ok: false, error: msg });
+      }
     }
   );
 }

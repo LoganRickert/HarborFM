@@ -8,12 +8,14 @@ import { promisify } from 'util';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import { requireAuth } from '../plugins/auth.js';
+import { canAccessEpisode } from '../services/access.js';
 import { readSettings } from './settings.js';
 import { uploadsDir, segmentPath, getDataDir, libraryDir, processedDir, assertPathUnder } from '../services/paths.js';
 import * as audioService from '../services/audio.js';
 import { writeRssFile } from '../services/rss.js';
 import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
+import { wouldExceedStorageLimit } from '../services/storageLimit.js';
 
 const exec = promisify(execFile);
 const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg';
@@ -126,27 +128,6 @@ function getSegmentAudioPath(
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/ogg'];
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per segment
 
-function canAccessEpisode(userId: string, episodeId: string): { podcastId: string } | null {
-  const row = db
-    .prepare(
-      `SELECT e.podcast_id FROM episodes e
-       JOIN podcasts p ON p.id = e.podcast_id
-       WHERE e.id = ? AND p.owner_user_id = ?`
-    )
-    .get(episodeId, userId) as { podcast_id: string } | undefined;
-  if (row) return { podcastId: row.podcast_id };
-  if (!isAdmin(userId)) return null;
-  const adminRow = db
-    .prepare('SELECT podcast_id FROM episodes WHERE id = ?')
-    .get(episodeId) as { podcast_id: string } | undefined;
-  return adminRow ? { podcastId: adminRow.podcast_id } : null;
-}
-
-function isAdmin(userId: string): boolean {
-  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role: string } | undefined;
-  return user?.role === 'admin';
-}
-
 export async function segmentRoutes(app: FastifyInstance) {
   // Used by the web client to decide whether transcript viewing/generation should be shown.
   app.get('/api/asr/available', { preHandler: [requireAuth] }, async (_request, reply) => {
@@ -161,7 +142,7 @@ export async function segmentRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
-      if (!access && !isAdmin(request.userId)) return reply.status(404).send({ error: 'Episode not found' });
+      if (!access) return reply.status(404).send({ error: 'Episode not found' });
       const rows = db
         .prepare(
           `SELECT s.id, s.episode_id, s.position, s.type, s.name, s.reusable_asset_id, s.audio_path, s.duration_sec, s.created_at,
@@ -232,6 +213,13 @@ export async function segmentRoutes(app: FastifyInstance) {
         }
         request.log.error(err);
         return reply.status(500).send({ error: 'Upload failed' });
+      }
+
+      if (wouldExceedStorageLimit(db, request.userId, bytesWritten)) {
+        try { unlinkSync(destPath); } catch { /* ignore */ }
+        return reply.status(403).send({
+          error: 'You have reached your storage limit. Delete some content to free space.',
+        });
       }
 
       const segmentBase = uploadsDir(podcastId, episodeId);
@@ -1105,6 +1093,20 @@ export async function segmentRoutes(app: FastifyInstance) {
         }
       }
       if (paths.length === 0) return reply.status(400).send({ error: 'No valid segment audio found.' });
+      const copyrightLines: string[] = [];
+      for (const s of segments) {
+        if (s.type === 'reusable' && s.reusable_asset_id) {
+          const asset = db
+            .prepare('SELECT name, copyright FROM reusable_assets WHERE id = ?')
+            .get(s.reusable_asset_id) as { name: string; copyright: string | null } | undefined;
+          const copyright = asset?.copyright != null ? String(asset.copyright).trim() : '';
+          if (copyright) {
+            const name = (s.name != null && String(s.name).trim() !== '') ? String(s.name).trim() : (asset?.name ?? '');
+            copyrightLines.push(`${name || 'Segment'} by ${copyright}`);
+          }
+        }
+      }
+      const descriptionCopyrightSnapshot = copyrightLines.length > 0 ? copyrightLines.join('\n') : null;
       const settings = readSettings();
       const outPath = audioService.getFinalOutputPath(podcastId, episodeId, settings.final_format);
       try {
@@ -1121,9 +1123,10 @@ export async function segmentRoutes(app: FastifyInstance) {
             audio_mime = ?,
             audio_bytes = ?,
             audio_duration_sec = ?,
+            description_copyright_snapshot = ?,
             updated_at = datetime('now')
            WHERE id = ?`
-        ).run(outPath, outPath, meta.mime, meta.sizeBytes, meta.durationSec, episodeId);
+        ).run(outPath, outPath, meta.mime, meta.sizeBytes, meta.durationSec, descriptionCopyrightSnapshot, episodeId);
         try {
           writeRssFile(podcastId, null);
         } catch (err) {
