@@ -324,7 +324,8 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/auth/validate-reset-token', async (request, reply) => {
-    const token = typeof request.query?.token === 'string' ? request.query.token.trim() : '';
+    const query = request.query as { token?: string };
+    const token = typeof query?.token === 'string' ? query.token.trim() : '';
     if (!token) {
       return reply.status(400).send({ error: 'Token is required' });
     }
