@@ -57,10 +57,10 @@ echo ""
 
 cd "$INSTALL_DIR"
 
-# .env
+# .env (read from /dev/tty so prompts work when script is piped: curl ... | bash)
 if [ -f .env ]; then
   echo "Existing .env found."
-  read -r -p "Overwrite with new values? [y/N] " overwrite
+  read -r -p "Overwrite with new values? [y/N] " overwrite </dev/tty
   if [[ ! "$overwrite" =~ ^[yY] ]]; then
     echo "Using existing .env. Skipping prompts."
     set -a
@@ -79,13 +79,13 @@ fi
 
 if [ "${overwrite_env:-false}" = true ]; then
   echo ""
-  read -r -p "Domain name (e.g. harborfm.example.com) [localhost]: " DOMAIN
+  read -r -p "Domain name (e.g. harborfm.example.com) [localhost]: " DOMAIN </dev/tty
   DOMAIN="${DOMAIN:-localhost}"
 
-  read -r -p "Email for Let's Encrypt (required for real SSL, empty to skip certbot): " CERTBOT_EMAIL
+  read -r -p "Email for Let's Encrypt (required for real SSL, empty to skip certbot): " CERTBOT_EMAIL </dev/tty
   CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 
-  read -r -p "Optional timezone for fail2ban (e.g. America/New_York, Enter to skip): " TZ
+  read -r -p "Optional timezone for fail2ban (e.g. America/New_York, Enter to skip): " TZ </dev/tty
   TZ="${TZ:-}"
 
   {
@@ -126,7 +126,7 @@ done
 
 if [ -n "$CERTBOT_EMAIL" ] && [ "$DOMAIN" != "localhost" ]; then
   echo ""
-  read -r -p "Obtain Let's Encrypt certificate for $DOMAIN now? [Y/n] " run_certbot
+  read -r -p "Obtain Let's Encrypt certificate for $DOMAIN now? [Y/n] " run_certbot </dev/tty
   if [[ ! "$run_certbot" =~ ^[nN] ]]; then
     echo "Running certbot..."
     if docker compose run --rm certbot; then
