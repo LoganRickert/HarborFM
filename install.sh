@@ -147,7 +147,7 @@ fi
 
 echo ""
 echo "=== Done ==="
-SETUP_PATH="$(docker compose logs harborfm 2>&1 | grep -oE '/setup\?id=[A-Za-z0-9_.-]+' | head -1)"
+SETUP_PATH="$(cd "$INSTALL_DIR" && docker compose logs harborfm 2>&1 | grep -oE '/setup\?id=[A-Za-z0-9_.-]+' | head -1)"
 if [ -n "$SETUP_PATH" ]; then
   echo "  Setup:   https://${DOMAIN}${SETUP_PATH} (or http:// if no cert yet)"
 fi
