@@ -1,5 +1,6 @@
 .wrap {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -11,6 +12,13 @@
   background-position: center;
   background-repeat: no-repeat;
   background-attachment: fixed;
+}
+
+@media (max-width: 768px) {
+  .wrap {
+    /* On mobile, fixed attachment causes background to jump when viewport resizes; scroll keeps cover stable */
+    background-attachment: scroll;
+  }
 }
 
 .card {

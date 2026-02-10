@@ -218,28 +218,29 @@ export function Users() {
                           aria-label={`Delete user ${user.email}`}
                         >
                           <Trash2 size={16} strokeWidth={2} aria-hidden />
-                          <span>Delete</span>
                         </button>
                       </div>
                     </div>
-                    <p className={styles.userCardMeta}>
-                      <span className={user.role === 'admin' ? styles.roleAdmin : styles.roleUser}>
-                        {user.role}
-                      </span>
-                      {' • '}
-                      Created {new Date(user.created_at).toLocaleDateString()}
-                      {' • '}
-                      Storage {formatBytes(user.disk_bytes_used ?? 0)}
-                    </p>
-                    {(user.last_login_at != null || user.last_login_ip != null || user.last_login_location) && (
-                      <p className={styles.userCardFooter}>
-                        Last login: {user.last_login_at != null ? new Date(user.last_login_at).toLocaleString() : '—'}
-                        {user.last_login_ip != null && <> · {user.last_login_ip}</>}
-                        {user.last_login_location != null && user.last_login_location !== '' && (
-                          <> · {user.last_login_location}</>
-                        )}
+                    <div className={styles.userCardDetailsRow}>
+                      <p className={styles.userCardMeta}>
+                        <span className={user.role === 'admin' ? styles.roleAdmin : styles.roleUser}>
+                          {user.role}
+                        </span>
+                        {' • '}
+                        Created {new Date(user.created_at).toLocaleDateString()}
+                        {' • '}
+                        Storage {formatBytes(user.disk_bytes_used ?? 0)}
                       </p>
-                    )}
+                      {(user.last_login_at != null || user.last_login_ip != null || user.last_login_location) && (
+                        <p className={styles.userCardLastLogin}>
+                          Last login: {user.last_login_at != null ? new Date(user.last_login_at).toLocaleString() : '—'}
+                          {user.last_login_ip != null && <> · {user.last_login_ip}</>}
+                          {user.last_login_location != null && user.last_login_location !== '' && (
+                            <> · {user.last_login_location}</>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

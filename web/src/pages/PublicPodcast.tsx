@@ -120,6 +120,7 @@ function EpisodePlayer({
       if (!el.src || el.ended) {
         el.src = audioUrl;
       }
+      el.currentTime = currentTime;
       el.play().catch(() => onPause());
     }
   }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Mic, Library, Info } from 'lucide-react';
+import { Play, Pause, Mic, Library, Info, Trash2 } from 'lucide-react';
 import { segmentStreamUrl, segmentWaveformUrl } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { formatDuration } from './utils';
@@ -170,9 +170,6 @@ export function SegmentRow({
         </div>
         <audio ref={audioRef} style={{ display: 'none' }} />
         <div className={styles.segmentActions}>
-          <button type="button" className={styles.segmentBtn} onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'} aria-label={isPlaying ? 'Pause segment' : 'Play segment'}>
-            {isPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
-          </button>
           <button type="button" className={styles.segmentBtn} onClick={onMoreInfo} title="More info" aria-label="Show more information">
             <Info size={18} aria-hidden />
           </button>
@@ -182,13 +179,16 @@ export function SegmentRow({
           <button type="button" className={styles.segmentBtn} onClick={onMoveDown} disabled={index === total - 1} title="Move down" aria-label="Move segment down">
             ↓
           </button>
-          <button type="button" className={styles.segmentBtn} onClick={onDeleteRequest} disabled={isDeleting} title="Remove" aria-label="Remove segment">
-            ✕
+          <button type="button" className={`${styles.segmentBtn} ${styles.segmentBtnDanger}`} onClick={onDeleteRequest} disabled={isDeleting} title="Remove" aria-label="Remove segment">
+            <Trash2 size={18} aria-hidden />
           </button>
         </div>
       </div>
       {durationSec > 0 && (
         <div className={styles.segmentWaveformRow}>
+          <button type="button" className={styles.segmentBtn} onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'} aria-label={isPlaying ? 'Pause segment' : 'Play segment'}>
+            {isPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
+          </button>
           {waveformData ? (
             <WaveformCanvas
               data={waveformData}
@@ -202,6 +202,7 @@ export function SegmentRow({
                 }
               }}
               onPlayPause={togglePlay}
+              className={`${styles.waveformTrack} ${styles.segmentWaveformTrack}`}
             />
           ) : (
             <div

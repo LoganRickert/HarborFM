@@ -444,7 +444,14 @@
   .podcastHeroMain .cardHeaderActions {
     grid-column: 1;
     grid-row: 3;
-    justify-self: start;
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .podcastHeroMain .cardHeaderActions .cardHeaderPrimary,
+  .podcastHeroMain .cardHeaderActions .cardHeaderSecondary {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .cardHeader {
@@ -815,6 +822,7 @@
   max-width: 360px;
   width: calc(100% - 2rem);
   max-height: calc(100vh - 2rem);
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
@@ -855,6 +863,11 @@
   max-height: min(90vh, 720px);
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+
+.dialogContentWideShort {
+  max-height: min(calc(90vh - 100px), 620px);
 }
 
 .dialogContentWide .dialogTitle {
@@ -885,6 +898,7 @@
 .dialogBodyScroll {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -914,6 +928,15 @@
 @media (min-width: 640px) {
   .dialogContentWide {
     max-width: 560px;
+  }
+}
+
+@media (max-width: 640px) {
+  .dialogContentWide.dialogShowDetailsGrid {
+    max-height: min(calc(90vh - 100px), 620px);
+  }
+  .dialogShowDetailsGrid {
+    height: min(calc(90vh - 100px), 620px);
   }
 }
 

@@ -359,7 +359,15 @@
 }
 
 .segmentWaveformRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   width: 100%;
+  min-width: 0;
+}
+
+.segmentWaveformTrack {
+  flex: 1;
   min-width: 0;
 }
 
@@ -426,6 +434,8 @@
 
 .segmentWaveformRow .segmentProgressTrack {
   margin-top: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 .segmentProgressTrack {
@@ -490,7 +500,7 @@
     flex-basis: 100%;
     margin-top: 0.25rem;
     margin-left: 0;
-    justify-content: center;
+    justify-content: space-around;
   }
 }
 
@@ -515,6 +525,17 @@
   opacity: 0.5;
   cursor: not-allowed;
   color: var(--success);
+}
+
+.segmentBtnDanger {
+  color: #d48989;
+}
+.segmentBtnDanger:hover:not(:disabled) {
+  color: #e09898;
+  background: rgba(212, 137, 137, 0.12);
+}
+.segmentBtnDanger:disabled {
+  color: #d48989;
 }
 
 /* Generate final bar — prominent at top of sections */

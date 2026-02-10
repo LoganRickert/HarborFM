@@ -110,6 +110,15 @@
   word-break: break-word;
 }
 
+.userCardDetailsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
 .userCardMeta {
   margin: 0;
   font-size: 0.75rem;
@@ -119,8 +128,8 @@
   gap: 0.25rem;
 }
 
-.userCardFooter {
-  margin: 0.25rem 0 0 0;
+.userCardLastLogin {
+  margin: 0;
   font-size: 0.75rem;
   color: var(--text-muted);
 }
@@ -508,5 +517,9 @@
   
   .actionBtn {
     flex: 0 1 auto;
+  }
+
+  .userCardActions .actionBtn:not(.actionBtnDanger) {
+    flex: 1 1 0;
   }
 }

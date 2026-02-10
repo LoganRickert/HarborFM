@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Edit, Play, Pause, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, Edit, Play, Pause, Trash2, Upload, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   createLibraryAsset,
@@ -469,7 +469,8 @@ export function Library() {
                   onClick={() => fileInputRef.current?.click()}
                   aria-label="Choose audio file to add to library"
                 >
-                  Choose audio file
+                  <Upload size={20} strokeWidth={2} aria-hidden />
+                  Upload Audio
                 </button>
                 {isAdmin && (
                   !showPixabayImport ? (
@@ -479,6 +480,7 @@ export function Library() {
                       onClick={() => setShowPixabayImport(true)}
                       aria-label="Import from Pixabay"
                     >
+                      <Download size={20} strokeWidth={2} aria-hidden />
                       Import from Pixabay
                     </button>
                   ) : (
@@ -500,6 +502,7 @@ export function Library() {
                           onClick={() => { setShowPixabayImport(false); setPixabayUrl(''); }}
                           aria-label="Cancel Pixabay import"
                         >
+                          <X size={18} strokeWidth={2} aria-hidden />
                           Cancel
                         </button>
                         <button
@@ -509,6 +512,7 @@ export function Library() {
                           disabled={!pixabayUrl.trim() || pixabayImportMutation.isPending}
                           aria-label="Import from Pixabay"
                         >
+                          <Download size={18} strokeWidth={2} aria-hidden />
                           {pixabayImportMutation.isPending ? 'Importing…' : 'Import'}
                         </button>
                       </div>
@@ -690,15 +694,23 @@ export function Library() {
                   <div className={styles.itemMain}>
                     <div className={styles.itemTitleRow}>
                       <span className={styles.itemName}>{asset.name}</span>
-                      {asset.tag && <span className={styles.itemTag}>{asset.tag}</span>}
-                      {Boolean(asset.global_asset) && (
-                        <span className={styles.itemTag} title="Visible to everyone in the library">
-                          Global
-                        </span>
-                      )}
                     </div>
                     <div className={styles.itemMeta}>
-                      {formatDuration(asset.duration_sec)} · {formatLibraryDate(asset.created_at)}
+                      {(asset.tag || asset.global_asset) && (
+                        <span className={styles.itemMetaLabels}>
+                          {asset.tag && <span className={styles.itemTag}>{asset.tag}</span>}
+                          {Boolean(asset.global_asset) && (
+                            <span className={styles.itemTag} title="Visible to everyone in the library">
+                              Global
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      <span className={styles.itemMetaRight}>
+                        <span>{formatDuration(asset.duration_sec)}</span>
+                        <span className={styles.itemMetaDot} aria-hidden />
+                        <span>{formatLibraryDate(asset.created_at)}</span>
+                      </span>
                     </div>
                   </div>
                   <div className={styles.itemActions}>

@@ -58,15 +58,15 @@ export function EpisodesList() {
         <div className={styles.summary}>
           <span className={styles.summaryItem}>
             <span className={styles.summaryCount}>{publishedCount}</span>
-            <span className={styles.summaryLabel}>published</span>
+            <span className={styles.summaryLabel}>Published</span>
           </span>
           <span className={styles.summaryItem}>
             <span className={styles.summaryCount}>{scheduledCount}</span>
-            <span className={styles.summaryLabel}>scheduled</span>
+            <span className={styles.summaryLabel}>Scheduled</span>
           </span>
           <span className={styles.summaryItem}>
             <span className={styles.summaryCount}>{draftCount}</span>
-            <span className={styles.summaryLabel}>draft</span>
+            <span className={styles.summaryLabel}>Draft</span>
           </span>
         </div>
         {episodesLoading && (

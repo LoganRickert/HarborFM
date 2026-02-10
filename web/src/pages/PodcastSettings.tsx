@@ -233,7 +233,7 @@ function ExportsSection({ podcastId }: { podcastId: string }) {
       <div className={styles.exportHeader}>
         <div className={styles.exportTitle}>
           <Cloud size={18} strokeWidth={2} aria-hidden="true" />
-          <h2 className={styles.sectionTitle}>Podcast Delivery (S3)</h2>
+          <h2 className={styles.sectionTitle}>Podcast Delivery</h2>
         </div>
         <button
           type="button"
@@ -246,7 +246,7 @@ function ExportsSection({ podcastId }: { podcastId: string }) {
         </button>
       </div>
       <p className={styles.sectionSub}>
-        Deploy your RSS feed and episode audio files to an S3-compatible bucket. Credentials are stored encrypted and can’t be viewed again.
+        Deploy your RSS feed and episode audio files to an S3-compatible bucket. Credentials are stored encrypted and can’t be viewed again. The analytics are not available when deploying to S3.
       </p>
 
       {exportsList.length === 0 ? <p className={styles.exportMuted}>No export destination configured.</p> : null}
@@ -342,7 +342,7 @@ function ExportsSection({ podcastId }: { podcastId: string }) {
       <Dialog.Root open={dialogOpen} onOpenChange={(open) => !isSaving && setDialogOpen(open)}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide}`}>
+          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentWideShort}`}>
             <Dialog.Close asChild>
               <button
                 type="button"

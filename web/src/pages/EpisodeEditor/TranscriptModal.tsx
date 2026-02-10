@@ -760,7 +760,7 @@ export function TranscriptModal({
                       Ask
                     </button>
                   )}
-                  {showTranscriptModeBar && (
+                  {asrAvailable && (
                     <button
                       type="button"
                       role="tab"

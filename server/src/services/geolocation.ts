@@ -38,20 +38,21 @@ async function initReaders(): Promise<void> {
 }
 
 /**
- * Get a human-readable location string for an IP (e.g. "Minneapolis, United States" or "United States").
+ * Get a human-readable location string for an IP (e.g. "London, England, United Kingdom" or "United States").
  * Uses GeoLite2-City if present, otherwise GeoLite2-Country, from the data directory.
  * Returns null if no database is available or the IP cannot be resolved.
  */
 export async function getLocationForIp(ip: string): Promise<string | null> {
   await initReaders();
-  
+
   if (cityReader) {
     try {
       const res = cityReader.city(ip);
       const countryName = res.country?.names?.en ?? res.country?.isoCode ?? '';
       const cityName = res.city?.names?.en;
-      if (countryName && cityName) return `${cityName}, ${countryName}`;
-      if (countryName) return countryName;
+      const regionName = res.subdivisions?.[0]?.names?.en;
+      const parts = [cityName, regionName, countryName].filter(Boolean);
+      if (parts.length > 0) return parts.join(', ');
     } catch {
       // IP not in DB or invalid
     }

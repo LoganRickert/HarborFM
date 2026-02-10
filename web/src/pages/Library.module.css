@@ -160,6 +160,7 @@
 .uploadSubmit {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   padding: 0.65rem 1rem;
   border-radius: var(--radius);
@@ -179,6 +180,7 @@
 .uploadCancel {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   padding: 0.65rem 1rem;
   border-radius: var(--radius);
@@ -310,19 +312,45 @@
 }
 
 .itemTag {
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--accent);
-  background: rgba(0, 212, 170, 0.12);
-  border: 1px solid rgba(0, 212, 170, 0.2);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: var(--bg-muted);
 }
 
 .itemMeta {
-  margin-top: 0.35rem;
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.itemMetaLabels {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.itemMetaRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.itemMetaDot {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.5;
 }
 
 .itemWaveformRow {
@@ -632,6 +660,18 @@
 @media (max-width: 640px) {
   .page {
     padding: 1.5rem;
+  }
+
+  .uploadChooseRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .uploadChooseRow .uploadChooseBtn {
+    flex: 1 1 0;
+    min-width: 0;
+    width: 100%;
+    text-align: center;
   }
 
   .item {
