@@ -2,6 +2,9 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db/index.js';
 import { randomBytes } from 'crypto';
 import { getCookieSecureFlag } from '../services/cookies.js';
+import { sha256Hex } from '../utils/hash.js';
+
+const API_KEY_PREFIX = 'hfm_';
 
 const CSRF_COOKIE_NAME = 'harborfm_csrf';
 const CSRF_COOKIE_OPTS = {
@@ -38,14 +41,49 @@ declare module 'fastify' {
   interface FastifyInstance {
     requireAuth: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     requireAdmin: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    requireNotReadOnly: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
   interface FastifyRequest {
     userId: string;
+    /** True if authenticated via API key (Bearer hfm_...). Use requireSession for routes that must use cookie/JWT. */
+    authViaApiKey?: boolean;
   }
+}
+
+function getBearerToken(request: FastifyRequest): string | undefined {
+  const auth = getHeaderValue(request.headers['authorization']);
+  if (!auth || !auth.startsWith('Bearer ')) return undefined;
+  return auth.slice(7).trim() || undefined;
+}
+
+/** If Authorization: Bearer hfm_... is present, validate as API key and return userId; else null. */
+function authViaApiKey(request: FastifyRequest): string | null {
+  const token = getBearerToken(request);
+  if (!token || !token.startsWith(API_KEY_PREFIX)) return null;
+  const keyHash = sha256Hex(token);
+  const row = db
+    .prepare(
+      'SELECT user_id FROM api_keys WHERE key_hash = ?'
+    )
+    .get(keyHash) as { user_id: string } | undefined;
+  if (!row) return null;
+  db.prepare('UPDATE api_keys SET last_used_at = datetime(\'now\') WHERE key_hash = ?').run(keyHash);
+  return row.user_id;
 }
 
 /** Shared handler so routes can use it even when registered in a child context (e.g. with prefix). */
 export async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const apiKeyUserId = authViaApiKey(request);
+  if (apiKeyUserId) {
+    const user = db.prepare('SELECT COALESCE(disabled, 0) as disabled FROM users WHERE id = ?').get(apiKeyUserId) as { disabled: number } | undefined;
+    if (!user || user.disabled === 1) {
+      return reply.status(403).send({ error: 'Account is disabled' });
+    }
+    request.userId = apiKeyUserId;
+    request.authViaApiKey = true;
+    return;
+  }
+
   try {
     await request.jwtVerify();
     const payload = request.user as JWTPayload;
@@ -90,7 +128,16 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply)
   }
 }
 
+/** Reject read-only users (must be used after requireAuth). */
+export async function requireNotReadOnly(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const row = db.prepare('SELECT COALESCE(read_only, 0) AS read_only FROM users WHERE id = ?').get(request.userId) as { read_only: number } | undefined;
+  if (row?.read_only === 1) {
+    return reply.status(403).send({ error: 'Read-only access; this action is not allowed.' });
+  }
+}
+
 export async function authPlugin(app: FastifyInstance) {
   app.decorate('requireAuth', requireAuth);
   app.decorate('requireAdmin', requireAdmin);
+  app.decorate('requireNotReadOnly', requireNotReadOnly);
 }

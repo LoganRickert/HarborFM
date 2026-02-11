@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createEpisode } from '../api/episodes';
 import { getPodcast } from '../api/podcasts';
+import { me, isReadOnly } from '../api/auth';
 import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './PodcastNew.module.css';
 
@@ -18,6 +19,11 @@ export function EpisodeNew() {
   const maxEpisodes = podcast?.max_episodes ?? null;
   const episodeCount = Number(podcast?.episode_count ?? 0);
   const atEpisodeLimit = maxEpisodes != null && maxEpisodes > 0 && episodeCount >= Number(maxEpisodes);
+  const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
+  const readOnly = isReadOnly(meData?.user);
+  useEffect(() => {
+    if (readOnly && id) navigate(`/podcasts/${id}/episodes`, { replace: true });
+  }, [readOnly, id, navigate]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -38,6 +44,7 @@ export function EpisodeNew() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     mutation.mutate();
   }
 
@@ -105,10 +112,10 @@ export function EpisodeNew() {
             <button
               type="submit"
               className={styles.submit}
-              disabled={mutation.isPending || atEpisodeLimit}
+              disabled={mutation.isPending || atEpisodeLimit || readOnly}
               aria-label="Create episode"
             >
-              {mutation.isPending ? 'Creating…' : 'Create episode'}
+              {mutation.isPending ? 'Creating...' : 'Create episode'}
             </button>
           </div>
         </form>

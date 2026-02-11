@@ -437,6 +437,17 @@
   transform: none;
 }
 
+.cardActionDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cardActionDisabled:hover {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header {

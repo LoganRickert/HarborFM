@@ -19,6 +19,7 @@ export interface SendMailOptions {
   subject: string;
   text: string;
   html: string;
+  replyTo?: string;
 }
 
 /**
@@ -47,6 +48,7 @@ export async function sendMail(options: SendMailOptions): Promise<{ sent: boolea
       await transporter.sendMail({
         from: from.trim(),
         to: options.to,
+        replyTo: options.replyTo?.trim() || undefined,
         subject: options.subject,
         text: options.text,
         html: options.html,
@@ -69,6 +71,9 @@ export async function sendMail(options: SendMailOptions): Promise<{ sent: boolea
         body: JSON.stringify({
           personalizations: [{ to: [{ email: options.to }] }],
           from: { email: from.trim(), name: APP_NAME },
+          ...(options.replyTo?.trim()
+            ? { reply_to: { email: options.replyTo.trim() } }
+            : {}),
           subject: options.subject,
           content: [
             { type: 'text/plain', value: options.text },
@@ -177,6 +182,95 @@ export function buildResetPasswordEmail(resetUrl: string): { subject: string; te
       </p>
       <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted};">
         This link expires in 1 hour.
+      </p>
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      ${APP_NAME}
+    </p>
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Build contact form notification email (HTML and plain text) for admins.
+ */
+export function buildContactNotificationEmail(
+  name: string,
+  email: string,
+  message: string,
+  context?: { podcastTitle?: string; episodeTitle?: string }
+): { subject: string; text: string; html: string } {
+  const contextLine =
+    context?.episodeTitle && context?.podcastTitle
+      ? `${context.podcastTitle} - ${context.episodeTitle}`
+      : context?.podcastTitle
+        ? context.podcastTitle
+        : null;
+  const subject = contextLine
+    ? `${APP_NAME} Feedback: ${contextLine}`
+    : `${APP_NAME} Contact Form: ${name}`;
+  const text = [
+    `New contact form submission from ${name} (${email}):`,
+    contextLine ? `Regarding: ${contextLine}` : '',
+    '',
+    '---',
+    '',
+    message,
+    '',
+    '---',
+    '',
+    `Reply to: ${email}`,
+    '',
+    APP_NAME,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  const safeMessage = escapeHtml(message).replace(/\n/g, '<br>');
+  const safeContextLine = contextLine ? escapeHtml(contextLine) : null;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="max-width: 520px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      <h1 style="margin: 0 0 8px; font-size: 1.25rem; font-weight: 700; color: ${STYLE.accent};">${safeContextLine ? 'New Feedback' : 'New Contact Message'}</h1>
+      <p style="margin: 0 0 20px; font-size: 0.875rem; color: ${STYLE.textMuted};">${safeContextLine ? `Someone sent feedback about: ${safeContextLine}` : `Someone submitted the contact form on your ${APP_NAME} site.`}</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 0 0 20px;">
+        <tr>
+          <td style="padding: 8px 0; font-size: 0.875rem; color: ${STYLE.textMuted}; width: 80px;">From</td>
+          <td style="padding: 8px 0; font-size: 1rem; color: ${STYLE.text};">${safeName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; font-size: 0.875rem; color: ${STYLE.textMuted};">Email</td>
+          <td style="padding: 8px 0; font-size: 1rem;"><a href="mailto:${safeEmail}" style="color: ${STYLE.accent}; text-decoration: none;">${safeEmail}</a></td>
+        </tr>
+      </table>
+      <div style="margin: 0 0 24px; padding: 16px; background: ${STYLE.bg}; border: 1px solid ${STYLE.border}; border-radius: 8px;">
+        <p style="margin: 0 0 8px; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-transform: uppercase; letter-spacing: 0.04em;">Message</p>
+        <p style="margin: 0; font-size: 1rem; color: ${STYLE.text}; white-space: pre-wrap;">${safeMessage}</p>
+      </div>
+      <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted};">
+        You can reply directly to ${safeEmail} to respond.
       </p>
     </div>
     <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">

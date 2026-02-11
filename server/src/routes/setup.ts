@@ -23,10 +23,32 @@ function writeSetting(key: string, value: string): void {
 }
 
 export async function setupRoutes(app: FastifyInstance) {
-  app.get('/api/setup/status', async () => {
+  app.get('/api/setup/status', {
+    schema: {
+      tags: ['Setup'],
+      summary: 'Get setup status',
+      description: 'Returns whether the server needs initial setup and client config (registration, public feeds, CAPTCHA, welcome banner). No authentication required.',
+      security: [],
+      response: {
+        200: {
+          description: 'Setup status and client config',
+          type: 'object',
+          properties: {
+            setupRequired: { type: 'boolean' },
+            registrationEnabled: { type: 'boolean' },
+            publicFeedsEnabled: { type: 'boolean' },
+            captchaProvider: { type: 'string' },
+            captchaSiteKey: { type: 'string' },
+            emailConfigured: { type: 'boolean' },
+            welcomeBanner: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async () => {
     const setupRequired = !isSetupComplete();
     if (setupRequired) {
-      return { setupRequired: true, registrationEnabled: false, publicFeedsEnabled: false, captchaProvider: 'none' as const, captchaSiteKey: '', emailConfigured: false };
+      return { setupRequired: true, registrationEnabled: false, publicFeedsEnabled: false, captchaProvider: 'none' as const, captchaSiteKey: '', emailConfigured: false, welcomeBanner: '' };
     }
     try {
       const settings = readSettings();
@@ -40,16 +62,32 @@ export async function setupRoutes(app: FastifyInstance) {
         captchaProvider,
         captchaSiteKey,
         emailConfigured,
+        welcomeBanner: String(settings.welcome_banner ?? ''),
       };
     } catch {
       // Best-effort: if settings can't be read for any reason, default to allowing registration.
-      return { setupRequired: false, registrationEnabled: true, publicFeedsEnabled: true, captchaProvider: 'none' as const, captchaSiteKey: '', emailConfigured: false };
+      return { setupRequired: false, registrationEnabled: true, publicFeedsEnabled: true, captchaProvider: 'none' as const, captchaSiteKey: '', emailConfigured: false, welcomeBanner: '' };
     }
   });
 
   // Validate a setup link id (does NOT return the token).
   // Also participates in setup IP banning (too many invalid IDs).
-  app.get('/api/setup/validate', async (request, reply) => {
+  app.get('/api/setup/validate', {
+    schema: {
+      tags: ['Setup'],
+      summary: 'Validate setup token',
+      description: 'Validates a setup link ID (query param `id`). Does not return the token. Used before showing the setup form.',
+      security: [],
+      querystring: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      response: {
+        200: { description: 'Token valid', type: 'object', properties: { ok: { type: 'boolean' } } },
+        400: { description: 'Missing setup id' },
+        401: { description: 'Invalid setup id' },
+        409: { description: 'Setup already completed' },
+        429: { description: 'Rate limited' },
+      },
+    },
+  }, async (request, reply) => {
     if (isSetupComplete()) {
       return reply.status(409).send({ error: 'Setup already completed' });
     }
@@ -87,13 +125,31 @@ export async function setupRoutes(app: FastifyInstance) {
 
   // Convenience endpoint so startup logs can mention a stable token exists (does NOT return the token).
   // Also ensures token is generated/persisted for the admin to use.
-  app.post('/api/setup/prepare', async (request, reply) => {
+  app.post('/api/setup/prepare', {
+    schema: {
+      tags: ['Setup'],
+      summary: 'Prepare setup',
+      description: 'Ensures setup token exists. Call before redirecting to setup. Returns 409 if setup already complete.',
+      security: [],
+      response: { 200: { description: 'Ready', type: 'object', properties: { ok: { type: 'boolean' } } }, 409: { description: 'Setup already completed' } },
+    },
+  }, async (request, reply) => {
     if (isSetupComplete()) return reply.status(409).send({ error: 'Setup already completed' });
     getOrCreateSetupToken();
     return { ok: true };
   });
 
-  app.post('/api/setup/complete', async (request, reply) => {
+  app.post('/api/setup/complete', {
+    schema: {
+      tags: ['Setup'],
+      summary: 'Complete setup',
+      description: 'Finish initial setup: create admin account and apply settings. Requires valid setup token (id query). No auth.',
+      security: [],
+      querystring: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      body: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' }, hostname: { type: 'string' }, registration_enabled: { type: 'boolean' }, public_feeds_enabled: { type: 'boolean' }, import_pixabay_assets: { type: 'boolean' } }, required: ['email', 'password'] },
+      response: { 200: { description: 'Setup complete' }, 201: { description: 'Setup complete' }, 400: { description: 'Validation failed' }, 401: { description: 'Missing setup id' }, 409: { description: 'Already completed' }, 429: { description: 'Rate limited' } },
+    },
+  }, async (request, reply) => {
     if (isSetupComplete()) {
       return reply.status(409).send({ error: 'Setup already completed' });
     }

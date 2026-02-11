@@ -1,9 +1,10 @@
 User-agent: *
 Disallow: /
 
-# Allow legal pages
+# Allow legal and contact pages
 Allow: /privacy
 Allow: /terms
+Allow: /contact
 
 # Allow public podcast feeds and episodes (web pages)
 Allow: /feed/
@@ -25,6 +26,7 @@ Disallow: /setup
 Disallow: /login
 Disallow: /register
 Disallow: /reset-password
+Disallow: /api/docs
 
 # Sitemap
 Sitemap: /api/sitemap.xml

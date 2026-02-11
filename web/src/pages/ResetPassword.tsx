@@ -112,7 +112,7 @@ export function ResetPassword() {
                     disabled={forgotMutation.isPending}
                     aria-label="Send reset link"
                   >
-                    {forgotMutation.isPending ? 'Sending…' : 'Send reset link'}
+                    {forgotMutation.isPending ? 'Sending...' : 'Send reset link'}
                   </button>
                 </form>
               )}
@@ -122,7 +122,7 @@ export function ResetPassword() {
           {isResetMode && (
             <>
               {tokenValidation.isLoading && (
-                <p className={styles.verificationCardText}>Checking reset link…</p>
+                <p className={styles.verificationCardText}>Checking reset link...</p>
               )}
               {tokenInvalid && (
                 <div className={styles.verificationCardError}>
@@ -179,7 +179,7 @@ export function ResetPassword() {
                     disabled={resetMutation.isPending || password !== confirmPassword || password.length < 8}
                     aria-label="Set New Password"
                   >
-                    {resetMutation.isPending ? 'Saving…' : 'Set New Password'}
+                    {resetMutation.isPending ? 'Saving...' : 'Set New Password'}
                   </button>
                 </form>
               ) : null}
@@ -196,6 +196,8 @@ export function ResetPassword() {
           <Link to="/privacy">Privacy Policy</Link>
           <span className={styles.footerBelowCardSep} aria-hidden />
           <Link to="/terms">Terms of Service</Link>
+          <span className={styles.footerBelowCardSep} aria-hidden />
+          <Link to="/contact">Contact</Link>
         </p>
       </div>
     </main>

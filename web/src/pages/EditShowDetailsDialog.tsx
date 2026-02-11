@@ -185,7 +185,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
           </Dialog.Description>
           <div className={styles.dialogBodyScroll}>
             {isLoading && !podcast ? (
-              <p style={{ padding: '1.5rem', color: 'var(--text-muted)', margin: 0 }}>Loading…</p>
+              <p style={{ padding: '1.5rem', color: 'var(--text-muted)', margin: 0 }}>Loading...</p>
             ) : podcast ? (
               <form onSubmit={handleSubmit} className={styles.form}>
                 <label className={styles.label}>
@@ -479,7 +479,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     Cancel
                   </button>
                   <button type="submit" className={styles.submit} disabled={mutation.isPending || uploadArtworkMutation.isPending} aria-label="Save show changes">
-                    {uploadArtworkMutation.isPending ? 'Uploading…' : mutation.isPending ? 'Saving…' : 'Save changes'}
+                    {uploadArtworkMutation.isPending ? 'Uploading...' : mutation.isPending ? 'Saving...' : 'Save changes'}
                   </button>
                 </div>
               </form>

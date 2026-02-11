@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { randomUUID } from 'crypto';
 import { basename, join } from 'path';
 import { existsSync, unlinkSync, writeFileSync } from 'fs';
-import { requireAdmin, requireAuth } from '../plugins/auth.js';
+import { requireAdmin, requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { db } from '../db/index.js';
 import { isAdmin } from '../services/access.js';
 import { podcastCreateSchema, podcastUpdateSchema } from '@harborfm/shared';
@@ -25,14 +25,31 @@ export async function podcastRoutes(app: FastifyInstance) {
            COALESCE(podcasts.max_episodes, (SELECT max_episodes FROM users WHERE id = podcasts.owner_user_id)) AS max_episodes,
            (SELECT COUNT(*) FROM episodes WHERE podcast_id = podcasts.id) AS episode_count
     FROM podcasts`;
-  app.get('/api/podcasts', { preHandler: [requireAuth] }, async (request) => {
+  app.get('/api/podcasts', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'List podcasts',
+      description: 'List shows owned by the current user.',
+      response: { 200: { description: 'List of podcasts' } },
+    },
+  }, async (request) => {
     const rows = db
       .prepare(`${podcastListSelect} WHERE owner_user_id = ? ORDER BY updated_at DESC`)
       .all(request.userId) as Record<string, unknown>[];
     return { podcasts: rows.map(podcastRowWithFilename) };
   });
 
-  app.get('/api/podcasts/user/:userId', { preHandler: [requireAdmin] }, async (request) => {
+  app.get('/api/podcasts/user/:userId', {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'List podcasts by user (admin)',
+      description: 'List shows for a given user. Admin only.',
+      params: { type: 'object', properties: { userId: { type: 'string' } }, required: ['userId'] },
+      response: { 200: { description: 'List of podcasts' } },
+    },
+  }, async (request) => {
     const { userId } = request.params as { userId: string };
     const rows = db
       .prepare(`${podcastListSelect} WHERE owner_user_id = ? ORDER BY updated_at DESC`)
@@ -40,7 +57,16 @@ export async function podcastRoutes(app: FastifyInstance) {
     return { podcasts: rows.map(podcastRowWithFilename) };
   });
 
-  app.post('/api/podcasts', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.post('/api/podcasts', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Create podcast',
+      description: 'Create a new show. Requires read-write access.',
+      body: { type: 'object', properties: { title: { type: 'string' }, slug: { type: 'string' }, description: { type: 'string' } }, required: ['title', 'slug'] },
+      response: { 201: { description: 'Created podcast' }, 400: { description: 'Validation failed' }, 403: { description: 'At limit or read-only' }, 409: { description: 'Slug taken' } },
+    },
+  }, async (request, reply) => {
     const parsed = podcastCreateSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -119,7 +145,16 @@ export async function podcastRoutes(app: FastifyInstance) {
     return reply.status(201).send(podcastRowWithFilename(row));
   });
 
-  app.get('/api/podcasts/:id', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.get('/api/podcasts/:id', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Get podcast',
+      description: 'Get a show by ID. Must own it or be admin.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      response: { 200: { description: 'Podcast' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { userId } = request;
     const row = db
@@ -139,7 +174,16 @@ export async function podcastRoutes(app: FastifyInstance) {
     return podcastRowWithFilename(row);
   });
 
-  app.get('/api/podcasts/:id/analytics', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.get('/api/podcasts/:id/analytics', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Get podcast analytics',
+      description: 'Returns listen and episode analytics for a show.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      response: { 200: { description: 'Analytics data' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id: podcastId } = request.params as { id: string };
     const { userId } = request;
     const podcast = db
@@ -227,7 +271,17 @@ export async function podcastRoutes(app: FastifyInstance) {
     };
   });
 
-  app.patch('/api/podcasts/:id', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.patch('/api/podcasts/:id', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Update podcast',
+      description: 'Update show metadata. Requires read-write access.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      body: { type: 'object', properties: { title: { type: 'string' }, slug: { type: 'string' }, description: { type: 'string' } } },
+      response: { 200: { description: 'Updated podcast' }, 400: { description: 'Validation failed' }, 403: { description: 'Only admins can edit slugs' }, 404: { description: 'Not found' }, 409: { description: 'Slug taken' } },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parsed = podcastUpdateSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -375,7 +429,16 @@ export async function podcastRoutes(app: FastifyInstance) {
     return podcastRowWithFilename(row);
   });
 
-  app.post('/api/podcasts/:id/artwork', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.post('/api/podcasts/:id/artwork', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Upload podcast artwork',
+      description: 'Upload cover image (multipart). Max 5MB. Requires read-write access.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      response: { 200: { description: 'Artwork uploaded' }, 400: { description: 'No file or not image' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const existing = db.prepare('SELECT id, artwork_path FROM podcasts WHERE id = ? AND owner_user_id = ?').get(id, request.userId) as { id: string; artwork_path: string | null } | undefined;
     if (!existing) return reply.status(404).send({ error: 'Podcast not found' });

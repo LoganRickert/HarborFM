@@ -8,7 +8,8 @@ export interface EpisodeDetailsSummaryCardProps {
   episodeNumber: number | null;
   /** Resolved URL for episode cover image (optional). */
   artworkUrl?: string | null;
-  onEditClick: () => void;
+  /** When undefined, Edit button is hidden (e.g. read-only user). */
+  onEditClick?: () => void;
 }
 
 export function EpisodeDetailsSummaryCard({
@@ -38,10 +39,12 @@ export function EpisodeDetailsSummaryCard({
           <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
         </div>
       </div>
-      <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
-        <Settings size={18} strokeWidth={2} aria-hidden />
-        Edit Details
-      </button>
+      {onEditClick != null && (
+        <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
+          <Settings size={18} strokeWidth={2} aria-hidden />
+          Edit Details
+        </button>
+      )}
     </div>
   );
 }

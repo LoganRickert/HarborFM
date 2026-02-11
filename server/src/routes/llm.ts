@@ -6,7 +6,15 @@ import { userRateLimitPreHandler } from '../services/rateLimit.js';
 const OPENAI_DEFAULT_MODEL = 'gpt5-mini';
 
 export async function llmRoutes(app: FastifyInstance) {
-  app.get('/api/llm/available', { preHandler: [requireAuth] }, async () => {
+  app.get('/api/llm/available', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['LLM'],
+      summary: 'LLM availability',
+      description: 'Check if an LLM provider is configured and available.',
+      response: { 200: { description: 'available: boolean' } },
+    },
+  }, async () => {
     const settings = readSettings();
     const available =
       settings.llm_provider === 'ollama' ||
@@ -16,7 +24,16 @@ export async function llmRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/llm/ask',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'llm', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'llm', windowMs: 1000 })],
+      schema: {
+        tags: ['LLM'],
+        summary: 'Ask LLM',
+        description: 'Send a question (and optional transcript) to the configured LLM.',
+        body: { type: 'object', properties: { transcript: { type: 'string' }, question: { type: 'string' } }, required: ['question'] },
+        response: { 200: { description: 'response text' }, 400: { description: 'Question required or no provider' }, 502: { description: 'Provider error' } },
+      },
+    },
     async (request, reply) => {
       const body = request.body as { transcript?: string; question?: string };
       const transcript = typeof body?.transcript === 'string' ? body.transcript : '';

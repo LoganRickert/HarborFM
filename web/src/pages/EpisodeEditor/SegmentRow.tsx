@@ -20,6 +20,7 @@ export interface SegmentRowProps {
   onMoreInfo: () => void;
   registerPause: (id: string, pause: () => void) => void;
   unregisterPause: (id: string) => void;
+  readOnly?: boolean;
 }
 
 export function SegmentRow({
@@ -36,6 +37,7 @@ export function SegmentRow({
   onMoreInfo,
   registerPause,
   unregisterPause,
+  readOnly = false,
 }: SegmentRowProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressTrackRef = useRef<HTMLDivElement>(null);
@@ -163,12 +165,14 @@ export function SegmentRow({
             onBlur={handleNameBlur}
             placeholder={defaultName}
             aria-label="Section name"
+            readOnly={readOnly}
           />
           <div className={styles.segmentMeta}>
             {formatDuration(Math.floor(currentTime))} / {formatDuration(segment.duration_sec)}
           </div>
         </div>
         <audio ref={audioRef} style={{ display: 'none' }} />
+        {!readOnly && (
         <div className={styles.segmentActions}>
           <button type="button" className={styles.segmentBtn} onClick={onMoreInfo} title="More info" aria-label="Show more information">
             <Info size={18} aria-hidden />
@@ -183,6 +187,7 @@ export function SegmentRow({
             <Trash2 size={18} aria-hidden />
           </button>
         </div>
+        )}
       </div>
       {durationSec > 0 && (
         <div className={styles.segmentWaveformRow}>

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSettings, updateSettings, testLlmConnection, testWhisperConnection, testSmtpConnection, testSendGridConnection, type AppSettings } from '../api/settings';
+import { getVersion } from '../api/version';
 import { FullPageLoading } from '../components/Loading';
 import styles from './Settings.module.css';
 
@@ -33,7 +34,23 @@ export function Settings() {
     queryFn: () => getSettings(),
   });
 
+  const { data: versionData } = useQuery({
+    queryKey: ['version'],
+    queryFn: getVersion,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const [saveNotice, setSaveNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const welcomeBannerRef = useRef<HTMLTextAreaElement>(null);
+
+  const resizeWelcomeBanner = useCallback(() => {
+    const el = welcomeBannerRef.current;
+    if (!el) return;
+    el.style.height = '0';
+    const h = Math.max(el.scrollHeight, 60);
+    el.style.height = `${h}px`;
+  }, []);
 
   const [form, setForm] = useState<AppSettings>({
     whisper_asr_url: '',
@@ -64,11 +81,16 @@ export function Settings() {
     smtp_from: '',
     sendgrid_api_key: '',
     sendgrid_from: '',
+    welcome_banner: '',
   });
 
   useEffect(() => {
     if (settings) setForm(settings);
   }, [settings]);
+
+  useEffect(() => {
+    resizeWelcomeBanner();
+  }, [form.welcome_banner, resizeWelcomeBanner]);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -102,6 +124,7 @@ export function Settings() {
         smtp_from: form.email_provider === 'smtp' ? form.smtp_from.trim() : '',
         sendgrid_api_key: form.email_provider === 'sendgrid' && form.sendgrid_api_key !== '(set)' ? form.sendgrid_api_key : undefined,
         sendgrid_from: form.email_provider === 'sendgrid' ? form.sendgrid_from.trim() : '',
+        welcome_banner: form.welcome_banner,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -200,6 +223,13 @@ export function Settings() {
         <p className={styles.heroSub}>Control your server configuration and access settings.</p>
       </header>
 
+      {versionData?.version && (
+        <div className={styles.versionCard}>
+          <span className={styles.versionLabel}>Version</span>
+          <span className={styles.versionValue}>{versionData.version}</span>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className={styles.form}>
         <section className={styles.card}>
           <h2 className={styles.cardTitle}>Access & General</h2>
@@ -241,6 +271,22 @@ export function Settings() {
               />
               <p className={styles.inputHelp}>
                 Base URL for RSS feed enclosures when hosting audio files on this server. Used if no S3 export is configured.
+              </p>
+            </label>
+
+            <label className={styles.label}>
+              Welcome Banner
+              <textarea
+                ref={welcomeBannerRef}
+                className={styles.input}
+                rows={1}
+                placeholder="Optional message above the sign in form..."
+                value={form.welcome_banner}
+                onChange={(e) => setForm((f) => ({ ...f, welcome_banner: e.target.value }))}
+                onInput={resizeWelcomeBanner}
+              />
+              <p className={styles.inputHelp}>
+                Shown above the sign in form. New lines are preserved. Leave empty to hide.
               </p>
             </label>
           </div>
@@ -443,7 +489,7 @@ export function Settings() {
                   onClick={() => whisperTestMutation.mutate()}
                   disabled={whisperTestMutation.isPending}
                 >
-                  {whisperTestMutation.isPending ? 'Testing…' : 'Test'}
+                  {whisperTestMutation.isPending ? 'Testing...' : 'Test'}
                 </button>
               </div>
             </div>
@@ -535,7 +581,7 @@ export function Settings() {
                     onClick={() => testMutation.mutate()}
                     disabled={testMutation.isPending}
                   >
-                    {testMutation.isPending ? 'Testing…' : 'Test'}
+                    {testMutation.isPending ? 'Testing...' : 'Test'}
                   </button>
                 </div>
               </>
@@ -712,7 +758,7 @@ export function Settings() {
                       onClick={() => smtpTestMutation.mutate()}
                       disabled={smtpTestMutation.isPending}
                     >
-                      {smtpTestMutation.isPending ? 'Testing…' : 'Test'}
+                      {smtpTestMutation.isPending ? 'Testing...' : 'Test'}
                     </button>
                   </div>
                 </div>
@@ -780,7 +826,7 @@ export function Settings() {
                       onClick={() => sendgridTestMutation.mutate()}
                       disabled={sendgridTestMutation.isPending}
                     >
-                      {sendgridTestMutation.isPending ? 'Testing…' : 'Test'}
+                      {sendgridTestMutation.isPending ? 'Testing...' : 'Test'}
                     </button>
                   </div>
                 </div>
@@ -804,7 +850,7 @@ export function Settings() {
 
         <div className={styles.actions}>
           <button type="submit" className={styles.submit} disabled={mutation.isPending} aria-label="Save settings">
-            {mutation.isPending ? 'Saving…' : 'Save'}
+            {mutation.isPending ? 'Saving...' : 'Save'}
           </button>
         </div>
       </form>

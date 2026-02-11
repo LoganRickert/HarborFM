@@ -205,7 +205,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
                 Cancel
               </button>
               <button type="button" className={styles.submit} onClick={handleAddToLibrary} disabled={uploadMutation.isPending} aria-label="Add file to library">
-                {uploadMutation.isPending ? 'Adding…' : 'Add to Library'}
+                {uploadMutation.isPending ? 'Adding...' : 'Add to Library'}
               </button>
             </div>
           </div>
@@ -230,7 +230,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
             <input
               type="search"
               className={styles.input}
-              placeholder="Search by name…"
+              placeholder="Search by name..."
               value={filterQuery}
               onChange={(e) => {
                 setFilterQuery(e.target.value);
@@ -271,7 +271,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
 
         {!pendingFile &&
           (isLoading ? (
-            <p className={styles.libraryEmpty}>Loading…</p>
+            <p className={styles.libraryEmpty}>Loading...</p>
           ) : assets.length === 0 ? (
             <p className={styles.libraryEmpty}>No library clips yet. Choose a file above to add one.</p>
           ) : filteredAndSorted.length === 0 ? (

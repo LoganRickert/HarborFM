@@ -6,6 +6,13 @@ import * as m004 from './migrations/004_podcast_max_episodes.js';
 import * as m005 from './migrations/005_episode_description_copyright_snapshot.js';
 import * as m006 from './migrations/006_email_verification.js';
 import * as m007 from './migrations/007_password_reset_tokens.js';
+import * as m008 from './migrations/008_user_read_only.js';
+import * as m009 from './migrations/009_export_bucket_region_endpoint_encrypted.js';
+import * as m010 from './migrations/010_export_mode_config_enc.js';
+import * as m011 from './migrations/011_exports_unified_config.js';
+import * as m012 from './migrations/012_api_keys.js';
+import * as m013 from './migrations/013_contact_messages.js';
+import * as m014 from './migrations/014_contact_messages_context.js';
 
 const migrations = [
   { name: '001_initial', ...m001 },
@@ -15,6 +22,13 @@ const migrations = [
   { name: '005_episode_description_copyright_snapshot', ...m005 },
   { name: '006_email_verification', ...m006 },
   { name: '007_password_reset_tokens', ...m007 },
+  { name: '008_user_read_only', ...m008 },
+  { name: '009_export_bucket_region_endpoint_encrypted', ...m009 },
+  { name: '010_export_mode_config_enc', ...m010 },
+  { name: '011_exports_unified_config', ...m011 },
+  { name: '012_api_keys', ...m012 },
+  { name: '013_contact_messages', ...m013 },
+  { name: '014_contact_messages_context', ...m014 },
 ];
 
 const MIGRATIONS_TABLE = `

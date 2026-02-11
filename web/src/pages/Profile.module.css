@@ -1,0 +1,379 @@
+.page {
+  max-width: var(--max-content);
+  margin: 0 auto;
+}
+
+.hero {
+  margin-bottom: 1.5rem;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.heroSub {
+  margin: 0.5rem 0 0;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+}
+
+.heroLink {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.heroLink:hover {
+  text-decoration: underline;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.cardTitle {
+  margin: 0 0 0.25rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cardSub {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.docsLink {
+  color: var(--accent);
+  text-decoration: none;
+}
+.docsLink:hover {
+  text-decoration: underline;
+}
+
+.list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.term {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.detail {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2em 0.5em;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--text-muted);
+  border-radius: 6px;
+  margin-right: 0.5em;
+}
+
+.cardNote {
+  margin: 1rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.error {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--error);
+}
+
+.muted {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* API keys */
+.apiKeyCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.apiKeyCardHeader .cardSub {
+  margin-bottom: 0;
+}
+
+.apiKeyList {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.apiKeyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.apiKeyMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.apiKeyCreated,
+.apiKeyLastUsed {
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.apiKeyLastUsed {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.revokeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--error);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.revokeBtn:hover:not(:disabled) {
+  border-color: var(--error);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.revokeBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.createKeyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.createKeyBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+
+.createKeyBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.keyLimitNote {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* New key modal */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: fadeIn 0.15s ease;
+}
+
+.modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem 2rem;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.modalIcon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+
+.modalClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.modalClose:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.modalWarn {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.keyDisplay {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.keyValue {
+  flex: 1;
+  font-size: 0.8125rem;
+  font-family: ui-monospace, monospace;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.copyBtn:hover {
+  background: var(--accent-dim);
+}
+
+.modalSub {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.modalSub code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.modalDone {
+  display: block;
+  margin-left: auto;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.modalDone:hover {
+  background: var(--accent-dim);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}

@@ -81,7 +81,7 @@ export function Setup() {
       <main>
         <div className={styles.wrap}>
           <div className={styles.card}>
-            <p className={styles.subtitle}>Loading setup status…</p>
+            <p className={styles.subtitle}>Loading setup status...</p>
           </div>
         </div>
       </main>
@@ -121,7 +121,7 @@ export function Setup() {
               <p className={styles.setupNoticeTitle}>Setup link required</p>
               <p className={styles.setupNoticeBody}>
                 Missing setup id in the URL. Check the server logs for a link like{' '}
-                <code className={styles.setupNoticeCode}>/setup?id=…..</code>
+                <code className={styles.setupNoticeCode}>/setup?id=.....</code>
               </p>
             </div>
           </div>
@@ -139,7 +139,7 @@ export function Setup() {
               <img src="/favicon.svg" alt="" className={styles.brandIcon} />
               <h1 className={styles.title}>HarborFM</h1>
             </div>
-            <p className={styles.subtitle}>Validating setup link…</p>
+            <p className={styles.subtitle}>Validating setup link...</p>
           </div>
         </div>
       </main>
@@ -275,7 +275,7 @@ export function Setup() {
             disabled={mutation.isPending || !setupId}
             aria-label="Complete setup"
           >
-            {mutation.isPending ? 'Setting up…' : 'Complete setup'}
+            {mutation.isPending ? 'Setting up...' : 'Complete setup'}
           </button>
         </form>
         </div>

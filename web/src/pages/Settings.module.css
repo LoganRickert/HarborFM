@@ -22,6 +22,32 @@
   color: var(--text-muted);
 }
 
+.versionCard {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.versionLabel {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.versionValue {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
 .form {
   display: flex;
   flex-direction: column;
@@ -86,7 +112,8 @@
 }
 
 .input,
-.select {
+.select,
+textarea.input {
   padding: 0.5rem 0.75rem;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -94,8 +121,14 @@
   color: var(--text);
   font-size: 1rem;
 }
+textarea.input {
+  resize: none;
+  min-height: 2.5rem;
+  overflow: hidden;
+}
 .input:focus,
-.select:focus {
+.select:focus,
+textarea.input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-glow);

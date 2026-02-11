@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Plus } from 'lucide-react';
 import { getPodcast } from '../api/podcasts';
 import { listEpisodes } from '../api/episodes';
+import { me, isReadOnly } from '../api/auth';
 import { FullPageLoading, InlineLoading } from '../components/Loading';
 import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './EpisodesList.module.css';
@@ -22,6 +23,8 @@ export function EpisodesList() {
   const maxEpisodes = podcast?.max_episodes ?? null;
   const episodeCount = Number(podcast?.episode_count ?? episodes.length);
   const atEpisodeLimit = maxEpisodes != null && maxEpisodes > 0 && episodeCount >= Number(maxEpisodes);
+  const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
+  const readOnly = isReadOnly(meData?.user);
 
   const publishedCount = episodes.filter((e) => e.status === 'published').length;
   const scheduledCount = episodes.filter((e) => e.status === 'scheduled').length;
@@ -42,16 +45,23 @@ export function EpisodesList() {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <h1 className={styles.cardTitle}>Episodes</h1>
-          {atEpisodeLimit ? (
+          {readOnly ? (
+            <span className={`${styles.newBtn} ${styles.newBtnDisabled}`} title="Read-only account">
+              <Plus size={18} strokeWidth={2.5} aria-hidden />
+              New Episode
+            </span>
+          ) : atEpisodeLimit ? (
             <span
               className={`${styles.newBtn} ${styles.newBtnDisabled}`}
               title="You're at max episodes for this show"
             >
-              New episode
+              <Plus size={18} strokeWidth={2.5} aria-hidden />
+              New Episode
             </span>
           ) : (
             <Link to={`/podcasts/${id}/episodes/new`} className={styles.newBtn}>
-              New episode
+              <Plus size={18} strokeWidth={2.5} aria-hidden />
+              New Episode
             </Link>
           )}
         </div>
@@ -77,7 +87,11 @@ export function EpisodesList() {
         {!episodesLoading && episodes.length === 0 && (
           <div className={styles.empty}>
             <p>No episodes yet.</p>
-            {atEpisodeLimit ? (
+            {readOnly ? (
+              <span className={`${styles.emptyLink} ${styles.emptyLinkDisabled}`} title="Read-only account">
+                Create first episode
+              </span>
+            ) : atEpisodeLimit ? (
               <span
                 className={`${styles.emptyLink} ${styles.emptyLinkDisabled}`}
                 title="You're at max episodes for this show"

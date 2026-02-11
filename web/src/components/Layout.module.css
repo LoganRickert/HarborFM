@@ -94,18 +94,114 @@
   color: var(--accent);
 }
 
+.adminDropdownWrap {
+  position: relative;
+}
+
+.adminDropdownWrap:hover .adminDropdown {
+  display: flex;
+}
+
+.adminDropdownWrap .navLink,
+.adminDropdownWrap .navLinkActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: default;
+  border: none;
+  font: inherit;
+}
+
+.adminDropdownWrap:hover .adminChevron {
+  transform: rotate(180deg);
+}
+
+.adminChevron {
+  transition: transform 0.2s ease;
+}
+
+.adminDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0;
+  padding-top: 2px;
+  min-width: 140px;
+  padding: 0.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+}
+
+.adminDropdownLink,
+.adminDropdownLinkActive {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.adminDropdownLink:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+  text-decoration: none;
+}
+
+.adminDropdownLinkActive {
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.08);
+}
+
+.adminDropdownLinkActive:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .nav {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 
-.user {
-  font-size: 0.875rem;
+.profileLink,
+.profileLinkActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: var(--radius);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.profileLink {
   color: var(--text-muted);
 }
+.profileLink:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+  text-decoration: none;
+}
+.profileLinkActive {
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.08);
+}
+.profileLinkActive:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
 @media (max-width: 600px) {
-  .user {
+  .profileLink,
+  .profileLinkActive {
     display: none;
   }
 }
@@ -197,10 +293,10 @@
   border-bottom: 1px solid var(--border);
 }
 
-.mobileUser {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  font-weight: 500;
+.mobileMenuProfile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .mobileMenuClose {
@@ -254,6 +350,52 @@
 .mobileNavLinkActive:hover {
   color: var(--accent);
   text-decoration: none;
+}
+
+.mobileAdminSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.mobileAdminTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.mobileAdminTrigger:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.mobileAdminTrigger .adminChevronOpen {
+  flex-shrink: 0;
+  transform: rotate(180deg);
+}
+
+.mobileAdminSubmenu {
+  display: flex;
+  flex-direction: column;
+  padding-left: 1rem;
+  gap: 0;
+}
+
+.mobileAdminSubmenu .mobileNavLink,
+.mobileAdminSubmenu .mobileNavLinkActive {
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
 }
 
 .mobileLogout {

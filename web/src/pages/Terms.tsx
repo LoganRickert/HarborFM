@@ -53,6 +53,13 @@ export function Terms() {
               Continued use after changes constitutes acceptance of the updated terms.
             </p>
           </div>
+          <p className={styles.footerLinks}>
+            <Link to="/privacy">Privacy Policy</Link>
+            <span className={styles.footerSep} aria-hidden />
+            <Link to="/terms">Terms of Service</Link>
+            <span className={styles.footerSep} aria-hidden />
+            <Link to="/contact">Contact</Link>
+          </p>
         </div>
       </div>
     </main>

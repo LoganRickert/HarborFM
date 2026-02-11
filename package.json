@@ -10,14 +10,22 @@
     "db:migrate": "pnpm --filter server run db:migrate",
     "db:clear-ip-bans": "pnpm --filter server run db:clear-ip-bans",
     "reset-password": "pnpm --filter server run reset-password",
+    "deploy:pm2": "bash scripts/deploy-pm2.sh",
     "build": "pnpm --filter shared run build && pnpm --filter server run build && pnpm --filter web run build",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
+    "build:openapi": "bash scripts/build-openapi.sh",
+    "build:docs": "bash scripts/build-docs.sh",
     "docker:build": "docker build -t harborfm ."
   },
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@10.28.2"
+  "packageManager": "pnpm@10.28.2",
+  "devDependencies": {
+    "marked": "^17.0.1",
+    "marked-gfm-heading-id": "^4.1.0",
+    "swagger-ui-dist": "^5.31.0"
+  }
 }

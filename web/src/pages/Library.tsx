@@ -19,7 +19,7 @@ import {
   type LibraryAsset,
 } from '../api/library';
 import { WaveformCanvas, type WaveformData } from './EpisodeEditor/WaveformCanvas';
-import { me } from '../api/auth';
+import { me, isReadOnly } from '../api/auth';
 import { getUser } from '../api/users';
 import styles from './Library.module.css';
 
@@ -139,6 +139,7 @@ export function Library() {
   const currentUser = meData?.user;
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
   const currentUserId = currentUser?.id ?? undefined;
+  const readOnly = !isAdminView && isReadOnly(currentUser);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['library', userId],
@@ -367,6 +368,7 @@ export function Library() {
   }
 
   function canEditAsset(asset: LibraryAsset): boolean {
+    if (readOnly) return false;
     const ownerId = asset.owner_user_id ?? (userId ?? currentUserId);
     return (currentUserId != null && String(ownerId) === String(currentUserId)) || Boolean(isAdmin);
   }
@@ -454,7 +456,7 @@ export function Library() {
         </div>
       </header>
 
-      {!isAdminView && (
+      {!isAdminView && !readOnly && (
         <section className={styles.uploadCard}>
           <div className={styles.uploadHeader}>
             <h2 className={styles.uploadTitle}>Add to library</h2>
@@ -513,7 +515,7 @@ export function Library() {
                           aria-label="Import from Pixabay"
                         >
                           <Download size={18} strokeWidth={2} aria-hidden />
-                          {pixabayImportMutation.isPending ? 'Importing…' : 'Import'}
+                          {pixabayImportMutation.isPending ? 'Importing...' : 'Import'}
                         </button>
                       </div>
                     </div>
@@ -590,7 +592,7 @@ export function Library() {
                   disabled={uploadMutation.isPending}
                   aria-label="Add file to library"
                 >
-                  {uploadMutation.isPending ? 'Adding…' : 'Add to Library'}
+                  {uploadMutation.isPending ? 'Adding...' : 'Add to Library'}
                 </button>
               </div>
             </div>
@@ -615,7 +617,7 @@ export function Library() {
         <input
           type="search"
           className={styles.input}
-          placeholder="Search by name…"
+          placeholder="Search by name..."
           value={filterQuery}
           onChange={(e) => { setFilterQuery(e.target.value); setPage(1); }}
           aria-label="Search library"
@@ -655,7 +657,7 @@ export function Library() {
 
       {isLoading && (
         <div className={styles.stateCard}>
-          <p className={styles.stateText}>Loading library…</p>
+          <p className={styles.stateText}>Loading library...</p>
         </div>
       )}
 
@@ -797,7 +799,7 @@ export function Library() {
                 disabled={deleteMutation.isPending}
                 aria-label="Confirm delete library item"
               >
-                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </Dialog.Content>
@@ -890,7 +892,7 @@ export function Library() {
                 disabled={editMutation.isPending || editName.trim() === ''}
                 aria-label="Save library item"
               >
-                {editMutation.isPending ? 'Saving…' : 'Save'}
+                {editMutation.isPending ? 'Saving...' : 'Save'}
               </button>
             </div>
           </Dialog.Content>

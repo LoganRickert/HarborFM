@@ -564,6 +564,16 @@
   color: var(--bg);
 }
 
+/* Export destination type: allow wrap when many options */
+.exportModeToggle {
+  flex-wrap: wrap;
+}
+.exportModeToggle .statusToggleBtn,
+.exportModeToggle .statusToggleActive {
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+}
+
 .textarea {
   resize: vertical;
   min-height: 100px;
@@ -734,6 +744,12 @@
   margin-bottom: 0.5rem;
 }
 
+.exportHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .exportTitle {
   display: inline-flex;
   align-items: center;
@@ -759,6 +775,31 @@
   border-radius: var(--radius);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.deployBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: 0 0 20px var(--accent-glow);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.deployBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  box-shadow: 0 0 32px var(--accent-glow);
+  transform: translateY(-1px);
+}
+.deployBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .gearBtn:hover:not(:disabled) {
@@ -954,16 +995,101 @@
   line-height: 1.5;
 }
 
+.dialogActions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.dialogConfirmRemove {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--error);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dialogConfirmRemove:hover:not(:disabled) {
+  background: var(--error-dim, #c53030);
+  border-color: var(--error-dim, #c53030);
+}
+.dialogConfirmRemove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.exportList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .exportCard {
   padding: 0.75rem 1rem;
   background: var(--bg-muted);
   border-radius: var(--radius);
-  margin-bottom: 0.5rem;
+}
+
+.exportCardRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.exportCardMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.exportCardMeta strong {
+  font-weight: 600;
+  display: inline;
+  margin-bottom: 0;
+}
+
+.deployAllRow {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.deployAllResults {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
 .exportCard strong {
   display: block;
   margin-bottom: 0.25rem;
+}
+
+.exportModeBadge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius);
+  margin-left: 0.5rem;
+  vertical-align: middle;
 }
 
 .exportCardActions {
@@ -980,9 +1106,37 @@
   gap: 0.375rem;
 }
 
+.exportCardActions button.cancel {
+  color: rgba(255, 255, 255, 0.78);
+  border-color: var(--text-muted);
+}
+.exportCardActions button.cancel:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.88);
+  border-color: var(--text);
+}
+
+.exportDeleteBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--error, #c53030);
+  background: transparent;
+  border: 1px solid var(--error, #c53030);
+  border-radius: var(--radius);
+}
+.exportDeleteBtn:hover {
+  color: var(--bg);
+  background: var(--error, #c53030);
+}
+
 @media (max-width: 640px) {
+  .exportCardRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
   .exportCardActions {
     flex-direction: column;
+    margin-top: 0.75rem;
   }
   .exportCardActions button {
     flex: 1 1 auto;

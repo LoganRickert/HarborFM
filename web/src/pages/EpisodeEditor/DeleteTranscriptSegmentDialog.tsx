@@ -51,7 +51,7 @@ export function DeleteTranscriptSegmentDialog({
               disabled={isDeleting}
               aria-label="Confirm delete transcript segment"
             >
-              {isDeleting ? 'Deleting…' : 'Delete'}
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </button>
           </div>
         </Dialog.Content>

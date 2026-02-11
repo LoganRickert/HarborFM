@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPodcast } from '../api/podcasts';
-import { me } from '../api/auth';
+import { me, isReadOnly } from '../api/auth';
 import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './PodcastNew.module.css';
 
@@ -25,6 +25,10 @@ export function PodcastNew() {
   const maxPodcasts = meData?.user?.max_podcasts ?? null;
   const podcastCount = meData?.podcast_count ?? 0;
   const atPodcastLimit = maxPodcasts != null && maxPodcasts > 0 && podcastCount >= maxPodcasts;
+  const readOnly = isReadOnly(meData?.user);
+  useEffect(() => {
+    if (readOnly) navigate('/', { replace: true });
+  }, [readOnly, navigate]);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -120,7 +124,7 @@ export function PodcastNew() {
               disabled={mutation.isPending || atPodcastLimit}
               aria-label="Create show"
             >
-              {mutation.isPending ? 'Creating…' : 'Create show'}
+              {mutation.isPending ? 'Creating...' : 'Create show'}
             </button>
           </div>
         </form>

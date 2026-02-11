@@ -3,11 +3,21 @@ import { apiGet, apiPost } from './client';
 export interface User {
   id: string;
   email: string;
+  created_at?: string;
   role?: 'user' | 'admin';
+  read_only?: number; // 0 = false, 1 = true
   max_podcasts?: number | null;
   max_episodes?: number | null;
   max_storage_mb?: number | null;
   disk_bytes_used?: number;
+  last_login_at?: string | null;
+  last_login_ip?: string | null;
+  last_login_location?: string | null;
+}
+
+/** True if the user is in read-only mode (cannot create or edit content). */
+export function isReadOnly(user: User | null | undefined): boolean {
+  return Boolean(user?.read_only);
 }
 
 const FIVE_MB = 5 * 1024 * 1024;

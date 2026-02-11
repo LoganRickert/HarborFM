@@ -14,11 +14,21 @@
   background-attachment: fixed;
 }
 
-@media (max-width: 768px) {
-  .wrap {
-    /* On mobile, fixed attachment causes background to jump when viewport resizes; scroll keeps cover stable */
-    background-attachment: scroll;
-  }
+.welcomeBanner {
+  width: 100%;
+  max-width: var(--max-card);
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-line;
+  text-align: center;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .card {
@@ -231,6 +241,13 @@
   font-size: 0.875rem;
   color: var(--text-muted);
   text-align: center;
+}
+
+.footerLinks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
 }
 
 .footerBelowCard {

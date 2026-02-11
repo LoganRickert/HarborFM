@@ -9,6 +9,7 @@ export interface User {
   created_at: string;
   role: 'user' | 'admin';
   disabled: number; // SQLite uses INTEGER for booleans (0 = false, 1 = true)
+  read_only: number; // 0 = false, 1 = true
   disk_bytes_used: number;
   last_login_at: string | null;
   last_login_ip: string | null;
@@ -21,7 +22,16 @@ export interface User {
 export async function usersRoutes(app: FastifyInstance) {
   app.get(
     '/api/users',
-    { preHandler: [requireAdmin] },
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ['Users'],
+        summary: 'List users',
+        description: 'Paginated list of users. Admin only.',
+        querystring: { type: 'object', properties: { page: { type: 'string' }, limit: { type: 'string' }, search: { type: 'string' } } },
+        response: { 200: { description: 'Users and pagination' } },
+      },
+    },
     async (request, _reply) => {
       const query = request.query as { page?: string; limit?: string; search?: string } | undefined;
       const page = Math.max(1, parseInt(query?.page ?? '1', 10) || 1);
@@ -45,7 +55,7 @@ export async function usersRoutes(app: FastifyInstance) {
       const total = totalCount.count;
 
       // Get paginated users (oldest to newest by default)
-      const queryStr = `SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users ${whereClause} ORDER BY created_at ASC LIMIT ? OFFSET ?`;
+      const queryStr = `SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users ${whereClause} ORDER BY created_at ASC LIMIT ? OFFSET ?`;
       const rows = search
         ? db.prepare(queryStr).all(searchParam, limit, offset) as User[]
         : db.prepare(queryStr).all(limit, offset) as User[];
@@ -64,13 +74,24 @@ export async function usersRoutes(app: FastifyInstance) {
 
   app.patch(
     '/api/users/:userId',
-    { preHandler: [requireAdmin] },
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ['Users'],
+        summary: 'Update user',
+        description: 'Update user fields (email, role, disabled, read_only, password, limits). Admin only.',
+        params: { type: 'object', properties: { userId: { type: 'string' } }, required: ['userId'] },
+        body: { type: 'object', properties: { email: { type: 'string' }, role: { type: 'string', enum: ['user', 'admin'] }, disabled: { type: 'boolean' }, read_only: { type: 'boolean' }, password: { type: 'string' }, max_podcasts: {}, max_episodes: {}, max_storage_mb: {} } },
+        response: { 200: { description: 'Updated user' }, 400: { description: 'Validation or email in use' }, 404: { description: 'User not found' } },
+      },
+    },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       const body = request.body as {
         email?: string;
         role?: 'user' | 'admin';
         disabled?: boolean;
+        read_only?: boolean;
         password?: string;
         max_podcasts?: number | null | '';
         max_episodes?: number | null | '';
@@ -107,6 +128,11 @@ export async function usersRoutes(app: FastifyInstance) {
         values.push(body.disabled ? 1 : 0);
       }
 
+      if (body?.read_only !== undefined) {
+        updates.push('read_only = ?');
+        values.push(body.read_only ? 1 : 0);
+      }
+
       if (body?.password !== undefined && body.password.trim() !== '') {
         const password_hash = await argon2.hash(body.password);
         updates.push('password_hash = ?');
@@ -140,18 +166,27 @@ export async function usersRoutes(app: FastifyInstance) {
       db.prepare(sql).run(...values);
 
       // Return updated user
-      const updated = db.prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users WHERE id = ?').get(userId) as User;
+      const updated = db.prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users WHERE id = ?').get(userId) as User;
       return updated;
     }
   );
 
   app.get(
     '/api/users/:userId',
-    { preHandler: [requireAdmin] },
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ['Users'],
+        summary: 'Get user',
+        description: 'Get a user by ID. Admin only.',
+        params: { type: 'object', properties: { userId: { type: 'string' } }, required: ['userId'] },
+        response: { 200: { description: 'User' }, 404: { description: 'User not found' } },
+      },
+    },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       const user = db
-        .prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users WHERE id = ?')
+        .prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users WHERE id = ?')
         .get(userId) as User | undefined;
       if (!user) {
         return reply.code(404).send({ error: 'User not found' });
@@ -162,7 +197,16 @@ export async function usersRoutes(app: FastifyInstance) {
 
   app.delete(
     '/api/users/:userId',
-    { preHandler: [requireAdmin] },
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ['Users'],
+        summary: 'Delete user',
+        description: 'Permanently delete a user. Admin only.',
+        params: { type: 'object', properties: { userId: { type: 'string' } }, required: ['userId'] },
+        response: { 200: { description: 'success: true' }, 404: { description: 'User not found' } },
+      },
+    },
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
 

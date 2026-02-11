@@ -39,10 +39,10 @@ export function VerifyEmail() {
             <h2 className={styles.setupHeaderTitle}>Verify your email</h2>
           </div>
           {status === 'loading' && (
-            <p className={styles.subtitle}>Verifying your account…</p>
+            <p className={styles.subtitle}>Verifying your account...</p>
           )}
           {status === 'ok' && (
-            <p className={styles.subtitle}>Redirecting to sign in…</p>
+            <p className={styles.subtitle}>Redirecting to sign in...</p>
           )}
           {status === 'error' && (
             <>

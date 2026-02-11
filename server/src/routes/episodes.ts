@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import { nanoid } from 'nanoid';
-import { requireAuth } from '../plugins/auth.js';
+import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { db } from '../db/index.js';
 import { isAdmin, canAccessPodcast } from '../services/access.js';
 import { episodeCreateSchema, episodeUpdateSchema } from '@harborfm/shared';
@@ -38,7 +38,16 @@ function episodeRowWithFilename(row: Record<string, unknown>): Record<string, un
 export async function episodeRoutes(app: FastifyInstance) {
   app.get(
     '/api/podcasts/:podcastId/episodes',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Episodes'],
+        summary: 'List episodes',
+        description: 'List episodes for a podcast. Must have access to the podcast.',
+        params: { type: 'object', properties: { podcastId: { type: 'string' } }, required: ['podcastId'] },
+        response: { 200: { description: 'List of episodes' }, 404: { description: 'Podcast not found' } },
+      },
+    },
     async (request, reply) => {
       const { podcastId } = request.params as { podcastId: string };
       if (!canAccessPodcast(request.userId, podcastId) && !isAdmin(request.userId)) {
@@ -55,7 +64,17 @@ export async function episodeRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/podcasts/:podcastId/episodes',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Episodes'],
+        summary: 'Create episode',
+        description: 'Create an episode for a podcast. Requires read-write access.',
+        params: { type: 'object', properties: { podcastId: { type: 'string' } }, required: ['podcastId'] },
+        body: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, status: { type: 'string' } }, required: ['title'] },
+        response: { 201: { description: 'Created episode' }, 400: { description: 'Validation failed' }, 403: { description: 'At limit or read-only' }, 404: { description: 'Podcast not found' } },
+      },
+    },
     async (request, reply) => {
       const { podcastId } = request.params as { podcastId: string };
       if (!canAccessPodcast(request.userId, podcastId)) {
@@ -120,7 +139,16 @@ export async function episodeRoutes(app: FastifyInstance) {
     }
   );
 
-  app.get('/api/episodes/:id', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.get('/api/episodes/:id', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Episodes'],
+      summary: 'Get episode',
+      description: 'Get an episode by ID. Must own the podcast or be admin.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      response: { 200: { description: 'Episode' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { userId } = request;
     const row = db
@@ -134,7 +162,17 @@ export async function episodeRoutes(app: FastifyInstance) {
     return episodeRowWithFilename(row);
   });
 
-  app.patch('/api/episodes/:id', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.patch('/api/episodes/:id', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Episodes'],
+      summary: 'Update episode',
+      description: 'Update episode metadata. Requires read-write access.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      body: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, status: { type: 'string' } } },
+      response: { 200: { description: 'Updated episode' }, 400: { description: 'Validation failed' }, 403: { description: 'Only admins can edit slugs' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const existing = db
       .prepare(
@@ -250,7 +288,16 @@ export async function episodeRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/podcasts/:podcastId/episodes/:episodeId/artwork',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Episodes'],
+        summary: 'Upload episode artwork',
+        description: 'Upload episode cover image (multipart). Max 5MB. Requires read-write access.',
+        params: { type: 'object', properties: { podcastId: { type: 'string' }, episodeId: { type: 'string' } }, required: ['podcastId', 'episodeId'] },
+        response: { 200: { description: 'Artwork uploaded' }, 400: { description: 'No file or not image' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { podcastId, episodeId } = request.params as { podcastId: string; episodeId: string };
       const existing = db

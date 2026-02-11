@@ -1,52 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Play, Pause, ChevronRight } from 'lucide-react';
+import { Play, Pause, ChevronRight, MessageCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getPublicPodcast, getPublicEpisode, publicEpisodeWaveformUrl } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
+import { FeedbackModal } from '../components/FeedbackModal';
 import { useMeta } from '../hooks/useMeta';
 import { WaveformCanvas, type WaveformData } from './EpisodeEditor/WaveformCanvas';
+import { formatDate, formatDuration, formatSeasonEpisode } from '../utils/format';
 import styles from './PublicEpisode.module.css';
-
-function formatDuration(seconds: number | null | undefined): string {
-  if (!seconds) return '';
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-  return `${minutes}:${String(secs).padStart(2, '0')}`;
-}
-
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
-  try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return '';
-  }
-}
-
-function formatSeasonEpisode(seasonNumber: number | null | undefined, episodeNumber: number | null | undefined): string {
-  if (seasonNumber != null && episodeNumber != null) {
-    return `S${seasonNumber} E${episodeNumber}`;
-  }
-  if (seasonNumber != null) {
-    return `S${seasonNumber}`;
-  }
-  if (episodeNumber != null) {
-    return `E${episodeNumber}`;
-  }
-  return '';
-}
 
 export function PublicEpisode() {
   const { podcastSlug, episodeSlug } = useParams<{ podcastSlug: string; episodeSlug: string }>();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const { data: podcast, isLoading: podcastLoading } = useQuery({
     queryKey: ['public-podcast', podcastSlug],
     queryFn: () => getPublicPodcast(podcastSlug!),
@@ -189,20 +155,40 @@ export function PublicEpisode() {
             />
           ) : null}
           <div className={styles.headerContent}>
-            {(episode.season_number != null || episode.episode_number != null) && (
-              <div className={styles.seasonEpisode}>
-                {formatSeasonEpisode(episode.season_number, episode.episode_number)}
+            {(episode.season_number != null || episode.episode_number != null || episode.audio_duration_sec) ? (
+              <div className={styles.seasonEpisodeWrap}>
+                {(episode.season_number != null || episode.episode_number != null) && (
+                  <span className={styles.seasonEpisode}>
+                    {formatSeasonEpisode(episode.season_number, episode.episode_number)}
+                  </span>
+                )}
+                {episode.audio_duration_sec && (
+                  <>
+                    {(episode.season_number != null || episode.episode_number != null) && (
+                      <span className={styles.badgeSep} aria-hidden />
+                    )}
+                    <span className={styles.durationBadge}>
+                      {formatDuration(episode.audio_duration_sec)}
+                    </span>
+                  </>
+                )}
               </div>
-            )}
+            ) : null}
             <h1 className={styles.title}>{episode.title}</h1>
+            <div className={styles.episodeSubRow}>
+              <button
+                type="button"
+                className={styles.messageBtn}
+                onClick={() => setFeedbackOpen(true)}
+                aria-label="Send message"
+              >
+                <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
+                Message
+              </button>
+            </div>
             <div className={styles.meta}>
               {episode.publish_at && (
                 <span className={styles.date}>{formatDate(episode.publish_at)}</span>
-              )}
-              {episode.audio_duration_sec && (
-                <span className={styles.duration}>
-                  {formatDuration(episode.audio_duration_sec)}
-                </span>
               )}
             </div>
           </div>
@@ -263,6 +249,17 @@ export function PublicEpisode() {
         </div>
       </main>
       </div>
+
+      <FeedbackModal
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        context={{
+          podcastSlug: podcastSlug ?? undefined,
+          episodeSlug: episodeSlug ?? undefined,
+          podcastTitle: podcast.title,
+          episodeTitle: episode.title,
+        }}
+      />
     </div>
   );
 }

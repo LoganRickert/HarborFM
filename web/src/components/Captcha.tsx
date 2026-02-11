@@ -29,6 +29,8 @@ const HCAPTCHA_SCRIPT = 'https://js.hcaptcha.com/1/api.js';
 interface CaptchaProps {
   provider: CaptchaProvider;
   siteKey: string;
+  /** reCAPTCHA v3 action name (e.g. 'login', 'contact'). Default 'login'. */
+  action?: string;
 }
 
 function loadScript(src: string, onload?: () => void): void {
@@ -45,7 +47,7 @@ function loadScript(src: string, onload?: () => void): void {
 }
 
 export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
-  { provider, siteKey },
+  { provider, siteKey, action: actionProp = 'login' },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
           if (!window.grecaptcha) return Promise.resolve('');
           return new Promise<void>((resolve) => {
             window.grecaptcha!.ready(resolve);
-          }).then(() => window.grecaptcha!.execute(siteKey, { action: 'login' }));
+          }).then(() => window.grecaptcha!.execute(siteKey, { action: actionProp }));
         }
         if (provider === 'recaptcha_v2') {
           if (!window.grecaptcha) return Promise.resolve('');
@@ -75,7 +77,7 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
         return Promise.resolve('');
       },
     }),
-    [provider, siteKey]
+    [provider, siteKey, actionProp]
   );
 
   useEffect(() => {

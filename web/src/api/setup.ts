@@ -10,6 +10,7 @@ export function setupStatus() {
     captchaProvider: CaptchaProvider;
     captchaSiteKey: string;
     emailConfigured: boolean;
+    welcomeBanner: string;
   }>('/setup/status');
 }
 

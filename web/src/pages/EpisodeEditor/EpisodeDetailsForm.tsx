@@ -319,7 +319,7 @@ export function EpisodeDetailsForm({
           Cancel
         </button>
         <button type="submit" className={styles.submit} disabled={savingOrUploading} aria-label="Save episode details">
-          {cover?.uploadArtworkPending ? 'Uploading…' : isSaving ? 'Saving…' : 'Save'}
+          {cover?.uploadArtworkPending ? 'Uploading...' : isSaving ? 'Saving...' : 'Save'}
         </button>
       </div>
     </form>

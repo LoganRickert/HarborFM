@@ -29,6 +29,7 @@ export interface AppSettings {
   smtp_from: string;
   sendgrid_api_key: string;
   sendgrid_from: string;
+  welcome_banner: string;
 }
 
 export function getSettings(): Promise<AppSettings> {

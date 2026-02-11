@@ -105,7 +105,7 @@ export function Register() {
                 disabled={mutation.isPending}
                 aria-label="Create account"
               >
-                {mutation.isPending ? 'Creating…' : 'Create account'}
+                {mutation.isPending ? 'Creating...' : 'Create account'}
               </button>
             </form>
             <p className={styles.footer}>
@@ -118,6 +118,8 @@ export function Register() {
           <Link to="/privacy">Privacy Policy</Link>
           <span className={styles.footerBelowCardSep} aria-hidden />
           <Link to="/terms">Terms of Service</Link>
+          <span className={styles.footerBelowCardSep} aria-hidden />
+          <Link to="/contact">Contact</Link>
         </p>
       </div>
     </main>

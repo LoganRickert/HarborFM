@@ -13,6 +13,8 @@ export interface EpisodeSectionsPanelProps {
   recordDisabled?: boolean;
   /** Shown when record is disabled. */
   recordDisabledMessage?: string;
+  /** When true, user cannot add record, add library, or edit/delete/move segments. */
+  readOnly?: boolean;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
   onDeleteRequest: (segmentId: string) => void;
@@ -33,6 +35,7 @@ export function EpisodeSectionsPanel({
   onAddLibrary,
   recordDisabled = false,
   recordDisabledMessage,
+  readOnly = false,
   onMoveUp,
   onMoveDown,
   onDeleteRequest,
@@ -54,11 +57,11 @@ export function EpisodeSectionsPanel({
       </header>
 
       <div className={styles.addSectionChoiceRow}>
-        {recordDisabled ? (
+        {recordDisabled || readOnly ? (
           <span
             className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary} ${styles.addSectionChoiceBtnDisabled}`}
-            title={recordDisabledMessage}
-            aria-label={recordDisabledMessage ?? 'Record new section (disabled)'}
+            title={readOnly ? 'Read-only account' : recordDisabledMessage}
+            aria-label={readOnly ? 'Record new section (read-only)' : (recordDisabledMessage ?? 'Record new section (disabled)')}
           >
             <Mic size={24} strokeWidth={2} aria-hidden />
             <span>Record new section</span>
@@ -69,10 +72,21 @@ export function EpisodeSectionsPanel({
             <span>Record new section</span>
           </button>
         )}
-        <button type="button" className={styles.addSectionChoiceBtn} onClick={onAddLibrary} aria-label="Insert from library">
-          <Library size={24} strokeWidth={2} aria-hidden />
-          <span>Insert from library</span>
-        </button>
+        {readOnly ? (
+          <span
+            className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnDisabled}`}
+            title="Read-only account"
+            aria-label="Insert from library (read-only)"
+          >
+            <Library size={24} strokeWidth={2} aria-hidden />
+            <span>Insert from library</span>
+          </span>
+        ) : (
+          <button type="button" className={styles.addSectionChoiceBtn} onClick={onAddLibrary} aria-label="Insert from library">
+            <Library size={24} strokeWidth={2} aria-hidden />
+            <span>Insert from library</span>
+          </button>
+        )}
       </div>
       {recordDisabled && recordDisabledMessage && (
         <p className={styles.sectionSub} style={{ marginTop: '0.25rem' }}>
@@ -81,7 +95,7 @@ export function EpisodeSectionsPanel({
       )}
 
       {segmentsLoading ? (
-        <p className={styles.sectionSub}>Loading sections…</p>
+        <p className={styles.sectionSub}>Loading sections...</p>
       ) : segments.length === 0 ? (
         <p className={styles.sectionSub}>No sections yet. Record or add from library above.</p>
       ) : (
@@ -102,6 +116,7 @@ export function EpisodeSectionsPanel({
               onMoreInfo={() => onSegmentMoreInfo(seg.id)}
               registerPause={registerSegmentPause}
               unregisterPause={unregisterSegmentPause}
+              readOnly={readOnly}
             />
           ))}
         </ul>

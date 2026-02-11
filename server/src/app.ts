@@ -5,6 +5,8 @@ import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, writeFileSync, chmodSync } from 'fs';
@@ -25,6 +27,8 @@ import { llmRoutes } from './routes/llm.js';
 import { usersRoutes } from './routes/users.js';
 import { publicRoutes } from './routes/public.js';
 import { setupRoutes } from './routes/setup.js';
+import { contactRoutes } from './routes/contact.js';
+import { messagesRoutes } from './routes/messages.js';
 import { sitemapRoutes } from './routes/sitemap.js';
 import {
   flush,
@@ -35,6 +39,7 @@ import {
 import { ensureSecretsDir, getSecretsDir } from './services/paths.js';
 import { getOrCreateSetupToken, isSetupComplete } from './services/setup.js';
 import { getSecretsKey } from './services/secrets.js';
+import { SWAGGER_TITLE, SWAGGER_THEME_CSS } from './swagger-theme.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -104,15 +109,7 @@ async function main() {
 
   await app.register(rateLimit, {
     max: 100,
-    timeWindow: '1 minute',
-    allowList: (req) => {
-      const path = req.url.split('?')[0];
-      return (
-        path === '/api/health' ||
-        path.startsWith('/api/setup') ||
-        path === '/setup'
-      );
-    },
+    timeWindow: '1 minute'
   });
 
   await app.register(cookie);
@@ -122,6 +119,57 @@ async function main() {
     cookie: { cookieName: 'harborfm_jwt', signed: false },
   });
   await app.register(authPlugin);
+
+  await app.register(fastifySwagger, {
+    openapi: {
+      openapi: '3.0.0',
+      info: {
+        title: 'HarborFM API',
+        description:
+          'REST API for HarborFM. Authenticate with an API key from **Profile → API keys** in the app. Use the key as a Bearer token: `Authorization: Bearer hfm_your_key_here`.',
+        version: '1.0.0',
+      },
+      servers: [{ url: '/', description: 'Current host' }],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'API Key',
+            description: 'Your API key from Profile → API keys (prefix: hfm_)',
+          },
+        },
+      },
+      security: [{ bearerAuth: [] }],
+    },
+    transformObject(documentObject) {
+      const spec =
+        'openapiObject' in documentObject
+          ? documentObject.openapiObject
+          : documentObject.swaggerObject;
+      const paths = spec && 'paths' in spec ? spec.paths : undefined;
+      if (paths) {
+        for (const pathMethods of Object.values(paths)) {
+          for (const op of Object.values(pathMethods)) {
+            const o = op as { tags?: string[] } | undefined;
+            if (o && typeof o === 'object' && (!o.tags || o.tags.length === 0)) {
+              o.tags = ['Endpoints'];
+            }
+          }
+        }
+      }
+      return spec;
+    },
+  });
+
+  await app.register(fastifySwaggerUi, {
+    routePrefix: '/api/docs',
+    uiConfig: { docExpansion: 'list', tryItOutEnabled: true },
+    theme: {
+      title: SWAGGER_TITLE,
+      css: [{ filename: 'harborfm.css', content: SWAGGER_THEME_CSS }],
+    },
+  });
 
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: '/' });
@@ -136,6 +184,8 @@ async function main() {
   await app.register(llmRoutes, { prefix: '/' });
   await app.register(usersRoutes, { prefix: '/' });
   await app.register(setupRoutes, { prefix: '/' });
+  await app.register(contactRoutes, { prefix: '/' });
+  await app.register(messagesRoutes, { prefix: '/' });
   await app.register(publicRoutes, { prefix: '/' });
   await app.register(sitemapRoutes, { prefix: '/' });
 

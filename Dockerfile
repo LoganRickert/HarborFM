@@ -33,7 +33,7 @@ RUN set -eux; \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg tini build-essential python3 ca-certificates wget libmad0 \
-    libid3tag0 libboost-program-options1.74.0 geoipupdate \
+    libid3tag0 libboost-program-options1.74.0 geoipupdate smbclient \
   && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \

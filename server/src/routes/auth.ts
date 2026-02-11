@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import argon2 from 'argon2';
-import { requireAuth } from '../plugins/auth.js';
+import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import { registerBodySchema, loginBodySchema } from '@harborfm/shared';
@@ -12,8 +12,11 @@ import { getLocationForIp } from '../services/geolocation.js';
 import { verifyCaptcha } from '../services/captcha.js';
 import { sendMail, buildWelcomeVerificationEmail, buildResetPasswordEmail } from '../services/email.js';
 import { normalizeHostname } from '../utils/url.js';
+import { sha256Hex } from '../utils/hash.js';
 
 const COOKIE_NAME = 'harborfm_jwt';
+const API_KEY_PREFIX = 'hfm_';
+const MAX_API_KEYS_PER_USER = 5;
 const VERIFICATION_TOKEN_BYTES = 24;
 const VERIFICATION_EXPIRY_HOURS = 24;
 const CSRF_COOKIE_NAME = 'harborfm_csrf';
@@ -39,7 +42,16 @@ function newCsrfToken(): string {
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/api/auth/register', async (request, reply) => {
+  app.post('/api/auth/register', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Register',
+      description: 'Create a new account. No authentication required. May require email verification.',
+      security: [],
+      body: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' }, captchaToken: { type: 'string' } }, required: ['email', 'password'] },
+      response: { 201: { description: 'User created or verification required' }, 400: { description: 'Validation failed' }, 403: { description: 'Registration disabled' }, 409: { description: 'Email already registered' } },
+    },
+  }, async (request, reply) => {
     // Setup gate: if there are no users, the server must be bootstrapped first.
     // This prevents "first registrant becomes admin" on fresh installs.
     const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
@@ -149,7 +161,16 @@ export async function authRoutes(app: FastifyInstance) {
       .send({ user: { id, email } });
   });
 
-  app.get('/api/auth/verify-email', async (request, reply) => {
+  app.get('/api/auth/verify-email', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Verify email',
+      description: 'Verify email address with token from welcome email. No authentication required.',
+      security: [],
+      querystring: { type: 'object', properties: { token: { type: 'string' } }, required: ['token'] },
+      response: { 200: { description: 'Email verified' }, 400: { description: 'Invalid or expired token' } },
+    },
+  }, async (request, reply) => {
     const token = (request.query as { token?: string }).token?.trim();
     if (!token) {
       return reply.status(400).send({ error: 'Missing verification token' });
@@ -168,7 +189,16 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
-  app.post('/api/auth/login', async (request, reply) => {
+  app.post('/api/auth/login', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Login',
+      description: 'Sign in with email and password. Sets HTTP-only cookie. No authentication required.',
+      security: [],
+      body: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' }, captchaToken: { type: 'string' } }, required: ['email', 'password'] },
+      response: { 200: { description: 'User and session' }, 400: { description: 'Validation or CAPTCHA failed' }, 401: { description: 'Invalid credentials' }, 403: { description: 'Account disabled or email not verified' }, 429: { description: 'Rate limited' } },
+    },
+  }, async (request, reply) => {
     const ip = getClientIp(request);
     const userAgent = getUserAgent(request);
     const ban = getIpBan(ip, 'auth_login');
@@ -274,7 +304,16 @@ export async function authRoutes(app: FastifyInstance) {
   const RESET_TOKEN_EXPIRY_HOURS = 1;
   const RESET_TOKEN_BYTES = 32;
 
-  app.post('/api/auth/forgot-password', async (request, reply) => {
+  app.post('/api/auth/forgot-password', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Forgot password',
+      description: 'Request a password reset email. No authentication required. Always returns 200 when email is valid.',
+      security: [],
+      body: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+      response: { 200: { description: 'OK' }, 400: { description: 'Email required' }, 429: { description: 'Rate limited' }, 503: { description: 'Email not configured' } },
+    },
+  }, async (request, reply) => {
     const settings = readSettings();
     if (settings.email_provider !== 'smtp' && settings.email_provider !== 'sendgrid') {
       return reply.status(503).send({
@@ -300,8 +339,14 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
 
-    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string } | undefined;
+    const user = db.prepare(
+      'SELECT id, COALESCE(disabled, 0) AS disabled, COALESCE(read_only, 0) AS read_only FROM users WHERE email = ?'
+    ).get(email) as { id: string; disabled: number; read_only: number } | undefined;
     if (!user) {
+      return reply.send({ ok: true });
+    }
+
+    if (user.disabled === 1 || user.read_only === 1) {
       return reply.send({ ok: true });
     }
 
@@ -323,7 +368,16 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
-  app.get('/api/auth/validate-reset-token', async (request, reply) => {
+  app.get('/api/auth/validate-reset-token', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Validate reset token',
+      description: 'Check if a password reset token is valid. No authentication required.',
+      security: [],
+      querystring: { type: 'object', properties: { token: { type: 'string' } }, required: ['token'] },
+      response: { 200: { description: 'Token valid' }, 400: { description: 'Invalid or expired' } },
+    },
+  }, async (request, reply) => {
     const query = request.query as { token?: string };
     const token = typeof query?.token === 'string' ? query.token.trim() : '';
     if (!token) {
@@ -338,7 +392,16 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
-  app.post('/api/auth/reset-password', async (request, reply) => {
+  app.post('/api/auth/reset-password', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Reset password',
+      description: 'Set new password using token from reset email. No authentication required.',
+      security: [],
+      body: { type: 'object', properties: { token: { type: 'string' }, password: { type: 'string' } }, required: ['token', 'password'] },
+      response: { 200: { description: 'Password updated' }, 400: { description: 'Invalid token or password too short' } },
+    },
+  }, async (request, reply) => {
     const body = request.body as { token?: string; password?: string };
     const token = typeof body?.token === 'string' ? body.token.trim() : '';
     const password = typeof body?.password === 'string' ? body.password : '';
@@ -362,22 +425,48 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
-  app.post('/api/auth/logout', async (_request, reply) => {
+  app.post('/api/auth/logout', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Logout',
+      description: 'Clear session cookies. No authentication required.',
+      security: [],
+      response: { 200: { description: 'OK', type: 'object', properties: { ok: { type: 'boolean' } } } },
+    },
+  }, async (_request, reply) => {
     return reply
       .clearCookie(COOKIE_NAME, { path: '/' })
       .clearCookie(CSRF_COOKIE_NAME, { path: '/' })
       .send({ ok: true });
   });
 
-  app.get('/api/auth/me', { preHandler: [requireAuth] }, async (request, reply) => {
-    const user = db.prepare('SELECT id, email, role, max_podcasts, max_episodes, max_storage_mb, COALESCE(disk_bytes_used, 0) AS disk_bytes_used FROM users WHERE id = ?').get(request.userId) as {
+  app.get('/api/auth/me', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Auth'],
+      summary: 'Get current user',
+      description: 'Returns the authenticated user profile, limits, and podcast/episode counts. Requires API key or session.',
+      response: { 200: { description: 'User and counts' }, 401: { description: 'Unauthorized' }, 404: { description: 'User not found' } },
+    },
+  }, async (request, reply) => {
+    const user = db.prepare(
+      `SELECT id, email, created_at, role, COALESCE(read_only, 0) AS read_only,
+        max_podcasts, max_episodes, max_storage_mb, COALESCE(disk_bytes_used, 0) AS disk_bytes_used,
+        last_login_at, last_login_ip, last_login_location
+       FROM users WHERE id = ?`
+    ).get(request.userId) as {
       id: string;
       email: string;
+      created_at: string;
       role: string;
+      read_only: number;
       max_podcasts: number | null;
       max_episodes: number | null;
       max_storage_mb: number | null;
       disk_bytes_used: number;
+      last_login_at: string | null;
+      last_login_ip: string | null;
+      last_login_location: string | null;
     } | undefined;
     if (!user) {
       return reply.status(404).send({ error: 'User not found' });
@@ -393,14 +482,105 @@ export async function authRoutes(app: FastifyInstance) {
       user: {
         id: user.id,
         email: user.email,
+        created_at: user.created_at,
         role: user.role,
+        read_only: user.read_only ? 1 : 0,
         max_podcasts: user.max_podcasts ?? null,
         max_episodes: user.max_episodes ?? null,
         max_storage_mb: user.max_storage_mb ?? null,
         disk_bytes_used: user.disk_bytes_used ?? 0,
+        last_login_at: user.last_login_at ?? null,
+        last_login_ip: user.last_login_ip ?? null,
+        last_login_location: user.last_login_location ?? null,
       },
       podcast_count: podcastCount.count,
       episode_count: episodeCount.count,
     };
+  });
+
+  function requireSession(
+    request: { authViaApiKey?: boolean; userId: string },
+    reply: { status: (code: number) => { send: (body: unknown) => unknown }; sent?: boolean }
+  ): boolean {
+    if (request.authViaApiKey) {
+      reply.status(403).send({ error: 'API key management requires signing in with your password.' });
+      return false;
+    }
+    return true;
+  }
+
+  app.get('/api/auth/api-keys', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Auth'],
+      summary: 'List API keys',
+      description: 'List your API keys (id, created_at, last_used_at). Requires session (not API key).',
+      response: { 200: { description: 'List of API keys' }, 401: { description: 'Unauthorized' }, 403: { description: 'Use session to manage keys' } },
+    },
+  }, async (request, reply) => {
+    if (!requireSession(request, reply as Parameters<typeof requireSession>[1])) return;
+    const keys = db
+      .prepare(
+        'SELECT id, created_at, last_used_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
+      )
+      .all(request.userId) as { id: string; created_at: string; last_used_at: string | null }[];
+    return { api_keys: keys };
+  });
+
+  app.post('/api/auth/api-keys', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Auth'],
+      summary: 'Create API key',
+      description: 'Generate a new API key. Raw key returned only once. Max 5 per user. Requires session (not API key).',
+      response: { 201: { description: 'New key' }, 400: { description: 'At key limit' }, 401: { description: 'Unauthorized' }, 403: { description: 'Use session or read-only' } },
+    },
+  }, async (request, reply) => {
+    if (!requireSession(request, reply as Parameters<typeof requireSession>[1])) return;
+    const count = db
+      .prepare('SELECT COUNT(*) as count FROM api_keys WHERE user_id = ?')
+      .get(request.userId) as { count: number };
+    if (count.count >= MAX_API_KEYS_PER_USER) {
+      return reply.status(400).send({
+        error: `You can have at most ${MAX_API_KEYS_PER_USER} API keys. Revoke one to create a new one.`,
+      });
+    }
+    const id = nanoid();
+    const rawKey = API_KEY_PREFIX + randomBytes(32).toString('hex');
+    const keyHash = sha256Hex(rawKey);
+    db.prepare(
+      'INSERT INTO api_keys (id, user_id, key_hash, created_at) VALUES (?, ?, ?, datetime(\'now\'))'
+    ).run(id, request.userId, keyHash);
+    const row = db.prepare('SELECT id, created_at FROM api_keys WHERE id = ?').get(id) as {
+      id: string;
+      created_at: string;
+    };
+    return reply.status(201).send({
+      id: row.id,
+      key: rawKey,
+      created_at: row.created_at,
+    });
+  });
+
+  app.delete('/api/auth/api-keys/:id', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Auth'],
+      summary: 'Revoke API key',
+      description: 'Permanently revoke an API key. Requires session (not API key).',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      response: { 204: { description: 'Revoked' }, 401: { description: 'Unauthorized' }, 403: { description: 'Use session or read-only' }, 404: { description: 'Key not found' } },
+    },
+  }, async (request, reply) => {
+    if (!requireSession(request, reply as Parameters<typeof requireSession>[1])) return;
+    const { id } = request.params as { id: string };
+    const existing = db
+      .prepare('SELECT id FROM api_keys WHERE id = ? AND user_id = ?')
+      .get(id, request.userId);
+    if (!existing) {
+      return reply.status(404).send({ error: 'API key not found' });
+    }
+    db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
+    return reply.status(204).send();
   });
 }

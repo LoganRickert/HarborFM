@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { createReadStream, existsSync, readFileSync } from 'fs';
 import { basename, extname } from 'path';
 import { db } from '../db/index.js';
+import { getExportPathPrefix } from '../services/export-config.js';
 import { getUserAgent } from '../services/loginAttempts.js';
 import { recordRssRequest } from '../services/podcastStats.js';
 import { assertPathUnder, assertSafeId, artworkDir, processedDir } from '../services/paths.js';
@@ -75,7 +76,16 @@ export async function publicRoutes(app: FastifyInstance) {
   const ARTWORK_FILENAME_REGEX = /^[a-zA-Z0-9_-]+\.(png|webp|jpg)$/i;
 
   // Serve uploaded episode cover image (public so feed and edit preview can use it).
-  app.get('/api/public/artwork/:podcastId/episodes/:episodeId/:filename', async (request, reply) => {
+  app.get('/api/public/artwork/:podcastId/episodes/:episodeId/:filename', {
+    schema: {
+      tags: ['Public'],
+      summary: 'Get episode artwork',
+      description: 'Returns the episode cover image (PNG/WebP/JPG). No authentication required.',
+      security: [],
+      params: { type: 'object', properties: { podcastId: { type: 'string' }, episodeId: { type: 'string' }, filename: { type: 'string' } }, required: ['podcastId', 'episodeId', 'filename'] },
+      response: { 200: { description: 'Image binary' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { podcastId, episodeId, filename } = request.params as { podcastId: string; episodeId: string; filename: string };
     try {
       assertSafeId(podcastId, 'podcastId');
@@ -107,7 +117,16 @@ export async function publicRoutes(app: FastifyInstance) {
   });
 
   // Serve uploaded podcast cover image (public so feed and edit preview can use it). URL includes filename so cache busts on new upload.
-  app.get('/api/public/artwork/:podcastId/:filename', async (request, reply) => {
+  app.get('/api/public/artwork/:podcastId/:filename', {
+    schema: {
+      tags: ['Public'],
+      summary: 'Get podcast artwork',
+      description: 'Returns the podcast/show cover image (PNG/WebP/JPG). No authentication required.',
+      security: [],
+      params: { type: 'object', properties: { podcastId: { type: 'string' }, filename: { type: 'string' } }, required: ['podcastId', 'filename'] },
+      response: { 200: { description: 'Image binary' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { podcastId, filename } = request.params as { podcastId: string; filename: string };
     try {
       assertSafeId(podcastId, 'podcastId');
@@ -138,13 +157,30 @@ export async function publicRoutes(app: FastifyInstance) {
   });
 
   // Public config (no auth): used by the web client to gate /feed routes.
-  app.get('/api/public/config', async (_request, reply) => {
+  app.get('/api/public/config', {
+    schema: {
+      tags: ['Public'],
+      summary: 'Get public config',
+      description: 'Returns whether public feeds are enabled. No authentication required.',
+      security: [],
+      response: { 200: { description: 'Config', type: 'object', properties: { public_feeds_enabled: { type: 'boolean' } }, required: ['public_feeds_enabled'] } },
+    },
+  }, async (_request, reply) => {
     const settings = readSettings();
     return reply.send({ public_feeds_enabled: Boolean(settings.public_feeds_enabled) });
   });
 
   // Get podcast by slug (public, no auth required)
-  app.get('/api/public/podcasts/:slug', async (request, reply) => {
+  app.get('/api/public/podcasts/:slug', {
+    schema: {
+      tags: ['Public'],
+      summary: 'Get podcast by slug',
+      description: 'Returns podcast metadata by URL slug. No authentication required. 404 when public feeds are disabled.',
+      security: [],
+      params: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] },
+      response: { 200: { description: 'Podcast metadata' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     if (!ensurePublicFeedsEnabled(reply)) return;
     const { slug } = request.params as { slug: string };
     const row = db
@@ -157,19 +193,29 @@ export async function publicRoutes(app: FastifyInstance) {
     const dto = publicPodcastDto(row) as Record<string, unknown>;
     const exportRow = db
       .prepare(
-        `SELECT public_base_url, prefix FROM exports WHERE podcast_id = ? AND public_base_url IS NOT NULL AND LENGTH(TRIM(public_base_url)) > 0 LIMIT 1`
+        `SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? AND public_base_url IS NOT NULL AND LENGTH(TRIM(public_base_url)) > 0 LIMIT 1`
       )
-      .get(row.id) as { public_base_url: string; prefix: string | null } | undefined;
+      .get(row.id) as Record<string, unknown> | undefined;
     if (exportRow?.public_base_url) {
       const base = String(exportRow.public_base_url).trim().replace(/\/$/, '');
-      const prefix = exportRow.prefix != null ? String(exportRow.prefix).trim().replace(/^\/|\/$/g, '') : '';
+      const prefix = getExportPathPrefix(exportRow) ?? '';
       dto.rss_url = prefix ? `${base}/${prefix}/feed.xml` : `${base}/feed.xml`;
     }
     return dto;
   });
 
   // Get published episodes for a podcast by podcast slug (public, no auth required)
-  app.get('/api/public/podcasts/:podcastSlug/episodes', async (request, reply) => {
+  app.get('/api/public/podcasts/:podcastSlug/episodes', {
+    schema: {
+      tags: ['Public'],
+      summary: 'List podcast episodes',
+      description: 'Returns published episodes for a podcast (paginated). No authentication required.',
+      security: [],
+      params: { type: 'object', properties: { podcastSlug: { type: 'string' } }, required: ['podcastSlug'] },
+      querystring: { type: 'object', properties: { limit: { type: 'string' }, offset: { type: 'string' } } },
+      response: { 200: { description: 'Episodes list with total, limit, offset, hasMore' }, 404: { description: 'Podcast not found' } },
+    },
+  }, async (request, reply) => {
     if (!ensurePublicFeedsEnabled(reply)) return;
     const { podcastSlug } = request.params as { podcastSlug: string };
     const query = request.query as { limit?: string; offset?: string };
@@ -215,7 +261,16 @@ export async function publicRoutes(app: FastifyInstance) {
   });
 
   // Get episode by podcast slug and episode slug (public, no auth required)
-  app.get('/api/public/podcasts/:podcastSlug/episodes/:episodeSlug', async (request, reply) => {
+  app.get('/api/public/podcasts/:podcastSlug/episodes/:episodeSlug', {
+    schema: {
+      tags: ['Public'],
+      summary: 'Get episode by slug',
+      description: 'Returns a published episode by podcast and episode slug. No authentication required.',
+      security: [],
+      params: { type: 'object', properties: { podcastSlug: { type: 'string' }, episodeSlug: { type: 'string' } }, required: ['podcastSlug', 'episodeSlug'] },
+      response: { 200: { description: 'Episode metadata' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     if (!ensurePublicFeedsEnabled(reply)) return;
     const { podcastSlug, episodeSlug } = request.params as { podcastSlug: string; episodeSlug: string };
     const podcast = db
@@ -239,7 +294,16 @@ export async function publicRoutes(app: FastifyInstance) {
   });
 
   // Get episode waveform by podcast slug and episode slug (public, no auth required)
-  app.get('/api/public/podcasts/:podcastSlug/episodes/:episodeSlug/waveform', async (request, reply) => {
+  app.get('/api/public/podcasts/:podcastSlug/episodes/:episodeSlug/waveform', {
+    schema: {
+      tags: ['Public'],
+      summary: 'Get episode waveform',
+      description: 'Returns waveform JSON for a published episode. No authentication required.',
+      security: [],
+      params: { type: 'object', properties: { podcastSlug: { type: 'string' }, episodeSlug: { type: 'string' } }, required: ['podcastSlug', 'episodeSlug'] },
+      response: { 200: { description: 'Waveform JSON' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     if (!ensurePublicFeedsEnabled(reply)) return;
     const { podcastSlug, episodeSlug } = request.params as { podcastSlug: string; episodeSlug: string };
     const podcast = db
@@ -274,7 +338,16 @@ export async function publicRoutes(app: FastifyInstance) {
   // Get RSS feed by podcast slug (public, no auth required)
   // Serves from data/rss/:podcastId/feed.xml if present and < RSS_CACHE_MAX_AGE_MS; otherwise generates, saves, and serves.
   // HEAD requests are not counted. 304 Not Modified (if added) should still count as a feed check — record before sending.
-  app.get('/api/public/podcasts/:podcastSlug/rss', async (request, reply) => {
+  app.get('/api/public/podcasts/:podcastSlug/rss', {
+    schema: {
+      tags: ['Public'],
+      summary: 'Get RSS feed',
+      description: 'Returns the RSS feed XML for a podcast by slug. No authentication required.',
+      security: [],
+      params: { type: 'object', properties: { podcastSlug: { type: 'string' } }, required: ['podcastSlug'] },
+      response: { 200: { description: 'RSS XML' }, 404: { description: 'Podcast not found' }, 500: { description: 'Failed to generate feed' } },
+    },
+  }, async (request, reply) => {
     if (!ensurePublicFeedsEnabled(reply)) return;
     const { podcastSlug } = request.params as { podcastSlug: string };
     const podcast = db

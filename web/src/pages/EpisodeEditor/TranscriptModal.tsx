@@ -775,7 +775,7 @@ export function TranscriptModal({
                 </div>
               </div>
             )}
-            {loading && <p>Loading…</p>}
+            {loading && <p>Loading...</p>}
             {!loading && text != null && mode === 'view' && (
               <>
                 {srtEntries ? (
@@ -876,14 +876,14 @@ export function TranscriptModal({
                   <input
                     type="text"
                     className={styles.transcriptAskInput}
-                    placeholder="Ask something about this transcript…"
+                    placeholder="Ask something about this transcript..."
                     value={askQuestion}
                     onChange={(e) => setAskQuestion(e.target.value)}
                     disabled={askMutation.isPending}
                     aria-label="Question"
                   />
                   <button type="submit" className={styles.transcriptAskSubmit} disabled={askMutation.isPending || !askQuestion.trim()} aria-label="Submit question">
-                    {askMutation.isPending ? '…' : 'Submit'}
+                    {askMutation.isPending ? '...' : 'Submit'}
                   </button>
                 </form>
                 {askError && (
@@ -934,7 +934,7 @@ export function TranscriptModal({
                         disabled={trimming || !trimStart.trim() || previewingStart || previewingEnd}
                         aria-label="Trim start of segment"
                       >
-                        {trimming ? 'Trimming…' : 'Trim Start'}
+                        {trimming ? 'Trimming...' : 'Trim Start'}
                       </button>
                     </div>
                   </div>
@@ -971,7 +971,7 @@ export function TranscriptModal({
                         disabled={trimming || !trimEnd.trim() || previewingStart || previewingEnd}
                         aria-label="Trim end of segment"
                       >
-                        {trimming ? 'Trimming…' : 'Trim End'}
+                        {trimming ? 'Trimming...' : 'Trim End'}
                       </button>
                     </div>
                   </div>
@@ -989,7 +989,7 @@ export function TranscriptModal({
                       style={{ width: '100%', marginTop: '0.5rem' }}
                       aria-label="Remove silence from segment"
                     >
-                      {removingSilence ? 'Removing Silence…' : 'Remove Silence'}
+                      {removingSilence ? 'Removing Silence...' : 'Remove Silence'}
                     </button>
                     <button
                       type="button"
@@ -999,7 +999,7 @@ export function TranscriptModal({
                       style={{ width: '100%', marginTop: '0.5rem' }}
                       aria-label="Apply noise suppression to segment"
                     >
-                      {applyingNoiseSuppression ? 'Applying…' : 'Noise Suppression'}
+                      {applyingNoiseSuppression ? 'Applying...' : 'Noise Suppression'}
                     </button>
                   </div>
                 </form>
@@ -1057,7 +1057,7 @@ export function TranscriptModal({
                       disabled={trimming}
                       aria-label="Confirm trim operation"
                     >
-                      {trimming ? 'Trimming…' : 'Confirm'}
+                      {trimming ? 'Trimming...' : 'Confirm'}
                     </button>
                   </div>
                 </Dialog.Content>
@@ -1110,7 +1110,7 @@ export function TranscriptModal({
                       disabled={removingSilence}
                       aria-label="Confirm remove silence"
                     >
-                      {removingSilence ? 'Removing…' : 'Confirm'}
+                      {removingSilence ? 'Removing...' : 'Confirm'}
                     </button>
                   </div>
                 </Dialog.Content>
@@ -1163,7 +1163,7 @@ export function TranscriptModal({
                       disabled={applyingNoiseSuppression}
                       aria-label="Confirm noise suppression"
                     >
-                      {applyingNoiseSuppression ? 'Applying…' : 'Confirm'}
+                      {applyingNoiseSuppression ? 'Applying...' : 'Confirm'}
                     </button>
                   </div>
                 </Dialog.Content>
@@ -1180,7 +1180,7 @@ export function TranscriptModal({
                     aria-label={generating ? 'Generating transcript' : 'Generate transcript'}
                   >
                     <FileText size={24} strokeWidth={2} aria-hidden />
-                    <span>{generating ? 'Generating…' : 'Generate transcript'}</span>
+                    <span>{generating ? 'Generating...' : 'Generate transcript'}</span>
                   </button>
                 )}
                 {generateError && (
@@ -1206,7 +1206,7 @@ export function TranscriptModal({
                 style={{ marginRight: 'auto' }}
                 aria-label="Generate new transcript"
               >
-                {generating ? 'Generating…' : 'New Transcript'}
+                {generating ? 'Generating...' : 'New Transcript'}
               </button>
             )}
             <Dialog.Close asChild>

@@ -28,6 +28,7 @@ export function Users() {
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<'user' | 'admin'>('user');
   const [editDisabled, setEditDisabled] = useState(false);
+  const [editReadOnly, setEditReadOnly] = useState(false);
   const [editPassword, setEditPassword] = useState('');
   const [editMaxPodcasts, setEditMaxPodcasts] = useState<number | null>(null);
   const [editMaxEpisodes, setEditMaxEpisodes] = useState<number | null>(null);
@@ -59,6 +60,7 @@ export function Users() {
         email?: string;
         role?: 'user' | 'admin';
         disabled?: boolean;
+        read_only?: boolean;
         password?: string;
         max_podcasts?: number | null;
         max_episodes?: number | null;
@@ -81,6 +83,7 @@ export function Users() {
     setEditEmail(user.email);
     setEditRole(user.role);
     setEditDisabled(user.disabled === 1);
+    setEditReadOnly((user as { read_only?: number }).read_only === 1);
     setEditPassword('');
     setEditMaxPodcasts(user.max_podcasts ?? null);
     setEditMaxEpisodes(user.max_episodes ?? null);
@@ -95,6 +98,7 @@ export function Users() {
       email?: string;
       role?: 'user' | 'admin';
       disabled?: boolean;
+      read_only?: boolean;
       password?: string;
       max_podcasts?: number | null;
       max_episodes?: number | null;
@@ -108,6 +112,9 @@ export function Users() {
     }
     if (editDisabled !== (userToEdit.disabled === 1)) {
       updates.disabled = editDisabled;
+    }
+    if (editReadOnly !== ((userToEdit as { read_only?: number }).read_only === 1)) {
+      updates.read_only = editReadOnly;
     }
     if (editPassword.trim() !== '') {
       updates.password = editPassword;
@@ -151,12 +158,12 @@ export function Users() {
         <input
           type="text"
           className={styles.searchInput}
-          placeholder="Search by email…"
+          placeholder="Search by email..."
           value={search}
           onChange={handleSearchChange}
         />
       </div>
-      {isLoading && <p className={styles.muted}>Loading users…</p>}
+      {isLoading && <p className={styles.muted}>Loading users...</p>}
       {isError && <p className={styles.error}>Failed to load users.</p>}
       {!isLoading && !isError && (
         <>
@@ -326,6 +333,20 @@ export function Users() {
                 </p>
               </div>
               <div className={styles.formGroup}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={editReadOnly}
+                    onChange={(e) => setEditReadOnly(e.target.checked)}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Read Only</span>
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
+                  When enabled, the user can view content but cannot create or edit podcasts, episodes, library items, or run build/S3 export.
+                </p>
+              </div>
+              <div className={styles.formGroup}>
                 <label className={styles.formLabel}>
                   Role
                   <div className={styles.roleToggle} role="group" aria-label="User role">
@@ -352,10 +373,10 @@ export function Users() {
               </div>
               <div className={styles.formGroup}>
                 <p className={styles.formLabel} style={{ marginBottom: '0.5rem' }}>
-                  Limits (leave empty for no limit)
+                  Limits (Leave Empty for No Limit)
                 </p>
                 <label className={styles.formLabel}>
-                  Max podcasts
+                  Max Podcasts
                   <input
                     type="number"
                     min={0}
@@ -370,7 +391,7 @@ export function Users() {
                   />
                 </label>
                 <label className={styles.formLabel} style={{ marginTop: '0.5rem' }}>
-                  Max episodes
+                  Max Episodes
                   <input
                     type="number"
                     min={0}
@@ -385,7 +406,7 @@ export function Users() {
                   />
                 </label>
                 <label className={styles.formLabel} style={{ marginTop: '0.5rem' }}>
-                  Max storage (MB)
+                  Max Storage (MB)
                   <input
                     type="number"
                     min={0}
@@ -416,7 +437,7 @@ export function Users() {
                   disabled={updateUserMutation.isPending}
                   aria-label="Save user changes"
                 >
-                  {updateUserMutation.isPending ? 'Saving…' : 'Save'}
+                  {updateUserMutation.isPending ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>
@@ -448,7 +469,7 @@ export function Users() {
                 disabled={deleteUserMutation.isPending}
                 aria-label="Confirm delete user"
               >
-                {deleteUserMutation.isPending ? 'Deleting…' : 'Delete'}
+                {deleteUserMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </Dialog.Content>

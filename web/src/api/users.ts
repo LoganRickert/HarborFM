@@ -8,6 +8,7 @@ export interface User {
   created_at: string;
   role: 'user' | 'admin';
   disabled: number; // 0 = false, 1 = true
+  read_only?: number; // 0 = false, 1 = true
   disk_bytes_used: number; // bytes
   last_login_at?: string | null;
   last_login_ip?: string | null;
@@ -57,6 +58,7 @@ export function updateUser(
     email?: string;
     role?: 'user' | 'admin';
     disabled?: boolean;
+    read_only?: boolean;
     password?: string;
     max_podcasts?: number | null;
     max_episodes?: number | null;

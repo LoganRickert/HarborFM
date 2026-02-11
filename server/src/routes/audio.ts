@@ -4,7 +4,7 @@ import { extname, dirname, basename } from 'path';
 import send from '@fastify/send';
 import { existsSync } from 'fs';
 import { db } from '../db/index.js';
-import { requireAuth } from '../plugins/auth.js';
+import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { canAccessEpisode } from '../services/access.js';
 import { getLocationForIp } from '../services/geolocation.js';
 import { getClientIp, getUserAgent } from '../services/loginAttempts.js';
@@ -29,7 +29,16 @@ const MAX_FILE_BYTES = 500 * 1024 * 1024; // 500 MB
 export async function audioRoutes(app: FastifyInstance) {
   app.post(
     '/api/episodes/:id/audio',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Audio'],
+        summary: 'Upload episode audio',
+        description: 'Upload source audio (WAV/MP3, multipart). Max 500MB. Requires read-write access.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 200: { description: 'Episode with updated audio' }, 400: { description: 'No file or invalid type' }, 403: { description: 'Storage limit' }, 404: { description: 'Episode not found' }, 500: { description: 'Upload failed' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -134,7 +143,16 @@ export async function audioRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/episodes/:id/process-audio',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })],
+      schema: {
+        tags: ['Audio'],
+        summary: 'Process episode audio',
+        description: 'Transcode source to final format (MP3/M4A). Requires read-write access.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 200: { description: 'Episode' }, 400: { description: 'No source audio' }, 404: { description: 'Episode not found' }, 500: { description: 'Processing failed' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId, { includeEpisode: true });
@@ -172,7 +190,16 @@ export async function audioRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/episodes/:id/final-waveform',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Audio'],
+        summary: 'Get final waveform',
+        description: 'Returns waveform JSON for processed episode audio.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 200: { description: 'Waveform JSON' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -193,7 +220,17 @@ export async function audioRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/episodes/:id/download',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Audio'],
+        summary: 'Download episode audio',
+        description: 'Download source or final audio. Query type: "source" | "final" (default).',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        querystring: { type: 'object', properties: { type: { type: 'string', enum: ['source', 'final'] } } },
+        response: { 200: { description: 'Audio file' }, 206: { description: 'Partial content' }, 404: { description: 'Not found' }, 500: { description: 'Send error' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const type = (request.query as { type?: string }).type ?? 'final';
@@ -223,10 +260,11 @@ export async function audioRoutes(app: FastifyInstance) {
 
       if (result.type === 'error') {
         const err = result.metadata.error as Error & { status?: number };
-        return reply.status(err.status ?? 500).send({ error: err.message ?? 'Internal Server Error' });
+        const status = (err.status ?? 500) as 404 | 500;
+        return reply.status(status).send({ error: err.message ?? 'Internal Server Error' });
       }
 
-      reply.code(result.statusCode);
+      reply.code(result.statusCode as 200 | 206 | 404 | 500);
       const headers = result.headers as Record<string, string>;
       for (const [key, value] of Object.entries(headers)) {
         if (value !== undefined) reply.header(key, value);
@@ -242,6 +280,16 @@ export async function audioRoutes(app: FastifyInstance) {
   // Format: /api/<podcastId>/episodes/<episodeId> or /api/<podcastId>/episodes/<episodeId>.mp3 (extension optional)
   app.get(
     '/api/:podcastId/episodes/:episodeId',
+    {
+      schema: {
+        tags: ['Audio'],
+        summary: 'Stream episode (public)',
+        description: 'Stream episode MP3 for RSS enclosures. Public when public feeds enabled. Supports Range.',
+        security: [],
+        params: { type: 'object', properties: { podcastId: { type: 'string' }, episodeId: { type: 'string' } }, required: ['podcastId', 'episodeId'] },
+        response: { 200: { description: 'Audio stream' }, 206: { description: 'Partial content' }, 400: { description: 'Invalid ID' }, 404: { description: 'Not found' }, 500: { description: 'Send error' } },
+      },
+    },
     async (request, reply) => {
       const settings = readSettings();
       if (!settings.public_feeds_enabled) {
@@ -316,12 +364,12 @@ export async function audioRoutes(app: FastifyInstance) {
 
       if (result.type === 'error') {
         const err = result.metadata.error as Error & { status?: number };
-        const status = err.status ?? 500;
+        const status = (err.status ?? 500) as 400 | 404 | 500;
         const message = err.message ?? 'Internal Server Error';
         return reply.status(status).send({ error: message });
       }
 
-      reply.code(result.statusCode);
+      reply.code(result.statusCode as 200 | 206 | 404 | 500);
       const headers = result.headers as Record<string, string>;
       for (const [key, value] of Object.entries(headers)) {
         if (value !== undefined) reply.header(key, value);

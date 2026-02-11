@@ -109,7 +109,7 @@ export function Login() {
             disabled={mutation.isPending}
             aria-label="Sign in"
           >
-            {mutation.isPending ? 'Signing in…' : 'Sign in'}
+            {mutation.isPending ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
         {setup?.registrationEnabled !== false && (
@@ -121,10 +121,17 @@ export function Login() {
           Forgot your password? <Link to="/reset-password">Reset password</Link>
         </p>
         </div>
+        {setup?.welcomeBanner?.trim() && (
+          <div className={styles.welcomeBanner} role="status">
+            {setup.welcomeBanner}
+          </div>
+        )}
         <p className={styles.footerBelowCard}>
           <Link to="/privacy">Privacy Policy</Link>
           <span className={styles.footerBelowCardSep} aria-hidden />
           <Link to="/terms">Terms of Service</Link>
+          <span className={styles.footerBelowCardSep} aria-hidden />
+          <Link to="/contact">Contact</Link>
         </p>
       </div>
     </main>

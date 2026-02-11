@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { basename, extname, join } from 'path';
 import { db } from '../db/index.js';
+import { getExportPathPrefix } from './export-config.js';
 import { assertPathUnder, assertResolvedPathUnder, rssDir } from './paths.js';
 import { EXT_DOT_TO_EXT } from '../utils/artwork.js';
 import { APP_NAME } from '../config.js';
@@ -68,13 +69,11 @@ export function generateRss(podcastId: string, publicBaseUrl?: string | null): s
   let exportPrefix: string | null = null;
   if (!publicBase) {
     const exportWithUrl = db
-      .prepare('SELECT public_base_url, prefix FROM exports WHERE podcast_id = ? AND public_base_url IS NOT NULL AND LENGTH(public_base_url) > 0 LIMIT 1')
-      .get(podcastId) as { public_base_url: string; prefix: string | null } | undefined;
+      .prepare('SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? AND public_base_url IS NOT NULL AND LENGTH(public_base_url) > 0 LIMIT 1')
+      .get(podcastId) as Record<string, unknown> | undefined;
     if (exportWithUrl?.public_base_url) {
-      // S3 export takes priority
       publicBase = sanitizeHttpUrl(exportWithUrl.public_base_url);
-      const raw = exportWithUrl.prefix != null ? String(exportWithUrl.prefix).trim() : '';
-      exportPrefix = raw ? raw.replace(/^\/|\/$/g, '') : null;
+      exportPrefix = getExportPathPrefix(exportWithUrl);
     } else {
       // If no S3 export, check for hostname setting (for self-hosted MP3s)
       const hostnameSetting = db
@@ -86,13 +85,11 @@ export function generateRss(podcastId: string, publicBaseUrl?: string | null): s
       // If neither S3 export nor hostname setting is configured, no enclosure URL will be included
     }
   } else {
-    // publicBaseUrl was passed in (e.g. from deploy); get prefix from export for S3 enclosure URLs
     const exportRow = db
-      .prepare('SELECT prefix FROM exports WHERE podcast_id = ? LIMIT 1')
-      .get(podcastId) as { prefix: string | null } | undefined;
-    if (exportRow?.prefix != null) {
-      const raw = String(exportRow.prefix).trim();
-      exportPrefix = raw ? raw.replace(/^\/|\/$/g, '') : null;
+      .prepare('SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? LIMIT 1')
+      .get(podcastId) as Record<string, unknown> | undefined;
+    if (exportRow) {
+      exportPrefix = getExportPathPrefix(exportRow);
     }
   }
   

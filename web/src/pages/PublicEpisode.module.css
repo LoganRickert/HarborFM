@@ -1,5 +1,6 @@
 .wrapper {
   min-height: 100vh;
+  overflow-x: hidden;
   background-color: var(--bg);
   background-image: url('/feed-bg.svg');
   background-size: cover;
@@ -115,6 +116,18 @@
   white-space: nowrap;
 }
 
+.feedbackLink {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.feedbackLink:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
 @media (min-width: 641px) {
   .breadcrumbCurrent {
     max-width: 420px;
@@ -145,6 +158,37 @@
   gap: 0.75rem;
 }
 
+.seasonEpisodeWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.badgeSep {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.durationBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
 .seasonEpisode {
   display: inline-block;
   padding: 0.25rem 0.625rem;
@@ -156,6 +200,38 @@
   border-radius: calc(var(--radius) - 2px);
   width: fit-content;
   font-family: var(--font-mono);
+}
+
+.episodeSubRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.messageBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.messageBtn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .title {
@@ -175,8 +251,7 @@
   flex-wrap: wrap;
 }
 
-.date,
-.duration {
+.date {
   display: inline-block;
 }
 

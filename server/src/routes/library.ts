@@ -7,7 +7,7 @@ import send from '@fastify/send';
 import { nanoid } from 'nanoid';
 import { libraryUpdateSchema } from '@harborfm/shared';
 import { db } from '../db/index.js';
-import { requireAuth, requireAdmin } from '../plugins/auth.js';
+import { requireAuth, requireAdmin, requireNotReadOnly } from '../plugins/auth.js';
 import { isAdmin } from '../services/access.js';
 import { libraryDir, libraryAssetPath } from '../services/paths.js';
 import { assertPathUnder } from '../services/paths.js';
@@ -101,7 +101,15 @@ function pixabayLdToAsset(
 }
 
 export async function libraryRoutes(app: FastifyInstance) {
-  app.get('/api/library', { preHandler: [requireAuth] }, async (request) => {
+  app.get('/api/library', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Library'],
+      summary: 'List library assets',
+      description: 'List reusable audio assets (yours and global).',
+      response: { 200: { description: 'List of assets' } },
+    },
+  }, async (request) => {
     const rows = db
       .prepare(
         `SELECT id, owner_user_id, name, tag, duration_sec, created_at,
@@ -114,7 +122,16 @@ export async function libraryRoutes(app: FastifyInstance) {
     return { assets: rows };
   });
 
-  app.get('/api/library/user/:userId', { preHandler: [requireAdmin] }, async (request) => {
+  app.get('/api/library/user/:userId', {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ['Library'],
+      summary: 'List library by user (admin)',
+      description: 'List reusable assets for a user. Admin only.',
+      params: { type: 'object', properties: { userId: { type: 'string' } }, required: ['userId'] },
+      response: { 200: { description: 'List of assets' } },
+    },
+  }, async (request) => {
     const { userId } = request.params as { userId: string };
     const rows = db
       .prepare(
@@ -129,7 +146,16 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/library/import-pixabay',
-    { preHandler: [requireAuth, requireAdmin] },
+    {
+      preHandler: [requireAuth, requireAdmin, requireNotReadOnly],
+      schema: {
+        tags: ['Library'],
+        summary: 'Import from Pixabay',
+        description: 'Import an audio asset from a Pixabay page URL. Admin only.',
+        body: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
+        response: { 201: { description: 'Imported asset' }, 400: { description: 'Invalid URL or import failed' }, 409: { description: 'Already in library' }, 502: { description: 'Download failed' } },
+      },
+    },
     async (request, reply) => {
       const body = request.body as { url?: string } | undefined;
       const url = typeof body?.url === 'string' ? body.url.trim() : '';
@@ -190,7 +216,15 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/library',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Library'],
+        summary: 'Upload library asset',
+        description: 'Upload audio file (multipart). WAV, MP3, WebM. Max 50MB. Requires read-write access.',
+        response: { 201: { description: 'Created asset' }, 400: { description: 'No file or invalid type' }, 403: { description: 'Storage limit' }, 413: { description: 'File too large' }, 500: { description: 'Upload or process failed' } },
+      },
+    },
     async (request, reply) => {
       const data = await request.file();
       if (!data) return reply.status(400).send({ error: 'No file uploaded' });
@@ -265,7 +299,17 @@ export async function libraryRoutes(app: FastifyInstance) {
     }
   );
 
-  app.patch('/api/library/:id', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.patch('/api/library/:id', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Library'],
+      summary: 'Update library asset',
+      description: 'Update asset metadata. Requires read-write access.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      body: { type: 'object', properties: { name: { type: 'string' }, tag: { type: 'string' } } },
+      response: { 200: { description: 'Updated asset' }, 400: { description: 'Validation failed' }, 403: { description: 'Cannot edit global asset' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const parse = libraryUpdateSchema.safeParse(request.body);
     if (!parse.success) {
@@ -328,7 +372,16 @@ export async function libraryRoutes(app: FastifyInstance) {
     return reply.send(row);
   });
 
-  app.delete('/api/library/:id', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.delete('/api/library/:id', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Library'],
+      summary: 'Delete library asset',
+      description: 'Permanently delete an asset. Requires read-write access.',
+      params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      response: { 204: { description: 'Deleted' }, 403: { description: 'Cannot delete global asset' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const row = db
       .prepare('SELECT * FROM reusable_assets WHERE id = ?')
@@ -370,7 +423,17 @@ export async function libraryRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  app.patch('/api/library/user/:userId/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
+  app.patch('/api/library/user/:userId/:id', {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ['Library'],
+      summary: 'Update user asset (admin)',
+      description: 'Update asset metadata for any user. Admin only.',
+      params: { type: 'object', properties: { userId: { type: 'string' }, id: { type: 'string' } }, required: ['userId', 'id'] },
+      body: { type: 'object', properties: { name: { type: 'string' }, tag: { type: 'string' }, global_asset: { type: 'number' } } },
+      response: { 200: { description: 'Updated asset' }, 400: { description: 'Validation failed' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id, userId } = request.params as { id: string; userId: string };
     const parse = libraryUpdateSchema.safeParse(request.body);
     if (!parse.success) {
@@ -419,7 +482,16 @@ export async function libraryRoutes(app: FastifyInstance) {
     return reply.send(row);
   });
 
-  app.delete('/api/library/user/:userId/:id', { preHandler: [requireAdmin] }, async (request, reply) => {
+  app.delete('/api/library/user/:userId/:id', {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ['Library'],
+      summary: 'Delete user asset (admin)',
+      description: 'Permanently delete a user asset. Admin only.',
+      params: { type: 'object', properties: { userId: { type: 'string' }, id: { type: 'string' } }, required: ['userId', 'id'] },
+      response: { 204: { description: 'Deleted' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
     const { id, userId } = request.params as { id: string; userId: string };
     const row = db
       .prepare('SELECT * FROM reusable_assets WHERE id = ? AND owner_user_id = ?')
@@ -479,10 +551,10 @@ export async function libraryRoutes(app: FastifyInstance) {
 
     if (result.type === 'error') {
       const err = result.metadata.error as Error & { status?: number };
-      return reply.status(err.status ?? 500).send({ error: err.message ?? 'Internal Server Error' });
+      return reply.status((err.status ?? 500) as 404 | 500).send({ error: err.message ?? 'Internal Server Error' });
     }
 
-    reply.code(result.statusCode);
+    reply.code(result.statusCode as 200 | 206 | 404 | 500);
     const headers = result.headers as Record<string, string>;
     for (const [key, value] of Object.entries(headers)) {
       if (value !== undefined) reply.header(key, value);
@@ -493,7 +565,16 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/library/:id/waveform',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Library'],
+        summary: 'Get asset waveform',
+        description: 'Returns waveform JSON for a library asset.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 200: { description: 'Waveform JSON' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const row = db
@@ -511,7 +592,16 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/library/:id/stream',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Library'],
+        summary: 'Stream library asset',
+        description: 'Stream audio file for a library asset. Supports range requests.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 200: { description: 'Audio stream' }, 206: { description: 'Partial content' }, 404: { description: 'Not found' }, 500: { description: 'Send error' } },
+      },
+    },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const row = db
@@ -532,7 +622,16 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/library/user/:userId/:id/waveform',
-    { preHandler: [requireAdmin] },
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ['Library'],
+        summary: 'Get user asset waveform (admin)',
+        description: 'Returns waveform JSON for a user asset. Admin only.',
+        params: { type: 'object', properties: { userId: { type: 'string' }, id: { type: 'string' } }, required: ['userId', 'id'] },
+        response: { 200: { description: 'Waveform JSON' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { id, userId } = request.params as { id: string; userId: string };
       const row = db
@@ -547,7 +646,16 @@ export async function libraryRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/library/user/:userId/:id/stream',
-    { preHandler: [requireAdmin] },
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ['Library'],
+        summary: 'Stream user asset (admin)',
+        description: 'Stream audio for a user asset. Admin only.',
+        params: { type: 'object', properties: { userId: { type: 'string' }, id: { type: 'string' } }, required: ['userId', 'id'] },
+        response: { 200: { description: 'Audio stream' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { id, userId } = request.params as { id: string; userId: string };
       const row = db

@@ -38,7 +38,15 @@ function assertSafeSlug(slug: string): void {
 
 export async function sitemapRoutes(app: FastifyInstance) {
   // Sitemap index: cached like podcast sitemaps (1h). Lists static sitemap + one per podcast (when public feeds enabled). Includes lastmod.
-  app.get('/api/sitemap.xml', async (request, reply) => {
+  app.get('/api/sitemap.xml', {
+    schema: {
+      tags: ['Sitemap'],
+      summary: 'Sitemap index',
+      description: 'Returns sitemap index XML. Public, no auth.',
+      security: [],
+      response: { 200: { description: 'Sitemap index XML' } },
+    },
+  }, async (request, reply) => {
     const cached = getCachedSitemapIndexIfFresh(SITEMAP_CACHE_MAX_AGE_MS);
     if (cached) {
       return reply
@@ -75,7 +83,15 @@ export async function sitemapRoutes(app: FastifyInstance) {
   });
 
   // Static sitemap: root, login, register, privacy, terms (feed pages are in per-podcast sitemaps).
-  app.get('/api/sitemap/static.xml', async (request, reply) => {
+  app.get('/api/sitemap/static.xml', {
+    schema: {
+      tags: ['Sitemap'],
+      summary: 'Static sitemap',
+      description: 'Returns static pages sitemap XML. Public, no auth.',
+      security: [],
+      response: { 200: { description: 'Sitemap XML' } },
+    },
+  }, async (request, reply) => {
     const baseUrl = getBaseUrl(request);
     const xml = generateStaticSitemapXml(baseUrl);
     return reply
@@ -85,7 +101,16 @@ export async function sitemapRoutes(app: FastifyInstance) {
   });
 
   // Per-podcast sitemap: cached like RSS — if missing or older than 1 hour, regenerate; else serve from disk. Paths asserted in service.
-  app.get('/api/sitemap/podcast/:slug.xml', async (request, reply) => {
+  app.get('/api/sitemap/podcast/:slug.xml', {
+    schema: {
+      tags: ['Sitemap'],
+      summary: 'Podcast sitemap',
+      description: 'Returns sitemap XML for a podcast feed. Public when public feeds enabled.',
+      security: [],
+      params: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] },
+      response: { 200: { description: 'Sitemap XML' }, 404: { description: 'Not found' }, 500: { description: 'Failed to generate sitemap' } },
+    },
+  }, async (request, reply) => {
     const settings = readSettings();
     if (!settings.public_feeds_enabled) {
       return reply.status(404).send({ error: 'Not found' });

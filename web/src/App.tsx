@@ -1,5 +1,34 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useAuthStore } from './store/auth';
+import { me } from './api/auth';
+import { setupStatus } from './api/setup';
+import { getPublicConfig } from './api/public';
+import { Layout } from './components/Layout';
+import { ServerDown } from './components/ServerDown';
+import { Login } from './pages/Login';
+import { Register } from './pages/Register';
+import { Setup } from './pages/Setup';
+import { ResetPassword } from './pages/ResetPassword';
+import { VerifyEmail } from './pages/VerifyEmail';
+import { Privacy } from './pages/Privacy';
+import { Terms } from './pages/Terms';
+import { Contact } from './pages/Contact';
+import { Dashboard } from './pages/Dashboard';
+import { PodcastNew } from './pages/PodcastNew';
+import { PodcastSettings } from './pages/PodcastSettings';
+import { PodcastAnalytics } from './pages/PodcastAnalytics';
+import { EpisodesList } from './pages/EpisodesList';
+import { EpisodeNew } from './pages/EpisodeNew';
+import { EpisodeEditor } from './pages/EpisodeEditor';
+import { Settings } from './pages/Settings';
+import { Profile } from './pages/Profile';
+import { Users } from './pages/Users';
+import { Messages } from './pages/Messages';
+import { PublicPodcast } from './pages/PublicPodcast';
+import { PublicEpisode } from './pages/PublicEpisode';
+import { Library } from './pages/Library';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -19,32 +48,6 @@ function ScrollToTop() {
   }, [pathname]);
   return null;
 }
-import { useQuery } from '@tanstack/react-query';
-import { useAuthStore } from './store/auth';
-import { me } from './api/auth';
-import { Layout } from './components/Layout';
-import { Login } from './pages/Login';
-import { Register } from './pages/Register';
-import { Setup } from './pages/Setup';
-import { ResetPassword } from './pages/ResetPassword';
-import { VerifyEmail } from './pages/VerifyEmail';
-import { Privacy } from './pages/Privacy';
-import { Terms } from './pages/Terms';
-import { Dashboard } from './pages/Dashboard';
-import { PodcastNew } from './pages/PodcastNew';
-import { PodcastSettings } from './pages/PodcastSettings';
-import { PodcastAnalytics } from './pages/PodcastAnalytics';
-import { EpisodesList } from './pages/EpisodesList';
-import { EpisodeNew } from './pages/EpisodeNew';
-import { EpisodeEditor } from './pages/EpisodeEditor';
-import { Settings } from './pages/Settings';
-import { Users } from './pages/Users';
-import { PublicPodcast } from './pages/PublicPodcast';
-import { PublicEpisode } from './pages/PublicEpisode';
-import { Library } from './pages/Library';
-import { setupStatus } from './api/setup';
-import { getPublicConfig } from './api/public';
-import { ServerDown } from './components/ServerDown';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
@@ -217,6 +220,7 @@ export default function App() {
         <Route path="/verify-email" element={<SetupGuard><VerifyEmail /></SetupGuard>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/contact" element={<SetupGuard><Contact /></SetupGuard>} />
         <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><PublicPodcast /></PublicFeedsGuard>} />
         <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><PublicEpisode /></PublicFeedsGuard>} />
         <Route
@@ -239,7 +243,9 @@ export default function App() {
           <Route path="library" element={<Library />} />
           <Route path="library/:userId" element={<RequireAdmin><Library /></RequireAdmin>} />
           <Route path="dashboard/:userId" element={<RequireAdmin><Dashboard /></RequireAdmin>} />
+          <Route path="profile" element={<Profile />} />
           <Route path="users" element={<RequireAdmin><Users /></RequireAdmin>} />
+          <Route path="messages" element={<Messages />} />
           <Route path="settings" element={<RequireAdmin><Settings /></RequireAdmin>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

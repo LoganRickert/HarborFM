@@ -51,7 +51,9 @@ download "$BASE_URL/nginx/nginx-80-only.conf.template"  "$INSTALL_DIR/nginx/ngin
 download "$BASE_URL/nginx/nginx-full.conf.template"   "$INSTALL_DIR/nginx/nginx-full.conf.template"
 download "$BASE_URL/fail2ban/filter.d/nginx-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/nginx-scanner.conf"
 download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/nginx-scanner.local"
+download "$BASE_URL/update.sh" "$INSTALL_DIR/update.sh"
 chmod +x "$INSTALL_DIR/nginx/entrypoint.sh"
+chmod +x "$INSTALL_DIR/update.sh"
 echo "Configs downloaded."
 echo ""
 
@@ -153,6 +155,7 @@ if [ -n "$SETUP_PATH" ]; then
 fi
 echo "  App:     https://${DOMAIN}/ (or http:// if no cert yet)"
 echo "  Renew:   docker compose run --rm certbot renew"
+echo "  Update:  ./update.sh   (from $INSTALL_DIR)"
 echo "  Logs:    docker compose logs -f"
 echo "  Stop:    docker compose down"
 echo "  Install: $INSTALL_DIR"

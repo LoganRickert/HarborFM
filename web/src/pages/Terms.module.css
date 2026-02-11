@@ -72,3 +72,31 @@
 .content h2:first-of-type {
   margin-top: 0.5rem;
 }
+
+.footerLinks {
+  margin: 2rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.footerLinks a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.footerLinks a:hover {
+  color: var(--accent-dim);
+}
+
+.footerSep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.6;
+}

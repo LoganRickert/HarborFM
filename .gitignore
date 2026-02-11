@@ -7,8 +7,13 @@ data
 .env.local
 .env.*.local
 *.log
+logs/
 .DS_Store
 coverage
 .turbo
 secrets/
 harborfm-docker-data/
+openapi.json
+docs-dist/
+ci-data/
+ci-secrets/

@@ -81,6 +81,8 @@ export interface AppSettings {
   sendgrid_api_key: string;
   /** From address for SendGrid. */
   sendgrid_from: string;
+  /** Optional message shown above the sign-in form. Newlines are preserved. */
+  welcome_banner: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -112,6 +114,7 @@ const DEFAULTS: AppSettings = {
   smtp_from: '',
   sendgrid_api_key: '',
   sendgrid_from: '',
+  welcome_banner: '',
 };
 
 const OPENAI_DEFAULT_MODEL = 'gpt5-mini';
@@ -245,6 +248,7 @@ export function readSettings(): AppSettings {
     else if (row.key === 'smtp_from') settings.smtp_from = row.value;
     else if (row.key === 'sendgrid_api_key') settings.sendgrid_api_key = row.value;
     else if (row.key === 'sendgrid_from') settings.sendgrid_from = row.value;
+    else if (row.key === 'welcome_banner') settings.welcome_banner = row.value;
   }
   
   return {
@@ -273,6 +277,7 @@ export function readSettings(): AppSettings {
     smtp_from: settings.smtp_from ?? DEFAULTS.smtp_from,
     sendgrid_api_key: settings.sendgrid_api_key ?? DEFAULTS.sendgrid_api_key,
     sendgrid_from: settings.sendgrid_from ?? DEFAULTS.sendgrid_from,
+    welcome_banner: settings.welcome_banner ?? DEFAULTS.welcome_banner,
   };
 }
 
@@ -306,6 +311,7 @@ function writeSettings(settings: AppSettings): void {
   stmt.run('smtp_from', settings.smtp_from);
   stmt.run('sendgrid_api_key', settings.sendgrid_api_key);
   stmt.run('sendgrid_from', settings.sendgrid_from);
+  stmt.run('welcome_banner', settings.welcome_banner);
 }
 
 /** Redact API keys from error messages before sending to client. */
@@ -350,7 +356,15 @@ async function verifySmtpCredentials(options: {
 }
 
 export async function settingsRoutes(app: FastifyInstance) {
-  app.get('/api/settings', { preHandler: [requireAdmin] }, async () => {
+  app.get('/api/settings', {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ['Settings'],
+      summary: 'Get settings',
+      description: 'Returns app settings (secrets redacted). Admin only.',
+      response: { 200: { description: 'Settings object' } },
+    },
+  }, async () => {
     const settings = readSettings();
     return {
       ...settings,
@@ -364,7 +378,16 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.patch(
     '/api/settings',
-    { preHandler: [requireAdmin] },
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ['Settings'],
+        summary: 'Update settings',
+        description: 'Update app settings. Admin only. Use (set) for existing secrets to leave unchanged.',
+        body: { type: 'object', description: 'Partial settings' },
+        response: { 200: { description: 'Updated settings (secrets redacted)' } },
+      },
+    },
     async (request, _reply) => {
       const body = request.body as Partial<AppSettings>;
       const current = readSettings();
@@ -458,6 +481,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         sendgrid_api_key = v === '(set)' ? current.sendgrid_api_key : v;
       }
       const sendgrid_from = body.sendgrid_from !== undefined ? String(body.sendgrid_from).trim() : current.sendgrid_from;
+      const welcome_banner = body.welcome_banner !== undefined ? String(body.welcome_banner) : current.welcome_banner;
 
       const next: AppSettings = {
         whisper_asr_url,
@@ -490,6 +514,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         smtp_from,
         sendgrid_api_key,
         sendgrid_from,
+        welcome_banner,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||
@@ -522,7 +547,16 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/settings/test-llm',
-    { preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'llm', windowMs: 1000 })] },
+    {
+      preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'llm', windowMs: 1000 })],
+      schema: {
+        tags: ['Settings'],
+        summary: 'Test LLM connection',
+        description: 'Verify LLM provider (Ollama/OpenAI) is reachable. Admin only.',
+        body: { type: 'object', properties: { llm_provider: { type: 'string' }, ollama_url: { type: 'string' }, openai_api_key: { type: 'string' } } },
+        response: { 200: { description: 'ok and optional error' } },
+      },
+    },
     async (request, reply) => {
       const body = request.body as Partial<AppSettings> | undefined;
       const current = readSettings();
@@ -584,7 +618,16 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/settings/test-whisper',
-    { preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'whisper', windowMs: 1000 })] },
+    {
+      preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'whisper', windowMs: 1000 })],
+      schema: {
+        tags: ['Settings'],
+        summary: 'Test Whisper ASR',
+        description: 'Verify Whisper ASR URL is reachable. Admin only.',
+        body: { type: 'object', properties: { whisper_asr_url: { type: 'string' } } },
+        response: { 200: { description: 'ok and optional error' } },
+      },
+    },
     async (request, reply) => {
       const body = request.body as { whisper_asr_url?: string } | undefined;
       const current = readSettings();
@@ -619,7 +662,16 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/settings/test-smtp',
-    { preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'smtp', windowMs: 2000 })] },
+    {
+      preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'smtp', windowMs: 2000 })],
+      schema: {
+        tags: ['Settings'],
+        summary: 'Test SMTP',
+        description: 'Verify SMTP credentials. Admin only.',
+        body: { type: 'object', properties: { smtp_host: { type: 'string' }, smtp_port: { type: 'number' }, smtp_user: { type: 'string' }, smtp_password: { type: 'string' } } },
+        response: { 200: { description: 'ok and optional error' } },
+      },
+    },
     async (request, reply) => {
       const body = request.body as Partial<AppSettings> | undefined;
       const current = readSettings();
@@ -645,7 +697,16 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/settings/test-sendgrid',
-    { preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'sendgrid', windowMs: 2000 })] },
+    {
+      preHandler: [requireAdmin, userRateLimitPreHandler({ bucket: 'sendgrid', windowMs: 2000 })],
+      schema: {
+        tags: ['Settings'],
+        summary: 'Test SendGrid',
+        description: 'Verify SendGrid API key. Admin only.',
+        body: { type: 'object', properties: { sendgrid_api_key: { type: 'string' } } },
+        response: { 200: { description: 'ok and optional error' } },
+      },
+    },
     async (request, reply) => {
       const body = request.body as Partial<AppSettings> | undefined;
       const current = readSettings();

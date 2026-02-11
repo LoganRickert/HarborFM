@@ -40,7 +40,7 @@ export function DeleteSegmentDialog({
               disabled={isDeleting}
               aria-label="Confirm remove section"
             >
-              {isDeleting ? 'Removing…' : 'Remove'}
+              {isDeleting ? 'Removing...' : 'Remove'}
             </button>
           </div>
         </Dialog.Content>

@@ -1,50 +1,15 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { ArrowRight, ArrowDown, ArrowUp, Rss, Play, Pause } from 'lucide-react';
+import { ArrowRight, ArrowDown, ArrowUp, Rss, Play, Pause, MessageCircle } from 'lucide-react';
 import { getPublicPodcast, getPublicEpisodes, publicEpisodeWaveformUrl } from '../api/public';
 import type { PublicEpisode } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
+import { FeedbackModal } from '../components/FeedbackModal';
 import { useMeta } from '../hooks/useMeta';
 import { WaveformCanvas, type WaveformData } from './EpisodeEditor/WaveformCanvas';
+import { formatDate, formatDuration, formatSeasonEpisode } from '../utils/format';
 import styles from './PublicPodcast.module.css';
-
-function formatDuration(seconds: number | null | undefined): string {
-  if (!seconds) return '';
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  }
-  return `${minutes}:${String(secs).padStart(2, '0')}`;
-}
-
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
-  try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  } catch {
-    return '';
-  }
-}
-
-function formatSeasonEpisode(seasonNumber: number | null | undefined, episodeNumber: number | null | undefined): string {
-  if (seasonNumber != null && episodeNumber != null) {
-    return `S${seasonNumber} E${episodeNumber}`;
-  }
-  if (seasonNumber != null) {
-    return `S${seasonNumber}`;
-  }
-  if (episodeNumber != null) {
-    return `E${episodeNumber}`;
-  }
-  return '';
-}
 
 function EpisodePlayer({
   episode,
@@ -186,6 +151,8 @@ export function PublicPodcast() {
   const [playingEpisodeId, setPlayingEpisodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+
   const { data: podcast, isLoading: podcastLoading, isError: podcastError } = useQuery({
     queryKey: ['public-podcast', podcastSlug],
     queryFn: () => getPublicPodcast(podcastSlug!),
@@ -304,15 +271,26 @@ export function PublicPodcast() {
                   <p className={styles.author}>by {podcast.author_name}</p>
                 )}
               </div>
-              <a
-                href={podcast.rss_url ?? `/api/public/podcasts/${podcastSlug}/rss`}
-                className={styles.rssButton}
-                title="RSS Feed"
-                aria-label="RSS Feed"
-                {...(podcast.rss_url ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-              >
-                <Rss size={18} strokeWidth={2.5} />
-              </a>
+              <div className={styles.headerActions}>
+                <button
+                  type="button"
+                  className={styles.messageBtn}
+                  onClick={() => setFeedbackOpen(true)}
+                  aria-label="Send message"
+                >
+                  <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
+                  Message
+                </button>
+                <a
+                  href={podcast.rss_url ?? `/api/public/podcasts/${podcastSlug}/rss`}
+                  className={styles.rssButton}
+                  title="RSS Feed"
+                  aria-label="RSS Feed"
+                  {...(podcast.rss_url ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                >
+                  <Rss size={18} strokeWidth={2.5} />
+                </a>
+              </div>
             </div>
             {podcast.description && (
               <p className={styles.description}>{podcast.description}</p>
@@ -329,7 +307,7 @@ export function PublicPodcast() {
         <div className={styles.episodesControls}>
           <input
             type="search"
-            placeholder="Search episodes…"
+            placeholder="Search episodes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={styles.searchInput}
@@ -357,7 +335,7 @@ export function PublicPodcast() {
             </button>
           </div>
         </div>
-        {episodesLoading && <p className={styles.muted}>Loading episodes…</p>}
+        {episodesLoading && <p className={styles.muted}>Loading episodes...</p>}
         {!episodesLoading && filteredAndSortedEpisodes.length === 0 && (
           <p className={styles.muted}>
             {searchQuery ? 'No episodes match your search.' : 'No episodes yet.'}
@@ -416,7 +394,7 @@ export function PublicPodcast() {
                   className={styles.loadMoreBtn}
                   aria-label="Load more episodes"
                 >
-                  {isFetchingNextPage ? 'Loading…' : 'Load more episodes'}
+                  {isFetchingNextPage ? 'Loading...' : 'Load more episodes'}
                 </button>
               </div>
             )}
@@ -426,6 +404,12 @@ export function PublicPodcast() {
       </div>
       </main>
       </div>
+
+      <FeedbackModal
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        context={{ podcastSlug: podcastSlug ?? undefined, podcastTitle: podcast.title }}
+      />
     </div>
   );
 }

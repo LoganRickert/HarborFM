@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb } from '../../components/Breadcrumb';
 import { useAuthStore } from '../../store/auth';
-import { me, canRecordNewSection, RECORD_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
+import { me, canRecordNewSection, isReadOnly, RECORD_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
 import { updateEpisode, uploadEpisodeArtwork } from '../../api/episodes';
 import {
   addRecordedSegment,
@@ -51,6 +51,7 @@ export function EpisodeEditorContent({
   const { user } = useAuthStore();
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
   const canRecord = canRecordNewSection(meData);
+  const readOnly = isReadOnly(meData?.user ?? user);
 
   const [episodeForm, setEpisodeForm] = useState(() => episodeToForm(episode));
   const [dialogForm, setDialogForm] = useState(() => episodeToForm(episode));
@@ -237,7 +238,7 @@ export function EpisodeEditorContent({
               ? `/api/public/artwork/${podcastId}/episodes/${id}/${encodeURIComponent(episode.artwork_filename)}`
               : null
         }
-        onEditClick={() => setDetailsDialogOpen(true)}
+        onEditClick={readOnly ? undefined : () => setDetailsDialogOpen(true)}
       />
 
       <div className={styles.card}>
@@ -249,6 +250,7 @@ export function EpisodeEditorContent({
               onAddLibrary={() => setShowLibrary(true)}
               recordDisabled={!canRecord}
               recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
+              readOnly={readOnly}
               onMoveUp={handleMoveUp}
               onMoveDown={handleMoveDown}
               onDeleteRequest={setSegmentToDelete}
@@ -264,15 +266,17 @@ export function EpisodeEditorContent({
         />
       </div>
 
-      <GenerateFinalBar
-        episodeId={id}
-        segmentCount={segments.length}
-        onBuild={() => renderMutation.mutate()}
-        isBuilding={renderMutation.isPending}
-        hasFinalAudio={Boolean(episode.audio_final_path)}
-        finalDurationSec={episode.audio_duration_sec ?? 0}
-        finalUpdatedAt={episode.updated_at}
-      />
+      {!readOnly && (
+        <GenerateFinalBar
+          episodeId={id}
+          segmentCount={segments.length}
+          onBuild={() => renderMutation.mutate()}
+          isBuilding={renderMutation.isPending}
+          hasFinalAudio={Boolean(episode.audio_final_path)}
+          finalDurationSec={episode.audio_duration_sec ?? 0}
+          finalUpdatedAt={episode.updated_at}
+        />
+      )}
       {renderMutation.isError && (
         <p className={styles.error}>{renderMutation.error?.message}</p>
       )}

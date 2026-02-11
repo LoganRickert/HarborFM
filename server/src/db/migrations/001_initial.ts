@@ -75,17 +75,10 @@ export const up = (db: { exec: (sql: string) => void }) => {
     CREATE TABLE IF NOT EXISTS exports (
       id TEXT PRIMARY KEY,
       podcast_id TEXT NOT NULL REFERENCES podcasts(id) ON DELETE CASCADE,
-      provider TEXT NOT NULL,
-      endpoint_url TEXT,
       name TEXT NOT NULL,
-      bucket TEXT NOT NULL,
-      prefix TEXT DEFAULT '',
-      region TEXT NOT NULL,
-      access_key_id TEXT NOT NULL,
-      secret_access_key TEXT NOT NULL,
-      access_key_id_enc TEXT,
-      secret_access_key_enc TEXT,
       public_base_url TEXT,
+      mode TEXT NOT NULL DEFAULT 'S3',
+      config_enc TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

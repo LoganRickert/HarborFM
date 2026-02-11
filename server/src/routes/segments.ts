@@ -7,7 +7,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
-import { requireAuth } from '../plugins/auth.js';
+import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { canAccessEpisode } from '../services/access.js';
 import { readSettings } from './settings.js';
 import { uploadsDir, segmentPath, getDataDir, libraryDir, processedDir, assertPathUnder } from '../services/paths.js';
@@ -130,7 +130,15 @@ const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per segment
 
 export async function segmentRoutes(app: FastifyInstance) {
   // Used by the web client to decide whether transcript viewing/generation should be shown.
-  app.get('/api/asr/available', { preHandler: [requireAuth] }, async (_request, reply) => {
+  app.get('/api/asr/available', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Segments'],
+      summary: 'ASR available',
+      description: 'Whether Whisper ASR is configured for transcripts.',
+      response: { 200: { description: 'available: boolean' } },
+    },
+  }, async (_request, reply) => {
     const settings = readSettings();
     const available = Boolean(settings.whisper_asr_url && settings.whisper_asr_url.trim());
     return reply.send({ available });
@@ -138,7 +146,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/episodes/:id/segments',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Segments'],
+        summary: 'List segments',
+        description: 'List segments for an episode (recorded and reusable).',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 200: { description: 'List of segments' }, 404: { description: 'Episode not found' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -158,7 +175,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/episodes/:id/segments',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Add segment',
+        description: 'Add segment: JSON type=reusable + reusable_asset_id, or multipart audio for recorded.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 201: { description: 'Created segment' }, 400: { description: 'Validation failed' }, 403: { description: 'Storage limit' }, 404: { description: 'Episode or asset not found' }, 500: { description: 'Upload or process failed' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -269,7 +295,17 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.put(
     '/api/episodes/:id/segments/reorder',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Reorder segments',
+        description: 'Set segment order by array of segment_ids.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        body: { type: 'object', properties: { segment_ids: { type: 'array', items: { type: 'string' } } }, required: ['segment_ids'] },
+        response: { 200: { description: 'Updated segments list' }, 400: { description: 'segment_ids required' }, 404: { description: 'Episode not found' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -287,7 +323,17 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.patch(
     '/api/episodes/:episodeId/segments/:segmentId',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Update segment',
+        description: 'Update segment name.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        body: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+        response: { 200: { description: 'Updated segment' }, 400: { description: 'name required' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -307,7 +353,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/episodes/:episodeId/segments/:segmentId/stream',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Stream segment audio',
+        description: 'Stream segment audio file.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        response: { 200: { description: 'Audio stream' }, 206: { description: 'Partial content' }, 404: { description: 'Not found' }, 500: { description: 'Send error' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -331,10 +386,10 @@ export async function segmentRoutes(app: FastifyInstance) {
 
       if (result.type === 'error') {
         const err = result.metadata.error as Error & { status?: number };
-        return reply.status(err.status ?? 500).send({ error: err.message ?? 'Internal Server Error' });
+        return reply.status((err.status ?? 500) as 404 | 500).send({ error: err.message ?? 'Internal Server Error' });
       }
 
-      reply.code(result.statusCode);
+      reply.code(result.statusCode as 200 | 206 | 404 | 500);
       const headers = result.headers as Record<string, string>;
       for (const [key, value] of Object.entries(headers)) {
         if (value !== undefined) reply.header(key, value);
@@ -346,7 +401,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/episodes/:episodeId/segments/:segmentId/waveform',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Get segment waveform',
+        description: 'Returns waveform JSON for a segment.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        response: { 200: { description: 'Waveform JSON' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -368,7 +432,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.get(
     '/api/episodes/:episodeId/segments/:segmentId/transcript',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Get segment transcript',
+        description: 'Returns transcript text for a segment.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        response: { 200: { description: 'text' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -389,7 +462,17 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/episodes/:episodeId/segments/:segmentId/transcript',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'whisper', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler({ bucket: 'whisper', windowMs: 1000 })],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Generate segment transcript',
+        description: 'Generate or return transcript via Whisper ASR. Query regenerate=true to force regenerate.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        querystring: { type: 'object', properties: { regenerate: { type: 'string' } } },
+        response: { 200: { description: 'text' }, 400: { description: 'ASR not configured' }, 404: { description: 'Not found' }, 413: { description: 'Audio too large' }, 502: { description: 'ASR failed' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const query = request.query as { regenerate?: string } | undefined;
@@ -496,7 +579,17 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/episodes/:episodeId/segments/:segmentId/trim',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Trim segment',
+        description: 'Trim segment to start/end seconds. Body: start_sec, end_sec.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        body: { type: 'object', properties: { start_sec: { type: 'number' }, end_sec: { type: 'number' } } },
+        response: { 200: { description: 'Updated segment' }, 204: { description: 'Trimmed' }, 400: { description: 'Validation failed' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const body = request.body as { start_sec?: number; end_sec?: number } | undefined;
@@ -613,7 +706,17 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/episodes/:episodeId/segments/:segmentId/remove-silence',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Remove silence',
+        description: 'Remove silence from segment. Body: threshold_db, min_silence_duration_sec.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        body: { type: 'object', properties: { threshold_db: { type: 'number' }, min_silence_duration_sec: { type: 'number' } } },
+        response: { 200: { description: 'Updated segment' }, 204: { description: 'Done' }, 400: { description: 'Validation failed' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const body = request.body as { threshold_seconds?: number; silence_threshold?: number } | undefined;
@@ -783,7 +886,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/episodes/:episodeId/segments/:segmentId/noise-suppression',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Noise suppression',
+        description: 'Apply noise suppression to segment.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        response: { 200: { description: 'Updated segment' }, 204: { description: 'Done' }, 400: { description: 'Only recorded segments' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const body = request.body as { nf?: number } | undefined;
@@ -859,7 +971,17 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.patch(
     '/api/episodes/:episodeId/segments/:segmentId/transcript',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Update segment transcript',
+        description: 'Replace transcript text. Body: text.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        body: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+        response: { 200: { description: 'Updated' }, 400: { description: 'text required' }, 404: { description: 'Not found' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const body = request.body as { text?: string } | undefined;
@@ -886,7 +1008,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.delete(
     '/api/episodes/:episodeId/segments/:segmentId/transcript',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Delete segment transcript',
+        description: 'Remove transcript file for segment.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        response: { 204: { description: 'Deleted' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const query = request.query as { entryIndex?: string } | undefined;
@@ -1014,7 +1145,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.delete(
     '/api/episodes/:episodeId/segments/:segmentId',
-    { preHandler: [requireAuth] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Delete segment',
+        description: 'Permanently delete a segment.',
+        params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
+        response: { 204: { description: 'Deleted' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+      },
+    },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const access = canAccessEpisode(request.userId, episodeId);
@@ -1066,7 +1206,16 @@ export async function segmentRoutes(app: FastifyInstance) {
 
   app.post(
     '/api/episodes/:id/render',
-    { preHandler: [requireAuth, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })] },
+    {
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler({ bucket: 'ffmpeg', windowMs: 1000 })],
+      schema: {
+        tags: ['Segments'],
+        summary: 'Render episode',
+        description: 'Concatenate segments and write final audio. Requires read-write access.',
+        params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        response: { 200: { description: 'Episode with updated audio' }, 400: { description: 'No segments or validation failed' }, 404: { description: 'Episode not found' }, 500: { description: 'Render failed' } },
+      },
+    },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);

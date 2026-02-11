@@ -379,7 +379,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
               </button>
               <button type="button" className={`${styles.recordChoiceBtn} ${styles.recordChoiceBtnPrimary}`} onClick={handleAdd} disabled={isAdding} aria-label={isAdding ? 'Adding to episode' : 'Add to episode'}>
                 <PlusCircle size={24} strokeWidth={2} aria-hidden />
-                <span>{isAdding ? 'Adding…' : 'Add to episode'}</span>
+                <span>{isAdding ? 'Adding...' : 'Add to episode'}</span>
               </button>
             </div>
           </>
