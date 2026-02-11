@@ -266,17 +266,16 @@ export function EpisodeEditorContent({
         />
       </div>
 
-      {!readOnly && (
-        <GenerateFinalBar
-          episodeId={id}
-          segmentCount={segments.length}
-          onBuild={() => renderMutation.mutate()}
-          isBuilding={renderMutation.isPending}
-          hasFinalAudio={Boolean(episode.audio_final_path)}
-          finalDurationSec={episode.audio_duration_sec ?? 0}
-          finalUpdatedAt={episode.updated_at}
-        />
-      )}
+      <GenerateFinalBar
+        episodeId={id}
+        segmentCount={segments.length}
+        onBuild={() => renderMutation.mutate()}
+        isBuilding={renderMutation.isPending}
+        hasFinalAudio={Boolean(episode.audio_final_path)}
+        finalDurationSec={episode.audio_duration_sec ?? 0}
+        finalUpdatedAt={episode.updated_at}
+        readOnly={readOnly}
+      />
       {renderMutation.isError && (
         <p className={styles.error}>{renderMutation.error?.message}</p>
       )}

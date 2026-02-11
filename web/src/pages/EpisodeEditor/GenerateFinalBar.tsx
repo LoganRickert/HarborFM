@@ -13,6 +13,7 @@ export interface GenerateFinalBarProps {
   finalDurationSec: number;
   /** When the final was last built (e.g. episode.updated_at). Used to bust cache so new build is played. */
   finalUpdatedAt?: string | null;
+  readOnly?: boolean;
 }
 
 export function GenerateFinalBar({
@@ -23,6 +24,7 @@ export function GenerateFinalBar({
   hasFinalAudio,
   finalDurationSec,
   finalUpdatedAt,
+  readOnly = false,
 }: GenerateFinalBarProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
@@ -144,8 +146,9 @@ export function GenerateFinalBar({
             type="button"
             className={styles.renderBtnPrimary}
             onClick={onBuild}
-            disabled={segmentCount === 0 || isBuilding}
-            aria-label={isBuilding ? 'Building...' : 'Build Final Episode'}
+            disabled={segmentCount === 0 || isBuilding || readOnly}
+            title={readOnly ? 'Read-only account' : undefined}
+            aria-label={readOnly ? 'Build Final Episode (read-only)' : isBuilding ? 'Building...' : 'Build Final Episode'}
           >
             <FileAudio size={20} strokeWidth={2} aria-hidden />
             <span>{isBuilding ? 'Building...' : 'Build Final Episode'}</span>
