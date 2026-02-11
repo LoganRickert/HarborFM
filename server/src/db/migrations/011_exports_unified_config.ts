@@ -9,7 +9,13 @@ const AAD = 'harborfm:exports';
 
 export const up = (db: Database) => {
   const tableInfo = db.prepare('PRAGMA table_info(exports)').all() as { name: string }[];
-  const hasLegacyColumns = tableInfo.some((c) => c.name === 'bucket');
+  const columnNames = tableInfo.map((c) => c.name);
+  const hasLegacyColumns = columnNames.includes('bucket');
+
+  // Older schemas may have bucket/etc. but no mode column (e.g. had "provider" or was added before mode existed).
+  if (hasLegacyColumns && !columnNames.includes('mode')) {
+    db.exec(`ALTER TABLE exports ADD COLUMN mode TEXT NOT NULL DEFAULT 'S3'`);
+  }
 
   if (hasLegacyColumns) {
     const rows = db.prepare(`SELECT id, mode, config_enc, bucket, prefix, region, endpoint_url,
