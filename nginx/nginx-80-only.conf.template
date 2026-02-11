@@ -32,6 +32,12 @@ http {
             try_files $uri =404;
         }
 
+        location = /nginx-health {
+            access_log off;
+            add_header Content-Type text/plain;
+            return 200 "ok\n";
+        }
+        
         # Stricter rate limit for auth endpoints (login, register, password reset, verify email)
         location ~ ^/api/auth/(login|register|forgot-password|reset-password|verify-email|validate-reset-token) {
             limit_req zone=auth burst=10 nodelay;

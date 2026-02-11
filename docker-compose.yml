@@ -49,7 +49,7 @@ services:
       - nginx_logs:/var/log/nginx
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:80/"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:80/nginx-health"]
       interval: 10s
       timeout: 5s
       retries: 3
