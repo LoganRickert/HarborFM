@@ -13,6 +13,9 @@ import * as m011 from './migrations/011_exports_unified_config.js';
 import * as m012 from './migrations/012_api_keys.js';
 import * as m013 from './migrations/013_contact_messages.js';
 import * as m014 from './migrations/014_contact_messages_context.js';
+import * as m015 from './migrations/015_podcast_shares.js';
+import * as m016 from './migrations/016_max_collaborators.js';
+import * as m017 from './migrations/017_platform_invites.js';
 
 const migrations = [
   { name: '001_initial', ...m001 },
@@ -29,6 +32,9 @@ const migrations = [
   { name: '012_api_keys', ...m012 },
   { name: '013_contact_messages', ...m013 },
   { name: '014_contact_messages_context', ...m014 },
+  { name: '015_podcast_shares', ...m015 },
+  { name: '016_max_collaborators', ...m016 },
+  { name: '017_platform_invites', ...m017 },
 ];
 
 const MIGRATIONS_TABLE = `

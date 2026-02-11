@@ -194,6 +194,55 @@ export function buildResetPasswordEmail(resetUrl: string): { subject: string; te
   return { subject, text, html };
 }
 
+/**
+ * Build invite-to-platform email (someone invited you to join Harbor).
+ */
+export function buildInviteToPlatformEmail(signupUrl: string): { subject: string; text: string; html: string } {
+  const subject = `You're invited to join ${APP_NAME}`;
+  const text = [
+    `Someone invited you to join ${APP_NAME} to collaborate on a podcast.`,
+    '',
+    'Create your account to get started:',
+    '',
+    signupUrl,
+    '',
+    `If you weren't expecting this, you can ignore this email.`,
+    '',
+    APP_NAME,
+  ].join('\n');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${subject}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      <h1 style="margin: 0 0 8px; font-size: 1.5rem; font-weight: 700; color: ${STYLE.text};">${APP_NAME}</h1>
+      <p style="margin: 0 0 24px; font-size: 0.875rem; color: ${STYLE.textMuted};">You're invited</p>
+      <p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">
+        Someone invited you to collaborate on a podcast. Create your account to get started.
+      </p>
+      <p style="margin: 0 0 24px; text-align: center;">
+        <a href="${signupUrl}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Create account</a>
+      </p>
+      <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted};">
+        If you weren't expecting this, you can ignore this email.
+      </p>
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      ${APP_NAME}
+    </p>
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

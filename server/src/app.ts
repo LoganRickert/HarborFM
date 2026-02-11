@@ -7,8 +7,8 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join, resolve } from 'path';
+import { PORT, MULTIPART_MAX_BYTES, PUBLIC_DIR as CONFIG_PUBLIC_DIR } from './config.js';
 import { existsSync, readFileSync, writeFileSync, chmodSync } from 'fs';
 import { randomBytes } from 'crypto';
 import './db/migrate.js';
@@ -40,9 +40,6 @@ import { ensureSecretsDir, getSecretsDir } from './services/paths.js';
 import { getOrCreateSetupToken, isSetupComplete } from './services/setup.js';
 import { getSecretsKey } from './services/secrets.js';
 import { SWAGGER_TITLE, SWAGGER_THEME_CSS } from './swagger-theme.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT) || 3001;
 
 function loadOrCreateJwtSecret(): string {
   const fromEnv = process.env.JWT_SECRET?.trim();
@@ -113,7 +110,7 @@ async function main() {
   });
 
   await app.register(cookie);
-  await app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } });
+  await app.register(multipart, { limits: { fileSize: MULTIPART_MAX_BYTES } });
   await app.register(jwt, {
     secret: JWT_SECRET,
     cookie: { cookieName: 'harborfm_jwt', signed: false },
@@ -197,7 +194,7 @@ async function main() {
   });
 
   // In production, serve the web app from PUBLIC_DIR (e.g. Docker copies web dist here)
-  const publicDir = process.env.PUBLIC_DIR ?? join(__dirname, '..', 'public');
+  const publicDir = resolve(CONFIG_PUBLIC_DIR);
   if (existsSync(publicDir)) {
     await app.register(fastifyStatic, {
       root: publicDir,

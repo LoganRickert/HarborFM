@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { createEpisode } from '../api/episodes';
 import { getPodcast } from '../api/podcasts';
 import { me, isReadOnly } from '../api/auth';
@@ -62,7 +63,7 @@ export function EpisodeNew() {
       <Breadcrumb items={breadcrumbItems} />
       <header className={styles.hero}>
         <h1 className={styles.heroTitle}>
-          New episode
+          New Episode
           <span className={styles.heroTitleAccent}>Add an episode to your show</span>
         </h1>
         <p className={styles.heroSub}>
@@ -107,6 +108,7 @@ export function EpisodeNew() {
               onClick={() => navigate(-1)}
               aria-label="Cancel creating episode"
             >
+              <ArrowLeft size={18} strokeWidth={2} aria-hidden />
               Cancel
             </button>
             <button
@@ -115,7 +117,8 @@ export function EpisodeNew() {
               disabled={mutation.isPending || atEpisodeLimit || readOnly}
               aria-label="Create episode"
             >
-              {mutation.isPending ? 'Creating...' : 'Create episode'}
+              <Plus size={18} strokeWidth={2.5} aria-hidden />
+              {mutation.isPending ? 'Creating...' : 'Create Episode'}
             </button>
           </div>
         </form>

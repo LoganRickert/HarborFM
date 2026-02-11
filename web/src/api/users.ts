@@ -16,6 +16,7 @@ export interface User {
   max_podcasts?: number | null;
   max_episodes?: number | null;
   max_storage_mb?: number | null;
+  max_collaborators?: number | null;
 }
 
 export interface UsersResponse {
@@ -63,6 +64,7 @@ export function updateUser(
     max_podcasts?: number | null;
     max_episodes?: number | null;
     max_storage_mb?: number | null;
+    max_collaborators?: number | null;
   }
 ): Promise<User> {
   return fetch(`${BASE}/users/${userId}`, {

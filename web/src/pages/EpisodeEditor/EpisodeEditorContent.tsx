@@ -50,8 +50,13 @@ export function EpisodeEditorContent({
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
-  const canRecord = canRecordNewSection(meData);
+  const canRecord = (podcast?.can_record_new_section ?? canRecordNewSection(meData)) === true;
   const readOnly = isReadOnly(meData?.user ?? user);
+  const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
+  const canEditMetadata = myRole === 'owner' || myRole === 'manager';
+  const canEditSegments = myRole === 'owner' || myRole === 'manager' || myRole === 'editor';
+  const segmentReadOnly = readOnly || !canEditSegments;
+  const metadataReadOnly = readOnly || !canEditMetadata;
 
   const [episodeForm, setEpisodeForm] = useState(() => episodeToForm(episode));
   const [dialogForm, setDialogForm] = useState(() => episodeToForm(episode));
@@ -238,7 +243,7 @@ export function EpisodeEditorContent({
               ? `/api/public/artwork/${podcastId}/episodes/${id}/${encodeURIComponent(episode.artwork_filename)}`
               : null
         }
-        onEditClick={readOnly ? undefined : () => setDetailsDialogOpen(true)}
+        onEditClick={metadataReadOnly ? undefined : () => setDetailsDialogOpen(true)}
       />
 
       <div className={styles.card}>
@@ -250,7 +255,7 @@ export function EpisodeEditorContent({
               onAddLibrary={() => setShowLibrary(true)}
               recordDisabled={!canRecord}
               recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
-              readOnly={readOnly}
+              readOnly={segmentReadOnly}
               onMoveUp={handleMoveUp}
               onMoveDown={handleMoveDown}
               onDeleteRequest={setSegmentToDelete}
@@ -274,7 +279,7 @@ export function EpisodeEditorContent({
         hasFinalAudio={Boolean(episode.audio_final_path)}
         finalDurationSec={episode.audio_duration_sec ?? 0}
         finalUpdatedAt={episode.updated_at}
-        readOnly={readOnly}
+        readOnly={segmentReadOnly}
       />
       {renderMutation.isError && (
         <p className={styles.error}>{renderMutation.error?.message}</p>

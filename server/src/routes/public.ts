@@ -10,9 +10,7 @@ import { EXT_DOT_TO_MIMETYPE } from '../utils/artwork.js';
 import { isHumanUserAgent } from '../utils/isBot.js';
 import { generateRss, getCachedRssIfFresh, writeRssToFile } from '../services/rss.js';
 import { readSettings } from './settings.js';
-
-/** Max age (ms) for serving cached public RSS feed from disk before regenerating. From env RSS_CACHE_MAX_AGE_MS or 1 hour. */
-const RSS_CACHE_MAX_AGE_MS = Number(process.env.RSS_CACHE_MAX_AGE_MS) || 60 * 60 * 1000;
+import { RSS_CACHE_MAX_AGE_MS } from '../config.js';
 
 export async function publicRoutes(app: FastifyInstance) {
   function ensurePublicFeedsEnabled(reply: import('fastify').FastifyReply): boolean {

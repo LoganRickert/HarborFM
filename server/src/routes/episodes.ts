@@ -4,11 +4,12 @@ import { basename, join } from 'path';
 import { nanoid } from 'nanoid';
 import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { db } from '../db/index.js';
-import { isAdmin, canAccessPodcast } from '../services/access.js';
+import { isAdmin, canAccessPodcast, getPodcastRole, canAccessEpisode, canEditEpisodeOrPodcastMetadata } from '../services/access.js';
 import { episodeCreateSchema, episodeUpdateSchema } from '@harborfm/shared';
 import { writeRssFile } from '../services/rss.js';
 import { assertPathUnder, assertResolvedPathUnder, artworkDir } from '../services/paths.js';
 import { MIMETYPE_TO_EXT } from '../utils/artwork.js';
+import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from '../config.js';
 
 function slugify(s: string): string {
   return s
@@ -50,7 +51,7 @@ export async function episodeRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { podcastId } = request.params as { podcastId: string };
-      if (!canAccessPodcast(request.userId, podcastId) && !isAdmin(request.userId)) {
+      if (!canAccessPodcast(request.userId, podcastId)) {
         return reply.status(404).send({ error: 'Podcast not found' });
       }
       const rows = db
@@ -77,13 +78,13 @@ export async function episodeRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { podcastId } = request.params as { podcastId: string };
-      if (!canAccessPodcast(request.userId, podcastId)) {
+      const role = getPodcastRole(request.userId, podcastId);
+      if (!canEditEpisodeOrPodcastMetadata(role)) {
         return reply.status(404).send({ error: 'Podcast not found' });
       }
-      const userId = request.userId as string;
-      const podcastRow = db.prepare('SELECT max_episodes FROM podcasts WHERE id = ?').get(podcastId) as { max_episodes: number | null } | undefined;
-      const userRow = db.prepare('SELECT max_episodes FROM users WHERE id = ?').get(userId) as { max_episodes: number | null } | undefined;
-      const maxEpisodes = podcastRow?.max_episodes ?? userRow?.max_episodes ?? null;
+      const podcastRow = db.prepare('SELECT owner_user_id, max_episodes FROM podcasts WHERE id = ?').get(podcastId) as { owner_user_id: string; max_episodes: number | null } | undefined;
+      const ownerMax = podcastRow ? db.prepare('SELECT max_episodes FROM users WHERE id = ?').get(podcastRow.owner_user_id) as { max_episodes: number | null } | undefined : undefined;
+      const maxEpisodes = podcastRow?.max_episodes ?? ownerMax?.max_episodes ?? null;
       if (maxEpisodes != null && maxEpisodes > 0) {
         const count = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE podcast_id = ?').get(podcastId) as { count: number };
         if (count.count >= maxEpisodes) {
@@ -144,20 +145,15 @@ export async function episodeRoutes(app: FastifyInstance) {
     schema: {
       tags: ['Episodes'],
       summary: 'Get episode',
-      description: 'Get an episode by ID. Must own the podcast or be admin.',
+      description: 'Get an episode by ID. Must have access to the podcast.',
       params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
       response: { 200: { description: 'Episode' }, 404: { description: 'Not found' } },
     },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { userId } = request;
-    const row = db
-      .prepare(
-        `SELECT e.* FROM episodes e
-         JOIN podcasts p ON p.id = e.podcast_id
-         WHERE e.id = ? AND (p.owner_user_id = ? OR (SELECT role FROM users WHERE id = ?) = 'admin')`
-      )
-      .get(id, userId, userId) as Record<string, unknown> | undefined;
+    const access = canAccessEpisode(request.userId, id);
+    if (!access) return reply.status(404).send({ error: 'Episode not found' });
+    const row = db.prepare('SELECT * FROM episodes WHERE id = ?').get(id) as Record<string, unknown> | undefined;
     if (!row) return reply.status(404).send({ error: 'Episode not found' });
     return episodeRowWithFilename(row);
   });
@@ -174,14 +170,10 @@ export async function episodeRoutes(app: FastifyInstance) {
     },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const existing = db
-      .prepare(
-        `SELECT e.id FROM episodes e
-         JOIN podcasts p ON p.id = e.podcast_id
-         WHERE e.id = ? AND p.owner_user_id = ?`
-      )
-      .get(id, request.userId);
-    if (!existing) return reply.status(404).send({ error: 'Episode not found' });
+    const access = canAccessEpisode(request.userId, id);
+    if (!access || !canEditEpisodeOrPodcastMetadata(access.role)) {
+      return reply.status(404).send({ error: 'Episode not found' });
+    }
     const parsed = episodeUpdateSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -300,13 +292,11 @@ export async function episodeRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { podcastId, episodeId } = request.params as { podcastId: string; episodeId: string };
-      const existing = db
-        .prepare(
-          `SELECT e.id, e.artwork_path FROM episodes e
-           JOIN podcasts p ON p.id = e.podcast_id
-           WHERE e.id = ? AND e.podcast_id = ? AND p.owner_user_id = ?`
-        )
-        .get(episodeId, podcastId, request.userId) as { id: string; artwork_path: string | null } | undefined;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access || !canEditEpisodeOrPodcastMetadata(access.role)) {
+        return reply.status(404).send({ error: 'Episode not found' });
+      }
+      const existing = db.prepare('SELECT id, artwork_path FROM episodes WHERE id = ? AND podcast_id = ?').get(episodeId, podcastId) as { id: string; artwork_path: string | null } | undefined;
       if (!existing) return reply.status(404).send({ error: 'Episode not found' });
       const data = await request.file();
       if (!data) return reply.status(400).send({ error: 'No file uploaded' });
@@ -317,7 +307,7 @@ export async function episodeRoutes(app: FastifyInstance) {
       const filename = `${nanoid()}.${ext}`;
       const destPath = join(dir, filename);
       const buffer = await data.toBuffer();
-      if (buffer.length > 5 * 1024 * 1024) return reply.status(400).send({ error: 'Image too large (max 5MB)' });
+      if (buffer.length > ARTWORK_MAX_BYTES) return reply.status(400).send({ error: `Image too large (max ${ARTWORK_MAX_MB}MB)` });
       assertResolvedPathUnder(destPath, dir);
       writeFileSync(destPath, buffer);
       db.prepare('UPDATE episodes SET artwork_path = ?, artwork_url = NULL, updated_at = datetime(\'now\') WHERE id = ?').run(destPath, episodeId);

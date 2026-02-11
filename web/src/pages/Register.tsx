@@ -61,12 +61,14 @@ export function Register() {
           <h2 className={styles.setupHeaderTitle}>Register</h2>
         </div>
         {verificationMessage ? (
-          <div className={styles.verificationCard}>
-            <p className={styles.verificationCardText}>{verificationMessage}</p>
+          <>
+            <div className={styles.verificationCard}>
+              <p className={styles.verificationCardText}>{verificationMessage}</p>
+            </div>
             <p className={styles.verificationCardFooter}>
               <Link to="/login">Sign in</Link> once you’ve verified your email.
             </p>
-          </div>
+          </>
         ) : (
           <>
             <form onSubmit={handleSubmit} className={styles.form}>

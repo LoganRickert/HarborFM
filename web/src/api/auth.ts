@@ -8,6 +8,7 @@ export interface User {
   read_only?: number; // 0 = false, 1 = true
   max_podcasts?: number | null;
   max_episodes?: number | null;
+  max_collaborators?: number | null;
   max_storage_mb?: number | null;
   disk_bytes_used?: number;
   last_login_at?: string | null;

@@ -112,9 +112,17 @@
 .actions {
   display: flex;
   gap: 0.75rem;
+  justify-content: space-between;
   margin-top: 0.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
+}
+
+.cancel,
+.submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
 }
 
 .cancel {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPodcast } from '../api/podcasts';
 import { me, isReadOnly } from '../api/auth';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { Breadcrumb } from '../components/Breadcrumb';
 import styles from './PodcastNew.module.css';
 
@@ -57,11 +58,11 @@ export function PodcastNew() {
 
   return (
     <div className={styles.page}>
-      <Breadcrumb items={[{ label: 'Home', href: '/' }, { label: 'New show' }]} />
+      <Breadcrumb items={[{ label: 'Home', href: '/' }, { label: 'New Show' }]} />
       <header className={styles.hero}>
         <h1 className={styles.heroTitle}>
-          New show
-          <span className={styles.heroTitleAccent}>Create a podcast</span>
+          New Show
+          <span className={styles.heroTitleAccent}>Create A Podcast</span>
         </h1>
         <p className={styles.heroSub}>
           Give your show a name and a URL-friendly slug. You can add artwork and more details later.
@@ -116,6 +117,7 @@ export function PodcastNew() {
               onClick={() => navigate(-1)}
               aria-label="Cancel creating show"
             >
+              <ArrowLeft size={18} strokeWidth={2} aria-hidden />
               Cancel
             </button>
             <button
@@ -124,7 +126,8 @@ export function PodcastNew() {
               disabled={mutation.isPending || atPodcastLimit}
               aria-label="Create show"
             >
-              {mutation.isPending ? 'Creating...' : 'Create show'}
+              <Plus size={18} strokeWidth={2.5} aria-hidden />
+              {mutation.isPending ? 'Creating...' : 'Create Show'}
             </button>
           </div>
         </form>

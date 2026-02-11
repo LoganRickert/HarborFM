@@ -52,7 +52,7 @@ export function Dashboard() {
           readOnly ? (
             <span className={`${styles.createBtn} ${styles.createBtnDisabled}`} title="Read-only account">
               <Plus size={18} strokeWidth={2.5} />
-              New show
+              New Show
             </span>
           ) : atPodcastLimit ? (
             <span
@@ -60,12 +60,12 @@ export function Dashboard() {
               title="You're at max shows"
             >
               <Plus size={18} strokeWidth={2.5} />
-              New show
+              New Show
             </span>
           ) : (
             <Link to="/podcasts/new" className={styles.createBtn}>
               <Plus size={18} strokeWidth={2.5} />
-              New show
+              New Show
             </Link>
           )
         )}
@@ -138,7 +138,12 @@ export function Dashboard() {
                 </div>
                 <div className={styles.cardBody}>
                   <h2 className={styles.cardTitle}>{p.title}</h2>
-                  <p className={styles.cardSlug}>{p.slug}</p>
+                  <p className={styles.cardSlug}>
+                    {p.slug}
+                    {(p as { is_shared?: boolean }).is_shared && (
+                      <span className={styles.sharedBadge} title="Shared with you">Shared</span>
+                    )}
+                  </p>
                   {p.description && (
                     <p className={styles.cardDesc}>
                       {p.description.slice(0, 120)}{p.description.length > 120 ? '...' : ''}
@@ -159,13 +164,21 @@ export function Dashboard() {
                     <Rss size={16} strokeWidth={2} aria-hidden />
                     <span className={styles.cardActionLabel}>Feed</span>
                   </Link>
-                  {!isAdminView && (
-                    readOnly ? (
-                      <span className={`${styles.cardAction} ${styles.cardActionDisabled}`} title="Read-only account">
-                        <Settings size={16} strokeWidth={2} aria-hidden />
-                        <span className={styles.cardActionLabel}>Settings</span>
-                      </span>
-                    ) : (
+                  {!isAdminView && (() => {
+                    const myRole = (p as { my_role?: string }).my_role;
+                    const canManage = myRole === 'owner' || myRole === 'manager';
+                    if (readOnly || !canManage) {
+                      return (
+                        <span
+                          className={`${styles.cardAction} ${styles.cardActionDisabled}`}
+                          title={!canManage ? 'Only managers and the owner can edit show settings' : 'Read-only account'}
+                        >
+                          <Settings size={16} strokeWidth={2} aria-hidden />
+                          <span className={styles.cardActionLabel}>Settings</span>
+                        </span>
+                      );
+                    }
+                    return (
                       <button
                         type="button"
                         className={styles.cardSettings}
@@ -178,8 +191,8 @@ export function Dashboard() {
                         <Settings size={16} strokeWidth={2} aria-hidden />
                         <span className={styles.cardActionLabel}>Settings</span>
                       </button>
-                    )
-                  )}
+                    );
+                  })()}
                   <Link
                     to={`/podcasts/${p.id}/episodes`}
                     className={styles.cardAction}
@@ -190,14 +203,28 @@ export function Dashboard() {
                   </Link>
                   {!isAdminView && (
                     (() => {
+                      const myRole = (p as { my_role?: string }).my_role;
                       const maxEp = p.max_episodes ?? null;
                       const epCount = Number(p.episode_count ?? 0);
                       const atLimit = maxEp != null && maxEp > 0 && epCount >= Number(maxEp);
+                      const canCreateEpisode = myRole === 'owner' || myRole === 'manager';
                       if (readOnly) {
                         return (
                           <span className={`${styles.cardActionPrimary} ${styles.cardActionPrimaryDisabled}`} title="Read-only account">
                             <Mic2 size={16} strokeWidth={2} aria-hidden />
-                            <span className={styles.cardActionLabel}>New episode</span>
+                            <span className={styles.cardActionLabel}>New Episode</span>
+                          </span>
+                        );
+                      }
+                      if (!canCreateEpisode) {
+                        return (
+                          <span
+                            className={`${styles.cardActionPrimary} ${styles.cardActionPrimaryDisabled}`}
+                            title="Only managers and the owner can create episodes"
+                            aria-label="New episode (view or editor)"
+                          >
+                            <Mic2 size={16} strokeWidth={2} aria-hidden />
+                            <span className={styles.cardActionLabel}>New Episode</span>
                           </span>
                         );
                       }
@@ -208,7 +235,7 @@ export function Dashboard() {
                           aria-label="New episode (at limit)"
                         >
                           <Mic2 size={16} strokeWidth={2} aria-hidden />
-                          <span className={styles.cardActionLabel}>New episode</span>
+                          <span className={styles.cardActionLabel}>New Episode</span>
                         </span>
                       ) : (
                         <Link
@@ -217,7 +244,7 @@ export function Dashboard() {
                           aria-label={`Create new episode for ${p.title}`}
                         >
                           <Mic2 size={16} strokeWidth={2} aria-hidden />
-                          <span className={styles.cardActionLabel}>New episode</span>
+                          <span className={styles.cardActionLabel}>New Episode</span>
                         </Link>
                       );
                     })()

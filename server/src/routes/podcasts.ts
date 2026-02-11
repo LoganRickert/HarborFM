@@ -5,7 +5,9 @@ import { basename, join } from 'path';
 import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import { requireAdmin, requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { db } from '../db/index.js';
-import { isAdmin } from '../services/access.js';
+import { isAdmin, getPodcastRole, canAccessPodcast, canEditEpisodeOrPodcastMetadata, canManageCollaborators, KNOWN_ROLES } from '../services/access.js';
+import { wouldExceedStorageLimit } from '../services/storageLimit.js';
+import { RECORD_MIN_FREE_BYTES, ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from '../config.js';
 import { podcastCreateSchema, podcastUpdateSchema } from '@harborfm/shared';
 import { assertPathUnder, assertResolvedPathUnder, artworkDir } from '../services/paths.js';
 import { MIMETYPE_TO_EXT } from '../utils/artwork.js';
@@ -30,14 +32,30 @@ export async function podcastRoutes(app: FastifyInstance) {
     schema: {
       tags: ['Podcasts'],
       summary: 'List podcasts',
-      description: 'List shows owned by the current user.',
+      description: 'List shows owned by or shared with the current user.',
       response: { 200: { description: 'List of podcasts' } },
     },
   }, async (request) => {
-    const rows = db
+    const userId = request.userId as string;
+    const owned = db
       .prepare(`${podcastListSelect} WHERE owner_user_id = ? ORDER BY updated_at DESC`)
-      .all(request.userId) as Record<string, unknown>[];
-    return { podcasts: rows.map(podcastRowWithFilename) };
+      .all(userId) as Record<string, unknown>[];
+    const shared = db
+      .prepare(
+        `${podcastListSelect}
+         WHERE id IN (SELECT podcast_id FROM podcast_shares WHERE user_id = ?)
+         ORDER BY updated_at DESC`
+      )
+      .all(userId) as Record<string, unknown>[];
+    const ownedIds = new Set(owned.map((r) => r.id as string));
+    const combined = [
+      ...owned.map((r) => ({ ...podcastRowWithFilename(r), my_role: 'owner' as const, is_shared: false })),
+      ...shared.filter((r) => !ownedIds.has(r.id as string)).map((r) => {
+        const share = db.prepare('SELECT role FROM podcast_shares WHERE podcast_id = ? AND user_id = ?').get(r.id, userId) as { role: string } | undefined;
+        return { ...podcastRowWithFilename(r), my_role: share?.role ?? 'view', is_shared: true };
+      }),
+    ].sort((a: Record<string, unknown>, b: Record<string, unknown>) => new Date((b.updated_at as string) ?? 0).getTime() - new Date((a.updated_at as string) ?? 0).getTime());
+    return { podcasts: combined };
   });
 
   app.get('/api/podcasts/user/:userId', {
@@ -150,13 +168,16 @@ export async function podcastRoutes(app: FastifyInstance) {
     schema: {
       tags: ['Podcasts'],
       summary: 'Get podcast',
-      description: 'Get a show by ID. Must own it or be admin.',
+      description: 'Get a show by ID. Must have access (owner or shared).',
       params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
       response: { 200: { description: 'Podcast' }, 404: { description: 'Not found' } },
     },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const { userId } = request;
+    if (getPodcastRole(userId, id) === null) {
+      return reply.status(404).send({ error: 'Podcast not found' });
+    }
     const row = db
       .prepare(
         `SELECT podcasts.id, podcasts.owner_user_id, podcasts.title, podcasts.slug, podcasts.description,
@@ -165,13 +186,29 @@ export async function podcastRoutes(app: FastifyInstance) {
          podcasts.explicit, podcasts.artwork_path, podcasts.artwork_url, podcasts.site_url,
          podcasts.copyright, podcasts.podcast_guid, podcasts.locked, podcasts.license,
          podcasts.itunes_type, podcasts.medium, podcasts.created_at, podcasts.updated_at,
+         podcasts.max_collaborators,
          COALESCE(podcasts.max_episodes, (SELECT max_episodes FROM users WHERE id = podcasts.owner_user_id)) AS max_episodes,
          (SELECT COUNT(*) FROM episodes WHERE podcast_id = podcasts.id) AS episode_count
-         FROM podcasts WHERE podcasts.id = ? AND (owner_user_id = ? OR (SELECT role FROM users WHERE id = ?) = 'admin')`
+         FROM podcasts WHERE podcasts.id = ?`
       )
-      .get(id, userId, userId) as Record<string, unknown> | undefined;
+      .get(id) as Record<string, unknown> | undefined;
     if (!row) return reply.status(404).send({ error: 'Podcast not found' });
-    return podcastRowWithFilename(row);
+    const role = getPodcastRole(userId, id);
+    const isShared = role !== 'owner';
+    const ownerId = row.owner_user_id as string;
+    const can_record_new_section = ownerId ? !wouldExceedStorageLimit(db, ownerId, RECORD_MIN_FREE_BYTES) : true;
+    const podcastMaxCollab = row.max_collaborators as number | null | undefined;
+    const ownerMaxCollab = ownerId
+      ? (db.prepare('SELECT max_collaborators FROM users WHERE id = ?').get(ownerId) as { max_collaborators: number | null } | undefined)?.max_collaborators ?? null
+      : null;
+    const effective_max_collaborators = podcastMaxCollab ?? ownerMaxCollab ?? null;
+    return {
+      ...podcastRowWithFilename(row),
+      my_role: role ?? 'view',
+      is_shared: isShared,
+      can_record_new_section,
+      effective_max_collaborators: effective_max_collaborators,
+    };
   });
 
   app.get('/api/podcasts/:id/analytics', {
@@ -186,14 +223,17 @@ export async function podcastRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { id: podcastId } = request.params as { id: string };
     const { userId } = request;
+    if (!canAccessPodcast(userId, podcastId)) {
+      return reply.status(404).send({ error: 'Podcast not found' });
+    }
     const podcast = db
       .prepare(
         `SELECT p.id, COALESCE(u.read_only, 0) AS owner_read_only
          FROM podcasts p
          INNER JOIN users u ON p.owner_user_id = u.id
-         WHERE p.id = ? AND (p.owner_user_id = ? OR (SELECT role FROM users WHERE id = ?) = 'admin')`
+         WHERE p.id = ?`
       )
-      .get(podcastId, userId, userId) as { id: string; owner_read_only: number } | undefined;
+      .get(podcastId) as { id: string; owner_read_only: number } | undefined;
     if (!podcast) return reply.status(404).send({ error: 'Podcast not found' });
 
     const rss_daily = db
@@ -289,7 +329,7 @@ export async function podcastRoutes(app: FastifyInstance) {
     schema: {
       tags: ['Podcasts'],
       summary: 'Update podcast',
-      description: 'Update show metadata. Requires read-write access.',
+      description: 'Update show metadata. Requires manager or owner.',
       params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
       body: { type: 'object', properties: { title: { type: 'string' }, slug: { type: 'string' }, description: { type: 'string' } } },
       response: { 200: { description: 'Updated podcast' }, 400: { description: 'Validation failed' }, 403: { description: 'Only admins can edit slugs' }, 404: { description: 'Not found' }, 409: { description: 'Slug taken' } },
@@ -300,10 +340,10 @@ export async function podcastRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
     }
-    const existing = db
-      .prepare('SELECT id FROM podcasts WHERE id = ? AND owner_user_id = ?')
-      .get(id, request.userId);
-    if (!existing) return reply.status(404).send({ error: 'Podcast not found' });
+    const role = getPodcastRole(request.userId, id);
+    if (!canEditEpisodeOrPodcastMetadata(role)) {
+      return reply.status(404).send({ error: 'Podcast not found' });
+    }
     
     // Get current podcast to check slug changes
     const currentPodcast = db.prepare('SELECT slug FROM podcasts WHERE id = ?').get(id) as { slug: string } | undefined;
@@ -406,6 +446,10 @@ export async function podcastRoutes(app: FastifyInstance) {
       fields.push('medium = ?');
       values.push(data.medium);
     }
+    if (data.max_collaborators !== undefined) {
+      fields.push('max_collaborators = ?');
+      values.push(data.max_collaborators);
+    }
     if (data.category_tertiary !== undefined) {
       fields.push('category_tertiary = ?');
       values.push(data.category_tertiary);
@@ -453,7 +497,11 @@ export async function podcastRoutes(app: FastifyInstance) {
     },
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const existing = db.prepare('SELECT id, artwork_path FROM podcasts WHERE id = ? AND owner_user_id = ?').get(id, request.userId) as { id: string; artwork_path: string | null } | undefined;
+    const role = getPodcastRole(request.userId, id);
+    if (!canEditEpisodeOrPodcastMetadata(role)) {
+      return reply.status(404).send({ error: 'Podcast not found' });
+    }
+    const existing = db.prepare('SELECT id, artwork_path FROM podcasts WHERE id = ?').get(id) as { id: string; artwork_path: string | null } | undefined;
     if (!existing) return reply.status(404).send({ error: 'Podcast not found' });
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
@@ -464,7 +512,7 @@ export async function podcastRoutes(app: FastifyInstance) {
     const filename = `${nanoid()}.${ext}`;
     const destPath = join(dir, filename);
     const buffer = await data.toBuffer();
-    if (buffer.length > 5 * 1024 * 1024) return reply.status(400).send({ error: 'Image too large (max 5MB)' });
+    if (buffer.length > ARTWORK_MAX_BYTES) return reply.status(400).send({ error: `Image too large (max ${ARTWORK_MAX_MB}MB)` });
     assertResolvedPathUnder(destPath, dir);
     writeFileSync(destPath, buffer);
     db.prepare('UPDATE podcasts SET artwork_path = ?, artwork_url = NULL, updated_at = datetime(\'now\') WHERE id = ?').run(destPath, id);
@@ -479,5 +527,134 @@ export async function podcastRoutes(app: FastifyInstance) {
     }
     const row = db.prepare('SELECT * FROM podcasts WHERE id = ?').get(id) as Record<string, unknown>;
     return podcastRowWithFilename(row);
+  });
+
+  // Collaborators (sharing)
+  app.get('/api/podcasts/:podcastId/collaborators', {
+    preHandler: [requireAuth],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'List collaborators',
+      description: 'List users with access to the podcast (manager or owner only).',
+      params: { type: 'object', properties: { podcastId: { type: 'string' } }, required: ['podcastId'] },
+      response: { 200: { description: 'List of collaborators' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
+    const { podcastId } = request.params as { podcastId: string };
+    const role = getPodcastRole(request.userId, podcastId);
+    if (!canManageCollaborators(role)) return reply.status(404).send({ error: 'Podcast not found' });
+    const rows = db
+      .prepare(
+        `SELECT ps.user_id, ps.role, ps.created_at, u.email
+         FROM podcast_shares ps
+         JOIN users u ON u.id = ps.user_id
+         WHERE ps.podcast_id = ?
+         ORDER BY ps.created_at ASC`
+      )
+      .all(podcastId) as Array<{ user_id: string; role: string; created_at: string; email: string }>;
+    return { collaborators: rows };
+  });
+
+  app.post('/api/podcasts/:podcastId/collaborators', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Add collaborator',
+      description: 'Invite a user by email. Returns USER_NOT_FOUND if email has no account.',
+      params: { type: 'object', properties: { podcastId: { type: 'string' } }, required: ['podcastId'] },
+      body: { type: 'object', properties: { email: { type: 'string' }, role: { type: 'string' } }, required: ['email', 'role'] },
+      response: { 201: { description: 'Collaborator added' }, 400: { description: 'Invalid role' }, 403: { description: 'Collaborator limit' }, 404: { description: 'User not found' }, 500: { description: 'Server error' } },
+    },
+  }, async (request, reply) => {
+    const { podcastId } = request.params as { podcastId: string };
+    const role = getPodcastRole(request.userId, podcastId);
+    if (!canManageCollaborators(role)) return reply.status(404).send({ error: 'Podcast not found' });
+    const body = request.body as { email?: string; role?: string };
+    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const shareRole = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : '';
+    if (!email) return reply.status(400).send({ error: 'email is required' });
+    if (!KNOWN_ROLES.has(shareRole)) return reply.status(400).send({ error: 'Invalid role. Use view, editor, or manager.' });
+    const user = db.prepare('SELECT id FROM users WHERE LOWER(email) = ?').get(email) as { id: string } | undefined;
+    if (!user) {
+      return reply.status(404).send({
+        error: 'user_not_found',
+        code: 'USER_NOT_FOUND',
+        email,
+        can_invite_to_platform: true,
+      });
+    }
+    const podcast = db.prepare('SELECT owner_user_id, max_collaborators FROM podcasts WHERE id = ?').get(podcastId) as { owner_user_id: string; max_collaborators: number | null } | undefined;
+    if (!podcast) return reply.status(404).send({ error: 'Podcast not found' });
+    const ownerLimits = db.prepare('SELECT max_collaborators FROM users WHERE id = ?').get(podcast.owner_user_id) as { max_collaborators: number | null } | undefined;
+    const maxCollaborators = podcast.max_collaborators ?? ownerLimits?.max_collaborators ?? null;
+    if (maxCollaborators != null && maxCollaborators > 0) {
+      const count = db.prepare('SELECT COUNT(*) as count FROM podcast_shares WHERE podcast_id = ?').get(podcastId) as { count: number };
+      if (count.count >= maxCollaborators) {
+        return reply.status(403).send({ error: 'This show has reached its collaborator limit.' });
+      }
+    }
+    if (user.id === podcast.owner_user_id) {
+      return reply.status(400).send({ error: 'The owner is already on the show.' });
+    }
+    try {
+      db.prepare(
+        'INSERT INTO podcast_shares (podcast_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT(podcast_id, user_id) DO UPDATE SET role = excluded.role'
+      ).run(podcastId, user.id, shareRole);
+    } catch {
+      return reply.status(500).send({ error: 'Failed to add collaborator' });
+    }
+    const row = db
+      .prepare(
+        `SELECT ps.user_id, ps.role, ps.created_at, u.email FROM podcast_shares ps JOIN users u ON u.id = ps.user_id WHERE ps.podcast_id = ? AND ps.user_id = ?`
+      )
+      .get(podcastId, user.id) as { user_id: string; role: string; created_at: string; email: string };
+    return reply.status(201).send(row);
+  });
+
+  app.patch('/api/podcasts/:podcastId/collaborators/:userId', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Update collaborator role',
+      params: { type: 'object', properties: { podcastId: { type: 'string' }, userId: { type: 'string' } }, required: ['podcastId', 'userId'] },
+      body: { type: 'object', properties: { role: { type: 'string' } }, required: ['role'] },
+      response: { 200: { description: 'Updated' }, 400: { description: 'Invalid role' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
+    const { podcastId, userId: targetUserId } = request.params as { podcastId: string; userId: string };
+    const role = getPodcastRole(request.userId, podcastId);
+    if (!canManageCollaborators(role)) return reply.status(404).send({ error: 'Podcast not found' });
+    const body = request.body as { role?: string };
+    const shareRole = typeof body?.role === 'string' ? body.role.trim().toLowerCase() : '';
+    if (!KNOWN_ROLES.has(shareRole)) return reply.status(400).send({ error: 'Invalid role. Use view, editor, or manager.' });
+    const existing = db.prepare('SELECT user_id FROM podcast_shares WHERE podcast_id = ? AND user_id = ?').get(podcastId, targetUserId);
+    if (!existing) return reply.status(404).send({ error: 'Collaborator not found' });
+    db.prepare('UPDATE podcast_shares SET role = ? WHERE podcast_id = ? AND user_id = ?').run(shareRole, podcastId, targetUserId);
+    const row = db
+      .prepare(
+        `SELECT ps.user_id, ps.role, ps.created_at, u.email FROM podcast_shares ps JOIN users u ON u.id = ps.user_id WHERE ps.podcast_id = ? AND ps.user_id = ?`
+      )
+      .get(podcastId, targetUserId) as { user_id: string; role: string; created_at: string; email: string };
+    return row;
+  });
+
+  app.delete('/api/podcasts/:podcastId/collaborators/:userId', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Podcasts'],
+      summary: 'Remove collaborator',
+      description: 'Remove access. Caller can be manager/owner or the user themselves (leave).',
+      params: { type: 'object', properties: { podcastId: { type: 'string' }, userId: { type: 'string' } }, required: ['podcastId', 'userId'] },
+      response: { 204: { description: 'Removed' }, 404: { description: 'Not found' } },
+    },
+  }, async (request, reply) => {
+    const { podcastId, userId: targetUserId } = request.params as { podcastId: string; userId: string };
+    const role = getPodcastRole(request.userId, podcastId);
+    const isSelf = request.userId === targetUserId;
+    if (!canManageCollaborators(role) && !isSelf) return reply.status(404).send({ error: 'Podcast not found' });
+    const existing = db.prepare('SELECT user_id FROM podcast_shares WHERE podcast_id = ? AND user_id = ?').get(podcastId, targetUserId);
+    if (!existing) return reply.status(404).send({ error: 'Collaborator not found' });
+    db.prepare('DELETE FROM podcast_shares WHERE podcast_id = ? AND user_id = ?').run(podcastId, targetUserId);
+    return reply.status(204).send();
   });
 }

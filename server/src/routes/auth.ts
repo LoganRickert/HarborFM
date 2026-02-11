@@ -10,16 +10,14 @@ import { getCookieSecureFlag } from '../services/cookies.js';
 import { clearFailures, getClientIp, getIpBan, getUserAgent, recordFailureAndMaybeBan } from '../services/loginAttempts.js';
 import { getLocationForIp } from '../services/geolocation.js';
 import { verifyCaptcha } from '../services/captcha.js';
-import { sendMail, buildWelcomeVerificationEmail, buildResetPasswordEmail } from '../services/email.js';
+import { sendMail, buildWelcomeVerificationEmail, buildResetPasswordEmail, buildInviteToPlatformEmail } from '../services/email.js';
 import { normalizeHostname } from '../utils/url.js';
 import { sha256Hex } from '../utils/hash.js';
+import { MAX_PLATFORM_INVITES_PER_DAY, API_KEY_PREFIX, MAX_API_KEYS_PER_USER, CSRF_COOKIE_NAME } from '../config.js';
 
 const COOKIE_NAME = 'harborfm_jwt';
-const API_KEY_PREFIX = 'hfm_';
-const MAX_API_KEYS_PER_USER = 5;
 const VERIFICATION_TOKEN_BYTES = 24;
 const VERIFICATION_EXPIRY_HOURS = 24;
-const CSRF_COOKIE_NAME = 'harborfm_csrf';
 // In production, cookies are Secure by default (HTTPS only). Set COOKIE_SECURE=false when using HTTP (e.g. Docker on localhost).
 const COOKIE_SECURE = getCookieSecureFlag();
 const COOKIE_OPTS = {
@@ -110,6 +108,7 @@ export async function authRoutes(app: FastifyInstance) {
     const max_podcasts = (settings.default_max_podcasts == null || settings.default_max_podcasts === 0) ? null : settings.default_max_podcasts;
     const max_storage_mb = (settings.default_storage_mb == null || settings.default_storage_mb === 0) ? null : settings.default_storage_mb;
     const max_episodes = (settings.default_max_episodes == null || settings.default_max_episodes === 0) ? null : settings.default_max_episodes;
+    const max_collaborators = (settings.default_max_collaborators == null || settings.default_max_collaborators === 0) ? null : settings.default_max_collaborators;
 
     const requiresVerification = settings.email_provider === 'smtp' || settings.email_provider === 'sendgrid';
     let email_verified = 1;
@@ -125,8 +124,8 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     db.prepare(
-      `INSERT INTO users (id, email, password_hash, role, max_podcasts, max_storage_mb, max_episodes, email_verified, email_verification_token, email_verification_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO users (id, email, password_hash, role, max_podcasts, max_storage_mb, max_episodes, max_collaborators, email_verified, email_verification_token, email_verification_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       email,
@@ -135,6 +134,7 @@ export async function authRoutes(app: FastifyInstance) {
       max_podcasts,
       max_storage_mb,
       max_episodes,
+      max_collaborators,
       email_verified,
       email_verification_token,
       email_verification_expires_at
@@ -487,7 +487,7 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const user = db.prepare(
       `SELECT id, email, created_at, role, COALESCE(read_only, 0) AS read_only,
-        max_podcasts, max_episodes, max_storage_mb, COALESCE(disk_bytes_used, 0) AS disk_bytes_used,
+        max_podcasts, max_episodes, max_storage_mb, max_collaborators, COALESCE(disk_bytes_used, 0) AS disk_bytes_used,
         last_login_at, last_login_ip, last_login_location
        FROM users WHERE id = ?`
     ).get(request.userId) as {
@@ -499,6 +499,7 @@ export async function authRoutes(app: FastifyInstance) {
       max_podcasts: number | null;
       max_episodes: number | null;
       max_storage_mb: number | null;
+      max_collaborators: number | null;
       disk_bytes_used: number;
       last_login_at: string | null;
       last_login_ip: string | null;
@@ -507,13 +508,16 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) {
       return reply.status(404).send({ error: 'User not found' });
     }
-    const podcastCount = db.prepare('SELECT COUNT(*) as count FROM podcasts WHERE owner_user_id = ?').get(request.userId) as { count: number };
+    const ownedPodcasts = db.prepare('SELECT COUNT(*) as count FROM podcasts WHERE owner_user_id = ?').get(request.userId) as { count: number };
+    const sharedPodcasts = db.prepare('SELECT COUNT(*) as count FROM podcast_shares WHERE user_id = ?').get(request.userId) as { count: number };
+    const podcastCount = ownedPodcasts.count + sharedPodcasts.count;
     const episodeCount = db
       .prepare(
         `SELECT COUNT(*) as count FROM episodes e
-         JOIN podcasts p ON p.id = e.podcast_id WHERE p.owner_user_id = ?`
+         JOIN podcasts p ON p.id = e.podcast_id
+         WHERE p.owner_user_id = ? OR EXISTS (SELECT 1 FROM podcast_shares WHERE podcast_id = p.id AND user_id = ?)`
       )
-      .get(request.userId) as { count: number };
+      .get(request.userId, request.userId) as { count: number };
     const isReadOnly = user.read_only === 1;
     return {
       user: {
@@ -525,12 +529,13 @@ export async function authRoutes(app: FastifyInstance) {
         max_podcasts: user.max_podcasts ?? null,
         max_episodes: user.max_episodes ?? null,
         max_storage_mb: user.max_storage_mb ?? null,
+        max_collaborators: user.max_collaborators ?? null,
         disk_bytes_used: user.disk_bytes_used ?? 0,
         last_login_at: isReadOnly ? null : (user.last_login_at ?? null),
         last_login_ip: isReadOnly ? null : (user.last_login_ip ?? null),
         last_login_location: isReadOnly ? null : (user.last_login_location ?? null),
       },
-      podcast_count: podcastCount.count,
+      podcast_count: podcastCount,
       episode_count: episodeCount.count,
     };
   });
@@ -619,5 +624,51 @@ export async function authRoutes(app: FastifyInstance) {
     }
     db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
     return reply.status(204).send();
+  });
+
+  app.post('/api/invite-to-platform', {
+    preHandler: [requireAuth, requireNotReadOnly],
+    schema: {
+      tags: ['Auth'],
+      summary: 'Invite someone to join the platform',
+      description: 'Send an email inviting the recipient to create an account. Rate limited per user per day.',
+      body: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+      response: { 200: { description: 'Invite sent' }, 400: { description: 'Invalid email or already sent' }, 429: { description: 'Rate limited' }, 503: { description: 'Email not configured' } },
+    },
+  }, async (request, reply) => {
+    const body = request.body as { email?: string };
+    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!email) return reply.status(400).send({ error: 'email is required' });
+    const userId = request.userId as string;
+    const countLast24h = db
+      .prepare(
+        `SELECT COUNT(*) as count FROM platform_invites WHERE inviter_user_id = ? AND created_at > datetime('now', '-1 day')`
+      )
+      .get(userId) as { count: number };
+    if (countLast24h.count >= MAX_PLATFORM_INVITES_PER_DAY) {
+      return reply.status(429).send({ error: 'You have reached the limit of platform invites per day. Try again tomorrow.' });
+    }
+    const sameEmailRecent = db
+      .prepare(
+        `SELECT 1 FROM platform_invites WHERE LOWER(email) = ? AND created_at > datetime('now', '-1 day') LIMIT 1`
+      )
+      .get(email);
+    if (sameEmailRecent) {
+      return reply.status(400).send({ error: 'An invite was already sent to this email recently. Please wait 24 hours.' });
+    }
+    const settings = readSettings();
+    if (settings.email_provider === 'none') {
+      return reply.status(503).send({ error: 'Email is not configured. Ask an administrator to set up email.' });
+    }
+    const baseUrl = normalizeHostname(settings.hostname || '') || 'http://localhost';
+    const signupUrl = `${baseUrl}/signup`;
+    const { subject, text, html } = buildInviteToPlatformEmail(signupUrl);
+    const sendResult = await sendMail({ to: email, subject, text, html });
+    if (!sendResult.sent) {
+      request.log.warn({ emailRedacted: email.slice(0, 3) + '***', err: sendResult.error }, 'Invite-to-platform email failed');
+      return reply.status(503).send({ error: sendResult.error ?? 'Failed to send email' });
+    }
+    db.prepare('INSERT INTO platform_invites (inviter_user_id, email) VALUES (?, ?)').run(userId, email);
+    return reply.send({ ok: true });
   });
 }

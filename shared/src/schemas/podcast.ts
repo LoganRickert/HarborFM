@@ -30,7 +30,10 @@ export const podcastCreateSchema = z.object({
   medium: z.enum(['podcast', 'music', 'video', 'film', 'audiobook', 'newsletter', 'blog']).default('podcast'),
 });
 
-export const podcastUpdateSchema = podcastCreateSchema.partial();
+/** Partial of create schema plus optional per-podcast limits (e.g. max_collaborators). */
+export const podcastUpdateSchema = podcastCreateSchema.partial().extend({
+  max_collaborators: z.number().int().min(0).nullable().optional(),
+});
 
 export type PodcastCreate = z.infer<typeof podcastCreateSchema>;
 export type PodcastUpdate = z.infer<typeof podcastUpdateSchema>;

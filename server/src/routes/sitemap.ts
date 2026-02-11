@@ -11,9 +11,7 @@ import {
   writeSitemapToFile,
   writeSitemapIndexToFile,
 } from '../services/sitemap.js';
-
-/** Max age (ms) for serving cached podcast sitemap from disk before regenerating. Same as RSS: 1 hour. */
-const SITEMAP_CACHE_MAX_AGE_MS = Number(process.env.RSS_CACHE_MAX_AGE_MS) || 60 * 60 * 1000;
+import { RSS_CACHE_MAX_AGE_MS } from '../config.js';
 
 function getBaseUrl(request: FastifyRequest): string {
   const settings = readSettings();
@@ -47,7 +45,7 @@ export async function sitemapRoutes(app: FastifyInstance) {
       response: { 200: { description: 'Sitemap index XML' } },
     },
   }, async (request, reply) => {
-    const cached = getCachedSitemapIndexIfFresh(SITEMAP_CACHE_MAX_AGE_MS);
+    const cached = getCachedSitemapIndexIfFresh(RSS_CACHE_MAX_AGE_MS);
     if (cached) {
       return reply
         .header('Content-Type', 'application/xml; charset=utf-8')
@@ -132,7 +130,7 @@ export async function sitemapRoutes(app: FastifyInstance) {
     }
     const baseUrl = getBaseUrl(request);
     try {
-      const cached = getCachedSitemapIfFresh(podcast.id, SITEMAP_CACHE_MAX_AGE_MS);
+      const cached = getCachedSitemapIfFresh(podcast.id, RSS_CACHE_MAX_AGE_MS);
       if (cached) {
         return reply
           .header('Content-Type', 'application/xml; charset=utf-8')

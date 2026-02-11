@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Rss, ExternalLink, List, Settings as GearIcon, Cloud, X, FlaskConical, UploadCloud, BarChart3, Plus, Trash2, Pencil } from 'lucide-react';
+import { Rss, ExternalLink, List, Settings as GearIcon, Cloud, X, FlaskConical, UploadCloud, BarChart3, Plus, Trash2, Pencil, Users, UserPlus } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { getPodcast } from '../api/podcasts';
+import { getPodcast, listCollaborators, addCollaborator, updateCollaborator, removeCollaborator, inviteToPlatform, CollaboratorApiError } from '../api/podcasts';
 import { getAuthRssPreviewUrl } from '../api/rss';
 import { me, isReadOnly } from '../api/auth';
 import { listExports, createExport, updateExport, testExport, deployAllExports, deleteExport, type Export, type ExportMode, type ExportCreateBody, type ExportUpdateBody, EXPORT_MODE_LABELS } from '../api/exports';
@@ -21,6 +21,8 @@ export function PodcastSettings() {
   });
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
   const readOnly = isReadOnly(meData?.user);
+  const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
+  const canManageShow = myRole === 'owner' || myRole === 'manager';
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
@@ -60,7 +62,7 @@ export function PodcastSettings() {
                 <List size={16} strokeWidth={2} aria-hidden />
                 Episodes
               </Link>
-              {!readOnly && (
+              {!readOnly && canManageShow && (
                 <button
                   type="button"
                   className={styles.cardSettings}
@@ -181,8 +183,231 @@ export function PodcastSettings() {
             </p>
           </div>
 
-          <ExportsSection podcastId={id} readOnly={readOnly} />
+          {canManageShow && <ExportsSection podcastId={id} readOnly={readOnly} />}
+
+          {canManageShow && <CollaboratorsSection podcastId={id} effectiveMaxCollaborators={podcast?.effective_max_collaborators ?? undefined} />}
       </>
+    </div>
+  );
+}
+
+function CollaboratorsSection({ podcastId, effectiveMaxCollaborators }: { podcastId: string; effectiveMaxCollaborators?: number | null }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['collaborators', podcastId],
+    queryFn: () => listCollaborators(podcastId).then((r) => r.collaborators),
+    enabled: !!podcastId,
+  });
+  const collaborators = data ?? [];
+  const atCollaboratorLimit =
+    effectiveMaxCollaborators != null && effectiveMaxCollaborators > 0 && collaborators.length >= effectiveMaxCollaborators;
+  const [addEmail, setAddEmail] = useState('');
+  const [addRole, setAddRole] = useState<'view' | 'editor' | 'manager'>('editor');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [userNotFoundEmail, setUserNotFoundEmail] = useState<string | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
+
+  const addMutation = useMutation({
+    mutationFn: (body: { email: string; role: string }) => addCollaborator(podcastId, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collaborators', podcastId] });
+      queryClient.invalidateQueries({ queryKey: ['podcasts'] });
+      setAddEmail('');
+      setAddError(null);
+      setUserNotFoundEmail(null);
+    },
+    onError: (err: unknown) => {
+      if (err instanceof CollaboratorApiError && err.data?.code === 'USER_NOT_FOUND' && err.data?.email) {
+        setUserNotFoundEmail(err.data.email);
+        setAddError('This person is not on the platform yet.');
+      } else {
+        setAddError(err instanceof Error ? err.message : 'Failed to add collaborator');
+        setUserNotFoundEmail(null);
+      }
+    },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: (email: string) => inviteToPlatform({ email }),
+    onSuccess: () => {
+      setUserNotFoundEmail(null);
+      setInviteSending(false);
+    },
+    onError: () => setInviteSending(false),
+  });
+
+  const [collaboratorToRemove, setCollaboratorToRemove] = useState<{ user_id: string; email: string } | null>(null);
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) => removeCollaborator(podcastId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collaborators', podcastId] });
+      queryClient.invalidateQueries({ queryKey: ['podcasts'] });
+      setCollaboratorToRemove(null);
+    },
+  });
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    setAddError(null);
+    setUserNotFoundEmail(null);
+    const email = addEmail.trim().toLowerCase();
+    if (!email) return;
+    addMutation.mutate({ email, role: addRole });
+  }
+
+  function handleInviteToPlatform() {
+    if (!userNotFoundEmail) return;
+    setInviteSending(true);
+    inviteMutation.mutate(userNotFoundEmail);
+  }
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.exportHeader}>
+        <div className={styles.exportTitle}>
+          <Users size={18} strokeWidth={2} aria-hidden="true" />
+          <h2 className={styles.sectionTitle}>Collaborators</h2>
+        </div>
+      </div>
+      <p className={styles.sectionSub}>
+        Invite others to this show. View: read-only. Editor: edit segments and build the episode. Manager: edit metadata, episodes, and exports.
+      </p>
+
+      {atCollaboratorLimit && (
+        <div className={styles.collabLimitCard} role="status">
+          This show has reached its collaborator limit ({effectiveMaxCollaborators}). Remove someone to invite another.
+        </div>
+      )}
+
+      {!atCollaboratorLimit && (
+      <form onSubmit={handleAdd} className={styles.collabForm}>
+        <div className={styles.collabFormInputWrap}>
+          <input
+            type="email"
+            placeholder="Email"
+            value={addEmail}
+            onChange={(e) => setAddEmail(e.target.value)}
+            className={styles.input}
+            required
+          />
+        </div>
+        <div className={styles.collabFormActions}>
+          <div className={styles.statusToggle} role="group" aria-label="Role">
+            {(['view', 'editor', 'manager'] as const).map((role) => (
+              <button
+                key={role}
+                type="button"
+                className={addRole === role ? styles.statusToggleActive : styles.statusToggleBtn}
+                onClick={() => setAddRole(role)}
+                aria-pressed={addRole === role}
+                aria-label={role.charAt(0).toUpperCase() + role.slice(1)}
+              >
+                {role.charAt(0).toUpperCase() + role.slice(1)}
+              </button>
+            ))}
+          </div>
+          <button type="submit" className={styles.gearBtn} disabled={addMutation.isPending} aria-label="Add collaborator">
+            <UserPlus size={16} strokeWidth={2} aria-hidden />
+            {addMutation.isPending ? 'Adding...' : 'Add'}
+          </button>
+        </div>
+      </form>
+      )}
+
+      {addError && (
+        <div className={styles.collabError}>
+          <p>{addError}</p>
+          {userNotFoundEmail && (
+            <button
+              type="button"
+              className={styles.invitePlatformBtn}
+              onClick={handleInviteToPlatform}
+              disabled={inviteMutation.isPending || inviteSending}
+            >
+              {inviteMutation.isPending || inviteSending ? 'Sending...' : 'Invite them to join the platform'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {isLoading ? (
+        <p className={styles.exportMuted}>Loading...</p>
+      ) : collaborators.length === 0 ? (
+        <p className={styles.exportMuted}>No collaborators yet. Add someone by email above.</p>
+      ) : (
+        <>
+          <ul className={styles.exportList}>
+            {collaborators.map((c) => (
+              <li key={c.user_id} className={styles.exportCard}>
+                <div className={styles.exportCardRow}>
+                  <div className={styles.exportCardMeta}>
+                    <strong>{c.email}</strong>
+                    <span className={styles.exportModeBadge}>{c.role}</span>
+                  </div>
+                  <div className={`${styles.exportCardActions} ${styles.collabCardActions}`}>
+                    <div className={styles.statusToggle} role="group" aria-label={`Role for ${c.email}`}>
+                      {(['view', 'editor', 'manager'] as const).map((role) => (
+                        <button
+                          key={role}
+                          type="button"
+                          className={c.role === role ? styles.statusToggleActive : styles.statusToggleBtn}
+                          onClick={() => {
+                            if (role !== c.role) {
+                              updateCollaborator(podcastId, c.user_id, { role }).then(() => {
+                                queryClient.invalidateQueries({ queryKey: ['collaborators', podcastId] });
+                              });
+                            }
+                          }}
+                          aria-pressed={c.role === role}
+                          aria-label={role.charAt(0).toUpperCase() + role.slice(1)}
+                        >
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.exportDeleteBtn}
+                      onClick={() => setCollaboratorToRemove({ user_id: c.user_id, email: c.email })}
+                      disabled={removeMutation.isPending}
+                      aria-label={`Remove ${c.email}`}
+                    >
+                      <Trash2 size={16} aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <Dialog.Root open={!!collaboratorToRemove} onOpenChange={(open) => !open && setCollaboratorToRemove(null)}>
+            <Dialog.Portal>
+              <Dialog.Overlay className={styles.dialogOverlay} />
+              <Dialog.Content className={styles.dialogContent}>
+                <Dialog.Title className={styles.dialogTitle}>Remove collaborator?</Dialog.Title>
+                <Dialog.Description className={styles.dialogDescription}>
+                  {collaboratorToRemove
+                    ? `This will remove ${collaboratorToRemove.email} from this show. They will lose access.`
+                    : 'This will remove this collaborator from this show.'}
+                </Dialog.Description>
+                <div className={styles.dialogActions}>
+                  <Dialog.Close asChild>
+                    <button type="button" className={styles.cancel} aria-label="Cancel">Cancel</button>
+                  </Dialog.Close>
+                  <button
+                    type="button"
+                    className={styles.dialogConfirmRemove}
+                    onClick={() => collaboratorToRemove && removeMutation.mutate(collaboratorToRemove.user_id)}
+                    disabled={removeMutation.isPending}
+                    aria-label="Confirm remove collaborator"
+                  >
+                    {removeMutation.isPending ? 'Removing...' : 'Remove'}
+                  </button>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        </>
+      )}
     </div>
   );
 }

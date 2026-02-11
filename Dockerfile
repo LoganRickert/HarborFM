@@ -14,8 +14,10 @@ RUN pnpm install --frozen-lockfile
 COPY shared ./shared
 COPY server ./server
 COPY web ./web
+COPY scripts ./scripts
 
 RUN pnpm run lint
+RUN pnpm run db:migrate:test
 RUN pnpm run build
 
 # Runtime stage: Node + ffmpeg, single image

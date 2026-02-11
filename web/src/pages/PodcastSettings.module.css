@@ -537,7 +537,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  margin-top: 0.25rem;
 }
 .statusToggleBtn,
 .statusToggleActive {
@@ -810,6 +809,108 @@
 }
 
 .gearBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.collabForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.collabFormInputWrap {
+  flex: 1;
+  min-width: 200px;
+}
+
+@media (max-width: 640px) {
+  .collabFormInputWrap {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .collabFormActions {
+    flex-grow: 1;
+  }
+}
+
+.collabFormActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.collabForm .input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  box-sizing: border-box;
+}
+
+.collabForm .select,
+.roleSelect {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.collabLimitCard {
+  margin-bottom: 1rem;
+  padding: 0.875rem 1rem;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.collabError {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--error);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.collabError p {
+  margin: 0;
+}
+
+.invitePlatformBtn {
+  display: inline-block;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid rgba(0, 212, 170, 0.35);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  margin-top: 0.5rem;
+}
+
+.invitePlatformBtn:hover:not(:disabled) {
+  background: rgba(0, 212, 170, 0.1);
+}
+
+.invitePlatformBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -1100,6 +1201,14 @@
   justify-content: flex-end;
 }
 
+.collabCardActions {
+  align-items: center;
+}
+.collabCardActions .statusToggle {
+  width: auto;
+  flex-grow: 1;
+}
+
 .exportCardActions button {
   display: inline-flex;
   align-items: center;
@@ -1124,6 +1233,10 @@
   border: 1px solid var(--error, #c53030);
   border-radius: var(--radius);
 }
+
+.collabCardActions .exportDeleteBtn {
+  padding: 0.5rem;
+}
 .exportDeleteBtn:hover {
   color: var(--bg);
   background: var(--error, #c53030);
@@ -1135,13 +1248,15 @@
     align-items: stretch;
   }
   .exportCardActions {
-    flex-direction: column;
+    flex-direction: row;
     margin-top: 0.75rem;
   }
   .exportCardActions button {
     flex: 1 1 auto;
-    width: 100%;
     justify-content: center;
+  }
+  .collabCardActions .exportDeleteBtn {
+    flex-grow: 0;
   }
 }
 

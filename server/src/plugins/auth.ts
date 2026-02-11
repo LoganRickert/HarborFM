@@ -3,10 +3,8 @@ import { db } from '../db/index.js';
 import { randomBytes } from 'crypto';
 import { getCookieSecureFlag } from '../services/cookies.js';
 import { sha256Hex } from '../utils/hash.js';
+import { API_KEY_PREFIX, CSRF_COOKIE_NAME } from '../config.js';
 
-const API_KEY_PREFIX = 'hfm_';
-
-const CSRF_COOKIE_NAME = 'harborfm_csrf';
 const CSRF_COOKIE_OPTS = {
   httpOnly: false,
   secure: getCookieSecureFlag(),

@@ -13,6 +13,7 @@
     "deploy:pm2": "bash scripts/deploy-pm2.sh",
     "build": "pnpm --filter shared run build && pnpm --filter server run build && pnpm --filter web run build",
     "lint": "pnpm -r run lint",
+    "db:migrate:test": "bash scripts/test-migrations.sh",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "build:openapi": "bash scripts/build-openapi.sh",

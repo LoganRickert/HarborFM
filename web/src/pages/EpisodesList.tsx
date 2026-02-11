@@ -25,6 +25,8 @@ export function EpisodesList() {
   const atEpisodeLimit = maxEpisodes != null && maxEpisodes > 0 && episodeCount >= Number(maxEpisodes);
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
   const readOnly = isReadOnly(meData?.user);
+  const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
+  const canCreateEpisode = myRole === 'owner' || myRole === 'manager';
 
   const publishedCount = episodes.filter((e) => e.status === 'published').length;
   const scheduledCount = episodes.filter((e) => e.status === 'scheduled').length;
@@ -47,6 +49,14 @@ export function EpisodesList() {
           <h1 className={styles.cardTitle}>Episodes</h1>
           {readOnly ? (
             <span className={`${styles.newBtn} ${styles.newBtnDisabled}`} title="Read-only account">
+              <Plus size={18} strokeWidth={2.5} aria-hidden />
+              New Episode
+            </span>
+          ) : !canCreateEpisode ? (
+            <span
+              className={`${styles.newBtn} ${styles.newBtnDisabled}`}
+              title="Only managers and the owner can create episodes"
+            >
               <Plus size={18} strokeWidth={2.5} aria-hidden />
               New Episode
             </span>
@@ -89,6 +99,13 @@ export function EpisodesList() {
             <p>No episodes yet.</p>
             {readOnly ? (
               <span className={`${styles.emptyLink} ${styles.emptyLinkDisabled}`} title="Read-only account">
+                Create first episode
+              </span>
+            ) : !canCreateEpisode ? (
+              <span
+                className={`${styles.emptyLink} ${styles.emptyLinkDisabled}`}
+                title="Only managers and the owner can create episodes"
+              >
                 Create first episode
               </span>
             ) : atEpisodeLimit ? (

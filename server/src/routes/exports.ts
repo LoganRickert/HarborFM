@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
 import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { db } from '../db/index.js';
-import { canAccessPodcast } from '../services/access.js';
+import { getPodcastRole, canEditEpisodeOrPodcastMetadata } from '../services/access.js';
 import { exportCreateSchema, exportUpdateSchema, type ExportCreate } from '@harborfm/shared';
 import { testS3Access, deployPodcastToS3 } from '../services/s3.js';
 import { testFtpAccess, deployPodcastToFtp } from '../services/ftp.js';
@@ -15,14 +15,11 @@ import { writeRssFile } from '../services/rss.js';
 import { buildConfigEnc, getDecryptedConfigFromEnc, mergeAndEncryptConfig, type ExportMode } from '../services/export-config.js';
 
 function getExport(userId: string, exportId: string): Record<string, unknown> | null {
-  const row = db
-    .prepare(
-      `SELECT ex.* FROM exports ex
-       JOIN podcasts p ON p.id = ex.podcast_id
-       WHERE ex.id = ? AND p.owner_user_id = ?`
-    )
-    .get(exportId, userId) as Record<string, unknown> | undefined;
-  return row ?? null;
+  const row = db.prepare('SELECT * FROM exports WHERE id = ?').get(exportId) as (Record<string, unknown> & { podcast_id: string }) | undefined;
+  if (!row) return null;
+  const role = getPodcastRole(userId, row.podcast_id);
+  if (!canEditEpisodeOrPodcastMetadata(role)) return null;
+  return row;
 }
 
 function exportDto(row: Record<string, unknown>) {
@@ -128,7 +125,8 @@ export async function exportRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id: podcastId } = request.params as { id: string };
-      if (!canAccessPodcast(request.userId, podcastId)) {
+      const role = getPodcastRole(request.userId, podcastId);
+      if (!canEditEpisodeOrPodcastMetadata(role)) {
         return reply.status(404).send({ error: 'Podcast not found' });
       }
       const parsed = exportCreateSchema.safeParse(request.body);
@@ -165,7 +163,8 @@ export async function exportRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id: podcastId } = request.params as { id: string };
-      if (!canAccessPodcast(request.userId, podcastId)) {
+      const role = getPodcastRole(request.userId, podcastId);
+      if (!canEditEpisodeOrPodcastMetadata(role)) {
         return reply.status(404).send({ error: 'Podcast not found' });
       }
       const rows = db
@@ -192,16 +191,15 @@ export async function exportRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id: podcastId } = request.params as { id: string };
-      if (!canAccessPodcast(request.userId, podcastId)) {
+      const role = getPodcastRole(request.userId, podcastId);
+      if (!canEditEpisodeOrPodcastMetadata(role)) {
         return reply.status(404).send({ error: 'Podcast not found' });
       }
       const rows = db
         .prepare(
-          `SELECT ex.* FROM exports ex
-           JOIN podcasts p ON p.id = ex.podcast_id
-           WHERE ex.podcast_id = ? AND p.owner_user_id = ? ORDER BY ex.updated_at DESC`
+          `SELECT ex.* FROM exports ex WHERE ex.podcast_id = ? ORDER BY ex.updated_at DESC`
         )
-        .all(podcastId, request.userId) as Record<string, unknown>[];
+        .all(podcastId) as Record<string, unknown>[];
       if (rows.length === 0) {
         return reply.status(400).send({ error: 'No delivery destinations configured. Add at least one to deploy.' });
       }
@@ -496,14 +494,10 @@ export async function exportRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const row = db
-        .prepare(
-          `SELECT r.* FROM export_runs r
-           JOIN podcasts p ON p.id = r.podcast_id
-           WHERE r.id = ? AND p.owner_user_id = ?`
-        )
-        .get(id, request.userId);
+      const row = db.prepare('SELECT * FROM export_runs WHERE id = ?').get(id) as (Record<string, unknown> & { podcast_id: string }) | undefined;
       if (!row) return reply.status(404).send({ error: 'Run not found' });
+      const role = getPodcastRole(request.userId, row.podcast_id);
+      if (!canEditEpisodeOrPodcastMetadata(role)) return reply.status(404).send({ error: 'Run not found' });
       return row as Record<string, unknown>;
     }
   );

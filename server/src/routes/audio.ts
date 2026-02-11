@@ -5,7 +5,7 @@ import send from '@fastify/send';
 import { existsSync } from 'fs';
 import { db } from '../db/index.js';
 import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
-import { canAccessEpisode } from '../services/access.js';
+import { canAccessEpisode, canEditSegments, canEditEpisodeOrPodcastMetadata, getPodcastOwnerId } from '../services/access.js';
 import { getLocationForIp } from '../services/geolocation.js';
 import { getClientIp, getUserAgent } from '../services/loginAttempts.js';
 import {
@@ -18,13 +18,13 @@ import { uploadsDir, processedDir, assertPathUnder } from '../services/paths.js'
 import * as audioService from '../services/audio.js';
 import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 import { wouldExceedStorageLimit } from '../services/storageLimit.js';
+import { EPISODE_AUDIO_UPLOAD_MAX_BYTES } from '../config.js';
 import { readSettings } from './settings.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
 import { getSingleRangeRequestedLength } from '../utils/parseRange.js';
 import { isHumanUserAgent } from '../utils/isBot.js';
 
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'];
-const MAX_FILE_BYTES = 500 * 1024 * 1024; // 500 MB
 
 export async function audioRoutes(app: FastifyInstance) {
   app.post(
@@ -36,13 +36,14 @@ export async function audioRoutes(app: FastifyInstance) {
         summary: 'Upload episode audio',
         description: 'Upload source audio (WAV/MP3, multipart). Max 500MB. Requires read-write access.',
         params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        response: { 200: { description: 'Episode with updated audio' }, 400: { description: 'No file or invalid type' }, 403: { description: 'Storage limit' }, 404: { description: 'Episode not found' }, 500: { description: 'Upload failed' } },
+        response: { 200: { description: 'Episode with updated audio' }, 400: { description: 'No file or invalid type' }, 403: { description: 'Storage limit or permission' }, 404: { description: 'Episode not found' }, 500: { description: 'Upload failed' } },
       },
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditEpisodeOrPodcastMetadata(access.role)) return reply.status(403).send({ error: 'You do not have permission to upload episode audio.' });
       const { podcastId } = access;
 
       const data = await request.file();
@@ -83,7 +84,7 @@ export async function audioRoutes(app: FastifyInstance) {
 
       let bytesWritten = 0;
       try {
-        bytesWritten = await streamToFileWithLimit(data.file, destPath, MAX_FILE_BYTES);
+        bytesWritten = await streamToFileWithLimit(data.file, destPath, EPISODE_AUDIO_UPLOAD_MAX_BYTES);
       } catch (err) {
         if (err instanceof FileTooLargeError) {
           return reply.status(400).send({ error: 'File too large' });
@@ -92,8 +93,9 @@ export async function audioRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
+      const storageUserId = getPodcastOwnerId(access.podcastId) ?? request.userId;
       const potentialDelta = bytesWritten - oldDestBytes - bytesRemoved;
-      if (potentialDelta > 0 && wouldExceedStorageLimit(db, request.userId, potentialDelta)) {
+      if (potentialDelta > 0 && wouldExceedStorageLimit(db, storageUserId, potentialDelta)) {
         try { unlinkSync(destPath); } catch { /* ignore */ }
         return reply.status(403).send({
           error: 'You have reached your storage limit. Delete some content to free space.',
@@ -112,7 +114,7 @@ export async function audioRoutes(app: FastifyInstance) {
         // keep defaults
       }
 
-      // Track disk usage delta (best-effort)
+      // Track disk usage delta against podcast owner (best-effort)
       const delta = (sizeBytes || 0) - oldDestBytes - bytesRemoved;
       if (delta !== 0) {
         db.prepare(
@@ -123,7 +125,7 @@ export async function audioRoutes(app: FastifyInstance) {
                ELSE COALESCE(disk_bytes_used, 0) + ?
              END
            WHERE id = ?`
-        ).run(delta, delta, request.userId);
+        ).run(delta, delta, storageUserId);
       }
 
       db.prepare(
@@ -150,13 +152,14 @@ export async function audioRoutes(app: FastifyInstance) {
         summary: 'Process episode audio',
         description: 'Transcode source to final format (MP3/M4A). Requires read-write access.',
         params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        response: { 200: { description: 'Episode' }, 400: { description: 'No source audio' }, 404: { description: 'Episode not found' }, 500: { description: 'Processing failed' } },
+        response: { 200: { description: 'Episode' }, 400: { description: 'No source audio' }, 403: { description: 'Permission denied' }, 404: { description: 'Episode not found' }, 500: { description: 'Processing failed' } },
       },
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId, { includeEpisode: true });
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to process episode audio.' });
       const { podcastId, episode } = access;
       const sourcePath = episode!.audio_source_path as string | undefined;
       if (!sourcePath || !existsSync(sourcePath)) {

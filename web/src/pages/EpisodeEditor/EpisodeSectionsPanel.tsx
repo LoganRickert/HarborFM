@@ -64,12 +64,12 @@ export function EpisodeSectionsPanel({
             aria-label={readOnly ? 'Record new section (read-only)' : (recordDisabledMessage ?? 'Record new section (disabled)')}
           >
             <Mic size={24} strokeWidth={2} aria-hidden />
-            <span>Record new section</span>
+            <span>Record New Section</span>
           </span>
         ) : (
           <button type="button" className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary}`} onClick={onAddRecord} aria-label="Record new section">
             <Mic size={24} strokeWidth={2} aria-hidden />
-            <span>Record new section</span>
+            <span>Record New Section</span>
           </button>
         )}
         {readOnly ? (

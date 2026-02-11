@@ -8,7 +8,7 @@ import { promisify } from 'util';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
-import { canAccessEpisode } from '../services/access.js';
+import { canAccessEpisode, canEditSegments, canUseAssetInSegment, getPodcastOwnerId } from '../services/access.js';
 import { readSettings } from './settings.js';
 import { uploadsDir, segmentPath, getDataDir, libraryDir, processedDir, assertPathUnder } from '../services/paths.js';
 import * as audioService from '../services/audio.js';
@@ -16,9 +16,9 @@ import { writeRssFile } from '../services/rss.js';
 import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 import { userRateLimitPreHandler } from '../services/rateLimit.js';
 import { wouldExceedStorageLimit } from '../services/storageLimit.js';
+import { SEGMENT_UPLOAD_MAX_BYTES, FFMPEG_PATH } from '../config.js';
 
 const exec = promisify(execFile);
-const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg';
 
 
 function transcriptPath(audioPath: string): string {
@@ -126,7 +126,6 @@ function getSegmentAudioPath(
 }
 
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/ogg'];
-const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per segment
 
 export async function segmentRoutes(app: FastifyInstance) {
   // Used by the web client to decide whether transcript viewing/generation should be shown.
@@ -189,17 +188,17 @@ export async function segmentRoutes(app: FastifyInstance) {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const { podcastId } = access;
 
       const contentType = (request.headers['content-type'] || '').toLowerCase();
       if (contentType.includes('application/json')) {
         const body = request.body as { type?: string; reusable_asset_id?: string; name?: string };
         if (body?.type === 'reusable' && body?.reusable_asset_id) {
-          const asset = db
-            .prepare(
-              'SELECT id, name FROM reusable_assets WHERE id = ? AND (owner_user_id = ? OR global_asset = 1)'
-            )
-            .get(body.reusable_asset_id, request.userId) as { name: string } | undefined;
+          if (!canUseAssetInSegment(request.userId, body.reusable_asset_id, podcastId)) {
+            return reply.status(404).send({ error: 'Library asset not found' });
+          }
+          const asset = db.prepare('SELECT id, name FROM reusable_assets WHERE id = ?').get(body.reusable_asset_id) as { name: string } | undefined;
           if (!asset) return reply.status(404).send({ error: 'Library asset not found' });
           const maxPos = db
             .prepare('SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM episode_segments WHERE episode_id = ?')
@@ -232,7 +231,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       const destPath = segmentPath(podcastId, episodeId, segmentId, ext);
       let bytesWritten = 0;
       try {
-        bytesWritten = await streamToFileWithLimit(data.file, destPath, MAX_FILE_BYTES);
+        bytesWritten = await streamToFileWithLimit(data.file, destPath, SEGMENT_UPLOAD_MAX_BYTES);
       } catch (err) {
         if (err instanceof FileTooLargeError) {
           return reply.status(400).send({ error: 'File too large' });
@@ -241,7 +240,8 @@ export async function segmentRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
-      if (wouldExceedStorageLimit(db, request.userId, bytesWritten)) {
+      const storageUserId = getPodcastOwnerId(podcastId) ?? request.userId;
+      if (wouldExceedStorageLimit(db, storageUserId, bytesWritten)) {
         try { unlinkSync(destPath); } catch { /* ignore */ }
         return reply.status(403).send({
           error: 'You have reached your storage limit. Delete some content to free space.',
@@ -281,12 +281,12 @@ export async function segmentRoutes(app: FastifyInstance) {
          VALUES (?, ?, ?, 'recorded', ?, ?, ?)`
       ).run(segmentId, episodeId, maxPos.pos, segmentName, finalPath, durationSec);
 
-      // Track disk usage (best-effort)
+      // Track disk usage against podcast owner (best-effort)
       db.prepare(
         `UPDATE users
          SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ?
          WHERE id = ?`
-      ).run(bytesWritten, request.userId);
+      ).run(bytesWritten, storageUserId);
 
       const row = db.prepare('SELECT * FROM episode_segments WHERE id = ?').get(segmentId) as Record<string, unknown>;
       return reply.status(201).send(row);
@@ -303,13 +303,14 @@ export async function segmentRoutes(app: FastifyInstance) {
         description: 'Set segment order by array of segment_ids.',
         params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
         body: { type: 'object', properties: { segment_ids: { type: 'array', items: { type: 'string' } } }, required: ['segment_ids'] },
-        response: { 200: { description: 'Updated segments list' }, 400: { description: 'segment_ids required' }, 404: { description: 'Episode not found' } },
+        response: { 200: { description: 'Updated segments list' }, 400: { description: 'segment_ids required' }, 403: { description: 'Permission denied' }, 404: { description: 'Episode not found' } },
       },
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const body = request.body as { segment_ids: string[] };
       if (!Array.isArray(body?.segment_ids)) return reply.status(400).send({ error: 'segment_ids array required' });
       const ids = body.segment_ids as string[];
@@ -331,13 +332,14 @@ export async function segmentRoutes(app: FastifyInstance) {
         description: 'Update segment name.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
         body: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
-        response: { 200: { description: 'Updated segment' }, 400: { description: 'name required' }, 404: { description: 'Not found' } },
+        response: { 200: { description: 'Updated segment' }, 400: { description: 'name required' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' } },
       },
     },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const body = request.body as { name?: string };
       const name = body?.name !== undefined ? (body.name === null || body.name === '' ? null : String(body.name).trim()) : undefined;
       if (name === undefined) return reply.status(400).send({ error: 'name field required' });
@@ -470,7 +472,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         description: 'Generate or return transcript via Whisper ASR. Query regenerate=true to force regenerate.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
         querystring: { type: 'object', properties: { regenerate: { type: 'string' } } },
-        response: { 200: { description: 'text' }, 400: { description: 'ASR not configured' }, 404: { description: 'Not found' }, 413: { description: 'Audio too large' }, 502: { description: 'ASR failed' } },
+        response: { 200: { description: 'text' }, 400: { description: 'ASR not configured' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' }, 413: { description: 'Audio too large' }, 502: { description: 'ASR failed' } },
       },
     },
     async (request, reply) => {
@@ -480,6 +482,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const segment = db
         .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
@@ -587,7 +590,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         description: 'Trim segment to start/end seconds. Body: start_sec, end_sec.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
         body: { type: 'object', properties: { start_sec: { type: 'number' }, end_sec: { type: 'number' } } },
-        response: { 200: { description: 'Updated segment' }, 204: { description: 'Trimmed' }, 400: { description: 'Validation failed' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+        response: { 200: { description: 'Updated segment' }, 204: { description: 'Trimmed' }, 400: { description: 'Validation failed' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
       },
     },
     async (request, reply) => {
@@ -602,6 +605,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const segment = db
         .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
@@ -714,7 +718,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         description: 'Remove silence from segment. Body: threshold_db, min_silence_duration_sec.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
         body: { type: 'object', properties: { threshold_db: { type: 'number' }, min_silence_duration_sec: { type: 'number' } } },
-        response: { 200: { description: 'Updated segment' }, 204: { description: 'Done' }, 400: { description: 'Validation failed' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+        response: { 200: { description: 'Updated segment' }, 204: { description: 'Done' }, 400: { description: 'Validation failed' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
       },
     },
     async (request, reply) => {
@@ -735,6 +739,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const segment = db
         .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
@@ -779,7 +784,7 @@ export async function segmentRoutes(app: FastifyInstance) {
           const entries = parseSrt(srtText);
           
           // Detect silence periods to calculate timing adjustments
-          const { stderr } = await exec(FFMPEG, [
+          const { stderr } = await exec(FFMPEG_PATH, [
             '-i', audio.path,
             '-af', `silencedetect=noise=${silenceThresholdDb}dB:d=${thresholdSeconds}`,
             '-f', 'null',
@@ -893,7 +898,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         summary: 'Noise suppression',
         description: 'Apply noise suppression to segment.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
-        response: { 200: { description: 'Updated segment' }, 204: { description: 'Done' }, 400: { description: 'Only recorded segments' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+        response: { 200: { description: 'Updated segment' }, 204: { description: 'Done' }, 400: { description: 'Only recorded segments' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
       },
     },
     async (request, reply) => {
@@ -903,6 +908,7 @@ export async function segmentRoutes(app: FastifyInstance) {
 
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const segment = db
         .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
@@ -979,7 +985,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         description: 'Replace transcript text. Body: text.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
         body: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-        response: { 200: { description: 'Updated' }, 400: { description: 'text required' }, 404: { description: 'Not found' } },
+        response: { 200: { description: 'Updated' }, 400: { description: 'text required' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' } },
       },
     },
     async (request, reply) => {
@@ -993,6 +999,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const segment = db
         .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
@@ -1015,7 +1022,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         summary: 'Delete segment transcript',
         description: 'Remove transcript file for segment.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
-        response: { 204: { description: 'Deleted' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+        response: { 204: { description: 'Deleted' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
       },
     },
     async (request, reply) => {
@@ -1025,6 +1032,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const segment = db
         .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
@@ -1152,13 +1160,14 @@ export async function segmentRoutes(app: FastifyInstance) {
         summary: 'Delete segment',
         description: 'Permanently delete a segment.',
         params: { type: 'object', properties: { episodeId: { type: 'string' }, segmentId: { type: 'string' } }, required: ['episodeId', 'segmentId'] },
-        response: { 204: { description: 'Deleted' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
+        response: { 204: { description: 'Deleted' }, 403: { description: 'Permission denied' }, 404: { description: 'Not found' }, 500: { description: 'Processing failed' } },
       },
     },
     async (request, reply) => {
       const { episodeId, segmentId } = request.params as { episodeId: string; segmentId: string };
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to edit segments.' });
       const row = db
         .prepare('SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?')
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
@@ -1187,7 +1196,8 @@ export async function segmentRoutes(app: FastifyInstance) {
       }
       db.prepare('DELETE FROM episode_segments WHERE id = ? AND episode_id = ?').run(segmentId, episodeId);
 
-      // Track disk usage (recorded segments only). Ignore transcript bytes per request.
+      // Track disk usage (recorded segments): subtract from podcast owner
+      const storageUserId = getPodcastOwnerId(access.podcastId) ?? request.userId;
       if (bytesFreed > 0) {
         db.prepare(
           `UPDATE users
@@ -1197,7 +1207,7 @@ export async function segmentRoutes(app: FastifyInstance) {
                ELSE COALESCE(disk_bytes_used, 0) - ?
              END
            WHERE id = ?`
-        ).run(bytesFreed, bytesFreed, request.userId);
+        ).run(bytesFreed, bytesFreed, storageUserId);
       }
 
       return reply.status(204).send();
@@ -1213,13 +1223,14 @@ export async function segmentRoutes(app: FastifyInstance) {
         summary: 'Render episode',
         description: 'Concatenate segments and write final audio. Requires read-write access.',
         params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        response: { 200: { description: 'Episode with updated audio' }, 400: { description: 'No segments or validation failed' }, 404: { description: 'Episode not found' }, 500: { description: 'Render failed' } },
+        response: { 200: { description: 'Episode with updated audio' }, 400: { description: 'No segments or validation failed' }, 403: { description: 'Permission denied' }, 404: { description: 'Episode not found' }, 500: { description: 'Render failed' } },
       },
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access) return reply.status(404).send({ error: 'Episode not found' });
+      if (!canEditSegments(access.role)) return reply.status(403).send({ error: 'You do not have permission to build the episode.' });
       const { podcastId } = access;
       const segments = db
         .prepare('SELECT * FROM episode_segments WHERE episode_id = ? ORDER BY position ASC, created_at ASC')

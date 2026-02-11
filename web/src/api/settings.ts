@@ -17,6 +17,7 @@ export interface AppSettings {
   default_max_podcasts: number | null;
   default_storage_mb: number | null;
   default_max_episodes: number | null;
+  default_max_collaborators: number | null;
   captcha_provider: 'none' | 'recaptcha_v2' | 'recaptcha_v3' | 'hcaptcha';
   captcha_site_key: string;
   captcha_secret_key: string;

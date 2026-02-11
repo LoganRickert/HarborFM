@@ -57,6 +57,8 @@ export interface AppSettings {
   default_storage_mb: number | null;
   /** Default max episodes for new users. null/empty = no limit. */
   default_max_episodes: number | null;
+  /** Default max collaborators per user (per podcast). null/empty = no limit. */
+  default_max_collaborators: number | null;
   /** CAPTCHA provider for sign-in and registration. */
   captcha_provider: 'none' | 'recaptcha_v2' | 'recaptcha_v3' | 'hcaptcha';
   /** Site key for the selected CAPTCHA provider. */
@@ -102,6 +104,7 @@ const DEFAULTS: AppSettings = {
   default_max_podcasts: null,
   default_storage_mb: null,
   default_max_episodes: null,
+  default_max_collaborators: null,
   captcha_provider: 'none',
   captcha_site_key: '',
   captcha_secret_key: '',
@@ -166,6 +169,7 @@ export function migrateSettingsFromFile(): void {
     stmt.run('default_max_podcasts', settings.default_max_podcasts == null ? '' : String(settings.default_max_podcasts));
     stmt.run('default_storage_mb', settings.default_storage_mb == null ? '' : String(settings.default_storage_mb));
     stmt.run('default_max_episodes', settings.default_max_episodes == null ? '' : String(settings.default_max_episodes));
+    stmt.run('default_max_collaborators', (settings as Partial<AppSettings>).default_max_collaborators == null ? '' : String((settings as Partial<AppSettings>).default_max_collaborators));
     stmt.run('captcha_provider', (settings as Partial<AppSettings>).captcha_provider ?? 'none');
     stmt.run('captcha_site_key', (settings as Partial<AppSettings>).captcha_site_key ?? '');
     stmt.run('captcha_secret_key', (settings as Partial<AppSettings>).captcha_secret_key ?? '');
@@ -227,6 +231,10 @@ export function readSettings(): AppSettings {
       const v = row.value.trim();
       settings.default_max_episodes = v === '' ? null : (Number(row.value) || null);
     }
+    else if (row.key === 'default_max_collaborators') {
+      const v = row.value.trim();
+      settings.default_max_collaborators = v === '' ? null : (Number(row.value) || null);
+    }
     else if (row.key === 'captcha_provider') {
       const v = row.value as AppSettings['captcha_provider'];
       if (v === 'recaptcha_v2' || v === 'recaptcha_v3' || v === 'hcaptcha' || v === 'none') settings.captcha_provider = v;
@@ -265,6 +273,7 @@ export function readSettings(): AppSettings {
     default_max_podcasts: settings.default_max_podcasts ?? DEFAULTS.default_max_podcasts,
     default_storage_mb: settings.default_storage_mb ?? DEFAULTS.default_storage_mb,
     default_max_episodes: settings.default_max_episodes ?? DEFAULTS.default_max_episodes,
+    default_max_collaborators: settings.default_max_collaborators ?? DEFAULTS.default_max_collaborators,
     captcha_provider: settings.captcha_provider ?? DEFAULTS.captcha_provider,
     captcha_site_key: settings.captcha_site_key ?? DEFAULTS.captcha_site_key,
     captcha_secret_key: settings.captcha_secret_key ?? DEFAULTS.captcha_secret_key,
@@ -299,6 +308,7 @@ function writeSettings(settings: AppSettings): void {
   stmt.run('default_max_podcasts', settings.default_max_podcasts == null ? '' : String(settings.default_max_podcasts));
   stmt.run('default_storage_mb', settings.default_storage_mb == null ? '' : String(settings.default_storage_mb));
   stmt.run('default_max_episodes', settings.default_max_episodes == null ? '' : String(settings.default_max_episodes));
+  stmt.run('default_max_collaborators', settings.default_max_collaborators == null ? '' : String(settings.default_max_collaborators));
   stmt.run('captcha_provider', settings.captcha_provider);
   stmt.run('captcha_site_key', settings.captcha_site_key);
   stmt.run('captcha_secret_key', settings.captcha_secret_key);
@@ -443,6 +453,8 @@ export async function settingsRoutes(app: FastifyInstance) {
         body.default_storage_mb !== undefined ? parseOptionalNum(body.default_storage_mb) : current.default_storage_mb;
       const default_max_episodes =
         body.default_max_episodes !== undefined ? parseOptionalNum(body.default_max_episodes) : current.default_max_episodes;
+      const default_max_collaborators =
+        body.default_max_collaborators !== undefined ? parseOptionalNum(body.default_max_collaborators) : current.default_max_collaborators;
       const captcha_provider =
         body.captcha_provider === 'recaptcha_v2' || body.captcha_provider === 'recaptcha_v3' || body.captcha_provider === 'hcaptcha'
           ? body.captcha_provider
@@ -502,6 +514,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         default_max_podcasts,
         default_storage_mb,
         default_max_episodes,
+        default_max_collaborators,
         captcha_provider,
         captcha_site_key,
         captcha_secret_key,

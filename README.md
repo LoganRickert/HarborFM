@@ -233,16 +233,32 @@ Then open http://localhost:3001 (or your host and port). On first run, migration
 
 ### Docker environment variables
 
-All [environment variables](#environment-variables) supported by the server work the same in Docker. Set them with `-e` or an env file.
+All environment variables supported by the server work the same in Docker. Set them with `-e` or an env file. The table below matches `server/src/config.ts`, `server/src/services/paths.ts`, and related server code.
 
 | Variable | Default in image | Description |
 |----------|------------------|-------------|
 | `PORT` | `3001` | Port the server listens on |
 | `DATA_DIR` | `/data` | Directory for DB, uploads, processed audio, RSS, artwork, library |
 | `SECRETS_DIR` | `/secrets` | Directory for jwt-secret.txt and secrets-key.txt (mount separately for stricter access) |
-| `JWT_SECRET` | (none) | **Required.** Secret for signing JWTs (use a long random string) |
-| `HARBORFM_SECRETS_KEY` | (none) | Optional 32-byte hex key for encrypting export credentials |
+| `PUBLIC_DIR` | `/app/server/public` | Directory to serve static web app from |
+| `JWT_SECRET` | (none) | Secret for signing JWTs (use a long random string) |
+| `HARBORFM_SECRETS_KEY` | (none) | Optional key for encrypting export credentials (base64/base64url) |
 | `COOKIE_SECURE` | (auto) | Set to `true` when using HTTPS so cookies are Secure |
+| `NODE_ENV` | `production` | Set by image; when `production`, cookies use Secure if `COOKIE_SECURE` is unset |
+| `RECORD_MIN_FREE_MB` | `5` | Min free storage (MB) required to record a new section |
+| `RSS_CACHE_MAX_AGE_MS` | `3600000` | RSS/sitemap cache max age in ms (1 hour) |
+| `EPISODE_AUDIO_UPLOAD_MAX_MB` | `500` | Max episode source audio upload size (MB) |
+| `SEGMENT_UPLOAD_MAX_MB` | `100` | Max recorded segment upload size (MB) |
+| `LIBRARY_UPLOAD_MAX_MB` | `50` | Max library asset upload size (MB) |
+| `MULTIPART_MAX_MB` | `500` | Max multipart body size (MB) for Fastify |
+| `ARTWORK_MAX_MB` | `5` | Max podcast/episode artwork upload size (MB) |
+| `FFMPEG_PATH` | `ffmpeg` | Path to ffmpeg binary |
+| `FFPROBE_PATH` | `ffprobe` | Path to ffprobe binary |
+| `AUDIOWAVEFORM_PATH` | `audiowaveform` | Path to audiowaveform binary |
+| `PLATFORM_INVITES_PER_DAY` | `10` | Max "invite to platform" emails per inviter per 24 hours |
+| `API_KEY_PREFIX` | `hfm_` | Prefix for API keys |
+| `MAX_API_KEYS_PER_USER` | `5` | Max API keys per user |
+| `CSRF_COOKIE_NAME` | `harborfm_csrf` | Name of the CSRF cookie |
 
 ## Running without Docker
 
@@ -330,6 +346,21 @@ From the repo root:
 | `pnpm run test` | Run tests in all packages |
 | `pnpm run docker:build` | Build the Docker image (`docker build -t harborfm .`) |
 | `pnpm run build:docs` | Build the GitHub pages |
+
+## Permissions
+
+Each podcast has an **owner** (the user who created it) and optional **collaborators** with a role. Access is role-based; admins have full access to all podcasts.
+
+| Role | Allowed actions |
+|------|------------------|
+| **view** | List/read podcast and episodes, stream audio, view analytics. Read-only. |
+| **editor** | Everything in view, plus: edit segments, record new sections, render/build the final episode. |
+| **manager** | Everything in editor, plus: create/update episodes and episode artwork, edit show details, configure **Podcast Delivery** (exports), manage collaborators (invite, change role, remove). |
+| **owner** | Full control. Only the owner can delete the podcast or transfer ownership. |
+
+- **Collaborators** are managed per show in **Settings → Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on Harbor yet, the UI can send them an “invite to the platform” email (rate-limited).
+- **Storage** for a show (recorded segments, episode source audio) counts against the **podcast owner’s** storage limit, not the collaborator’s. If the owner is at or near their limit, “Record new section” is disabled for everyone on that show.
+- **New episode** is only available to **managers** and the **owner**; view and editor roles see it disabled.
 
 ## Export
 

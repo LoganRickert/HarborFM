@@ -33,6 +33,7 @@ export function Users() {
   const [editMaxPodcasts, setEditMaxPodcasts] = useState<number | null>(null);
   const [editMaxEpisodes, setEditMaxEpisodes] = useState<number | null>(null);
   const [editMaxStorageMb, setEditMaxStorageMb] = useState<number | null>(null);
+  const [editMaxCollaborators, setEditMaxCollaborators] = useState<number | null>(null);
   const limit = 50;
   const queryClient = useQueryClient();
 
@@ -88,6 +89,7 @@ export function Users() {
     setEditMaxPodcasts(user.max_podcasts ?? null);
     setEditMaxEpisodes(user.max_episodes ?? null);
     setEditMaxStorageMb(user.max_storage_mb ?? null);
+    setEditMaxCollaborators(user.max_collaborators ?? null);
   }
 
   function handleEditSubmit(e: React.FormEvent) {
@@ -103,6 +105,7 @@ export function Users() {
       max_podcasts?: number | null;
       max_episodes?: number | null;
       max_storage_mb?: number | null;
+      max_collaborators?: number | null;
     } = {};
     if (editEmail !== userToEdit.email) {
       updates.email = editEmail;
@@ -127,6 +130,9 @@ export function Users() {
     }
     if (editMaxStorageMb !== (userToEdit.max_storage_mb ?? null)) {
       updates.max_storage_mb = editMaxStorageMb;
+    }
+    if (editMaxCollaborators !== (userToEdit.max_collaborators ?? null)) {
+      updates.max_collaborators = editMaxCollaborators;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -284,7 +290,7 @@ export function Users() {
       <Dialog.Root open={!!userToEdit} onOpenChange={(open) => !open && setUserToEdit(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentScrollable}`}>
+          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}>
             <Dialog.Title className={styles.dialogTitle}>Edit User</Dialog.Title>
             <Dialog.Description className={styles.dialogDescription}>
               Update the user email, password, role, and limits.
@@ -417,6 +423,21 @@ export function Users() {
                     onChange={(e) => {
                       const v = e.target.value;
                       setEditMaxStorageMb(v === '' ? null : Number(v));
+                    }}
+                  />
+                </label>
+                <label className={styles.formLabel} style={{ marginTop: '0.5rem' }}>
+                  Max Collaborators
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className={styles.formInput}
+                    placeholder="No limit"
+                    value={editMaxCollaborators ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditMaxCollaborators(v === '' ? null : Number(v));
                     }}
                   />
                 </label>

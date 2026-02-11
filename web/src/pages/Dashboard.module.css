@@ -293,6 +293,22 @@
   color: var(--text-muted);
   font-family: var(--font-mono);
   opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.sharedBadge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.12);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: var(--font-sans);
 }
 
 .cardDesc {

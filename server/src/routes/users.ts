@@ -17,6 +17,7 @@ export interface User {
   max_podcasts: number | null;
   max_episodes: number | null;
   max_storage_mb: number | null;
+  max_collaborators: number | null;
 }
 
 export async function usersRoutes(app: FastifyInstance) {
@@ -55,7 +56,7 @@ export async function usersRoutes(app: FastifyInstance) {
       const total = totalCount.count;
 
       // Get paginated users (oldest to newest by default)
-      const queryStr = `SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users ${whereClause} ORDER BY created_at ASC LIMIT ? OFFSET ?`;
+      const queryStr = `SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb, max_collaborators FROM users ${whereClause} ORDER BY created_at ASC LIMIT ? OFFSET ?`;
       const rows = search
         ? db.prepare(queryStr).all(searchParam, limit, offset) as User[]
         : db.prepare(queryStr).all(limit, offset) as User[];
@@ -81,7 +82,7 @@ export async function usersRoutes(app: FastifyInstance) {
         summary: 'Update user',
         description: 'Update user fields (email, role, disabled, read_only, password, limits). Admin only.',
         params: { type: 'object', properties: { userId: { type: 'string' } }, required: ['userId'] },
-        body: { type: 'object', properties: { email: { type: 'string' }, role: { type: 'string', enum: ['user', 'admin'] }, disabled: { type: 'boolean' }, read_only: { type: 'boolean' }, password: { type: 'string' }, max_podcasts: {}, max_episodes: {}, max_storage_mb: {} } },
+        body: { type: 'object', properties: { email: { type: 'string' }, role: { type: 'string', enum: ['user', 'admin'] }, disabled: { type: 'boolean' }, read_only: { type: 'boolean' }, password: { type: 'string' }, max_podcasts: {}, max_episodes: {}, max_storage_mb: {}, max_collaborators: {} } },
         response: { 200: { description: 'Updated user' }, 400: { description: 'Validation or email in use' }, 404: { description: 'User not found' } },
       },
     },
@@ -96,6 +97,7 @@ export async function usersRoutes(app: FastifyInstance) {
         max_podcasts?: number | null | '';
         max_episodes?: number | null | '';
         max_storage_mb?: number | null | '';
+        max_collaborators?: number | null | '';
       } | undefined;
 
       // Check if user exists
@@ -156,6 +158,10 @@ export async function usersRoutes(app: FastifyInstance) {
         updates.push('max_storage_mb = ?');
         values.push(parseOptionalNum(body.max_storage_mb));
       }
+      if (body?.max_collaborators !== undefined) {
+        updates.push('max_collaborators = ?');
+        values.push(parseOptionalNum(body.max_collaborators));
+      }
 
       if (updates.length === 0) {
         return reply.code(400).send({ error: 'No fields to update' });
@@ -166,7 +172,7 @@ export async function usersRoutes(app: FastifyInstance) {
       db.prepare(sql).run(...values);
 
       // Return updated user
-      const updated = db.prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users WHERE id = ?').get(userId) as User;
+      const updated = db.prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb, max_collaborators FROM users WHERE id = ?').get(userId) as User;
       return updated;
     }
   );
@@ -186,7 +192,7 @@ export async function usersRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { userId } = request.params as { userId: string };
       const user = db
-        .prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb FROM users WHERE id = ?')
+        .prepare('SELECT id, email, created_at, role, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only, COALESCE(disk_bytes_used, 0) as disk_bytes_used, last_login_at, last_login_ip, last_login_location, max_podcasts, max_episodes, max_storage_mb, max_collaborators FROM users WHERE id = ?')
         .get(userId) as User | undefined;
       if (!user) {
         return reply.code(404).send({ error: 'User not found' });

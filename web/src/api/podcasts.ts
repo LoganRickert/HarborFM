@@ -1,5 +1,17 @@
 import { apiGet, apiPost, apiPatch, csrfHeaders } from './client';
 
+/** Thrown by addCollaborator when response is not ok; may include data from body (e.g. USER_NOT_FOUND). */
+export class CollaboratorApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public data?: { code?: string; email?: string; error?: string }
+  ) {
+    super(message);
+    this.name = 'CollaboratorApiError';
+  }
+}
+
 const BASE = '/api';
 
 export interface Podcast {
@@ -30,6 +42,13 @@ export interface Podcast {
   updated_at: string;
   max_episodes?: number | null;
   episode_count?: number;
+  my_role?: 'owner' | 'view' | 'editor' | 'manager';
+  is_shared?: boolean;
+  max_collaborators?: number | null;
+  /** Whether the podcast owner has at least 5 MB free for recording (used for Record new section). */
+  can_record_new_section?: boolean;
+  /** Effective max collaborators (podcast or owner limit). Used to hide add form when at limit. */
+  effective_max_collaborators?: number | null;
 }
 
 export interface PodcastsResponse {
@@ -114,6 +133,50 @@ export async function uploadPodcastArtwork(podcastId: string, file: File): Promi
     throw new Error((err as { error?: string }).error ?? res.statusText);
   }
   return res.json();
+}
+
+export interface Collaborator {
+  user_id: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
+
+export function listCollaborators(podcastId: string) {
+  return apiGet<{ collaborators: Collaborator[] }>(`/podcasts/${podcastId}/collaborators`);
+}
+
+export async function addCollaborator(podcastId: string, body: { email: string; role: string }): Promise<Collaborator> {
+  const res = await fetch(`/api/podcasts/${podcastId}/collaborators`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new CollaboratorApiError(
+      (data as { error?: string }).error ?? res.statusText,
+      res.status,
+      data as { code?: string; email?: string }
+    );
+  }
+  return data as Collaborator;
+}
+
+export function updateCollaborator(podcastId: string, userId: string, body: { role: string }) {
+  return apiPatch<Collaborator>(`/podcasts/${podcastId}/collaborators/${userId}`, body);
+}
+
+export function removeCollaborator(podcastId: string, userId: string) {
+  return fetch(`/api/podcasts/${podcastId}/collaborators/${userId}`, { method: 'DELETE', credentials: 'include', headers: csrfHeaders() }).then((r) => {
+    if (!r.ok) return r.json().then((j) => Promise.reject(new Error((j as { error?: string }).error ?? r.statusText)));
+    return undefined;
+  });
+}
+
+export function inviteToPlatform(body: { email: string }) {
+  return apiPost<{ ok: boolean }>('/invite-to-platform', body);
 }
 
 export function updatePodcast(

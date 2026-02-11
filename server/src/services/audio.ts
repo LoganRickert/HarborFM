@@ -4,6 +4,7 @@ import { statSync, unlinkSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname, extname, basename, resolve, sep } from 'path';
 import { tmpdir } from 'os';
 import { processedDir, uploadsDir, getDataDir, assertPathUnder, ensureDir, assertResolvedPathUnder } from './paths.js';
+import { FFPROBE_PATH, FFMPEG_PATH, AUDIOWAVEFORM_PATH } from '../config.js';
 
 /** Allow output to allowedBaseDir or to os.tmpdir(); ensures output dir is under one of them. */
 function prepareOutputPath(outputPath: string, allowedBaseDir: string): void {
@@ -22,9 +23,6 @@ function prepareOutputPath(outputPath: string, allowedBaseDir: string): void {
 }
 
 const exec = promisify(execFile);
-const FFPROBE = process.env.FFPROBE_PATH ?? 'ffprobe';
-const FFMPEG = process.env.FFMPEG_PATH ?? 'ffmpeg';
-const AUDIOWAVEFORM = process.env.AUDIOWAVEFORM_PATH ?? 'audiowaveform';
 
 /** Loudness target for final episode (LUFS). Will be configurable per-user later. */
 const DEFAULT_LOUDNESS_TARGET_LUFS = -14;
@@ -42,7 +40,7 @@ export type FinalAudioChannels = 'mono' | 'stereo';
 /** Allowed base for probe: must be under data dir. Pass the base dir (e.g. uploadsDir or processedDir result). */
 export async function probeAudio(filePath: string, allowedBaseDir: string): Promise<ProbeResult> {
   const resolvedPath = assertPathUnder(filePath, allowedBaseDir);
-  const { stdout } = await exec(FFPROBE, [
+  const { stdout } = await exec(FFPROBE_PATH, [
     '-v', 'quiet',
     '-print_format', 'json',
     '-show_format',
@@ -65,7 +63,7 @@ export async function probeAudio(filePath: string, allowedBaseDir: string): Prom
   }
   if (durationSec <= 0) {
     try {
-      const { stdout: durationOut } = await exec(FFPROBE, [
+      const { stdout: durationOut } = await exec(FFPROBE_PATH, [
         '-v', 'error',
         '-show_entries', 'format=duration',
         '-of', 'default=noprint_wrappers=1:nokey=1',
@@ -82,7 +80,7 @@ export async function probeAudio(filePath: string, allowedBaseDir: string): Prom
   }
   if (durationSec <= 0) {
     try {
-      const { stderr } = await exec(FFMPEG, [
+      const { stderr } = await exec(FFMPEG_PATH, [
         '-i', resolvedPath,
         '-c', 'copy',
         '-f', 'null',
@@ -138,7 +136,7 @@ export async function normalizeUploadToMp3OrWav(
   const safeIn = assertPathUnder(inputPath, allowedBaseDir);
   const outPath = join(dirname(safeIn), basename(safeIn, extname(safeIn)) + '.mp3');
   ensureDir(dirname(outPath));
-  await exec(FFMPEG, [
+  await exec(FFMPEG_PATH, [
     '-i', safeIn,
     '-acodec', 'libmp3lame',
     '-b:a', '128k',
@@ -162,7 +160,7 @@ export async function generateWaveformFile(audioPath: string, allowedBaseDir: st
   const safeIn = assertPathUnder(audioPath, allowedBaseDir);
   const outPath = join(dirname(safeIn), basename(safeIn, extname(safeIn)) + '.waveform.json');
   assertPathUnder(dirname(outPath), allowedBaseDir);
-  await exec(AUDIOWAVEFORM, [
+  await exec(AUDIOWAVEFORM_PATH, [
     '-i', safeIn,
     '-o', outPath,
     '--pixels-per-second', '4',
@@ -207,7 +205,7 @@ export async function transcodeToFinal(
     );
   }
   args.push('-y', outPath);
-  await exec(FFMPEG, args, { maxBuffer: 1024 * 1024 });
+  await exec(FFMPEG_PATH, args, { maxBuffer: 1024 * 1024 });
   return outPath;
 }
 
@@ -246,7 +244,7 @@ export async function extractSegment(
 ): Promise<string> {
   const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
   const safeOut = assertPathUnder(outputPath, allowedBaseDir);
-  await exec(FFMPEG, [
+  await exec(FFMPEG_PATH, [
     '-ss', String(startSec),
     '-i', safeSource,
     '-t', String(durationSec),
@@ -286,7 +284,7 @@ export async function concatToFinal(
     args.push('-acodec', 'libmp3lame', '-b:a', bitrate);
   }
   args.push('-y', outputPath);
-  await exec(FFMPEG, args, { maxBuffer: 1024 * 1024 });
+  await exec(FFMPEG_PATH, args, { maxBuffer: 1024 * 1024 });
   return outputPath;
 }
 
@@ -335,7 +333,7 @@ export async function removeSegmentAndExportToWav(
   if (segments.length === 1) {
     // Only one segment, just extract it
     const seg = segments[0];
-    await exec(FFMPEG, [
+    await exec(FFMPEG_PATH, [
       '-ss', String(seg.start),
       '-i', safeSource,
       '-t', String(seg.end - seg.start),
@@ -356,7 +354,7 @@ export async function removeSegmentAndExportToWav(
         const seg = segments[i];
         const tempPath = join(tempDir, `temp_${nanoid()}.wav`);
         tempFiles.push(tempPath);
-        await exec(FFMPEG, [
+        await exec(FFMPEG_PATH, [
           '-ss', String(seg.start),
           '-i', safeSource,
           '-t', String(seg.end - seg.start),
@@ -378,7 +376,7 @@ export async function removeSegmentAndExportToWav(
         '-y',
         safeOut,
       ]);
-      await exec(FFMPEG, args, { maxBuffer: 1024 * 1024 });
+      await exec(FFMPEG_PATH, args, { maxBuffer: 1024 * 1024 });
     } finally {
       // Clean up temp files
       const { unlinkSync } = await import('fs');
@@ -430,7 +428,7 @@ export async function trimAudioToWav(
   
   const duration = end - start;
   
-  await exec(FFMPEG, [
+  await exec(FFMPEG_PATH, [
     '-ss', String(start),
     '-i', safeSource,
     '-t', String(duration),
@@ -465,7 +463,7 @@ export async function removeSilenceFromWav(
 
   // First, detect silence periods using silencedetect filter
   // silencedetect outputs: silence_start, silence_end, silence_duration
-  const { stderr } = await exec(FFMPEG, [
+  const { stderr } = await exec(FFMPEG_PATH, [
     '-i', safeSource,
     '-af', `silencedetect=noise=${silenceThresholdDb}dB:d=${thresholdSeconds}`,
     '-f', 'null',
@@ -502,7 +500,7 @@ export async function removeSilenceFromWav(
   
   if (silencePeriods.length === 0) {
     // No silence to remove, just copy the file
-    await exec(FFMPEG, [
+    await exec(FFMPEG_PATH, [
       '-i', safeSource,
       '-acodec', 'pcm_s16le',
       '-ar', '44100',
@@ -537,7 +535,7 @@ export async function removeSilenceFromWav(
   if (segments.length === 1) {
     // Only one segment, just extract it
     const seg = segments[0];
-    await exec(FFMPEG, [
+    await exec(FFMPEG_PATH, [
       '-ss', String(seg.start),
       '-i', safeSource,
       '-t', String(seg.end - seg.start),
@@ -557,7 +555,7 @@ export async function removeSilenceFromWav(
         const seg = segments[i];
         const tempPath = join(tempDir, `temp_${nanoid()}.wav`);
         tempFiles.push(tempPath);
-        await exec(FFMPEG, [
+        await exec(FFMPEG_PATH, [
           '-ss', String(seg.start),
           '-i', safeSource,
           '-t', String(seg.end - seg.start),
@@ -579,7 +577,7 @@ export async function removeSilenceFromWav(
         '-y',
         safeOut,
       ]);
-      await exec(FFMPEG, args, { maxBuffer: 1024 * 1024 });
+      await exec(FFMPEG_PATH, args, { maxBuffer: 1024 * 1024 });
     } finally {
       // Clean up temp files
       const { unlinkSync } = await import('fs');
@@ -636,7 +634,7 @@ export async function applyNoiseSuppressionToWav(
   const ext = extname(outputPath);
   const encoding = encodingArgsForExtension(ext);
 
-  await exec(FFMPEG, [
+  await exec(FFMPEG_PATH, [
     '-i', safeSource,
     '-af', `afftdn=nf=${clampedNf}`,
     ...encoding,

@@ -69,6 +69,7 @@ export function Settings() {
     default_max_podcasts: null,
     default_storage_mb: null,
     default_max_episodes: null,
+    default_max_collaborators: null,
     captcha_provider: 'none',
     captcha_site_key: '',
     captcha_secret_key: '',
@@ -111,6 +112,7 @@ export function Settings() {
         default_max_podcasts: form.default_max_podcasts,
         default_storage_mb: form.default_storage_mb,
         default_max_episodes: form.default_max_episodes,
+        default_max_collaborators: form.default_max_collaborators,
         captcha_provider: form.captcha_provider,
         captcha_site_key: form.captcha_provider === 'none' ? '' : form.captcha_site_key.trim(),
         captcha_secret_key:
@@ -340,6 +342,21 @@ export function Settings() {
                 onChange={(e) => {
                   const v = e.target.value;
                   setForm((f) => ({ ...f, default_storage_mb: v === '' ? null : Number(v) }));
+                }}
+              />
+            </label>
+            <label className={styles.label}>
+              Default max collaborators
+              <input
+                type="number"
+                min={0}
+                step={1}
+                className={styles.input}
+                placeholder="No limit"
+                value={form.default_max_collaborators ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((f) => ({ ...f, default_max_collaborators: v === '' ? null : Number(v) }));
                 }}
               />
             </label>

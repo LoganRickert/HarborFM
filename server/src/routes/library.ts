@@ -8,16 +8,16 @@ import { nanoid } from 'nanoid';
 import { libraryUpdateSchema } from '@harborfm/shared';
 import { db } from '../db/index.js';
 import { requireAuth, requireAdmin, requireNotReadOnly } from '../plugins/auth.js';
-import { isAdmin } from '../services/access.js';
+import { isAdmin, canReadLibraryAsset } from '../services/access.js';
 import { libraryDir, libraryAssetPath } from '../services/paths.js';
 import { assertPathUnder } from '../services/paths.js';
 import { normalizeHostname } from '../utils/url.js';
 import * as audioService from '../services/audio.js';
 import { FileTooLargeError, streamToFileWithLimit, extensionFromAudioMimetype } from '../services/uploads.js';
 import { wouldExceedStorageLimit } from '../services/storageLimit.js';
+import { LIBRARY_UPLOAD_MAX_BYTES } from '../config.js';
 
 const ALLOWED_MIME = ['audio/wav', 'audio/wave', 'audio/x-wav', 'audio/mpeg', 'audio/mp3', 'audio/webm', 'audio/ogg'];
-const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB per library asset
 
 function libraryWaveformPath(audioPath: string): string {
   return audioPath.replace(/\.[^.]+$/, '.waveform.json');
@@ -241,7 +241,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       const destPath = libraryAssetPath(request.userId, id, ext);
       let bytesWritten = 0;
       try {
-        bytesWritten = await streamToFileWithLimit(data.file, destPath, MAX_FILE_BYTES);
+        bytesWritten = await streamToFileWithLimit(data.file, destPath, LIBRARY_UPLOAD_MAX_BYTES);
       } catch (err) {
         if (err instanceof FileTooLargeError) {
           return reply.status(400).send({ error: 'File too large' });
@@ -577,11 +577,8 @@ export async function libraryRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const row = db
-        .prepare(
-          'SELECT * FROM reusable_assets WHERE id = ? AND (owner_user_id = ? OR global_asset = 1)'
-        )
-        .get(id, request.userId) as Record<string, unknown> | undefined;
+      if (!canReadLibraryAsset(request.userId, id)) return reply.status(404).send({ error: 'Asset not found' });
+      const row = db.prepare('SELECT * FROM reusable_assets WHERE id = ?').get(id) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: 'Asset not found' });
       const path = row.audio_path as string;
       if (!path || !existsSync(path)) return reply.status(404).send({ error: 'File not found' });
@@ -604,11 +601,8 @@ export async function libraryRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const row = db
-        .prepare(
-          'SELECT * FROM reusable_assets WHERE id = ? AND (owner_user_id = ? OR global_asset = 1)'
-        )
-        .get(id, request.userId) as Record<string, unknown> | undefined;
+      if (!canReadLibraryAsset(request.userId, id)) return reply.status(404).send({ error: 'Asset not found' });
+      const row = db.prepare('SELECT * FROM reusable_assets WHERE id = ?').get(id) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: 'Asset not found' });
       const path = row.audio_path as string;
       const ownerUserId = row.owner_user_id as string;
