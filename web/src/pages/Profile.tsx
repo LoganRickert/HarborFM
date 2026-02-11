@@ -92,7 +92,8 @@ export function Profile() {
   const hasLimits =
     user.max_podcasts != null || user.max_episodes != null || user.max_storage_mb != null;
   const hasLastLogin =
-    user.last_login_at != null || user.last_login_ip != null || user.last_login_location != null;
+    !user.read_only &&
+    (user.last_login_at != null || user.last_login_ip != null || user.last_login_location != null);
 
   return (
     <div className={styles.page}>

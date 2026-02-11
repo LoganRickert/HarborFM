@@ -110,6 +110,24 @@ export async function contactRoutes(app: FastifyInstance) {
       }
     }
 
+    // If message is for a podcast/episode and the owner is read-only, do not log or send email.
+    let ownerIsReadOnly = false;
+
+    if (podcastId) {
+      const owner = db
+        .prepare(
+          `SELECT COALESCE(u.read_only, 0) AS read_only FROM podcasts p
+           INNER JOIN users u ON p.owner_user_id = u.id
+           WHERE p.id = ?`
+        )
+        .get(podcastId) as { read_only: number } | undefined;
+      ownerIsReadOnly = owner?.read_only === 1;
+    }
+    
+    if (ownerIsReadOnly) {
+      return reply.send({ ok: true });
+    }
+
     const id = nanoid();
     db.prepare(
       'INSERT INTO contact_messages (id, name, email, message, podcast_id, episode_id) VALUES (?, ?, ?, ?, ?, ?)'

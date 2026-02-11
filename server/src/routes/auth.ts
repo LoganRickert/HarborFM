@@ -488,6 +488,7 @@ export async function authRoutes(app: FastifyInstance) {
          JOIN podcasts p ON p.id = e.podcast_id WHERE p.owner_user_id = ?`
       )
       .get(request.userId) as { count: number };
+    const isReadOnly = user.read_only === 1;
     return {
       user: {
         id: user.id,
@@ -499,9 +500,9 @@ export async function authRoutes(app: FastifyInstance) {
         max_episodes: user.max_episodes ?? null,
         max_storage_mb: user.max_storage_mb ?? null,
         disk_bytes_used: user.disk_bytes_used ?? 0,
-        last_login_at: user.last_login_at ?? null,
-        last_login_ip: user.last_login_ip ?? null,
-        last_login_location: user.last_login_location ?? null,
+        last_login_at: isReadOnly ? null : (user.last_login_at ?? null),
+        last_login_ip: isReadOnly ? null : (user.last_login_ip ?? null),
+        last_login_location: isReadOnly ? null : (user.last_login_location ?? null),
       },
       podcast_count: podcastCount.count,
       episode_count: episodeCount.count,
