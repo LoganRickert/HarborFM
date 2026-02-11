@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { setupStatus } from '../api/setup';
 import { forgotPassword, resetPassword, validateResetToken } from '../api/auth';
+import { Captcha, type CaptchaHandle } from '../components/Captcha';
 import styles from './Auth.module.css';
 
 export function ResetPassword() {
@@ -11,6 +12,7 @@ export function ResetPassword() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const captchaRef = useRef<CaptchaHandle>(null);
 
   const { data: setup } = useQuery({
     queryKey: ['setupStatus'],
@@ -34,7 +36,16 @@ export function ResetPassword() {
   const tokenInvalid = isResetMode && !tokenValidation.isLoading && (tokenValidation.isError || !tokenValid);
 
   const forgotMutation = useMutation({
-    mutationFn: () => forgotPassword(email),
+    mutationFn: async () => {
+      let captchaToken: string | undefined;
+      if (setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey) {
+        captchaToken = await captchaRef.current?.getToken();
+        if (!captchaToken?.trim()) {
+          throw new Error('Please complete the CAPTCHA.');
+        }
+      }
+      return forgotPassword(email, captchaToken);
+    },
   });
 
   const resetMutation = useMutation({
@@ -99,6 +110,14 @@ export function ResetPassword() {
                       required
                     />
                   </label>
+                  {setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey && (
+                    <Captcha
+                      ref={captchaRef}
+                      provider={setup.captchaProvider}
+                      siteKey={setup.captchaSiteKey}
+                      action="forgot_password"
+                    />
+                  )}
                   {forgotMutation.isError && (
                     <div className={styles.verificationCardError}>
                       <p className={styles.verificationCardErrorText}>

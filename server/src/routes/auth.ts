@@ -3,7 +3,7 @@ import argon2 from 'argon2';
 import { requireAuth, requireNotReadOnly } from '../plugins/auth.js';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
-import { registerBodySchema, loginBodySchema } from '@harborfm/shared';
+import { registerBodySchema, loginBodySchema, forgotPasswordBodySchema } from '@harborfm/shared';
 import { readSettings } from './settings.js';
 import { randomBytes } from 'crypto';
 import { getCookieSecureFlag } from '../services/cookies.js';
@@ -318,10 +318,14 @@ export async function authRoutes(app: FastifyInstance) {
     schema: {
       tags: ['Auth'],
       summary: 'Forgot password',
-      description: 'Request a password reset email. No authentication required. Always returns 200 when email is valid.',
+      description: 'Request a password reset email. No authentication required. Always returns 200 when email is valid. CAPTCHA required when enabled.',
       security: [],
-      body: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
-      response: { 200: { description: 'OK' }, 400: { description: 'Email required' }, 429: { description: 'Rate limited' }, 503: { description: 'Email not configured' } },
+      body: {
+        type: 'object',
+        properties: { email: { type: 'string' }, captchaToken: { type: 'string' } },
+        required: ['email'],
+      },
+      response: { 200: { description: 'OK' }, 400: { description: 'Email or CAPTCHA invalid' }, 429: { description: 'Rate limited' }, 503: { description: 'Email not configured' } },
     },
   }, async (request, reply) => {
     const settings = readSettings();
@@ -330,10 +334,31 @@ export async function authRoutes(app: FastifyInstance) {
         error: 'Password reset is not available. No email service is configured.',
       });
     }
-    const body = request.body as { email?: string };
-    const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-    if (!email) {
-      return reply.status(400).send({ error: 'Email is required' });
+    const parsed = forgotPasswordBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
+    }
+    const email = parsed.data.email.trim().toLowerCase();
+    const captchaToken = parsed.data.captchaToken?.trim();
+
+    if (settings.captcha_provider && settings.captcha_provider !== 'none') {
+      if (!captchaToken) {
+        return reply.status(400).send({ error: 'CAPTCHA is required. Please complete the challenge.' });
+      }
+      const ip = getClientIp(request);
+      const verify = await verifyCaptcha(
+        settings.captcha_provider,
+        settings.captcha_secret_key,
+        captchaToken,
+        ip
+      );
+      if (!verify.ok) {
+        request.log.warn(
+          { captchaProvider: settings.captcha_provider, verifyError: verify.error },
+          'Forgot password: CAPTCHA verification failed'
+        );
+        return reply.status(400).send({ error: verify.error ?? 'CAPTCHA verification failed' });
+      }
     }
 
     const lastRequest = db.prepare(
@@ -356,6 +381,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.send({ ok: true });
     }
 
+    // Do not send reset email if account is disabled OR read-only
     if (user.disabled === 1 || user.read_only === 1) {
       return reply.send({ ok: true });
     }

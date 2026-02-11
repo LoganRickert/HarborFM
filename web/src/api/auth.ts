@@ -75,8 +75,11 @@ export function validateResetToken(token: string) {
   return apiGet<{ ok: boolean }>(`/auth/validate-reset-token?token=${encodeURIComponent(token)}`);
 }
 
-export function forgotPassword(email: string) {
-  return apiPost<{ ok: boolean }>('/auth/forgot-password', { email });
+export function forgotPassword(email: string, captchaToken?: string) {
+  return apiPost<{ ok: boolean }>('/auth/forgot-password', {
+    email,
+    ...(captchaToken ? { captchaToken } : {}),
+  });
 }
 
 export function resetPassword(token: string, password: string) {

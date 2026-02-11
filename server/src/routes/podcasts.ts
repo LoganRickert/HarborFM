@@ -188,9 +188,12 @@ export async function podcastRoutes(app: FastifyInstance) {
     const { userId } = request;
     const podcast = db
       .prepare(
-        `SELECT id FROM podcasts WHERE id = ? AND (owner_user_id = ? OR (SELECT role FROM users WHERE id = ?) = 'admin')`
+        `SELECT p.id, COALESCE(u.read_only, 0) AS owner_read_only
+         FROM podcasts p
+         INNER JOIN users u ON p.owner_user_id = u.id
+         WHERE p.id = ? AND (p.owner_user_id = ? OR (SELECT role FROM users WHERE id = ?) = 'admin')`
       )
-      .get(podcastId, userId, userId) as { id: string } | undefined;
+      .get(podcastId, userId, userId) as { id: string; owner_read_only: number } | undefined;
     if (!podcast) return reply.status(404).send({ error: 'Podcast not found' });
 
     const rss_daily = db
@@ -260,6 +263,16 @@ export async function podcastRoutes(app: FastifyInstance) {
             human_count: number;
           }>)
       );
+    }
+
+    // If podcast owner is read-only, redact location names to "Location 1", "Location 2", etc.
+    if (podcast.owner_read_only === 1 && episode_location_daily.length > 0) {
+      const distinctLocations = [...new Set(episode_location_daily.map((r) => r.location))].sort();
+      const locationToRedacted = new Map<string, string>();
+      distinctLocations.forEach((loc, i) => locationToRedacted.set(loc, `Location ${i + 1}`));
+      for (const row of episode_location_daily) {
+        row.location = locationToRedacted.get(row.location) ?? row.location;
+      }
     }
 
     return {

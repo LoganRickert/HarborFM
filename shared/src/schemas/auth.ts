@@ -12,5 +12,11 @@ export const loginBodySchema = z.object({
   captchaToken: z.string().optional(),
 });
 
+export const forgotPasswordBodySchema = z.object({
+  email: z.string().min(1, { message: 'Email is required' }).email(),
+  captchaToken: z.string().optional(),
+});
+
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 export type LoginBody = z.infer<typeof loginBodySchema>;
+export type ForgotPasswordBody = z.infer<typeof forgotPasswordBodySchema>;
