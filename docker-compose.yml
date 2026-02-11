@@ -119,44 +119,44 @@ services:
     depends_on:
       - nginx
 
-# Named volumes backed by ./harborfm-docker-data/ (create dirs before first up if needed)
+# Named volumes backed by ${INSTALL_DIR}/harborfm-docker-data/ (install.sh sets INSTALL_DIR in .env)
 volumes:
   harborfm_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./harborfm-docker-data/data
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/data
   harborfm_secrets:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./harborfm-docker-data/secrets
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/secrets
   certbot_webroot:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./harborfm-docker-data/certbot/webroot
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/certbot/webroot
   certbot_certs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./harborfm-docker-data/certbot/certs
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/certbot/certs
   nginx_logs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./harborfm-docker-data/nginx/logs
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/logs
   whisper_cache:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./harborfm-docker-data/whisper/cache
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/whisper/cache
 
 networks:
   internal:
