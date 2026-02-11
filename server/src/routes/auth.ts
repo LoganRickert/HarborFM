@@ -37,6 +37,16 @@ const CSRF_COOKIE_OPTS = {
   maxAge: 60 * 60 * 24 * 7, // 7 days
 };
 
+/** Redact email for logging (avoid logging username in plain text). */
+function redactEmail(email: string): string {
+  const s = email.trim();
+  if (!s || !s.includes('@')) return '(invalid)';
+  const [local, domain] = s.split('@');
+  if (!domain) return '(invalid)';
+  const showLocal = local.length <= 2 ? '**' : local.slice(0, 1) + '***';
+  return `${showLocal}@${domain}`;
+}
+
 function newCsrfToken(): string {
   return randomBytes(32).toString('base64url');
 }
@@ -136,7 +146,7 @@ export async function authRoutes(app: FastifyInstance) {
       const { subject, text, html } = buildWelcomeVerificationEmail(verifyUrl);
       const sendResult = await sendMail({ to: email, subject, text, html });
       if (!sendResult.sent) {
-        request.log.warn({ email, err: sendResult.error }, 'Welcome/verification email failed to send');
+        request.log.warn({ emailRedacted: redactEmail(email), err: sendResult.error }, 'Welcome/verification email failed to send');
       }
       return reply.status(201).send({
         requiresVerification: true,
@@ -225,7 +235,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (settings.captcha_provider && settings.captcha_provider !== 'none') {
       if (!captchaToken || !captchaToken.trim()) {
         request.log.warn(
-          { email, ip, captchaProvider: settings.captcha_provider },
+          { emailRedacted: redactEmail(email), ip, captchaProvider: settings.captcha_provider },
           'Login rejected: CAPTCHA required but no token received'
         );
         return reply.status(400).send({ error: 'CAPTCHA is required. Please complete the challenge.' });
@@ -238,7 +248,7 @@ export async function authRoutes(app: FastifyInstance) {
       );
       if (!verify.ok) {
         request.log.warn(
-          { email, ip, captchaProvider: settings.captcha_provider, verifyError: verify.error },
+          { emailRedacted: redactEmail(email), ip, captchaProvider: settings.captcha_provider, verifyError: verify.error },
           'Login rejected: CAPTCHA verification failed'
         );
         return reply.status(400).send({ error: verify.error ?? 'CAPTCHA verification failed' });
@@ -252,7 +262,7 @@ export async function authRoutes(app: FastifyInstance) {
       | { id: string; password_hash: string; disabled: number; email_verified: number }
       | undefined;
     if (!row || !(await argon2.verify(row.password_hash, password))) {
-      request.log.warn({ email, ip }, 'Login failed: invalid credentials');
+      request.log.warn({ emailRedacted: redactEmail(email), ip }, 'Login failed: invalid credentials');
       // Record failed attempt unless banned (checked above).
       const after = recordFailureAndMaybeBan(ip, 'auth_login', { attemptedEmail: email, userAgent });
       if (after.bannedNow) {
@@ -264,14 +274,14 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
     if (row.disabled === 1) {
-      request.log.warn({ userId: row.id, email, ip }, 'Login rejected: account disabled');
+      request.log.warn({ userId: row.id, emailRedacted: redactEmail(email), ip }, 'Login rejected: account disabled');
       return reply.status(403).send({ error: 'Account is disabled' });
     }
     if (
       (settings.email_provider === 'smtp' || settings.email_provider === 'sendgrid') &&
       row.email_verified === 0
     ) {
-      request.log.warn({ userId: row.id, email, ip }, 'Login rejected: email not verified');
+      request.log.warn({ userId: row.id, emailRedacted: redactEmail(email), ip }, 'Login rejected: email not verified');
       return reply.status(403).send({
         error: 'Please verify your email before signing in. Check your inbox for the verification link.',
       });
@@ -363,7 +373,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { subject, text, html } = buildResetPasswordEmail(resetUrl);
     const sendResult = await sendMail({ to: email, subject, text, html });
     if (!sendResult.sent) {
-      request.log.warn({ email, err: sendResult.error }, 'Password reset email failed to send');
+      request.log.warn({ emailRedacted: redactEmail(email), err: sendResult.error }, 'Password reset email failed to send');
     }
     return reply.send({ ok: true });
   });

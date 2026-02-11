@@ -56,12 +56,8 @@ export async function testIpfsAccess(config: IpfsConfig): Promise<{ ok: boolean;
     const msg = formatIpfsTestError(err);
     console.error('[IPFS test failed]', {
       api_url: apiUrl,
-      has_api_key: Boolean(config.api_key?.trim()),
-      has_basic_auth: Boolean(config.username && config.password != null),
       path: config.path || '(empty)',
       error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
-      cause: err instanceof Error && err.cause ? String(err.cause) : undefined,
     });
     return { ok: false, error: msg };
   }
