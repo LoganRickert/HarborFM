@@ -14,6 +14,30 @@ const STYLE = {
   fontSans: "'DM Sans', system-ui, sans-serif",
 };
 
+/** Words that stay lowercase in title case unless first/last (e.g. "on", "your" -> "on" in middle). */
+const TITLE_CASE_SMALL_WORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "on", "in", "of", "to", "for", "by", "with", "at", "as", "is", "it",
+]);
+
+/**
+ * Format a string in Title Case: first letter of each word capitalized, small words lowercase in the middle.
+ * Words that already have internal capitals (e.g. HarborFM) are left unchanged.
+ */
+function toTitleCase(s: string): string {
+  const words = s.trim().split(/\s+/);
+  if (words.length === 0) return s;
+  return words
+    .map((word, i) => {
+      const isFirst = i === 0;
+      const isLast = i === words.length - 1;
+      const lower = word.toLowerCase();
+      if (!isFirst && !isLast && TITLE_CASE_SMALL_WORDS.has(lower)) return lower;
+      if (word.length > 1 && /[A-Z]/.test(word.slice(1))) return word;
+      return word.length === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
 export interface SendMailOptions {
   to: string;
   subject: string;
@@ -57,7 +81,7 @@ export async function sendMail(
         from,
         to: options.to,
         replyTo: options.replyTo?.trim() || undefined,
-        subject: options.subject,
+        subject: toTitleCase(options.subject),
         text: options.text,
         html: options.html,
       });
@@ -82,7 +106,7 @@ export async function sendMail(
           ...(options.replyTo?.trim()
             ? { reply_to: { email: options.replyTo.trim() } }
             : {}),
-          subject: options.subject,
+          subject: toTitleCase(options.subject),
           content: [
             { type: "text/plain", value: options.text },
             { type: "text/html", value: options.html },
@@ -143,7 +167,7 @@ export function buildWelcomeVerificationEmail(verifyUrl: string): {
   <title>${subject}</title>
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
-  <div style="width:100%;min-height:100vh;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
   <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
     <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
       ${emailHeaderWithFavicon(verifyUrl)}
@@ -205,7 +229,7 @@ export function buildResetPasswordEmail(
   <title>${subject}</title>
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
-  <div style="width:100%;min-height:100vh;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
   <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
     <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
       ${emailHeaderWithFavicon(resetUrl)}
@@ -267,7 +291,7 @@ export function buildWelcomeSetPasswordEmail(
   <title>${subject}</title>
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
-  <div style="width:100%;min-height:100vh;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
   <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
     <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
       ${emailHeaderWithFavicon(resetUrl)}
@@ -331,7 +355,7 @@ export function buildWelcomeVerifiedEmail(dashboardUrl: string): {
   <title>${subject}</title>
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
-  <div style="width:100%;min-height:100vh;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
   <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
     <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
       ${emailHeaderWithFavicon(dashboardUrl)}
@@ -388,7 +412,7 @@ export function buildInviteToPlatformEmail(signupUrl: string): {
   <title>${subject}</title>
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
-  <div style="width:100%;min-height:100vh;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
   <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
     <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
       ${emailHeaderWithFavicon(signupUrl)}
@@ -479,7 +503,7 @@ export function buildNewShowEmail(options: NewShowEmailOptions): {
   <title>${subject}</title>
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
-  <div style="width:100%;min-height:100vh;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
   <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
     <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
       ${emailHeaderWithFavicon(showUrl)}
@@ -569,7 +593,7 @@ export function buildContactNotificationEmail(
   <title>${escapeHtml(subject)}</title>
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
-  <div style="width:100%;min-height:100vh;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
   <div style="max-width: 520px; margin: 0 auto; padding: 32px 24px;">
     <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
       <h1 style="margin: 0 0 8px; font-size: 1.25rem; font-weight: 700; color: ${STYLE.accent};">${safeContextLine ? "New Feedback" : "New Contact Message"}</h1>

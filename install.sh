@@ -55,8 +55,10 @@ download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/
 download "$BASE_URL/fail2ban/filter.d/caddy-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/caddy-scanner.conf"
 download "$BASE_URL/fail2ban/jail.d/caddy-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/caddy-scanner.local"
 download "$BASE_URL/update.sh" "$INSTALL_DIR/update.sh"
+download "$BASE_URL/nginx-add-domain.sh" "$INSTALL_DIR/nginx-add-domain.sh"
 chmod +x "$INSTALL_DIR/nginx/entrypoint.sh"
 chmod +x "$INSTALL_DIR/update.sh"
+chmod +x "$INSTALL_DIR/nginx-add-domain.sh"
 echo "Configs downloaded."
 echo ""
 
@@ -141,11 +143,22 @@ mkdir -p \
   "$INSTALL_DIR/harborfm-docker-data/certbot/webroot" \
   "$INSTALL_DIR/harborfm-docker-data/certbot/certs" \
   "$INSTALL_DIR/harborfm-docker-data/nginx/logs" \
+  "$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled" \
   "$INSTALL_DIR/harborfm-docker-data/caddy/data" \
   "$INSTALL_DIR/harborfm-docker-data/caddy/config" \
   "$INSTALL_DIR/harborfm-docker-data/caddy/logs" \
   "$INSTALL_DIR/harborfm-docker-data/redis" \
   "$INSTALL_DIR/harborfm-docker-data/whisper/cache"
+
+# Placeholder so nginx include sites-enabled/*.conf does not fail when no extra sites exist
+placeholder="$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled/00-placeholder.conf"
+if [ ! -f "$placeholder" ]; then
+  echo '# Additional sites; add .conf files here (e.g. via nginx-add-domain.sh).' > "$placeholder"
+fi
+
+# Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
+touch "$INSTALL_DIR/harborfm-docker-data/caddy/logs/access.log" 2>/dev/null || true
+touch "$INSTALL_DIR/harborfm-docker-data/nginx/logs/access.log" 2>/dev/null || true
 
 echo "Starting containers (compose up with profile: $REVERSE_PROXY)..."
 set +e

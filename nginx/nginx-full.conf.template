@@ -81,4 +81,6 @@ http {
             proxy_read_timeout 600s;
         }
     }
+
+    include /etc/nginx/sites-enabled/*.conf;
 }

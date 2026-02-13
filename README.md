@@ -8,11 +8,13 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 
 **License:** MIT
 
+**Home Page:** [https://harborfm.com/](https://harborfm.com)
+
 **Source:** [https://github.com/LoganRickert/harborfm](https://github.com/LoganRickert/harborfm)
 
 **Demo Site:** [https://app.harborfm.com/](https://app.harborfm.com)
 
-**API Docs:** [http://docs.harborfm.com/server/](http://docs.harborfm.com/server/)
+**Swagger API Docs:** [https://harborfm.com/server/](https://harborfm.com/server/)
 
 ## Table of contents
 
@@ -68,7 +70,7 @@ To auto-renew Let's Encrypt certificates, add a cron job (run `crontab -e` and a
 0 3 * * * cd /path/to/harborfm-docker && docker compose run --rm --entrypoint certbot certbot renew
 ```
 
-If you use the `install.sh` script, an `update.sh` script will also be added to the install directory. Run this script to pull the latest docker-compose files and renew the nginx certificate.
+If you use the `install.sh` script, an `update.sh` script will also be added to the install directory. Run this script to pull the latest docker-compose files and renew the nginx certificate. To add more domains or subdomains (e.g. mydomain.harborfm.com) with nginx, use `nginx-add-domain.sh <domain>` from the install directory (DNS must already point to the host). Always run `docker compose` (and `docker compose restart`) from the install directory so volume paths such as nginx `sites-enabled` use the correct path from `.env`.
 
 ### Guide and Screenshots 
 

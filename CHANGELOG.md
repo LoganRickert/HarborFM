@@ -1,6 +1,8 @@
 # Changelog
 
-All notable changes are documented here. Until version 1.0, versions are identified by the last commit of each day.
+## v1.0.0 - 2026-02-13
+
+Officially version 1.0!
 
 ## v0.9.0 - 2026-02-12
 

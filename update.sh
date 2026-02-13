@@ -62,7 +62,12 @@ echo "Stopping containers..."
 docker compose down
 
 echo "Downloading latest configs from GitHub (main)..."
-download "$BASE_URL/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+read -r -p "Overwrite docker-compose.yml with version from GitHub? [y/N] " overwrite_compose </dev/tty || true
+if [[ "$overwrite_compose" =~ ^[yY] ]]; then
+  download "$BASE_URL/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+else
+  echo "Skipping docker-compose.yml (unchanged)."
+fi
 download "$BASE_URL/nginx/entrypoint.sh" "$INSTALL_DIR/nginx/entrypoint.sh"
 download "$BASE_URL/nginx/nginx-80-only.conf.template" "$INSTALL_DIR/nginx/nginx-80-only.conf.template"
 download "$BASE_URL/nginx/nginx-full.conf.template" "$INSTALL_DIR/nginx/nginx-full.conf.template"
@@ -72,10 +77,25 @@ download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/
 download "$BASE_URL/fail2ban/filter.d/caddy-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/caddy-scanner.conf"
 download "$BASE_URL/fail2ban/jail.d/caddy-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/caddy-scanner.local"
 download "$BASE_URL/update.sh" "$INSTALL_DIR/update.sh"
+download "$BASE_URL/nginx-add-domain.sh" "$INSTALL_DIR/nginx-add-domain.sh"
 chmod +x "$INSTALL_DIR/nginx/entrypoint.sh"
 chmod +x "$INSTALL_DIR/update.sh"
+chmod +x "$INSTALL_DIR/nginx-add-domain.sh"
 echo "Configs updated."
 echo ""
+
+# Ensure nginx sites-enabled exists with placeholder (for existing installs that added this later)
+mkdir -p "$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled"
+placeholder="$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled/00-placeholder.conf"
+if [ ! -f "$placeholder" ]; then
+  echo '# Additional sites; add .conf files here (e.g. via nginx-add-domain.sh).' > "$placeholder"
+  echo "Created nginx sites-enabled placeholder."
+fi
+
+# Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
+mkdir -p "$INSTALL_DIR/harborfm-docker-data/caddy/logs"
+touch "$INSTALL_DIR/harborfm-docker-data/nginx/logs/access.log" 2>/dev/null || true
+touch "$INSTALL_DIR/harborfm-docker-data/caddy/logs/access.log" 2>/dev/null || true
 
 echo "Pulling images..."
 docker compose pull

@@ -47,6 +47,9 @@
   color: var(--text);
   line-height: 1.6;
   margin: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .actions {

@@ -5,6 +5,7 @@
 #
 # Nginx: set DOMAIN, CERTBOT_EMAIL. Get cert: docker compose run --rm certbot. Renew: docker compose run --rm certbot renew
 # Caddy: set DOMAIN; Caddy obtains and renews TLS automatically (no certbot).
+# Always run docker compose from the install directory (where .env lives). .env must set INSTALL_DIR to that directory's absolute path so nginx sites-enabled and volume bind mounts are correct.
 
 services:
   harborfm:
@@ -48,6 +49,7 @@ services:
       - certbot_webroot:/var/www/certbot
       - certbot_certs:/etc/letsencrypt
       - nginx_logs:/var/log/nginx
+      - nginx_sites_enabled:/etc/nginx/sites-enabled:ro
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:80/nginx-health"]
@@ -178,6 +180,12 @@ volumes:
       type: none
       o: bind
       device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/logs
+  nginx_sites_enabled:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/sites-enabled
   caddy_data:
     driver: local
     driver_opts:
