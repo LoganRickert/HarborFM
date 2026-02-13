@@ -70,7 +70,24 @@ To auto-renew Let's Encrypt certificates, add a cron job (run `crontab -e` and a
 0 3 * * * cd /path/to/harborfm-docker && docker compose run --rm --entrypoint certbot certbot renew
 ```
 
-If you use the `install.sh` script, an `update.sh` script will also be added to the install directory. Run this script to pull the latest docker-compose files and renew the nginx certificate. To add more domains or subdomains (e.g. mydomain.harborfm.com) with nginx, use `nginx-add-domain.sh <domain>` from the install directory (DNS must already point to the host). Always run `docker compose` (and `docker compose restart`) from the install directory so volume paths such as nginx `sites-enabled` use the correct path from `.env`.
+If you use the `install.sh` script, an `update.sh` script will also be added to the install directory. Run this script to pull the latest docker-compose files and renew the nginx certificate. Always run `docker compose` (and `docker compose restart`) from the install directory so volume paths such as nginx `sites-enabled` use the correct path from `.env`.
+
+#### Adding additional domains (nginx)
+
+If you use nginx and want to serve the same Harbor FM app on extra domains or subdomains (e.g. `demo.harborfm.com`, `podcast.example.com`), use the included script from your **install directory**:
+
+```bash
+./nginx-add-domain.sh <domain>
+# Example:
+./nginx-add-domain.sh demo.harborfm.com
+```
+
+**Before running:**
+
+- Your `.env` must have `REVERSE_PROXY=nginx`, `CERTBOT_EMAIL` set, and `INSTALL_DIR` set to the install directory’s absolute path.
+- DNS for the new domain must already point to this server (A/AAAA to the same host as your main domain).
+
+The script will: add an nginx config for the domain under `sites-enabled`, reload nginx, run Let’s Encrypt (certbot) to obtain a certificate for that domain, then switch the config to HTTPS and reload again. Your primary domain (the one in `DOMAIN` in `.env`) is already served by the main nginx config-do not add it with this script or you’ll get duplicate server name warnings. Certificate renewal (e.g. cron with `docker compose run --rm --entrypoint certbot certbot renew`) renews all certs, including ones added this way.
 
 ### Guide and Screenshots 
 

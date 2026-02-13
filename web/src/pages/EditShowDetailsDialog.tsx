@@ -687,7 +687,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                             onChange={(e) => setForm((f) => ({ ...f, managed_domain: e.target.value || null }))}
                             className={styles.input}
                           >
-                            <option value="">—</option>
+                            <option value="">-</option>
                             {podcast.dns_config.allow_domains.map((d) => (
                               <option key={d} value={d}>{d}</option>
                             ))}
