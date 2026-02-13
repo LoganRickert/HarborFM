@@ -17,8 +17,9 @@ COPY web ./web
 COPY scripts ./scripts
 
 RUN pnpm run lint
-RUN pnpm run db:migrate:test
 RUN pnpm run build
+# Migration test must run after build: migrate script imports settings, which imports @harborfm/shared (shared/dist)
+RUN pnpm run db:migrate:test
 
 # Runtime stage: Node + ffmpeg, single image
 FROM node:22-bookworm-slim
