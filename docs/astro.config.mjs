@@ -1,7 +1,7 @@
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
-  site: 'https://docs.harborfm.com',
+  site: 'https://harborfm.com',
   outDir: '../docs-dist',
   build: {
     inlineStylesheets: 'auto',

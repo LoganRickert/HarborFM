@@ -45,7 +45,7 @@ cp -r web/public/. docs-dist/web/public/ 2>/dev/null || true
 cp LICENSE docs-dist/ 2>/dev/null || true
 
 # 5) SEO: robots.txt and sitemap.xml (base URL for docs site)
-DOCS_BASE_URL="${DOCS_BASE_URL:-https://docs.harborfm.com}"
+DOCS_BASE_URL="${DOCS_BASE_URL:-https://harborfm.com}"
 cat > docs-dist/robots.txt <<EOF
 User-agent: *
 Allow: /
