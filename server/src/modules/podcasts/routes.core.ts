@@ -422,6 +422,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
   );
 
   // GET /podcasts/:id/analytics
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   app.get(
     "/podcasts/:id/analytics",
     {
@@ -429,20 +430,58 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       schema: {
         tags: ["Podcasts"],
         summary: "Get podcast analytics",
-        description: "Returns listen and episode analytics for a show.",
+        description:
+          "Returns listen and episode analytics for a show. Optional start_date, end_date (YYYY-MM-DD), limit, and offset filter and paginate daily stats.",
         params: {
           type: "object",
           properties: { id: { type: "string" } },
           required: ["id"],
         },
+        querystring: {
+          type: "object",
+          properties: {
+            start_date: { type: "string", description: "YYYY-MM-DD" },
+            end_date: { type: "string", description: "YYYY-MM-DD" },
+            limit: { type: "integer", minimum: 1 },
+            offset: { type: "integer", minimum: 0 },
+          },
+        },
         response: {
           200: { description: "Analytics data" },
+          400: { description: "Invalid query params" },
           404: { description: "Not found" },
         },
       },
     },
     async (request, reply) => {
       const { id: podcastId } = request.params as { id: string };
+      const query = request.query as {
+        start_date?: string;
+        end_date?: string;
+        limit?: number;
+        offset?: number;
+      };
+      const start_date = query.start_date;
+      const end_date = query.end_date;
+      const limit = query.limit;
+      const offset = query.offset ?? 0;
+
+      if (start_date !== undefined && !DATE_RE.test(start_date)) {
+        return reply.status(400).send({ error: "Invalid start_date" });
+      }
+      if (end_date !== undefined && !DATE_RE.test(end_date)) {
+        return reply.status(400).send({ error: "Invalid end_date" });
+      }
+      if (start_date !== undefined && end_date !== undefined && start_date > end_date) {
+        return reply.status(400).send({ error: "start_date must be <= end_date" });
+      }
+      if (limit !== undefined && (limit < 1 || !Number.isInteger(limit))) {
+        return reply.status(400).send({ error: "Invalid limit" });
+      }
+      if (offset !== undefined && (offset < 0 || !Number.isInteger(offset))) {
+        return reply.status(400).send({ error: "Invalid offset" });
+      }
+
       const { userId } = request;
       if (!canAccessPodcast(userId, podcastId)) {
         return reply.status(404).send({ error: "Podcast not found" });
@@ -457,15 +496,30 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         .get(podcastId) as { id: string; owner_read_only: number } | undefined;
       if (!podcast)
         return reply.status(404).send({ error: "Podcast not found" });
+
+      const dateWhere =
+        start_date !== undefined && end_date !== undefined
+          ? " AND stat_date >= ? AND stat_date <= ?"
+          : "";
+      const limitClause =
+        limit !== undefined ? " LIMIT ? OFFSET ?" : "";
+      const rssParams: unknown[] = [podcastId];
+      if (start_date !== undefined && end_date !== undefined) {
+        rssParams.push(start_date, end_date);
+      }
+      if (limit !== undefined) {
+        rssParams.push(limit, offset);
+      }
       const rss_daily = db
         .prepare(
-          `SELECT stat_date, bot_count, human_count FROM podcast_stats_rss_daily WHERE podcast_id = ? ORDER BY stat_date DESC`,
+          `SELECT stat_date, bot_count, human_count FROM podcast_stats_rss_daily WHERE podcast_id = ?${dateWhere} ORDER BY stat_date DESC${limitClause}`,
         )
-        .all(podcastId) as Array<{
+        .all(...rssParams) as Array<{
         stat_date: string;
         bot_count: number;
         human_count: number;
       }>;
+
       const episodes = db
         .prepare(
           `SELECT id, title, slug FROM episodes WHERE podcast_id = ? ORDER BY COALESCE(publish_at, updated_at) DESC`,
@@ -497,12 +551,19 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }> = [];
       if (episodeIds.length > 0) {
         const placeholders = episodeIds.map(() => "?").join(",");
+        const epParams: unknown[] = [...episodeIds];
+        if (start_date !== undefined && end_date !== undefined) {
+          epParams.push(start_date, end_date);
+        }
+        if (limit !== undefined) {
+          epParams.push(limit, offset);
+        }
         episode_daily.push(
           ...(db
             .prepare(
-              `SELECT episode_id, stat_date, bot_count, human_count FROM podcast_stats_episode_daily WHERE episode_id IN (${placeholders}) ORDER BY stat_date DESC, episode_id`,
+              `SELECT episode_id, stat_date, bot_count, human_count FROM podcast_stats_episode_daily WHERE episode_id IN (${placeholders})${dateWhere} ORDER BY stat_date DESC, episode_id${limitClause}`,
             )
-            .all(...episodeIds) as Array<{
+            .all(...epParams) as Array<{
             episode_id: string;
             stat_date: string;
             bot_count: number;
@@ -512,9 +573,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episode_location_daily.push(
           ...(db
             .prepare(
-              `SELECT episode_id, stat_date, location, bot_count, human_count FROM podcast_stats_episode_location_daily WHERE episode_id IN (${placeholders}) ORDER BY stat_date DESC, episode_id, location`,
+              `SELECT episode_id, stat_date, location, bot_count, human_count FROM podcast_stats_episode_location_daily WHERE episode_id IN (${placeholders})${dateWhere} ORDER BY stat_date DESC, episode_id, location${limitClause}`,
             )
-            .all(...episodeIds) as Array<{
+            .all(...epParams) as Array<{
             episode_id: string;
             stat_date: string;
             location: string;
@@ -525,9 +586,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episode_listens_daily.push(
           ...(db
             .prepare(
-              `SELECT episode_id, stat_date, bot_count, human_count FROM podcast_stats_episode_listens_daily WHERE episode_id IN (${placeholders}) ORDER BY stat_date DESC, episode_id`,
+              `SELECT episode_id, stat_date, bot_count, human_count FROM podcast_stats_episode_listens_daily WHERE episode_id IN (${placeholders})${dateWhere} ORDER BY stat_date DESC, episode_id${limitClause}`,
             )
-            .all(...episodeIds) as Array<{
+            .all(...epParams) as Array<{
             episode_id: string;
             stat_date: string;
             bot_count: number;

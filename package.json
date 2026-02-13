@@ -9,6 +9,7 @@
     "dev:web": "pnpm --filter web run dev",
     "db:migrate": "pnpm --filter server run db:migrate",
     "db:clear-ip-bans": "pnpm --filter server run db:clear-ip-bans",
+    "db:seed-analytics": "pnpm --filter server run db:seed-analytics",
     "reset-password": "pnpm --filter server run reset-password",
     "deploy:pm2": "bash scripts/deploy-pm2.sh",
     "build": "pnpm --filter shared run build && pnpm --filter server run build && pnpm --filter web run build",
@@ -16,11 +17,11 @@
     "staging": "pnpm --filter shared run build && pnpm --filter server run build && pnpm --filter web run staging && mkdir -p server/public && cp -R web/dist/* server/public && cd server && node dist/app.js",
     "db:migrate:test": "bash scripts/test-migrations.sh",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test",
     "build:openapi": "bash scripts/build-openapi.sh",
     "build:docs": "bash scripts/build-docs.sh",
     "docker:build": "docker build -t harborfm .",
-    "e2e": "cd e2e && pnpm run e2e"
+    "e2e": "cd e2e && pnpm run e2e",
+    "test": "pnpm run lint && pnpm run build && pnpm run e2e"
   },
   "engines": {
     "node": ">=22"

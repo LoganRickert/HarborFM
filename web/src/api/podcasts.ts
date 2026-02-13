@@ -1,4 +1,4 @@
-import type { PodcastCreate, PodcastUpdate, PodcastsListQuery } from '@harborfm/shared';
+import type { PodcastAnalyticsQuery, PodcastCreate, PodcastUpdate, PodcastsListQuery } from '@harborfm/shared';
 import { apiGet, apiPost, apiPatch, apiDelete, csrfHeaders } from './client';
 
 /** Thrown by addCollaborator when response is not ok; may include data from body (e.g. USER_NOT_FOUND). */
@@ -146,8 +146,14 @@ export interface PodcastAnalytics {
   }>;
 }
 
-export function getPodcastAnalytics(podcastId: string) {
-  return apiGet<PodcastAnalytics>(`/podcasts/${podcastId}/analytics`);
+export function getPodcastAnalytics(podcastId: string, params?: PodcastAnalyticsQuery) {
+  const search = new URLSearchParams();
+  if (params?.start_date) search.set('start_date', params.start_date);
+  if (params?.end_date) search.set('end_date', params.end_date);
+  if (params?.limit != null) search.set('limit', String(params.limit));
+  if (params?.offset != null) search.set('offset', String(params.offset));
+  const query = search.toString();
+  return apiGet<PodcastAnalytics>(`/podcasts/${podcastId}/analytics${query ? `?${query}` : ''}`);
 }
 
 export function createPodcast(body: PodcastCreate) {

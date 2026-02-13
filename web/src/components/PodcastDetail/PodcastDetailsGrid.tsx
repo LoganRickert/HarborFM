@@ -6,6 +6,10 @@ import sharedStyles from './shared.module.css';
 
 const styles = { ...sharedStyles, ...localStyles };
 
+function toTitleCase(s: string): string {
+  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface PodcastDetailsGridProps {
   podcast: {
     slug: string;
@@ -99,13 +103,13 @@ export function PodcastDetailsGrid({ podcast, publicFeedsEnabled }: PodcastDetai
         {podcast.language && (
           <div className={styles.podcastDetailsItem}>
             <dt className={styles.podcastDetailsTerm}>Language</dt>
-            <dd className={styles.podcastDetailsValue}>{podcast.language}</dd>
+            <dd className={styles.podcastDetailsValue}>{toTitleCase(podcast.language)}</dd>
           </div>
         )}
         {podcast.medium && (
           <div className={styles.podcastDetailsItem}>
             <dt className={styles.podcastDetailsTerm}>Medium</dt>
-            <dd className={styles.podcastDetailsValue}>{podcast.medium}</dd>
+            <dd className={styles.podcastDetailsValue}>{toTitleCase(podcast.medium)}</dd>
           </div>
         )}
         <div className={styles.podcastDetailsItem}>

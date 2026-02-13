@@ -12,6 +12,12 @@
   margin-bottom: 1.5rem;
 }
 
+@media (max-width: 480px) {
+  .card {
+    padding: 1rem;
+  }
+}
+
 .card:last-child {
   margin-bottom: 0;
 }
@@ -48,9 +54,19 @@
   line-height: 1.5;
 }
 
+.cardFooter {
+  margin: 1rem 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .summary {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 1.5rem;
   flex-wrap: wrap;
   margin: 0 0 1rem;
@@ -83,6 +99,16 @@
   font-size: 0.875rem;
 }
 
+.tableEqualColumns {
+  table-layout: fixed;
+}
+
+.tableEqualColumns th,
+.tableEqualColumns td {
+  width: 25%;
+  box-sizing: border-box;
+}
+
 .table th,
 .table td {
   padding: 0.5rem 0.75rem;
@@ -96,16 +122,32 @@
   white-space: nowrap;
 }
 
+@media (max-width: 480px) {
+  .table th {
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+
 .table td {
   color: var(--text);
 }
 
+.table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .num {
   font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.table th.num,
+.table td.num {
   text-align: right;
 }
 
@@ -152,4 +194,86 @@
 .badgeHuman {
   background: rgba(0, 212, 170, 0.12);
   color: var(--accent);
+}
+
+/* Tabs */
+.analyticsTabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1.5rem;
+  padding: 4px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.analyticsTab {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.analyticsTab:hover {
+  color: var(--text);
+}
+
+.analyticsTabActive {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 0 16px var(--accent-glow);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.analyticsTabActive:hover {
+  background: var(--accent-dim);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.chartTypeToggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.chartTypeBtn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.chartTypeBtn:hover {
+  color: var(--text);
+}
+
+.chartTypeBtnActive {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(0, 212, 170, 0.08);
+}
+
+.chartContainer {
+  min-height: 280px;
+  width: 100%;
 }

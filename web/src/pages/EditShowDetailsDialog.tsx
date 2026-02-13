@@ -640,7 +640,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   />
                 </label>
 
-                {podcast.my_role === 'owner' && podcast.dns_config && (
+                {podcast.my_role === 'owner' &&
+                  podcast.dns_config &&
+                  (podcast.dns_config.allow_linking_domain ||
+                    podcast.dns_config.allow_domain ||
+                    (podcast.dns_config.allow_sub_domain && !!podcast.dns_config.default_domain)) && (
                   <>
                     <h3 className={styles.dialogSectionTitle}>DNS &amp; Custom Domain</h3>
                     {podcast.dns_config.allow_linking_domain && (

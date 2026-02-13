@@ -26,6 +26,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.1",
+    "recharts": "3.7.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

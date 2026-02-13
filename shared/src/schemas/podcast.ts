@@ -117,6 +117,26 @@ export const podcastCollaboratorUpdateBodySchema = z.object({
   role: z.enum(['view', 'editor', 'manager'], { message: 'Invalid role. Use view, editor, or manager.' }),
 });
 
+/** Query params for GET /podcasts/:id/analytics (filter and paginate daily stats). */
+const dateYYYYMMDD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Date must be YYYY-MM-DD' });
+
+export const podcastAnalyticsQuerySchema = z
+  .object({
+    start_date: dateYYYYMMDD.optional(),
+    end_date: dateYYYYMMDD.optional(),
+    limit: z.coerce.number().int().min(1).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.start_date != null && data.end_date != null) return data.start_date <= data.end_date;
+      return true;
+    },
+    { message: 'start_date must be <= end_date', path: ['end_date'] }
+  );
+
+export type PodcastAnalyticsQuery = z.infer<typeof podcastAnalyticsQuerySchema>;
+
 /** Query or body for RSS routes (public_base_url override). */
 export const rssPublicBaseUrlQuerySchema = z.object({
   public_base_url: z.string().url().optional().or(z.literal('')),
