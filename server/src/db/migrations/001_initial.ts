@@ -2,7 +2,6 @@
  * Initial schema: full consolidated schema as of latest migrations
  */
 export const up = (db: { exec: (sql: string) => void }) => {
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,

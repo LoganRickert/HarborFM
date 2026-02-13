@@ -30,12 +30,16 @@ export function EpisodeNew() {
   const [description, setDescription] = useState('');
 
   const mutation = useMutation({
-    mutationFn: () =>
-      createEpisode(id!, {
-        title,
-        description: description || undefined,
+    mutationFn: () => {
+      const pid = id;
+      if (!pid) throw new Error('Missing podcast id');
+      return createEpisode(pid, {
+        title: title || '',
+        description: description || '',
         status: 'draft',
-      }),
+        guid_is_permalink: 0,
+      });
+    },
     onSuccess: (ep) => {
       queryClient.invalidateQueries({ queryKey: ['episodes', id] });
       queryClient.invalidateQueries({ queryKey: ['podcast', id] });

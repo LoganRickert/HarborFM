@@ -1,0 +1,13 @@
+# Jail: ban IPs that hit common scanner/vuln paths (cgi-bin, PHP, wp-admin, etc.)
+# Used when REVERSE_PROXY=caddy. Traffic to Caddy is forwarded by Docker, so use DOCKER-USER chain.
+
+[caddy-scanner]
+enabled = true
+port = http,https
+filter = caddy-scanner
+logpath = /var/log/caddy/access.log
+maxretry = 1
+findtime = 1d
+bantime = 30m
+chain = DOCKER-USER
+action = iptables-multiport[name=caddy-scanner, port="80,443", protocol=tcp, chain=DOCKER-USER]

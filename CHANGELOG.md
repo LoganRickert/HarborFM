@@ -2,6 +2,23 @@
 
 All notable changes are documented here. Until version 1.0, versions are identified by the last commit of each day.
 
+## v0.9.0 - 2026-02-12
+
+- **API keys:** Optional name and expiry (`valid_until`); can be disabled or restricted to a `valid_from` datetime.
+- **Subscription tokens:** Per-podcast tokenized RSS for private or subscriber-only feeds; optional validity window and per-user limit on tokens.
+- **Subscriber-only episodes:** Episodes can be marked subscriber-only (excluded from public RSS, only in tokenized feed).
+- **Automatic DNS:** Podcasts can use a managed domain or sub-domain with optional Cloudflare API key (encrypted) for custom feed URLs.
+- **Per-user transcription:** Users can have transcription permission toggled (`can_transcribe`); admins control who can use Whisper.
+- **Podcast limits:** Podcast `max_episodes` now follows the owner’s current limit (no longer frozen at creation time).
+- **Public feed toggle:** Per-podcast option to disable the public RSS and public episode list (404 when disabled).
+- **Episode GUIDs:** GUIDs are unique per podcast to satisfy feed validators.
+- **Contact form:** Contact messages with optional context; messages stored and optionally emailed to admins.
+- **Collaborators & invites:** Podcast sharing with view/editor/manager roles; max collaborators limit; platform invites for new users.
+- **User limits & read-only:** Per-user limits for podcasts, episodes, storage; read-only accounts.
+- **Password reset & email verification:** Reset tokens and verification flow; forgot-password attempt tracking.
+- **Export config:** Unified export config with encrypted credentials; bucket/region/endpoint and mode support.
+- **Podcast stats & GeoIP:** RSS and episode stats (hits, listens, location); optional GeoLite2.
+
 ## [66ff470] - 2026-02-11
 
 - Added ability to have collaborators. Fixed styling issues. Moved around some envs.

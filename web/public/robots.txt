@@ -1,32 +1,14 @@
 User-agent: *
-Disallow: /
-
-# Allow legal and contact pages
-Allow: /privacy
-Allow: /terms
-Allow: /contact
-
-# Allow public podcast feeds and episodes (web pages)
-Allow: /feed/
-
-# Allow public API endpoints for podcasts and episodes
-Allow: /api/public/podcasts/
-
-# Allow RSS feeds
-Allow: /api/public/podcasts/*/rss
-
-# Allow sitemaps (index and per-podcast)
-Allow: /api/sitemap
-
-# Allow audio files (linked from RSS feeds)
-Allow: /api/*/episodes/*
-
-# Disallow specific non-public paths
 Disallow: /setup
 Disallow: /login
 Disallow: /register
 Disallow: /reset-password
 Disallow: /api/docs
+Disallow: /podcasts
+Disallow: /library
+Disallow: /messages
+Disallow: /users
+Disallow: /settings
+Disallow: /profile
 
-# Sitemap
-Sitemap: /api/sitemap.xml
+Sitemap: https://app.harborfm.com/api/sitemap.xml

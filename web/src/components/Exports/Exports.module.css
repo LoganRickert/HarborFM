@@ -1,0 +1,149 @@
+/* Exports Component Styles */
+
+/* Export Form */
+.addExportWrap {
+  padding: 1rem;
+  background: var(--bg-muted);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+}
+
+.addExportTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.addExportForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.addExportActions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Status Toggle */
+.statusToggle {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.statusToggleBtn,
+.statusToggleActive {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.statusToggleBtn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.statusToggleActive {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.statusToggleActive:hover {
+  background: var(--accent-dim);
+  color: var(--bg);
+}
+
+/* Export Mode Toggle */
+.exportModeToggle {
+  flex-wrap: wrap;
+}
+.exportModeToggle .statusToggleBtn,
+.exportModeToggle .statusToggleActive {
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+}
+
+/* Export Deploy */
+.deployBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: 0 0 20px var(--accent-glow);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.deployBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  box-shadow: 0 0 32px var(--accent-glow);
+  transform: translateY(-1px);
+}
+.deployBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.deployAllRow {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.deployAllResults {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Export Results */
+.exportResult {
+  margin-top: 0.5rem;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+.exportMeta {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.exportMeta > span {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+.exportMeta code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+  padding: 0.15rem 0.45rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  overflow-wrap: break-word;
+  word-break: break-all;
+}

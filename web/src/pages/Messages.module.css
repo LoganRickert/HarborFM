@@ -181,8 +181,34 @@
   word-break: break-word;
 }
 
-.ellipsis {
-  color: var(--text-muted);
+.messageCardTextClamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.viewMoreWrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.viewMoreBtn {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.viewMoreBtn:hover {
+  color: var(--accent-dim);
+  background: var(--accent-glow);
 }
 
 .pagination {

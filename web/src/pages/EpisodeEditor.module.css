@@ -484,6 +484,7 @@
   width: 100%;
   height: 32px;
   vertical-align: top;
+  cursor: pointer;
 }
 
 .segmentActions {
@@ -538,7 +539,7 @@
   color: #d48989;
 }
 
-/* Generate final bar — prominent at top of sections */
+/* Generate final bar - prominent at top of sections */
 .generateBar {
   margin-bottom: 1.25rem;
   padding: 1.5rem;
@@ -593,6 +594,7 @@
 .generateBarWaveform {
   flex: 1;
   min-width: 0;
+  cursor: pointer;
 }
 
 .generateBarProgressPlaceholder {
@@ -607,8 +609,30 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+}
+
+.generateBarActionsWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex-grow: 1;
+}
+
+.generateBarBuildNotice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: var(--radius);
+}
+
+.generateBarBuildNoticeIcon {
+  flex-shrink: 0;
+  color: rgba(234, 179, 8, 0.9);
 }
 
 .generateBarActions {
@@ -716,6 +740,64 @@
 .renderBtnPrimary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+.generateBarTranscriptBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.1);
+  border: 1px solid rgba(0, 212, 170, 0.35);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.generateBarTranscriptBtn:hover {
+  background: rgba(0, 212, 170, 0.18);
+  border-color: rgba(0, 212, 170, 0.5);
+  transform: translateY(-1px);
+}
+.generateBarTranscriptBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.generateBarTranscriptBtn:hover:disabled {
+  background: rgba(0, 212, 170, 0.1);
+  border-color: rgba(0, 212, 170, 0.35);
+  transform: none;
+}
+
+.generateBarGenerateTranscriptBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: 0 0 20px var(--accent-glow);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.generateBarGenerateTranscriptBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 28px var(--accent-glow);
+  transform: translateY(-1px);
+}
+.generateBarGenerateTranscriptBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
   box-shadow: none;
 }
 
@@ -956,7 +1038,7 @@
 
 .recordPlaybackWrap {
   margin-top: 2rem;
-  margin-bottom: 2.75rem;
+  margin-bottom: 1.75rem;
 }
 
 .recordPlaybackRow {
@@ -1001,6 +1083,11 @@
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
+
+.recordChoiceBtnSecondary {
+  margin: 0 0 2rem;
+}
+
 .recordChoiceBtn:hover {
   background: var(--bg-elevated);
   border-color: var(--text-muted);
@@ -1027,6 +1114,52 @@
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+.recordFooterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  width: 100%;
+}
+.recordFooterRow .libraryClose {
+  margin-top: 0;
+}
+
+.recordFooterRight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.recordFooterPrimaryBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.recordFooterPrimaryBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 20px var(--accent-glow);
+  color: var(--bg);
+}
+.recordFooterPrimaryBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 /* Library modal */
@@ -1368,49 +1501,136 @@
 }
 .dialogContentWide {
   max-width: 420px;
-  max-height: min(90vh, 720px);
-  display: flex;
-  flex-direction: column;
+  overflow: hidden;
+}
+.dialogContentWide .dialogHeaderRow {
+  flex-shrink: 0;
 }
 .dialogContentWide .dialogTitle {
   flex-shrink: 0;
 }
+.dialogContentWide .dialogActions {
+  flex-shrink: 0;
+}
 
-.dialogDetailsGrid {
-  height: min(90vh, 720px);
-  display: grid;
-  grid-template-rows: auto auto 1fr;
+/* Scrollable dialog layout (same pattern as EditShowDetailsDialog): flex column + scrollable body so height stays stable when toggles change */
+.dialogContentScrollable {
+  max-height: min(75vh, 720px);
+  display: flex;
+  flex-direction: column;
 }
-.dialogDetailsGrid .dialogTitle {
-  grid-row: 1;
-}
+
+/* Episode Details dialog: header, description, scroll body, footer */
+.dialogDetailsGrid .dialogHeaderRow,
 .dialogDetailsGrid .dialogDescription {
-  grid-row: 2;
+  flex-shrink: 0;
 }
-.dialogDetailsGrid .dialogBodyScrollForm {
-  grid-row: 3;
+.dialogDetailsGrid .dialogBodyScroll {
+  flex: 1;
   min-height: 0;
 }
-.dialogClose {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  width: 36px;
-  height: 36px;
+.dialogDetailsGrid .dialogFooter {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Episode Details dialog: footer only (layout uses shared.module.css) */
+.episodeDetailsDialog .dialogFooter {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Segment more-info (TranscriptModal): same max height as episode details */
+.segmentTranscriptDialog {
+  max-height: min(75vh, 720px);
+}
+
+.formSectionTitle {
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+.formSectionTitle:first-child {
+  margin-top: 0;
+}
+
+.advancedSection {
+  margin-top: 1.25rem;
+}
+.advancedToggle {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 212, 170, 0.08);
-  border: 1px solid rgba(0, 212, 170, 0.25);
-  border-radius: 10px;
-  color: var(--accent);
+  gap: 0.35rem;
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.advancedToggle:hover {
+  color: var(--text);
+}
+.advancedFields {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dialogHeaderRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.dialogHeaderRow .dialogTitle {
+  margin: 0;
+  margin-right: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.dialogClose {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 .dialogClose:hover:not(:disabled) {
   background: rgba(0, 212, 170, 0.14);
   border-color: rgba(0, 212, 170, 0.45);
-  transform: scale(1.05);
+  color: var(--text);
 }
 .dialogClose:disabled {
   opacity: 0.6;
@@ -1427,10 +1647,6 @@
   padding-right: 0.25rem;
 }
 
-.dialogBodyScrollForm {
-  flex: none;
-  min-height: 0;
-}
 .dialogBodyScroll::-webkit-scrollbar {
   width: 8px;
 }
@@ -1455,6 +1671,7 @@
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text);
+  overflow-wrap: break-word;
 }
 .dialogDescription {
   margin: 0 0 1.25rem;
@@ -1680,25 +1897,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  max-height: min(60vh, 32rem);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
-  padding-right: 5px;
-}
-.transcriptCards::-webkit-scrollbar {
-  width: 8px;
-}
-.transcriptCards::-webkit-scrollbar-track {
-  background: var(--bg-muted);
-  border-radius: 4px;
-}
-.transcriptCards::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-}
-.transcriptCards::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
 }
 .transcriptCard {
   background: var(--bg-muted);
@@ -1814,11 +2012,57 @@
   gap: 0.75rem;
   margin-top: 0.75rem;
 }
+
+/* Episode transcript popup (final episode SRT) */
+.episodeTranscriptDialog {
+  max-height: min(90vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+.episodeTranscriptBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.episodeTranscriptBody .transcriptText {
+  flex: 1;
+  min-height: 12rem;
+  resize: vertical;
+}
+.episodeTranscriptStatus {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+.episodeTranscriptErrorWrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+.episodeTranscriptError {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: rgba(229, 115, 115, 0.2);
+  border: 1px solid var(--error, #e57373);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  max-width: 100%;
+  text-align: center;
+  flex-grow: 1;
+}
 .dialogActions {
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
   align-items: center;
+  padding: 1rem 0 0;
+}
+.episodeTranscriptDialogActions {
+  justify-content: space-between;
 }
 .dialogConfirmRemove {
   padding: 0.5rem 1rem;
@@ -1857,6 +2101,10 @@
   flex-wrap: wrap;
 }
 
+.detailsSummaryCardSubscriberOnly {
+  border-color: #d4a84b;
+}
+
 .detailsSummaryRow {
   display: flex;
   align-items: center;
@@ -1877,6 +2125,17 @@
 .detailsSummaryMain {
   min-width: 0;
   flex: 1;
+}
+
+.detailsSummaryTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.detailsSummaryTitleLock {
+  flex-shrink: 0;
+  color: #d4a84b;
 }
 
 .detailsSummaryTitle {

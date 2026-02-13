@@ -1,13 +1,21 @@
-import { existsSync, readFileSync, unlinkSync, writeFileSync, chmodSync } from 'fs';
-import { join } from 'path';
-import { nanoid } from 'nanoid';
-import { db } from '../db/index.js';
-import { ensureDir, getDataDir } from './paths.js';
+import {
+  existsSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+  chmodSync,
+} from "fs";
+import { join } from "path";
+import { nanoid } from "nanoid";
+import { db } from "../db/index.js";
+import { ensureDir, getDataDir } from "./paths.js";
 
-const SETUP_TOKEN_FILENAME = 'setup-token.txt';
+const SETUP_TOKEN_FILENAME = "setup-token.txt";
 
 export function isSetupComplete(): boolean {
-  const row = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+  const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as {
+    count: number;
+  };
   return row.count > 0;
 }
 
@@ -18,13 +26,13 @@ function getSetupTokenPath(): string {
 export function readSetupToken(): string | null {
   const path = getSetupTokenPath();
   if (!existsSync(path)) return null;
-  const token = readFileSync(path, 'utf8').trim();
+  const token = readFileSync(path, "utf8").trim();
   return token || null;
 }
 
 export function getOrCreateSetupToken(): string {
   if (isSetupComplete()) {
-    throw new Error('Setup is already complete');
+    throw new Error("Setup is already complete");
   }
   ensureDir(getDataDir());
 
@@ -53,4 +61,3 @@ export function consumeSetupToken(token: string): boolean {
   }
   return true;
 }
-

@@ -1,18 +1,9 @@
+import type { LibraryAsset, LibraryUpdate } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
 
-export interface LibraryAsset {
-  id: string;
-  owner_user_id?: string;
-  name: string;
-  tag: string | null;
-  duration_sec: number;
-  created_at: string;
-  global_asset?: boolean | number;
-  copyright?: string | null;
-  license?: string | null;
-}
+export type { LibraryAsset, LibraryUpdate };
 
 export function listLibrary(): Promise<{ assets: LibraryAsset[] }> {
   return fetch(`${BASE}/library`, { method: 'GET', credentials: 'include' }).then((r) => {
@@ -65,10 +56,7 @@ export function createLibraryAsset(
   });
 }
 
-export function updateLibraryAsset(
-  id: string,
-  data: { name?: string; tag?: string | null; global_asset?: boolean; copyright?: string | null; license?: string | null }
-): Promise<LibraryAsset> {
+export function updateLibraryAsset(id: string, data: LibraryUpdate): Promise<LibraryAsset> {
   return fetch(`${BASE}/library/${id}`, {
     method: 'PATCH',
     credentials: 'include',
@@ -80,11 +68,7 @@ export function updateLibraryAsset(
   });
 }
 
-export function updateLibraryAssetForUser(
-  userId: string,
-  id: string,
-  data: { name?: string; tag?: string | null; global_asset?: boolean; copyright?: string | null; license?: string | null }
-): Promise<LibraryAsset> {
+export function updateLibraryAssetForUser(userId: string, id: string, data: LibraryUpdate): Promise<LibraryAsset> {
   return fetch(`${BASE}/library/user/${userId}/${id}`, {
     method: 'PATCH',
     credentials: 'include',

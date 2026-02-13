@@ -1,4 +1,5 @@
-import { apiGet, apiPost, apiPatch, csrfHeaders } from './client';
+import type { PodcastCreate, PodcastUpdate, PodcastsListQuery } from '@harborfm/shared';
+import { apiGet, apiPost, apiPatch, apiDelete, csrfHeaders } from './client';
 
 /** Thrown by addCollaborator when response is not ok; may include data from body (e.g. USER_NOT_FOUND). */
 export class CollaboratorApiError extends Error {
@@ -20,13 +21,18 @@ export interface Podcast {
   title: string;
   slug: string;
   description: string;
+  subtitle: string | null;
+  summary: string | null;
   language: string;
   author_name: string;
   owner_name: string;
   email: string;
   category_primary: string;
   category_secondary: string | null;
-  category_tertiary: string | null;
+  category_primary_two: string | null;
+  category_secondary_two: string | null;
+  category_primary_three: string | null;
+  category_secondary_three: string | null;
   explicit: number;
   artwork_path: string | null;
   artwork_filename: string | null;
@@ -38,6 +44,14 @@ export interface Podcast {
   license: string | null;
   itunes_type: 'episodic' | 'serial';
   medium: 'podcast' | 'music' | 'video' | 'film' | 'audiobook' | 'newsletter' | 'blog';
+  funding_url: string | null;
+  funding_label: string | null;
+  persons: string | null;
+  update_frequency_rrule: string | null;
+  update_frequency_label: string | null;
+  spotify_recent_count: number | null;
+  spotify_country_of_origin: string | null;
+  apple_podcasts_verify: string | null;
   created_at: string;
   updated_at: string;
   max_episodes?: number | null;
@@ -49,18 +63,59 @@ export interface Podcast {
   can_record_new_section?: boolean;
   /** Effective max collaborators (podcast or owner limit). Used to hide add form when at limit. */
   effective_max_collaborators?: number | null;
+  effective_max_subscriber_tokens?: number | null;
+  /** 1 = unlisted (not on /feed or sitemap). */
+  unlisted?: number;
+  /** 1 = subscriber-only feed enabled (tokens can be created). */
+  subscriber_only_feed_enabled?: number;
+  /** 1 = public feed disabled (only tokenized subscriber feed works). */
+  public_feed_disabled?: number;
+  /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
+  owner_can_transcribe?: number;
+  /** DNS: link domain (hostname). */
+  link_domain?: string | null;
+  /** DNS: managed domain (hostname). */
+  managed_domain?: string | null;
+  /** DNS: managed sub-domain. */
+  managed_sub_domain?: string | null;
+  /** True when podcast has a Cloudflare API key set (key never sent to client). */
+  cloudflare_api_key_set?: boolean;
+  /** Client-only: new API key when editing (sent in PATCH; never returned by API). */
+  cloudflare_api_key?: string;
+  /** DNS config from server settings (allow toggles and default domain list for edit UI). */
+  dns_config?: {
+    allow_linking_domain: boolean;
+    allow_domain: boolean;
+    allow_domains: string[];
+    default_domain: string;
+    allow_sub_domain: boolean;
+    allow_custom_key: boolean;
+  };
 }
 
 export interface PodcastsResponse {
   podcasts: Podcast[];
+  total: number;
 }
 
-export function listPodcasts() {
-  return apiGet<PodcastsResponse>('/podcasts');
+export function listPodcasts(params?: PodcastsListQuery) {
+  const search = new URLSearchParams();
+  if (params?.limit != null) search.set('limit', String(params.limit));
+  if (params?.offset != null) search.set('offset', String(params.offset));
+  if (params?.q) search.set('q', params.q);
+  if (params?.sort) search.set('sort', params.sort);
+  const query = search.toString();
+  return apiGet<PodcastsResponse>(`/podcasts${query ? `?${query}` : ''}`);
 }
 
-export function listPodcastsForUser(userId: string) {
-  return apiGet<PodcastsResponse>(`/podcasts/user/${userId}`);
+export function listPodcastsForUser(userId: string, params?: PodcastsListQuery) {
+  const search = new URLSearchParams();
+  if (params?.limit != null) search.set('limit', String(params.limit));
+  if (params?.offset != null) search.set('offset', String(params.offset));
+  if (params?.q) search.set('q', params.q);
+  if (params?.sort) search.set('sort', params.sort);
+  const query = search.toString();
+  return apiGet<PodcastsResponse>(`/podcasts/user/${userId}${query ? `?${query}` : ''}`);
 }
 
 export function getPodcast(id: string) {
@@ -95,27 +150,7 @@ export function getPodcastAnalytics(podcastId: string) {
   return apiGet<PodcastAnalytics>(`/podcasts/${podcastId}/analytics`);
 }
 
-export function createPodcast(body: {
-  title: string;
-  slug: string;
-  description?: string;
-  language?: string;
-  author_name?: string;
-  owner_name?: string;
-  email?: string;
-  category_primary?: string;
-  category_secondary?: string | null;
-  category_tertiary?: string | null;
-  explicit?: 0 | 1;
-  site_url?: string | null;
-  artwork_url?: string | null;
-  copyright?: string | null;
-  podcast_guid?: string | null;
-  locked?: 0 | 1;
-  license?: string | null;
-  itunes_type?: 'episodic' | 'serial';
-  medium?: 'podcast' | 'music' | 'video' | 'film' | 'audiobook' | 'newsletter' | 'blog';
-}) {
+export function createPodcast(body: PodcastCreate) {
   return apiPost<Podcast>('/podcasts', body);
 }
 
@@ -179,29 +214,81 @@ export function inviteToPlatform(body: { email: string }) {
   return apiPost<{ ok: boolean }>('/invite-to-platform', body);
 }
 
-export function updatePodcast(
-  id: string,
-  body: Partial<{
-    title: string;
-    slug: string;
-    description: string;
-    language: string;
-    author_name: string;
-    owner_name: string;
-    email: string;
-    category_primary: string;
-    category_secondary: string | null;
-    category_tertiary: string | null;
-    explicit: number;
-    site_url: string | null;
-    artwork_url: string | null;
-    copyright: string | null;
-    podcast_guid: string | null;
-    locked: number;
-    license: string | null;
-    itunes_type: 'episodic' | 'serial';
-    medium: 'podcast' | 'music' | 'video' | 'film' | 'audiobook' | 'newsletter' | 'blog';
-  }>
-) {
+export interface ImportStatus {
+  status: 'idle' | 'pending' | 'importing' | 'done' | 'failed';
+  message?: string;
+  error?: string;
+  current_episode?: number;
+  total_episodes?: number;
+}
+
+/** Start importing a podcast from an RSS/Atom feed URL. Returns 202 with podcast_id; poll getImportStatus for progress. */
+export function startImportPodcast(feedUrl: string) {
+  return apiPost<{ podcast_id: string }>('/podcasts/import', { feed_url: feedUrl });
+}
+
+export function getImportStatus(podcastId: string) {
+  return apiGet<ImportStatus>(`/podcasts/${podcastId}/import-status`);
+}
+
+export interface ActiveImportStatus {
+  status: 'idle' | 'pending' | 'importing' | 'done' | 'failed';
+  podcast_id?: string;
+  message?: string;
+  error?: string;
+  current_episode?: number;
+  total_episodes?: number;
+}
+
+/** Get the current user's in-progress import, if any. Use on Dashboard load to restore the import popup after refresh. */
+export function getActiveImport() {
+  return apiGet<ActiveImportStatus>('/podcasts/import-status');
+}
+
+export function updatePodcast(id: string, body: PodcastUpdate) {
   return apiPatch<Podcast>(`/podcasts/${id}`, body);
+}
+
+// Subscriber tokens (private RSS)
+export interface SubscriberToken {
+  id: string;
+  name: string;
+  created_at: string;
+  valid_from: string | null;
+  valid_until: string | null;
+  disabled: number;
+  last_used_at: string | null;
+}
+
+export function listSubscriberTokens(
+  podcastId: string,
+  params?: { limit?: number; offset?: number; q?: string; sort?: 'newest' | 'oldest' }
+) {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  if (params?.q) searchParams.set('q', params.q);
+  if (params?.sort) searchParams.set('sort', params.sort);
+  const query = searchParams.toString();
+  const url = `/podcasts/${podcastId}/subscriber-tokens${query ? `?${query}` : ''}`;
+  return apiGet<{ tokens: SubscriberToken[]; total: number }>(url);
+}
+
+export function createSubscriberToken(
+  podcastId: string,
+  body: { name: string; valid_from?: string; valid_until?: string }
+) {
+  return apiPost<SubscriberToken & { token: string }>(`/podcasts/${podcastId}/subscriber-tokens`, body);
+}
+
+export function updateSubscriberToken(
+  podcastId: string,
+  tokenId: string,
+  body: { disabled?: boolean; valid_until?: string; valid_from?: string }
+) {
+  return apiPatch<SubscriberToken>(`/podcasts/${podcastId}/subscriber-tokens/${tokenId}`, body);
+}
+
+export function deleteSubscriberToken(podcastId: string, tokenId: string) {
+  return apiDelete(`/podcasts/${podcastId}/subscriber-tokens/${tokenId}`);
 }

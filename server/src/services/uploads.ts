@@ -1,22 +1,22 @@
-import { createWriteStream, existsSync, unlinkSync } from 'fs';
-import { pipeline } from 'stream/promises';
-import { Transform } from 'stream';
+import { createWriteStream, existsSync, unlinkSync } from "fs";
+import { pipeline } from "stream/promises";
+import { Transform } from "stream";
 
 export class FileTooLargeError extends Error {
-  constructor(message = 'File too large') {
+  constructor(message = "File too large") {
     super(message);
-    this.name = 'FileTooLargeError';
+    this.name = "FileTooLargeError";
   }
 }
 
 /** Map audio mimetype to file extension for uploads. Order matters: more specific first. */
 const MIMETYPE_TO_EXT: Array<{ match: (m: string) => boolean; ext: string }> = [
-  { match: (m) => m.includes('wav'), ext: 'wav' },
-  { match: (m) => m.includes('webm'), ext: 'webm' },
-  { match: (m) => m.includes('ogg'), ext: 'ogg' },
-  { match: (m) => m.includes('m4a') || m.includes('mp4'), ext: 'm4a' },
-  { match: (m) => m.includes('flac'), ext: 'flac' },
-  { match: (m) => m.includes('mp3') || m.includes('mpeg'), ext: 'mp3' },
+  { match: (m) => m.includes("wav"), ext: "wav" },
+  { match: (m) => m.includes("webm"), ext: "webm" },
+  { match: (m) => m.includes("ogg"), ext: "ogg" },
+  { match: (m) => m.includes("m4a") || m.includes("mp4"), ext: "m4a" },
+  { match: (m) => m.includes("flac"), ext: "flac" },
+  { match: (m) => m.includes("mp3") || m.includes("mpeg"), ext: "mp3" },
 ];
 
 export function extensionFromAudioMimetype(mimetype: string): string {
@@ -24,7 +24,7 @@ export function extensionFromAudioMimetype(mimetype: string): string {
   for (const { match, ext } of MIMETYPE_TO_EXT) {
     if (match(m)) return ext;
   }
-  return 'mp3';
+  return "mp3";
 }
 
 /**
@@ -34,7 +34,7 @@ export function extensionFromAudioMimetype(mimetype: string): string {
 export async function streamToFileWithLimit(
   input: NodeJS.ReadableStream,
   destPath: string,
-  maxBytes: number
+  maxBytes: number,
 ): Promise<number> {
   let bytes = 0;
   const counter = new Transform({
@@ -48,7 +48,7 @@ export async function streamToFileWithLimit(
     },
   });
 
-  const out = createWriteStream(destPath, { flags: 'w' });
+  const out = createWriteStream(destPath, { flags: "w" });
   try {
     await pipeline(input, counter, out);
     return bytes;
@@ -61,4 +61,3 @@ export async function streamToFileWithLimit(
     throw err;
   }
 }
-

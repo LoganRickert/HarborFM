@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import styles from '../EpisodeEditor.module.css';
 
@@ -36,7 +37,14 @@ export function DeleteTranscriptSegmentDialog({
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <Dialog.Title className={styles.dialogTitle}>Delete transcript segment?</Dialog.Title>
+          <div className={styles.dialogHeaderRow}>
+            <Dialog.Title className={styles.dialogTitle}>Delete transcript segment?</Dialog.Title>
+            <Dialog.Close asChild>
+              <button type="button" className={styles.dialogClose} aria-label="Close">
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+          </div>
           <Dialog.Description className={styles.dialogDescription}>
             This will remove the segment from both the audio file and transcript. This cannot be undone.
           </Dialog.Description>

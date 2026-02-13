@@ -1,6 +1,7 @@
+import type { ExportCreate, ExportMode, ExportUpdate } from '@harborfm/shared';
 import { apiDelete, apiGet, apiPatch, apiPost } from './client';
 
-export type ExportMode = 'S3' | 'FTP' | 'SFTP' | 'WebDAV' | 'IPFS' | 'SMB';
+export type { ExportCreate, ExportMode, ExportUpdate };
 
 export interface Export {
   id: string;
@@ -20,49 +21,15 @@ export interface Export {
   has_credentials: boolean;
 }
 
-/** Create payload: mode + name + mode-specific fields (backend validates with exportCreateSchema). */
-export type ExportCreateBody =
-  | { mode: 'S3'; name: string; bucket: string; prefix?: string; region: string; endpoint_url?: string | null; access_key_id: string; secret_access_key: string; public_base_url?: string | null }
-  | { mode: 'FTP'; name: string; host: string; port?: number; username: string; password: string; path?: string; secure?: boolean; public_base_url?: string | null }
-  | { mode: 'SFTP'; name: string; host: string; port?: number; username: string; password?: string; private_key?: string; path?: string; public_base_url?: string | null }
-  | { mode: 'WebDAV'; name: string; url: string; username: string; password: string; path?: string; public_base_url?: string | null }
-  | { mode: 'IPFS'; name: string; api_url: string; api_key?: string; username?: string; password?: string; path?: string; gateway_url?: string | null; public_base_url?: string | null }
-  | { mode: 'SMB'; name: string; host: string; port?: number; share: string; username: string; password: string; domain?: string; path?: string; public_base_url?: string | null };
-
-export type ExportUpdateBody = Partial<{
-  mode: ExportMode;
-  name: string;
-  prefix: string;
-  public_base_url: string | null;
-  bucket: string;
-  region: string;
-  endpoint_url: string | null;
-  access_key_id: string;
-  secret_access_key: string;
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  path: string;
-  secure: boolean;
-  private_key: string;
-  url: string;
-  api_url: string;
-  api_key: string;
-  gateway_url: string | null;
-  share: string;
-  domain: string;
-}>;
-
 export function listExports(podcastId: string) {
   return apiGet<{ exports: Export[] }>(`/podcasts/${podcastId}/exports`).then((r) => r.exports);
 }
 
-export function createExport(podcastId: string, body: ExportCreateBody) {
+export function createExport(podcastId: string, body: ExportCreate) {
   return apiPost<Export>(`/podcasts/${podcastId}/exports`, body);
 }
 
-export function updateExport(exportId: string, body: ExportUpdateBody) {
+export function updateExport(exportId: string, body: ExportUpdate) {
   return apiPatch<Export>(`/exports/${exportId}`, body);
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Harbor FM — update configs from main and refresh containers
+# Harbor FM - update configs from main and refresh containers
 # Run from the install directory (where docker-compose.yml lives), or pass path as first argument.
 # Usage: ./update.sh [install-dir]
 set -e
@@ -49,6 +49,15 @@ download() {
 
 cd "$INSTALL_DIR"
 
+# Load .env for REVERSE_PROXY and certbot decision
+if [ -f "$INSTALL_DIR/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$INSTALL_DIR/.env"
+  set +a
+fi
+REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+
 echo "Stopping containers..."
 docker compose down
 
@@ -57,8 +66,11 @@ download "$BASE_URL/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
 download "$BASE_URL/nginx/entrypoint.sh" "$INSTALL_DIR/nginx/entrypoint.sh"
 download "$BASE_URL/nginx/nginx-80-only.conf.template" "$INSTALL_DIR/nginx/nginx-80-only.conf.template"
 download "$BASE_URL/nginx/nginx-full.conf.template" "$INSTALL_DIR/nginx/nginx-full.conf.template"
+download "$BASE_URL/caddy/Caddyfile" "$INSTALL_DIR/caddy/Caddyfile"
 download "$BASE_URL/fail2ban/filter.d/nginx-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/nginx-scanner.conf"
 download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/nginx-scanner.local"
+download "$BASE_URL/fail2ban/filter.d/caddy-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/caddy-scanner.conf"
+download "$BASE_URL/fail2ban/jail.d/caddy-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/caddy-scanner.local"
 download "$BASE_URL/update.sh" "$INSTALL_DIR/update.sh"
 chmod +x "$INSTALL_DIR/nginx/entrypoint.sh"
 chmod +x "$INSTALL_DIR/update.sh"
@@ -68,18 +80,10 @@ echo ""
 echo "Pulling images..."
 docker compose pull
 
-echo "Starting containers..."
-docker compose up -d
+echo "Starting containers (profile: $REVERSE_PROXY)..."
+docker compose --profile "$REVERSE_PROXY" up -d
 
-# Load .env for certbot decision
-if [ -f "$INSTALL_DIR/.env" ]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "$INSTALL_DIR/.env"
-  set +a
-fi
-
-if [ -n "${CERTBOT_EMAIL:-}" ] && [ "${DOMAIN:-localhost}" != "localhost" ]; then
+if [ "$REVERSE_PROXY" = "nginx" ] && [ -n "${CERTBOT_EMAIL:-}" ] && [ "${DOMAIN:-localhost}" != "localhost" ]; then
   echo ""
   echo "Attempting Let's Encrypt certificate renewal..."
   if docker compose run --rm --entrypoint certbot certbot renew; then

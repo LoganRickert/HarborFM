@@ -1,11 +1,12 @@
-import { create } from 'kubo-rpc-client';
-import { readFileSync } from 'fs';
-import { extname, join } from 'path';
-import { getDataDir } from './paths.js';
-import { assertPathUnder } from './paths.js';
-import { EXT_DOT_TO_EXT } from '../utils/artwork.js';
-import { md5Hex, MD5_SUFFIX } from '../utils/hash.js';
-import type { DeployEpisode, DeployResult } from './deploy-types.js';
+import { create } from "kubo-rpc-client";
+import { readFileSync } from "fs";
+import { extname, join } from "path";
+import { RSS_FEED_FILENAME } from "../config.js";
+import { getDataDir } from "./paths.js";
+import { assertPathUnder } from "./paths.js";
+import { EXT_DOT_TO_EXT } from "../utils/artwork.js";
+import { md5Hex, MD5_SUFFIX } from "../utils/hash.js";
+import type { DeployEpisode, DeployResult } from "./deploy-types.js";
 
 export interface IpfsConfig {
   api_url: string;
@@ -19,8 +20,8 @@ export interface IpfsConfig {
 }
 
 function normalizeApiUrl(url: string): string {
-  const u = url.trim().replace(/\/+$/, '');
-  return u.endsWith('/api/v0') ? u : `${u}/api/v0`;
+  const u = url.trim().replace(/\/+$/, "");
+  return u.endsWith("/api/v0") ? u : `${u}/api/v0`;
 }
 
 function createIpfsClient(config: IpfsConfig) {
@@ -28,8 +29,15 @@ function createIpfsClient(config: IpfsConfig) {
   const options: { url: string; headers?: Record<string, string> } = { url };
   if (config.api_key?.trim()) {
     options.headers = { authorization: `Bearer ${config.api_key.trim()}` };
-  } else if (config.username != null && config.username !== '' && config.password != null) {
-    const basic = Buffer.from(`${config.username}:${config.password}`, 'utf8').toString('base64');
+  } else if (
+    config.username != null &&
+    config.username !== "" &&
+    config.password != null
+  ) {
+    const basic = Buffer.from(
+      `${config.username}:${config.password}`,
+      "utf8",
+    ).toString("base64");
     options.headers = { authorization: `Basic ${basic}` };
   }
   return create(options);
@@ -39,14 +47,24 @@ function formatIpfsTestError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   const parts = [msg];
   if (err instanceof Error && err.cause) {
-    const cause = err.cause as { status?: number; statusText?: string; body?: string };
-    if (cause.status != null) parts.push(`HTTP ${cause.status}${cause.statusText ? ` ${cause.statusText}` : ''}`);
-    if (typeof cause.body === 'string' && cause.body) parts.push(cause.body.slice(0, 500));
+    const cause = err.cause as {
+      status?: number;
+      statusText?: string;
+      body?: string;
+    };
+    if (cause.status != null)
+      parts.push(
+        `HTTP ${cause.status}${cause.statusText ? ` ${cause.statusText}` : ""}`,
+      );
+    if (typeof cause.body === "string" && cause.body)
+      parts.push(cause.body.slice(0, 500));
   }
-  return parts.join(' — ');
+  return parts.join(" - ");
 }
 
-export async function testIpfsAccess(config: IpfsConfig): Promise<{ ok: boolean; error?: string }> {
+export async function testIpfsAccess(
+  config: IpfsConfig,
+): Promise<{ ok: boolean; error?: string }> {
   const apiUrl = normalizeApiUrl(config.api_url);
   try {
     const client = createIpfsClient(config);
@@ -54,9 +72,9 @@ export async function testIpfsAccess(config: IpfsConfig): Promise<{ ok: boolean;
     return { ok: true };
   } catch (err) {
     const msg = formatIpfsTestError(err);
-    console.error('[IPFS test failed]', {
+    console.error("[IPFS test failed]", {
       api_url: apiUrl,
-      path: config.path || '(empty)',
+      path: config.path || "(empty)",
       error: err instanceof Error ? err.message : String(err),
     });
     return { ok: false, error: msg };
@@ -64,15 +82,15 @@ export async function testIpfsAccess(config: IpfsConfig): Promise<{ ok: boolean;
 }
 
 function joinPath(base: string, ...parts: string[]): string {
-  const normalized = base.replace(/\/+$/, '');
-  const joined = [normalized, ...parts].join('/').replace(/\/+/g, '/');
-  return joined.replace(/^\//, '') || '';
+  const normalized = base.replace(/\/+$/, "");
+  const joined = [normalized, ...parts].join("/").replace(/\/+/g, "/");
+  return joined.replace(/^\//, "") || "";
 }
 
 /** Read existing file from MFS into a buffer. Returns null if path does not exist or read fails. */
 async function readMfsFile(
   client: Awaited<ReturnType<typeof create>>,
-  path: string
+  path: string,
 ): Promise<Buffer | null> {
   try {
     const chunks: Uint8Array[] = [];
@@ -91,27 +109,28 @@ export async function deployPodcastToIpfs(
   rssXml: string,
   episodes: DeployEpisode[],
   artworkPath?: string | null,
-  podcastId?: string
+  podcastId?: string,
 ): Promise<DeployResult> {
   const errors: string[] = [];
   let uploaded = 0;
   let skipped = 0;
-  const artworkBase = join(getDataDir(), 'artwork');
+  const artworkBase = join(getDataDir(), "artwork");
   const client = createIpfsClient(config);
 
-  const basePath = config.path ? joinPath(config.path).replace(/^\//, '') : '';
-  const mfsRoot = basePath ? `/${basePath}` : '/deploy';
+  const basePath = config.path ? joinPath(config.path).replace(/^\//, "") : "";
+  const mfsRoot = basePath ? `/${basePath}` : "/deploy";
 
   const writeFile = async (mfsPath: string, body: Buffer) => {
-    const fullPath = mfsRoot + (mfsPath.startsWith('/') ? mfsPath : `/${mfsPath}`);
+    const fullPath =
+      mfsRoot + (mfsPath.startsWith("/") ? mfsPath : `/${mfsPath}`);
     const hash = md5Hex(body);
     const md5Path = fullPath + MD5_SUFFIX;
     const existingMd5 = await readMfsFile(client, md5Path);
-    if (existingMd5 != null && existingMd5.toString('utf8').trim() === hash) {
+    if (existingMd5 != null && existingMd5.toString("utf8").trim() === hash) {
       skipped += 1;
       return;
     }
-    const dir = fullPath.replace(/\/[^/]+$/, '');
+    const dir = fullPath.replace(/\/[^/]+$/, "");
     if (dir && dir !== mfsRoot) {
       try {
         await client.files.mkdir(dir, { parents: true });
@@ -120,7 +139,10 @@ export async function deployPodcastToIpfs(
       }
     }
     await client.files.write(fullPath, body, { create: true, truncate: true });
-    await client.files.write(md5Path, Buffer.from(hash, 'utf8'), { create: true, truncate: true });
+    await client.files.write(md5Path, Buffer.from(hash, "utf8"), {
+      create: true,
+      truncate: true,
+    });
     uploaded += 1;
   };
 
@@ -132,10 +154,12 @@ export async function deployPodcastToIpfs(
         const safePath = assertPathUnder(artworkPath, artworkBase);
         const body = readFileSync(safePath);
         const extFromPath = extname(safePath).toLowerCase();
-        const ext = EXT_DOT_TO_EXT[extFromPath] ?? 'jpg';
+        const ext = EXT_DOT_TO_EXT[extFromPath] ?? "jpg";
         await writeFile(`/cover.${ext}`, body);
       } catch (e) {
-        errors.push(`Cover image: ${e instanceof Error ? e.message : String(e)}`);
+        errors.push(
+          `Cover image: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
 
@@ -143,10 +167,12 @@ export async function deployPodcastToIpfs(
       if (ep.audio_final_path) {
         try {
           const body = readFileSync(ep.audio_final_path);
-          const ext = extname(ep.audio_final_path || '') || '.mp3';
+          const ext = extname(ep.audio_final_path || "") || ".mp3";
           await writeFile(`/episodes/${ep.id}${ext}`, body);
         } catch (e) {
-          errors.push(`Episode ${ep.id} audio: ${e instanceof Error ? e.message : String(e)}`);
+          errors.push(
+            `Episode ${ep.id} audio: ${e instanceof Error ? e.message : String(e)}`,
+          );
         }
       }
       if (ep.artwork_path) {
@@ -154,26 +180,48 @@ export async function deployPodcastToIpfs(
           const safePath = assertPathUnder(ep.artwork_path, artworkBase);
           const body = readFileSync(safePath);
           const extFromPath = extname(safePath).toLowerCase();
-          const ext = EXT_DOT_TO_EXT[extFromPath] ?? 'jpg';
+          const ext = EXT_DOT_TO_EXT[extFromPath] ?? "jpg";
           await writeFile(`/episodes/${ep.id}.${ext}`, body);
         } catch (e) {
-          errors.push(`Episode ${ep.id} artwork: ${e instanceof Error ? e.message : String(e)}`);
+          errors.push(
+            `Episode ${ep.id} artwork: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+      if (ep.transcript_srt_path) {
+        try {
+          const processedBase = join(getDataDir(), "processed");
+          const safePath = assertPathUnder(
+            ep.transcript_srt_path,
+            processedBase,
+          );
+          const body = readFileSync(safePath);
+          await writeFile(`/episodes/${ep.id}.srt`, body);
+        } catch (e) {
+          errors.push(
+            `Episode ${ep.id} transcript: ${e instanceof Error ? e.message : String(e)}`,
+          );
         }
       }
     }
 
     const stat = await client.files.stat(mfsRoot);
     const dirCid = stat.cid.toString();
-    const gatewayBase = (config.gateway_url ?? 'https://ipfs.io/ipfs/').toString().trim().replace(/\/+$/, '');
+    const gatewayBase = (config.gateway_url ?? "https://ipfs.io/ipfs/")
+      .toString()
+      .trim()
+      .replace(/\/+$/, "");
     const publicBaseUrl = `${gatewayBase}/${dirCid}/`;
 
     if (!podcastId) {
-      errors.push('IPFS deploy requires podcastId to generate feed with correct URLs');
+      errors.push(
+        "IPFS deploy requires podcastId to generate feed with correct URLs",
+      );
     } else {
-      const { generateRss } = await import('./rss.js');
+      const { generateRss } = await import("./rss.js");
       const xml = generateRss(podcastId, publicBaseUrl);
-      const feedBody = Buffer.from(xml, 'utf8');
-      await writeFile('/feed.xml', feedBody);
+      const feedBody = Buffer.from(xml, "utf8");
+      await writeFile(`/${RSS_FEED_FILENAME}`, feedBody);
     }
 
     const finalStat = await client.files.stat(mfsRoot);

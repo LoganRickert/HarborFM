@@ -72,3 +72,62 @@
 .content h2:first-of-type {
   margin-top: 0.5rem;
 }
+
+.markdownBody {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.markdownBody p {
+  margin: 0 0 1rem;
+}
+
+.markdownBody h2 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.markdownBody h2:first-of-type {
+  margin-top: 0.5rem;
+}
+
+.markdownBody a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.markdownBody a:hover {
+  color: var(--accent-dim);
+}
+
+.footerLinks {
+  margin: 2rem 0 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.footerLinks a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.footerLinks a:hover {
+  color: var(--accent-dim);
+}
+
+.footerSep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.6;
+}

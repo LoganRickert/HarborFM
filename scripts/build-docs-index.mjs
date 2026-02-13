@@ -25,16 +25,16 @@ const html = `<!DOCTYPE html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HarborFM Docs</title>
-  <meta name="description" content="HarborFM — open source podcast creation tool. Build episodes from segments, export RSS and audio. Documentation and API reference." />
+  <meta name="description" content="HarborFM - open source podcast creation tool. Build episodes from segments, export RSS and audio. Documentation and API reference." />
   <meta name="theme-color" content="#00d4aa" />
   <link rel="icon" type="image/png" href="./web/public/favicon.png" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="HarborFM Docs" />
-  <meta property="og:description" content="HarborFM — open source podcast creation tool. Build episodes from segments, export RSS and audio." />
+  <meta property="og:description" content="HarborFM - open source podcast creation tool. Build episodes from segments, export RSS and audio." />
   <meta property="og:image" content="./web/public/og-image.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="HarborFM Docs" />
-  <meta name="twitter:description" content="HarborFM — open source podcast creation tool. Build episodes from segments, export RSS and audio." />
+  <meta name="twitter:description" content="HarborFM - open source podcast creation tool. Build episodes from segments, export RSS and audio." />
   <meta name="twitter:image" content="./web/public/og-image.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

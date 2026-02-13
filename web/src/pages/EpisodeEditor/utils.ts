@@ -1,10 +1,15 @@
 import type { Episode } from '../../api/episodes';
+import { parseUtc } from '../../utils/format';
 
 /** Form-friendly episode fields (strings for inputs, booleans for checkboxes). */
 export interface EpisodeForm {
   title: string;
   slug: string;
   description: string;
+  subtitle: string;
+  summary: string;
+  contentEncoded: string;
+  guid: string;
   artworkUrl: string;
   seasonNumber: string;
   episodeNumber: string;
@@ -14,6 +19,7 @@ export interface EpisodeForm {
   episodeType: 'full' | 'trailer' | 'bonus' | '';
   episodeLink: string;
   guidIsPermalink: boolean;
+  subscriberOnly: boolean;
 }
 
 export function episodeToForm(episode: Episode): EpisodeForm {
@@ -21,6 +27,10 @@ export function episodeToForm(episode: Episode): EpisodeForm {
     title: episode.title,
     slug: episode.slug || slugify(episode.title),
     description: episode.description ?? '',
+    subtitle: episode.subtitle ?? '',
+    summary: episode.summary ?? '',
+    contentEncoded: episode.content_encoded ?? '',
+    guid: episode.guid ?? '',
     artworkUrl: episode.artwork_url ?? '',
     seasonNumber: episode.season_number != null ? String(episode.season_number) : '',
     episodeNumber: episode.episode_number != null ? String(episode.episode_number) : '',
@@ -30,6 +40,7 @@ export function episodeToForm(episode: Episode): EpisodeForm {
     episodeType: (episode.episode_type as 'full' | 'trailer' | 'bonus') || 'full',
     episodeLink: episode.episode_link ?? '',
     guidIsPermalink: episode.guid_is_permalink === 1,
+    subscriberOnly: !!(episode.subscriber_only),
   };
 }
 
@@ -39,6 +50,10 @@ export function formToApiPayload(form: EpisodeForm) {
     title: form.title,
     slug: form.slug || slugify(form.title),
     description: form.description,
+    subtitle: form.subtitle?.trim() || null,
+    summary: form.summary?.trim() || null,
+    content_encoded: form.contentEncoded?.trim() || null,
+    guid: form.guid?.trim() || undefined,
     season_number: form.seasonNumber === '' ? null : parseInt(form.seasonNumber, 10),
     episode_number: form.episodeNumber === '' ? null : parseInt(form.episodeNumber, 10),
     episode_type: form.episodeType || 'full',
@@ -48,6 +63,7 @@ export function formToApiPayload(form: EpisodeForm) {
     publish_at: form.publishAt ? new Date(form.publishAt).toISOString() : null,
     episode_link: form.episodeLink || null,
     guid_is_permalink: form.guidIsPermalink ? 1 : 0,
+    subscriber_only: form.subscriberOnly ? 1 : 0,
   };
 }
 
@@ -68,20 +84,19 @@ export function formatDuration(sec: number): string {
 }
 
 export function formatLibraryDate(createdAt: string): string {
+  const d = parseUtc(createdAt);
+  if (!d) return createdAt;
   try {
-    const d = new Date(createdAt);
-    return Number.isFinite(d.getTime())
-      ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-      : createdAt;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return createdAt;
   }
 }
 
-/** Format ISO date string for datetime-local input (local time, with seconds for Safari). */
+/** Format ISO date string for datetime-local input (local time, with seconds for Safari). Parses server UTC first. */
 export function toDateTimeLocalValue(iso: string): string {
-  const d = new Date(iso);
-  if (!Number.isFinite(d.getTime())) return '';
+  const d = parseUtc(iso);
+  if (!d) return '';
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }

@@ -13,12 +13,14 @@
     "deploy:pm2": "bash scripts/deploy-pm2.sh",
     "build": "pnpm --filter shared run build && pnpm --filter server run build && pnpm --filter web run build",
     "lint": "pnpm -r run lint",
+    "staging": "pnpm --filter shared run build && pnpm --filter server run build && pnpm --filter web run staging && mkdir -p server/public && cp -R web/dist/* server/public && cd server && node dist/app.js",
     "db:migrate:test": "bash scripts/test-migrations.sh",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r run test",
     "build:openapi": "bash scripts/build-openapi.sh",
     "build:docs": "bash scripts/build-docs.sh",
-    "docker:build": "docker build -t harborfm ."
+    "docker:build": "docker build -t harborfm .",
+    "e2e": "cd e2e && pnpm run e2e"
   },
   "engines": {
     "node": ">=22"

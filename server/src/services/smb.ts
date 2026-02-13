@@ -1,16 +1,23 @@
-import { execSync } from 'child_process';
-import SambaClient from 'samba-client';
-import { readFileSync, writeFileSync, unlinkSync, mkdtempSync, rmSync } from 'fs';
-import { join, extname } from 'path';
-import { tmpdir } from 'os';
-import { getDataDir } from './paths.js';
-import { assertPathUnder } from './paths.js';
-import { EXT_DOT_TO_EXT } from '../utils/artwork.js';
-import { md5Hex, MD5_SUFFIX } from '../utils/hash.js';
-import type { DeployEpisode, DeployResult } from './deploy-types.js';
+import { execSync } from "child_process";
+import SambaClient from "samba-client";
+import {
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  mkdtempSync,
+  rmSync,
+} from "fs";
+import { join, extname } from "path";
+import { tmpdir } from "os";
+import { APP_NAME_SLUG, RSS_FEED_FILENAME, SMBCLIENT_PATH } from "../config.js";
+import { getDataDir } from "./paths.js";
+import { assertPathUnder } from "./paths.js";
+import { EXT_DOT_TO_EXT } from "../utils/artwork.js";
+import { md5Hex, MD5_SUFFIX } from "../utils/hash.js";
+import type { DeployEpisode, DeployResult } from "./deploy-types.js";
 
 export const SMB_CLIENT_REQUIRED =
-  'smbclient is not installed. Install it with: sudo apt-get install smbclient (Debian/Ubuntu), or equivalent for your system.';
+  "smbclient is not installed. Install it with: sudo apt-get install smbclient (Debian/Ubuntu), or equivalent for your system.";
 
 /**
  * Ensures the smbclient binary is available on PATH. Call before any SMB operation.
@@ -18,13 +25,10 @@ export const SMB_CLIENT_REQUIRED =
  */
 export function ensureSmbclientInstalled(): void {
   try {
-    execSync('which smbclient', { stdio: 'pipe', encoding: 'utf8' });
-    return;
-  } catch {
-    // which failed (e.g. Windows); try running smbclient
-  }
-  try {
-    execSync('smbclient --version', { stdio: 'pipe', encoding: 'utf8' });
+    execSync(`${SMBCLIENT_PATH} --version`, {
+      stdio: "pipe",
+      encoding: "utf8",
+    });
   } catch {
     throw new Error(SMB_CLIENT_REQUIRED);
   }
@@ -41,19 +45,25 @@ export interface SmbConfig {
 }
 
 function address(host: string, share: string): string {
-  const h = host.replace(/^\/\/?|\\+|\/+$/g, '');
-  const s = share.replace(/^\/\/?|\\+|\/+$/g, '');
+  const h = host.replace(/^\/\/?|\\+|\/+$/g, "");
+  const s = share.replace(/^\/\/?|\\+|\/+$/g, "");
   return `//${h}/${s}`;
 }
 
 function joinPath(base: string, ...parts: string[]): string {
-  const normalized = base.replace(/\/+$/, '').replace(/\\+$/, '');
-  const joined = [normalized, ...parts].join('/').replace(/\/+/g, '/');
-  return joined.replace(/^\//, '') || '';
+  const normalized = base.replace(/\/+$/, "").replace(/\\+$/, "");
+  const joined = [normalized, ...parts].join("/").replace(/\/+/g, "/");
+  return joined.replace(/^\//, "") || "";
 }
 
 function createClient(config: SmbConfig): SambaClient {
-  const opts: { address: string; username: string; password: string; domain?: string; port?: number } = {
+  const opts: {
+    address: string;
+    username: string;
+    password: string;
+    domain?: string;
+    port?: number;
+  } = {
     address: address(config.host, config.share),
     username: config.username,
     password: config.password,
@@ -63,11 +73,13 @@ function createClient(config: SmbConfig): SambaClient {
   return new SambaClient(opts);
 }
 
-export async function testSmbAccess(config: SmbConfig): Promise<{ ok: boolean; error?: string }> {
+export async function testSmbAccess(
+  config: SmbConfig,
+): Promise<{ ok: boolean; error?: string }> {
   ensureSmbclientInstalled();
   const client = createClient(config);
   try {
-    await client.dir('*');
+    await client.dir("*");
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -75,33 +87,32 @@ export async function testSmbAccess(config: SmbConfig): Promise<{ ok: boolean; e
   }
 }
 
-
 export async function deployPodcastToSmb(
   config: SmbConfig,
   _publicBaseUrl: string | null,
   rssXml: string,
   episodes: DeployEpisode[],
-  artworkPath?: string | null
+  artworkPath?: string | null,
 ): Promise<DeployResult> {
   ensureSmbclientInstalled();
   const errors: string[] = [];
   let uploaded = 0;
   let skipped = 0;
-  const artworkBase = join(getDataDir(), 'artwork');
+  const artworkBase = join(getDataDir(), "artwork");
   const client = createClient(config);
-  const basePath = config.path ? joinPath(config.path) : '';
+  const basePath = config.path ? joinPath(config.path) : "";
 
-  const tempDir = mkdtempSync(join(tmpdir(), 'harborfm-smb-'));
-  const md5TempPath = join(tempDir, '.md5');
+  const tempDir = mkdtempSync(join(tmpdir(), `${APP_NAME_SLUG}-smb-`));
+  const md5TempPath = join(tempDir, ".md5");
 
   const ensureDir = async (dirPath: string) => {
     if (!dirPath) return;
-    const parts = dirPath.split('/').filter(Boolean);
-    let acc = '';
+    const parts = dirPath.split("/").filter(Boolean);
+    let acc = "";
     for (const p of parts) {
       acc = acc ? `${acc}/${p}` : p;
       try {
-        await client.mkdir(acc, '');
+        await client.mkdir(acc, "");
       } catch {
         // may already exist
       }
@@ -113,7 +124,7 @@ export async function deployPodcastToSmb(
     const hash = md5Hex(body);
     try {
       await client.getFile(full + MD5_SUFFIX, md5TempPath);
-      const existingHash = readFileSync(md5TempPath, 'utf8').trim();
+      const existingHash = readFileSync(md5TempPath, "utf8").trim();
       if (existingHash === hash) {
         skipped += 1;
         try {
@@ -131,13 +142,13 @@ export async function deployPodcastToSmb(
     } catch {
       // .md5 file does not exist or get failed
     }
-    const dir = full.includes('/') ? full.replace(/\/[^/]+$/, '') : '';
+    const dir = full.includes("/") ? full.replace(/\/[^/]+$/, "") : "";
     if (dir) await ensureDir(dir);
-    const localPath = join(tempDir, Buffer.from(remotePath).toString('hex'));
+    const localPath = join(tempDir, Buffer.from(remotePath).toString("hex"));
     writeFileSync(localPath, body);
     try {
       await client.sendFile(localPath, full);
-      writeFileSync(md5TempPath, hash, 'utf8');
+      writeFileSync(md5TempPath, hash, "utf8");
       await client.sendFile(md5TempPath, full + MD5_SUFFIX);
       uploaded += 1;
     } finally {
@@ -157,18 +168,20 @@ export async function deployPodcastToSmb(
   try {
     if (basePath) await ensureDir(basePath);
 
-    const feedBody = Buffer.from(rssXml, 'utf8');
-    await upload('feed.xml', feedBody);
+    const feedBody = Buffer.from(rssXml, "utf8");
+    await upload(RSS_FEED_FILENAME, feedBody);
 
     if (artworkPath) {
       try {
         const safePath = assertPathUnder(artworkPath, artworkBase);
         const body = readFileSync(safePath);
         const extFromPath = extname(safePath).toLowerCase();
-        const ext = EXT_DOT_TO_EXT[extFromPath] ?? 'jpg';
+        const ext = EXT_DOT_TO_EXT[extFromPath] ?? "jpg";
         await upload(`cover.${ext}`, body);
       } catch (e) {
-        errors.push(`Cover image: ${e instanceof Error ? e.message : String(e)}`);
+        errors.push(
+          `Cover image: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
 
@@ -176,10 +189,12 @@ export async function deployPodcastToSmb(
       if (ep.audio_final_path) {
         try {
           const body = readFileSync(ep.audio_final_path);
-          const ext = extname(ep.audio_final_path || '') || '.mp3';
+          const ext = extname(ep.audio_final_path || "") || ".mp3";
           await upload(`episodes/${ep.id}${ext}`, body);
         } catch (e) {
-          errors.push(`Episode ${ep.id} audio: ${e instanceof Error ? e.message : String(e)}`);
+          errors.push(
+            `Episode ${ep.id} audio: ${e instanceof Error ? e.message : String(e)}`,
+          );
         }
       }
       if (ep.artwork_path) {
@@ -187,10 +202,27 @@ export async function deployPodcastToSmb(
           const safePath = assertPathUnder(ep.artwork_path, artworkBase);
           const body = readFileSync(safePath);
           const extFromPath = extname(safePath).toLowerCase();
-          const ext = EXT_DOT_TO_EXT[extFromPath] ?? 'jpg';
+          const ext = EXT_DOT_TO_EXT[extFromPath] ?? "jpg";
           await upload(`episodes/${ep.id}.${ext}`, body);
         } catch (e) {
-          errors.push(`Episode ${ep.id} artwork: ${e instanceof Error ? e.message : String(e)}`);
+          errors.push(
+            `Episode ${ep.id} artwork: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+      if (ep.transcript_srt_path) {
+        try {
+          const processedBase = join(getDataDir(), "processed");
+          const safePath = assertPathUnder(
+            ep.transcript_srt_path,
+            processedBase,
+          );
+          const body = readFileSync(safePath);
+          await upload(`episodes/${ep.id}.srt`, body);
+        } catch (e) {
+          errors.push(
+            `Episode ${ep.id} transcript: ${e instanceof Error ? e.message : String(e)}`,
+          );
         }
       }
     }

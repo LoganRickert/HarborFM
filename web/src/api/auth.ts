@@ -10,7 +10,9 @@ export interface User {
   max_episodes?: number | null;
   max_collaborators?: number | null;
   max_storage_mb?: number | null;
+  max_api_keys?: number | null;
   disk_bytes_used?: number;
+  can_transcribe?: number; // 0 = false, 1 = true
   last_login_at?: string | null;
   last_login_ip?: string | null;
   last_login_location?: string | null;

@@ -1,52 +1,30 @@
-import { apiGet } from './client';
+import type {
+  PublicConfig,
+  PublicEpisode,
+  PublicEpisodesResponse,
+  PublicPodcast,
+  PublicPodcastsListQuery,
+  PublicPodcastsResponse,
+} from '@harborfm/shared';
+import { apiGet, apiPost, apiDelete } from './client';
 
-export interface PublicPodcast {
-  id: string;
-  title: string;
-  slug: string;
-  description: string;
-  language: string;
-  author_name: string;
-  artwork_url: string | null;
-  artwork_uploaded?: boolean;
-  artwork_filename?: string | null;
-  site_url: string | null;
-  explicit: number;
-  rss_url?: string | null;
-}
+export type { PublicConfig, PublicEpisode, PublicEpisodesResponse, PublicPodcast, PublicPodcastsResponse };
 
-export interface PublicEpisode {
-  id: string;
-  podcast_id: string;
-  title: string;
-  slug: string;
-  description: string;
-  guid: string;
-  season_number: number | null;
-  episode_number: number | null;
-  episode_type: string | null;
-  explicit: number | null;
-  publish_at: string | null;
-  artwork_url: string | null;
-  artwork_filename?: string | null;
-  audio_mime: string | null;
-  audio_bytes: number | null;
-  audio_duration_sec: number | null;
-  audio_url: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PublicEpisodesResponse {
-  episodes: PublicEpisode[];
-  total: number;
-  limit: number;
-  offset: number;
-  hasMore: boolean;
-}
+// PublicEpisode with auth may include private URLs (same shape; server may send null when unauthenticated)
+export type PublicEpisodeWithAuth = PublicEpisode;
 
 export function getPublicConfig() {
-  return apiGet<{ public_feeds_enabled: boolean }>(`/public/config`);
+  return apiGet<PublicConfig>(`/public/config`);
+}
+
+export function getPublicPodcasts(params?: PublicPodcastsListQuery) {
+  const search = new URLSearchParams();
+  if (params?.limit != null) search.set('limit', String(params.limit));
+  if (params?.offset != null) search.set('offset', String(params.offset));
+  if (params?.q?.trim()) search.set('q', params.q.trim());
+  if (params?.sort) search.set('sort', params.sort);
+  const query = search.toString();
+  return apiGet<PublicPodcastsResponse>(`/public/podcasts${query ? `?${query}` : ''}`);
 }
 
 export function getPublicPodcast(slug: string) {
@@ -66,4 +44,18 @@ export function getPublicEpisode(podcastSlug: string, episodeSlug: string) {
 
 export function publicEpisodeWaveformUrl(podcastSlug: string, episodeSlug: string): string {
   return `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/episodes/${encodeURIComponent(episodeSlug)}/waveform`;
+}
+
+// Subscriber authentication functions
+export function authenticateSubscriber(token: string, podcastSlug: string) {
+  return apiPost<{ success: boolean; podcastSlug: string }>('/public/subscriber-auth', { token, podcastSlug });
+}
+
+export function getSubscriberAuthStatus() {
+  return apiGet<{ authenticated: boolean; podcastSlugs: string[]; tokens: Record<string, string> }>('/public/subscriber-auth/status');
+}
+
+export function logoutSubscriber(podcastSlug?: string) {
+  const query = podcastSlug ? `?podcastSlug=${encodeURIComponent(podcastSlug)}` : '';
+  return apiDelete<{ success: boolean }>(`/public/subscriber-auth${query}`);
 }

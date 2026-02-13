@@ -10,7 +10,8 @@ import {
   reorderSegments,
   deleteSegment,
   updateSegment,
-  renderEpisode,
+  startRenderEpisode,
+  getRenderStatus,
   type EpisodeSegment,
 } from '../../api/segments';
 import { episodeToForm, formToApiPayload } from './utils';
@@ -25,9 +26,15 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { DeleteTranscriptSegmentDialog } from './DeleteTranscriptSegmentDialog';
 import { TranscriptModal } from './TranscriptModal';
-import { deleteSegmentTranscript } from '../../api/segments';
-import type { Episode } from '../../api/episodes';
+import { EpisodeTranscriptModal } from './EpisodeTranscriptModal';
+import {
+  deleteSegmentTranscript,
+  startGenerateEpisodeTranscript,
+  getTranscriptStatus,
+} from '../../api/segments';
+import type { Episode, EpisodeUpdate } from '../../api/episodes';
 import type { Podcast } from '../../api/podcasts';
+import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeEditorContentProps {
@@ -75,14 +82,25 @@ export function EpisodeEditorContent({
   const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
   const [coverUploadKey, setCoverUploadKey] = useState(0);
   const [debouncedArtworkUrl, setDebouncedArtworkUrl] = useState('');
+  const [buildInProgress, setBuildInProgress] = useState(false);
+  const [buildAlreadyInProgressMessage, setBuildAlreadyInProgressMessage] = useState<string | null>(null);
+  const [renderPollError, setRenderPollError] = useState<string | null>(null);
+  const [showEpisodeTranscript, setShowEpisodeTranscript] = useState(false);
 
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playingSegmentIdRef = useRef<string | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const finalPauseRef = useRef<(() => void) | null>(null);
+
   const handleSegmentPlayRequest = useCallback((segmentId: string) => {
-    const current = playingSegmentIdRef.current;
-    if (current && current !== segmentId) segmentPauseRef.current.get(current)?.();
+    // Pause and reset all other segments to 0
+    for (const [id, pause] of segmentPauseRef.current) {
+      if (id !== segmentId) pause();
+    }
+    // Pause and reset final episode to 0
+    finalPauseRef.current?.();
     playingSegmentIdRef.current = segmentId;
   }, []);
   const registerSegmentPause = useCallback((id: string, pause: () => void) => {
@@ -91,6 +109,14 @@ export function EpisodeEditorContent({
   const unregisterSegmentPause = useCallback((id: string) => {
     segmentPauseRef.current.delete(id);
     if (playingSegmentIdRef.current === id) playingSegmentIdRef.current = null;
+  }, []);
+
+  const pauseCurrentSegment = useCallback(() => {
+    // Pause and reset all segments to 0
+    for (const pause of segmentPauseRef.current.values()) {
+      pause();
+    }
+    playingSegmentIdRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -155,7 +181,7 @@ export function EpisodeEditorContent({
       updateMutation.reset();
       uploadArtworkMutation.reset();
     }
-    // Intentionally omit updateMutation/uploadArtworkMutation — .reset() can change refs and cause an infinite loop
+    // Intentionally omit updateMutation/uploadArtworkMutation - .reset() can change refs and cause an infinite loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailsDialogOpen, episodeForm, episode.artwork_filename, episodeForm.artworkUrl]);
 
@@ -196,12 +222,87 @@ export function EpisodeEditorContent({
   });
 
   const renderMutation = useMutation({
-    mutationFn: () => renderEpisode(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['episode', id] });
-      queryClient.invalidateQueries({ queryKey: ['segments', id] });
+    mutationFn: () => startRenderEpisode(id),
+    onSuccess: (result) => {
+      if (result.status === 'building' || result.status === 'already_building') {
+        setRenderPollError(null);
+        setBuildInProgress(true);
+        setBuildAlreadyInProgressMessage(result.status === 'already_building' ? (result.message ?? 'A build is already in progress.') : null);
+      }
     },
   });
+
+  const TRANSCRIPT_POLL_INTERVAL_MS = 5000;
+
+  const generateTranscriptMutation = useMutation({
+    mutationFn: async () => {
+      await startGenerateEpisodeTranscript(id);
+      for (;;) {
+        await new Promise((r) => setTimeout(r, TRANSCRIPT_POLL_INTERVAL_MS));
+        const { status, error } = await getTranscriptStatus(id);
+        if (status === 'done') return;
+        if (status === 'failed') throw new Error(error ?? 'Transcript generation failed');
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+      setShowEpisodeTranscript(true);
+    },
+  });
+
+  // On load, check if a build is already in progress (e.g. user refreshed or navigated here)
+  useEffect(() => {
+    if (!id) return;
+    getRenderStatus(id)
+      .then(({ status }) => {
+        if (status === 'building') {
+          setBuildInProgress(true);
+          setBuildAlreadyInProgressMessage('A build is already in progress.');
+        }
+      })
+      .catch(() => {
+        // Ignore: render-status may be unavailable; building state will be correct after user starts a build
+      });
+  }, [id]);
+
+  useEffect(() => {
+    if (!buildInProgress || !id) return;
+    const poll = () => {
+      getRenderStatus(id)
+        .then(({ status, error }) => {
+          if (status === 'done') {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setBuildInProgress(false);
+            setBuildAlreadyInProgressMessage(null);
+            setRenderPollError(null);
+            queryClient.invalidateQueries({ queryKey: ['episode', id] });
+            queryClient.invalidateQueries({ queryKey: ['segments', id] });
+          } else if (status === 'failed') {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setBuildInProgress(false);
+            setBuildAlreadyInProgressMessage(null);
+            setRenderPollError(error ?? 'Build failed');
+          }
+        })
+        .catch(() => {
+          // Keep polling on network error
+        });
+    };
+    poll();
+    pollIntervalRef.current = setInterval(poll, 5000);
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [buildInProgress, id, queryClient]);
 
   function handleMoveUp(index: number) {
     if (index <= 0) return;
@@ -240,10 +341,11 @@ export function EpisodeEditorContent({
           episode.artwork_url
             ? episode.artwork_url
             : episode.artwork_filename
-              ? `/api/public/artwork/${podcastId}/episodes/${id}/${encodeURIComponent(episode.artwork_filename)}`
+              ? `/api/podcasts/${podcastId}/episodes/${id}/artwork/${encodeURIComponent(episode.artwork_filename)}`
               : null
         }
         onEditClick={metadataReadOnly ? undefined : () => setDetailsDialogOpen(true)}
+        subscriberOnly={episode.subscriber_only}
       />
 
       <div className={styles.card}>
@@ -265,7 +367,10 @@ export function EpisodeEditorContent({
               isDeletingSegment={deleteSegmentMutation.isPending}
               deletingSegmentId={deleteSegmentMutation.variables ?? null}
               onSegmentPlayRequest={handleSegmentPlayRequest}
-              onSegmentMoreInfo={setSegmentIdForInfo}
+              onSegmentMoreInfo={(segmentId) => {
+                pauseCurrentSegment();
+                setSegmentIdForInfo(segmentId);
+              }}
           registerSegmentPause={registerSegmentPause}
           unregisterSegmentPause={unregisterSegmentPause}
         />
@@ -274,15 +379,35 @@ export function EpisodeEditorContent({
       <GenerateFinalBar
         episodeId={id}
         segmentCount={segments.length}
-        onBuild={() => renderMutation.mutate()}
-        isBuilding={renderMutation.isPending}
+        onBuild={() => {
+          setRenderPollError(null);
+          renderMutation.mutate();
+        }}
+        isBuilding={renderMutation.isPending || buildInProgress}
+        buildMessage={buildAlreadyInProgressMessage}
         hasFinalAudio={Boolean(episode.audio_final_path)}
         finalDurationSec={episode.audio_duration_sec ?? 0}
         finalUpdatedAt={episode.updated_at}
         readOnly={segmentReadOnly}
+        onFinalPlayStart={pauseCurrentSegment}
+        pauseAndResetRef={finalPauseRef}
+        hasTranscript={episode.has_transcript === true}
+        onOpenTranscript={() => setShowEpisodeTranscript(true)}
+        onGenerateTranscript={episode.has_transcript !== true ? async () => { await generateTranscriptMutation.mutateAsync(); } : undefined}
+        canGenerateTranscript={meData?.user?.can_transcribe === 1}
+        error={
+          renderPollError ??
+          (renderMutation.isError ? renderMutation.error?.message : null) ??
+          (generateTranscriptMutation.isError ? generateTranscriptMutation.error?.message : null)
+        }
       />
-      {renderMutation.isError && (
-        <p className={styles.error}>{renderMutation.error?.message}</p>
+
+      {showEpisodeTranscript && (
+        <EpisodeTranscriptModal
+          episodeId={id}
+          onClose={() => setShowEpisodeTranscript(false)}
+          canEdit={canEditSegments && !readOnly}
+        />
       )}
 
       <Dialog.Root
@@ -292,25 +417,27 @@ export function EpisodeEditorContent({
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content
-            className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogDetailsGrid}`}
+            className={`${sharedStyles.dialogContent} ${sharedStyles.dialogContentWide} ${sharedStyles.dialogContentScrollable} ${styles.episodeDetailsDialog}`}
           >
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className={styles.dialogClose}
-                aria-label="Close"
-                disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
-              >
-                <X size={18} strokeWidth={2} aria-hidden="true" />
-              </button>
-            </Dialog.Close>
-            <Dialog.Title className={styles.dialogTitle}>
-              Episode Details
-            </Dialog.Title>
-            <Dialog.Description className={styles.dialogDescription}>
+            <div className={sharedStyles.dialogHeaderRow}>
+              <Dialog.Title className={sharedStyles.dialogTitle}>
+                Episode Details
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className={sharedStyles.dialogClose}
+                  aria-label="Close"
+                  disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
+                >
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className={sharedStyles.dialogDescription}>
               Edit the episode title, description, and publish settings.
             </Dialog.Description>
-            <div className={`${styles.dialogBodyScroll} ${styles.dialogBodyScrollForm}`}>
+            <div className={sharedStyles.dialogBodyScroll}>
               <EpisodeDetailsForm
                 form={dialogForm}
                 setForm={setDialogForm}
@@ -325,7 +452,7 @@ export function EpisodeEditorContent({
                       setPendingArtworkFile(null);
                       const { artwork_url: _artworkUrl, ...rest } = payload;
                       void _artworkUrl;
-                      updateMutation.mutate(rest);
+                      updateMutation.mutate(rest as EpisodeUpdate);
                     } catch {
                       // error surfaced via uploadArtworkMutation
                     }
@@ -333,7 +460,7 @@ export function EpisodeEditorContent({
                   }
                   const finalPayload =
                     coverMode === 'upload' ? (() => { const { artwork_url: _artworkUrl, ...rest } = payload; void _artworkUrl; return rest; })() : payload;
-                  updateMutation.mutate(finalPayload);
+                  updateMutation.mutate(finalPayload as EpisodeUpdate);
                 }}
                 onCancel={() => setDetailsDialogOpen(false)}
                 isSaving={updateMutation.isPending}
@@ -359,6 +486,20 @@ export function EpisodeEditorContent({
                   uploadArtworkPending: uploadArtworkMutation.isPending,
                 }}
               />
+            </div>
+            <div className={styles.dialogFooter}>
+              <button type="button" className={styles.cancel} onClick={() => setDetailsDialogOpen(false)} aria-label="Cancel editing episode">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="episode-details-form"
+                className={styles.submit}
+                disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
+                aria-label="Save episode details"
+              >
+                {uploadArtworkMutation.isPending ? 'Uploading...' : updateMutation.isPending ? 'Saving...' : 'Save'}
+              </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
@@ -404,6 +545,7 @@ export function EpisodeEditorContent({
             segments.find((s) => s.id === segmentIdForInfo)?.audio_path
           }
           asrAvailable={Boolean(asrAvail?.available)}
+          ownerCanTranscribe={podcast?.owner_can_transcribe === 1}
           onClose={() => setSegmentIdForInfo(null)}
           onDeleteEntry={(entryIndex) => {
             setTranscriptEntryToDelete({

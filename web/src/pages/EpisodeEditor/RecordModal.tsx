@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { RotateCcw, PlusCircle, Play, Pause } from 'lucide-react';
+import { RotateCcw, PlusCircle, Play, Pause, X, Upload } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { formatDuration } from './utils';
 import styles from '../EpisodeEditor.module.css';
@@ -15,6 +15,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [blob, setBlob] = useState<Blob | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [sectionName, setSectionName] = useState('');
   const [isMobile, setIsMobile] = useState(false);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
@@ -22,6 +23,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const [playbackDuration, setPlaybackDuration] = useState(0);
   const [isPlaybackPlaying, setIsPlaybackPlaying] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<'close' | 'discard_preview' | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasSeenAudio, setHasSeenAudio] = useState(false);
   const hasSeenAudioRef = useRef(false);
@@ -35,10 +37,13 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const recordButtonRef = useRef<HTMLButtonElement>(null);
   const stopButtonRef = useRef<HTMLButtonElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const wakeLockRef = useRef<{ release(): Promise<void> } | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelAnimationRef = useRef<number | null>(null);
+
+  const hasPreview = !!(blob || uploadedFile);
 
   function releaseWakeLock() {
     if (wakeLockRef.current) {
@@ -67,12 +72,12 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      if (!recording && !blob && recordButtonRef.current) recordButtonRef.current.focus();
+      if (!recording && !hasPreview && recordButtonRef.current) recordButtonRef.current.focus();
       else if (recording && stopButtonRef.current) stopButtonRef.current.focus();
-      else if (blob && cancelButtonRef.current) cancelButtonRef.current.focus();
+      else if (hasPreview && cancelButtonRef.current) cancelButtonRef.current.focus();
     }, 0);
     return () => clearTimeout(timeout);
-  }, [recording, blob]);
+  }, [recording, hasPreview]);
 
   useEffect(() => {
     const card = recordCardRef.current;
@@ -82,7 +87,11 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       if (!c) return;
       if (e.key === 'Escape') {
         e.preventDefault();
-        setShowCloseConfirm(true);
+        if (!recording && !hasPreview) onClose();
+        else {
+          setPendingConfirm('close');
+          setShowCloseConfirm(true);
+        }
         return;
       }
       if (e.key !== 'Tab') return;
@@ -112,22 +121,28 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [recording, blob]);
+  }, [recording, hasPreview, onClose]);
 
   useEffect(() => {
-    if (!blob) {
-      setPlaybackUrl(null);
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      setPlaybackUrl(url);
+      setPlaybackDuration(seconds);
       setPlaybackCurrentTime(0);
-      setPlaybackDuration(0);
-      setIsPlaybackPlaying(false);
-      return;
+      return () => URL.revokeObjectURL(url);
     }
-    const url = URL.createObjectURL(blob);
-    setPlaybackUrl(url);
-    setPlaybackDuration(seconds);
+    if (uploadedFile) {
+      const url = URL.createObjectURL(uploadedFile);
+      setPlaybackUrl(url);
+      setPlaybackDuration(0);
+      setPlaybackCurrentTime(0);
+      return () => URL.revokeObjectURL(url);
+    }
+    setPlaybackUrl(null);
     setPlaybackCurrentTime(0);
-    return () => URL.revokeObjectURL(url);
-  }, [blob, seconds]);
+    setPlaybackDuration(0);
+    setIsPlaybackPlaying(false);
+  }, [blob, seconds, uploadedFile]);
 
   useEffect(() => {
     const el = playbackAudioRef.current;
@@ -234,6 +249,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       setRecording(true);
       setSeconds(0);
       setBlob(null);
+      setUploadedFile(null);
       hasSeenAudioRef.current = false;
       setHasSeenAudio(false);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -266,10 +282,28 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   }
 
   function handleAdd() {
+    if (uploadedFile) {
+      onAdd(uploadedFile, sectionName.trim() || null);
+      return;
+    }
     if (!blob) return;
     const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('ogg') ? 'ogg' : 'webm';
     const file = new File([blob], `recording.${ext}`, { type: blob.type });
     onAdd(file, sectionName.trim() || null);
+  }
+
+  function handleUploadFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedFile(file);
+    setSectionName(file.name.replace(/\.[^.]+$/, ''));
+    setBlob(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function clearUploadedFile() {
+    setUploadedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
   function togglePlayback() {
@@ -292,26 +326,82 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const recordProgress = playbackDuration > 0 ? Math.min(1, playbackCurrentTime / playbackDuration) : 0;
 
   function requestClose() {
+    if (!recording && !hasPreview) {
+      onClose();
+    } else {
+      setPendingConfirm('close');
+      setShowCloseConfirm(true);
+    }
+  }
+
+  function requestDiscardPreview() {
+    setPendingConfirm('discard_preview');
     setShowCloseConfirm(true);
   }
 
-  function confirmClose() {
+  function confirmDiscard() {
+    if (pendingConfirm === 'close') {
+      setShowCloseConfirm(false);
+      setPendingConfirm(null);
+      onClose();
+    } else if (pendingConfirm === 'discard_preview') {
+      setShowCloseConfirm(false);
+      setPendingConfirm(null);
+      setBlob(null);
+      setSeconds(0);
+      clearUploadedFile();
+    }
+  }
+
+  function dismissConfirm() {
     setShowCloseConfirm(false);
-    onClose();
+    setPendingConfirm(null);
   }
 
   return (
     <div className={styles.recordOverlay} onClick={(e) => e.target === e.currentTarget && requestClose()}>
       <div ref={recordCardRef} className={styles.recordCard} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="record-title">
-        <h3 id="record-title" className={styles.recordTitle}>
-          Record A Section
-        </h3>
-        <p className={styles.recordSub}>Use your microphone. When done, stop and add to the episode.</p>
-        {!recording && !blob && (
-          <button ref={recordButtonRef} type="button" className={`${styles.recordBtn} ${styles.record}`} onClick={startRecording} aria-label="Start recording">
-            ●
+        <div className={styles.dialogHeaderRow}>
+          <h3 id="record-title" className={styles.dialogTitle}>
+            Record A Section
+          </h3>
+          <button type="button" className={styles.dialogClose} onClick={requestClose} aria-label="Close">
+            <X size={18} strokeWidth={2} aria-hidden="true" />
           </button>
+        </div>
+        <p className={styles.recordSub}>Use your microphone or upload audio. To begin, click the red record button below.</p>
+
+        {!recording && !hasPreview && (
+          <>
+            <button ref={recordButtonRef} type="button" className={`${styles.recordBtn} ${styles.record}`} onClick={startRecording} aria-label="Start recording">
+              ●
+            </button>
+            {isMobile && (
+              <p className={styles.recordMobileNote}>Please do not navigate away from this page or the recording may be stopped or lost. Please record for less than 30 minutes to avoid issues.</p>
+            )}
+            {!isMobile && (
+              <p className={styles.recordMobileNote}>Please do not navigate away from this page or the recording may be stopped or lost.</p>
+            )}
+            <button
+              type="button"
+              className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary} ${styles.libraryChooseFileBtn}`}
+              style={{ width: '100%', marginTop: '0.75rem' }}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Choose file to upload"
+            >
+              <Upload size={24} strokeWidth={2} aria-hidden />
+              <span>Choose File to Upload</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/mpeg,audio/mp3,audio/wav,audio/wave,audio/x-wav,audio/mp4,audio/webm,audio/ogg,.mp3,.wav,.m4a,.webm,.ogg"
+              style={{ display: 'none' }}
+              onChange={handleUploadFileSelect}
+            />
+          </>
         )}
+
         {recording && (
           <>
             <div className={styles.recordTime}>{formatDuration(seconds)}</div>
@@ -321,7 +411,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
               </div>
               {!hasSeenAudio && (
                 <p className={styles.recordLevelHint}>
-                  {audioLevel < 2 ? 'No input — check if microphone is muted' : 'Microphone active'}
+                  {audioLevel < 2 ? 'No input - check if microphone is muted' : 'Microphone active'}
                 </p>
               )}
             </div>
@@ -330,10 +420,8 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
             </button>
           </>
         )}
-        {isMobile && !blob && (
-          <p className={styles.recordMobileNote}>Please do not navigate away from this page or the recording may be stopped or lost.</p>
-        )}
-        {blob && !recording && (
+
+        {hasPreview && !recording && (
           <>
             <label className={styles.recordLabel}>
               Section name (optional)
@@ -372,39 +460,65 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
                 </div>
               </div>
             )}
-            <div className={styles.recordChoiceRow}>
-              <button type="button" className={styles.recordChoiceBtn} onClick={() => { setBlob(null); setSeconds(0); }} aria-label="Record again">
+            {blob && (
+              <button type="button" className={`${styles.recordChoiceBtn} ${styles.recordChoiceBtnSecondary}`} style={{ width: '100%', marginTop: '0.5rem' }} onClick={requestDiscardPreview} aria-label="Record again">
                 <RotateCcw size={24} strokeWidth={2} aria-hidden />
                 <span>Record again</span>
               </button>
-              <button type="button" className={`${styles.recordChoiceBtn} ${styles.recordChoiceBtnPrimary}`} onClick={handleAdd} disabled={isAdding} aria-label={isAdding ? 'Adding to episode' : 'Add to episode'}>
-                <PlusCircle size={24} strokeWidth={2} aria-hidden />
+            )}
+            {uploadedFile && (
+              <button type="button" className={styles.recordChoiceBtn} style={{ width: '100%', marginTop: '0.5rem' }} onClick={requestDiscardPreview} aria-label="Choose different file">
+                <Upload size={24} strokeWidth={2} aria-hidden />
+                <span>Choose different file</span>
+              </button>
+            )}
+            <div className={styles.recordFooterRow}>
+              <button ref={cancelButtonRef} type="button" className={styles.libraryClose} onClick={requestClose} aria-label="Cancel">
+                Cancel
+              </button>
+              <button type="button" className={styles.recordFooterPrimaryBtn} onClick={handleAdd} disabled={isAdding} aria-label={isAdding ? 'Adding to episode' : 'Add to episode'}>
+                <PlusCircle size={18} strokeWidth={2} aria-hidden />
                 <span>{isAdding ? 'Adding...' : 'Add to episode'}</span>
               </button>
             </div>
           </>
         )}
+
+        {!hasPreview && !recording && (
+          <div className={styles.recordFooterRow}>
+            <button ref={cancelButtonRef} type="button" className={styles.libraryClose} onClick={requestClose} aria-label="Cancel">
+              Cancel
+            </button>
+          </div>
+        )}
+
         {error && <p className={styles.error} style={{ marginTop: '0.5rem' }}>{error}</p>}
-        <div className={styles.recordActions} style={{ marginTop: '1rem' }}>
-          <button ref={cancelButtonRef} type="button" className={styles.libraryClose} onClick={requestClose} aria-label="Cancel recording">
-            Cancel
-          </button>
-        </div>
       </div>
 
-      <Dialog.Root open={showCloseConfirm} onOpenChange={(o) => !o && setShowCloseConfirm(false)}>
+      <Dialog.Root open={showCloseConfirm} onOpenChange={(o) => !o && dismissConfirm()}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.dialogContent}>
-            <Dialog.Title className={styles.dialogTitle}>Discard recording?</Dialog.Title>
-            <Dialog.Description className={styles.dialogDescription}>Your recording will not be saved.</Dialog.Description>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>
+                {pendingConfirm === 'discard_preview' ? 'Discard recording or upload?' : 'Discard recording?'}
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.dialogClose} onClick={dismissConfirm} aria-label="Close">
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className={styles.dialogDescription}>
+              {pendingConfirm === 'discard_preview' ? 'Your recording or upload will not be saved.' : 'Your recording will not be saved.'}
+            </Dialog.Description>
             <div className={styles.dialogActions}>
               <Dialog.Close asChild>
-                <button type="button" className={styles.cancel} aria-label="Stay and continue recording">
+                <button type="button" className={styles.cancel} onClick={dismissConfirm} aria-label="Stay and continue">
                   Stay
                 </button>
               </Dialog.Close>
-              <button type="button" className={styles.dialogConfirmRemove} onClick={confirmClose} aria-label="Discard recording">
+              <button type="button" className={styles.dialogConfirmRemove} onClick={confirmDiscard} aria-label="Discard">
                 Discard
               </button>
             </div>

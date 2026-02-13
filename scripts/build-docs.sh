@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build static API docs for GitHub Pages.
-# Layout: docs-dist/index.html (landing), docs-dist/server/ (Swagger UI + openapi.json).
+# Build docs site for GitHub Pages.
+# Layout: docs-dist/ = Astro site (index + pages); docs-dist/server/ = Swagger UI + openapi.json.
 # Run from repo root.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,14 +15,13 @@ if [[ ! -f openapi.json ]] || [[ server/dist/app.js -nt openapi.json ]]; then
   bash scripts/build-openapi.sh
 fi
 
-# 2) Prepare output
+# 2) Build Astro docs site (outputs to docs-dist/)
 rm -rf docs-dist
+ASTRO_TELEMETRY_DISABLED=1 pnpm --filter harborfm-docs run build
+
+# 3) Add Swagger UI and OpenAPI spec under server/
 mkdir -p docs-dist/server
-
-# 3) Copy Swagger UI static assets into server/
 cp -R node_modules/swagger-ui-dist/* docs-dist/server/
-
-# 4) Copy spec and point Swagger UI at it
 cp openapi.json docs-dist/server/openapi.json
 cat > docs-dist/server/swagger-initializer.js <<'EOF'
 window.onload = function () {
@@ -39,16 +38,13 @@ window.onload = function () {
 };
 EOF
 
-# 5) Copy local README-referenced assets so relative paths (screenshots/, web/public/) resolve
+# 4) Copy assets for any pages that reference them (screenshots, web/public, LICENSE)
 mkdir -p docs-dist/screenshots docs-dist/web/public
 cp -r screenshots/. docs-dist/screenshots/ 2>/dev/null || true
 cp -r web/public/. docs-dist/web/public/ 2>/dev/null || true
 cp LICENSE docs-dist/ 2>/dev/null || true
 
-# 6) Convert local README to HTML and build themed index (writes docs-dist/index.html)
-node scripts/build-docs-index.mjs
-
-# 7) SEO: robots.txt and sitemap.xml (base URL for docs site)
+# 5) SEO: robots.txt and sitemap.xml (base URL for docs site)
 DOCS_BASE_URL="${DOCS_BASE_URL:-https://docs.harborfm.com}"
 cat > docs-dist/robots.txt <<EOF
 User-agent: *
@@ -65,6 +61,11 @@ cat > docs-dist/sitemap.xml <<EOF
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>${DOCS_BASE_URL}/updates/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>${DOCS_BASE_URL}/server/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -72,4 +73,4 @@ cat > docs-dist/sitemap.xml <<EOF
 </urlset>
 EOF
 
-echo "Docs built in docs-dist/ (root index + server/)"
+echo "Docs built in docs-dist/ (Astro site + server/)"

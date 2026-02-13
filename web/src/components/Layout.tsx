@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, ChevronDown } from 'lucide-react';
+import { Menu, X, User, ChevronDown, LogOut } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { logout } from '../api/auth';
 import { useQueryClient } from '@tanstack/react-query';
@@ -18,7 +18,9 @@ export function Layout() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [adminSubmenuOpen, setAdminSubmenuOpen] = useState(false);
+  const [desktopAdminOpen, setDesktopAdminOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const desktopAdminRef = useRef<HTMLDivElement>(null);
 
   async function handleLogout() {
     await logout();
@@ -42,10 +44,25 @@ export function Layout() {
     }
   }, [menuOpen]);
 
-  // Close mobile menu when route changes
+  // Close mobile menu and admin submenus when route changes
   useEffect(() => {
     setMenuOpen(false);
+    setAdminSubmenuOpen(false);
+    setDesktopAdminOpen(false);
   }, [location.pathname]);
+
+  // Close desktop admin dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (desktopAdminRef.current && !desktopAdminRef.current.contains(event.target as Node)) {
+        setDesktopAdminOpen(false);
+      }
+    }
+    if (desktopAdminOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [desktopAdminOpen]);
 
   return (
     <div className={styles.layout}>
@@ -67,20 +84,38 @@ export function Layout() {
                 Messages
               </NavLink>
               {user?.role === 'admin' && (
-                <div className={styles.adminDropdownWrap}>
-                  <span
+                <div
+                  ref={desktopAdminRef}
+                  className={`${styles.adminDropdownWrap} ${desktopAdminOpen ? styles.adminDropdownWrapOpen : ''}`}
+                  onMouseEnter={() => setDesktopAdminOpen(true)}
+                  onMouseLeave={() => setDesktopAdminOpen(false)}
+                >
+                  <button
+                    type="button"
                     className={isAdminPath(location.pathname) ? styles.navLinkActive : styles.navLink}
                     aria-haspopup="true"
+                    aria-expanded={desktopAdminOpen}
                     aria-label="Admin menu"
+                    onClick={() => setDesktopAdminOpen((o) => !o)}
                   >
                     Admin
                     <ChevronDown size={16} strokeWidth={2} className={styles.adminChevron} aria-hidden />
-                  </span>
+                  </button>
                   <div className={styles.adminDropdown} role="menu">
-                    <NavLink to="/users" className={({ isActive }) => isActive ? styles.adminDropdownLinkActive : styles.adminDropdownLink} role="menuitem">
+                    <NavLink
+                      to="/users"
+                      className={({ isActive }) => isActive ? styles.adminDropdownLinkActive : styles.adminDropdownLink}
+                      role="menuitem"
+                      onClick={() => setDesktopAdminOpen(false)}
+                    >
                       Users
                     </NavLink>
-                    <NavLink to="/settings" className={({ isActive }) => isActive ? styles.adminDropdownLinkActive : styles.adminDropdownLink} role="menuitem">
+                    <NavLink
+                      to="/settings"
+                      className={({ isActive }) => isActive ? styles.adminDropdownLinkActive : styles.adminDropdownLink}
+                      role="menuitem"
+                      onClick={() => setDesktopAdminOpen(false)}
+                    >
                       Settings
                     </NavLink>
                   </div>
@@ -111,21 +146,14 @@ export function Layout() {
       {/* Mobile menu overlay */}
       {menuOpen && <div className={styles.menuOverlay} onClick={() => setMenuOpen(false)} />}
 
-      {/* Mobile slide-out menu — inert when closed so it's skipped in tab order */}
+      {/* Mobile slide-out menu - inert when closed so it's skipped in tab order */}
       <div
         ref={menuRef}
         className={`${styles.mobileMenu} ${menuOpen ? styles.mobileMenuOpen : ''}`}
         inert={!menuOpen ? true : undefined}
       >
         <div className={styles.mobileMenuHeader}>
-          <NavLink
-            to="/profile"
-            className={({ isActive }) => `${isActive ? styles.mobileNavLinkActive : styles.mobileNavLink} ${styles.mobileMenuProfile}`}
-            onClick={() => setMenuOpen(false)}
-          >
-            <User size={20} strokeWidth={2} aria-hidden />
-            Profile
-          </NavLink>
+          <span className={styles.mobileMenuTitle}>Menu</span>
           <button
             type="button"
             className={styles.mobileMenuClose}
@@ -158,6 +186,14 @@ export function Layout() {
           >
             Messages
           </NavLink>
+          <NavLink
+            to="/profile"
+            className={({ isActive }) => `${isActive ? styles.mobileNavLinkActive : styles.mobileNavLink} ${styles.mobileMenuProfile}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            <User size={20} strokeWidth={2} aria-hidden />
+            Profile
+          </NavLink>
           {user?.role === 'admin' && (
             <div className={styles.mobileAdminSection}>
               <button
@@ -171,20 +207,31 @@ export function Layout() {
               </button>
               {adminSubmenuOpen && (
                 <div className={styles.mobileAdminSubmenu}>
-                  <NavLink to="/users" className={({ isActive }) => isActive ? styles.mobileNavLinkActive : styles.mobileNavLink} onClick={() => setMenuOpen(false)}>
+                  <NavLink
+                    to="/users"
+                    className={({ isActive }) => isActive ? styles.mobileNavLinkActive : styles.mobileNavLink}
+                    onClick={() => { setMenuOpen(false); setAdminSubmenuOpen(false); }}
+                  >
                     Users
                   </NavLink>
-                  <NavLink to="/settings" className={({ isActive }) => isActive ? styles.mobileNavLinkActive : styles.mobileNavLink} onClick={() => setMenuOpen(false)}>
+                  <NavLink
+                    to="/settings"
+                    className={({ isActive }) => isActive ? styles.mobileNavLinkActive : styles.mobileNavLink}
+                    onClick={() => { setMenuOpen(false); setAdminSubmenuOpen(false); }}
+                  >
                     Settings
                   </NavLink>
                 </div>
               )}
             </div>
           )}
+        </nav>
+        <div className={styles.mobileMenuFooter}>
           <button type="button" className={styles.mobileLogout} onClick={handleLogout} aria-label="Log out">
+            <LogOut size={20} strokeWidth={2} aria-hidden />
             Log out
           </button>
-        </nav>
+        </div>
       </div>
 
       <main className={styles.main}>

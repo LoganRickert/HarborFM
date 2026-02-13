@@ -1,0 +1,1074 @@
+/* Shared styles for PodcastDetail components and EditShowDetailsDialog */
+
+/* Card Components */
+.card {
+  padding: 1.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.cardTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text);
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.sectionTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+
+.sectionSub {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Section Headers */
+.exportHeader,
+.tokenHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.exportTitle,
+.tokenTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.exportHeaderActions,
+.tokenHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.exportMuted,
+.tokenMuted {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.tokenNoMatch {
+  padding: 1rem;
+  text-align: center;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 1rem;
+}
+
+.tokenNoMatchText {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Subscriber Disabled State */
+.subscriberDisabledBody {
+  padding: 1.5rem;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.subscriberDisabledMessage {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+}
+
+.subscriberDisabledActions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Podcast Hero */
+.podcastHero {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.podcastHeroArtwork {
+  width: 120px;
+  height: 120px;
+  min-width: 120px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.podcastHeroMain {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.podcastHeroTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.podcastHeroTitleLock {
+  flex-shrink: 0;
+  color: #b8b8b8;
+}
+
+.podcastHeroTitleLockGold {
+  color: #d4a84b;
+}
+
+.podcastHeroTitleRow .cardTitle {
+  min-width: 0;
+  margin: 0 !important;
+}
+
+.podcastHeroMain .cardTitle {
+  min-width: 0;
+  margin: 0 !important;
+}
+
+.podcastHeroMain .podcastHeroDescription {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.podcastHeroMain .cardHeaderActions {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.podcastHeroDescription {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Form Elements */
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.input,
+.select,
+textarea.input {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.input:focus,
+.select:focus,
+textarea.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.input:disabled,
+.select:disabled,
+textarea.input:disabled {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Buttons */
+.submit {
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.submit:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+
+.submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cancel:hover {
+  background: var(--bg);
+  border-color: var(--text-muted);
+}
+
+/* Dialog Styles */
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1100;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dialogContent {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 360px;
+  width: calc(100% - 2rem);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 1101;
+  animation: fadeIn 0.15s ease;
+}
+
+.dialogContentWide {
+  max-width: 520px;
+}
+
+.dialogContentScrollable {
+  max-height: min(75vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.dialogBodyScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  margin: 0 -0.25rem 0 0;
+  padding-right: 0.25rem;
+}
+
+.dialogBodyScroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dialogBodyScroll::-webkit-scrollbar-track {
+  background: var(--bg-muted);
+  border-radius: 4px;
+}
+
+.dialogBodyScroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.dialogBodyScroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.dialogHeaderRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.dialogHeaderRow .dialogTitle {
+  margin: 0;
+  margin-right: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.dialogTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: break-word;
+}
+
+.dialogDescription {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dialogClose {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dialogClose:hover:not(:disabled) {
+  background: rgba(0, 212, 170, 0.14);
+  border-color: rgba(0, 212, 170, 0.45);
+  color: var(--text);
+}
+
+.dialogClose:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dialogActions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.dialogFooter {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.dialogConfirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dialogConfirm:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+
+.dialogConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialogConfirmRemove {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--error);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dialogConfirmRemove:hover:not(:disabled) {
+  background: #c53030;
+  border-color: #c53030;
+}
+
+.dialogConfirmRemove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Lists and Cards */
+.exportList,
+.collabList,
+.tokenList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.exportCard,
+.collabCard,
+.tokenCard {
+  padding: 1rem;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.exportCard:hover,
+.collabCard:hover,
+.tokenCard:hover {
+  background: var(--bg-elevated);
+  border-color: rgba(139, 146, 163, 0.4);
+}
+
+.exportCardRow,
+.collabCardRow,
+.tokenCardRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.exportCardMeta,
+.collabCardMeta,
+.tokenCardMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.exportCardMeta strong,
+.collabCardMeta strong,
+.tokenCardMeta strong {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.tokenCardMeta {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.tokenCardMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.exportCardActions,
+.collabCardActions,
+.tokenCardActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.exportModeBadge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+/* Badge variations */
+.tokenCardMetaRow .exportModeBadge {
+  margin-left: 0;
+  flex-shrink: 0;
+}
+
+.roleBadge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.statusBadgeActive {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--success);
+  background: rgba(0, 212, 170, 0.12);
+  border: 1px solid rgba(0, 212, 170, 0.25);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.statusBadgeDisabled {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.statusBadgeDisabledDanger {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.exportDeleteBtn,
+.collabDeleteBtn,
+.tokenDeleteBtn {
+  padding: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--error, #c53030);
+  background: transparent;
+  border: 1px solid var(--error, #c53030);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.exportDeleteBtn:hover:not(:disabled),
+.collabDeleteBtn:hover:not(:disabled),
+.tokenDeleteBtn:hover:not(:disabled) {
+  color: var(--bg);
+  background: var(--error, #c53030);
+}
+
+.exportDeleteBtn:disabled,
+.collabDeleteBtn:disabled,
+.tokenDeleteBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tokenMetaText {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Card Header Components */
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.cardHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cardSettings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: 8px;
+  color: var(--accent);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.cardSettings:hover {
+  background: rgba(0, 212, 170, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(1.05);
+}
+
+.cardSettings:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cardHeaderPrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 36px;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: 0 0 20px var(--accent-glow);
+  transition: background 0.15s ease, box-shadow 0.2s ease;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.cardHeaderPrimary:hover {
+  background: var(--accent-dim);
+  box-shadow: 0 0 28px var(--accent-glow);
+  text-decoration: none;
+  color: var(--bg);
+}
+
+.cardHeaderSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 36px;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.cardHeaderSecondary:hover {
+  background: rgba(0, 212, 170, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* Form and Edit Dialog Styles */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.textarea {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.dialogSectionTitle {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialogSectionTitle:first-child {
+  margin-top: 0;
+}
+
+.dialogShowDetailsGrid {
+  max-width: 600px;
+}
+
+.advancedSection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.advancedToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  width: 100%;
+  justify-content: center;
+}
+
+.advancedToggle:hover {
+  background: rgba(0, 212, 170, 0.15);
+  border-color: var(--accent);
+}
+
+.advancedFields {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.gearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.25);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.gearBtn:hover:not(:disabled) {
+  background: rgba(0, 212, 170, 0.14);
+  border-color: rgba(0, 212, 170, 0.45);
+}
+
+.gearBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.deployBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  box-shadow: 0 0 20px var(--accent-glow);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.deployBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  box-shadow: 0 0 32px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.deployBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.statusToggle {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+.statusToggleBtn,
+.statusToggleActive {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.statusToggleBtn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.statusToggleActive {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.statusToggleActive:hover {
+  background: var(--accent-dim);
+  color: var(--bg);
+}
+
+.success {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--success);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.25);
+  border-radius: var(--radius);
+}
+
+/* Limit and Warning Cards */
+.collabLimitCard,
+.tokenLimitCard {
+  margin-bottom: 1rem;
+  padding: 0.875rem 1rem;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.collabError,
+.tokenError {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  color: var(--error);
+  display: flex;
+  align-items: center;
+  flex-grow: 1;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.collabError p,
+.tokenError p {
+  margin: 0;
+}
+
+.collabEmptyState,
+.tokenEmptyState {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* Error and Status Messages */
+.error {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--error);
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.25);
+  border-radius: var(--radius);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 640px) {
+  .card {
+    padding: 1rem;
+  }
+
+  .exportCardRow,
+  .collabCardRow,
+  .tokenCardRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .exportCardMeta,
+  .collabCardMeta,
+  .tokenCardMeta {
+    width: 100%;
+  }
+
+  .exportCardActions,
+  .collabCardActions,
+  .tokenCardActions {
+    width: 100%;
+  }
+
+  .exportCardActions {
+    flex-wrap: nowrap;
+  }
+
+  .exportCardActions .cancel,
+  .exportCardActions button:not(.exportDeleteBtn) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .exportCardActions .exportDeleteBtn {
+    flex-shrink: 0;
+  }
+
+  .podcastHero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .podcastHeroMain {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+
+  .podcastHeroTitleRow {
+    grid-column: 1;
+    grid-row: 1;
+    justify-content: center;
+  }
+
+  .podcastHeroMain .cardHeaderActions {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: center;
+    margin-top: 0.5rem;
+  }
+
+  .podcastHeroMain .podcastHeroDescription {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .exportHeader,
+  .tokenHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .exportHeaderActions,
+  .tokenHeaderActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .exportHeaderActions .gearBtn,
+  .exportHeaderActions .deployBtn {
+    flex: 1;
+  }
+
+  .cardHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cardHeaderActions {
+    width: 100%;
+  }
+
+  .dialogContent {
+    width: calc(100% - 1.5rem);
+    padding: 1rem;
+  }
+}

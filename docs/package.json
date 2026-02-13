@@ -1,0 +1,16 @@
+{
+  "name": "harborfm-docs",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "astro": "5.17.0",
+    "marked": "^17.0.1"
+  }
+}

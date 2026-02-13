@@ -1,4 +1,4 @@
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from "fastify";
 
 type BucketKey = string;
 
@@ -16,11 +16,17 @@ function prune(now: number) {
   }
 }
 
-export function userRateLimitPreHandler(opts: { bucket: string; windowMs?: number }) {
+export function userRateLimitPreHandler(opts: {
+  bucket: string;
+  windowMs?: number;
+}) {
   const windowMs = opts.windowMs ?? 1000;
   const bucket = opts.bucket;
 
-  return async function rateLimit(request: FastifyRequest, reply: FastifyReply) {
+  return async function rateLimit(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
     const userId = (request as FastifyRequest & { userId?: string }).userId;
     // If no userId, skip (this limiter is meant for authed routes).
     if (!userId) return;
@@ -31,15 +37,19 @@ export function userRateLimitPreHandler(opts: { bucket: string; windowMs?: numbe
     const key: BucketKey = `${bucket}:${userId}`;
     const prev = lastSeen.get(key);
     if (prev !== undefined && now - prev < windowMs) {
-      const retryAfterSec = Math.max(1, Math.ceil((windowMs - (now - prev)) / 1000));
+      const retryAfterSec = Math.max(
+        1,
+        Math.ceil((windowMs - (now - prev)) / 1000),
+      );
       reply
         .code(429)
-        .header('Retry-After', String(retryAfterSec))
-        .send({ error: 'Too many requests. Please wait a moment and try again.' });
+        .header("Retry-After", String(retryAfterSec))
+        .send({
+          error: "Too many requests. Please wait a moment and try again.",
+        });
       return;
     }
 
     lastSeen.set(key, now);
   };
 }
-

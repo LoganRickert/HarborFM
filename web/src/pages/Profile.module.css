@@ -1,6 +1,9 @@
 .page {
+  display: flex;
+  flex-direction: column;
   max-width: var(--max-content);
   margin: 0 auto;
+  min-height: 0;
 }
 
 .hero {
@@ -120,108 +123,26 @@
   color: var(--text-muted);
 }
 
-/* API keys */
-.apiKeyCardHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.apiKeyCardHeader > div:first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-.apiKeyCardHeader .cardSub {
-  margin-bottom: 0;
-}
-
-.apiKeyList {
-  list-style: none;
-  margin: 0 0 1rem;
-  padding: 0;
+.apiKeysSection {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
-.apiKeyRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.apiKeyMeta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.apiKeyCreated,
-.apiKeyLastUsed {
-  font-size: 0.875rem;
-  color: var(--text);
-}
-
-.apiKeyLastUsed {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
-
-.revokeBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.875rem;
-  color: var(--error);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.revokeBtn:hover:not(:disabled) {
-  border-color: var(--error);
+.apiKeyLimitCard {
+  flex-grow: 1;
+  padding: 1rem 2rem;
+  text-align: center;
   background: rgba(239, 68, 68, 0.08);
+  margin: 0 0 1rem 0;
+  border: 1px solid var(--error);
+  border-radius: 12px;
 }
 
-.revokeBtn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.createKeyBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.9375rem;
+.apiKeyLimitText {
+  margin: 0;
+  font-size: 1rem;
   font-weight: 500;
-  color: var(--bg);
-  background: var(--accent);
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: background 0.15s ease;
-  flex-shrink: 0;
-}
-
-.createKeyBtn:hover:not(:disabled) {
-  background: var(--accent-dim);
-}
-
-.createKeyBtn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+  color: var(--error);
 }
 
 .keyLimitNote {
@@ -380,16 +301,5 @@
   .row {
     grid-template-columns: 1fr;
     gap: 0.25rem;
-  }
-
-  .apiKeyCardHeader {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .apiKeyCardHeader .createKeyBtn {
-    flex-grow: 1;
-    width: 100%;
-    justify-content: center;
   }
 }

@@ -2,6 +2,7 @@ packages:
   - server
   - web
   - shared
+  - docs
 
 ignoredBuiltDependencies:
   - argon2

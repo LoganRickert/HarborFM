@@ -1,6 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { slugify, type EpisodeForm } from './utils';
-import styles from '../EpisodeEditor.module.css';
+import localStyles from '../EpisodeEditor.module.css';
+import sharedStyles from '../../components/PodcastDetail/shared.module.css';
+
+const styles = { ...localStyles, ...sharedStyles };
 
 function safeImageSrc(url: string | null | undefined): string {
   if (!url) return '';
@@ -50,7 +54,6 @@ export function EpisodeDetailsForm({
   descriptionTextareaRef,
   slugDisabled,
   onSave,
-  onCancel,
   isSaving,
   saveError,
   saveSuccess,
@@ -58,6 +61,7 @@ export function EpisodeDetailsForm({
 }: EpisodeDetailsFormProps) {
   const cover = coverImageConfig;
   const savingOrUploading = isSaving || (cover?.uploadArtworkPending ?? false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (descriptionTextareaRef.current) {
@@ -72,9 +76,11 @@ export function EpisodeDetailsForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className={styles.form}>
+    <form id="episode-details-form" onSubmit={handleSubmit} className={styles.form}>
       {saveError && <p className={styles.error}>{saveError}</p>}
       {saveSuccess && <p className={styles.success}>Saved.</p>}
+
+      <h3 className={styles.formSectionTitle}>Basics</h3>
       <label className={styles.label}>
         Title
         <input
@@ -89,18 +95,19 @@ export function EpisodeDetailsForm({
             }));
           }}
           className={styles.input}
+          placeholder="e.g. Episode 1: Getting Started"
           required
         />
       </label>
       <label className={styles.label}>
         Slug
-        <span className={styles.labelHint}>Used in URLs — lowercase, numbers, hyphens only</span>
+        <span className={styles.labelHint}>Used in URLs - lowercase, numbers, hyphens only</span>
         <input
           type="text"
           value={form.slug}
           onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))}
           className={styles.input}
-          placeholder="auto-generated-from-title"
+          placeholder="e.g. episode-1-getting-started"
           pattern="[a-z0-9\-]+"
           required
           disabled={slugDisabled}
@@ -120,8 +127,31 @@ export function EpisodeDetailsForm({
           className={styles.textarea}
           rows={4}
           style={{ minHeight: '80px', overflow: 'hidden' }}
+          placeholder="What this episode is about. Shown in podcast apps."
         />
       </label>
+      <label className={styles.label}>
+        Subtitle
+        <input
+          type="text"
+          value={form.subtitle}
+          onChange={(e) => setForm((prev) => ({ ...prev, subtitle: e.target.value }))}
+          className={styles.input}
+          placeholder="e.g. One line summary for app listings"
+        />
+      </label>
+      <label className={styles.label}>
+        Summary
+        <textarea
+          value={form.summary}
+          onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
+          className={styles.textarea}
+          rows={2}
+          placeholder="Extended description for podcast apps (optional)"
+        />
+      </label>
+
+      <h3 className={styles.formSectionTitle}>Cover image</h3>
       <label className={styles.label}>
         Cover image
         {cover ? (
@@ -153,7 +183,7 @@ export function EpisodeDetailsForm({
                   value={form.artworkUrl}
                   onChange={(e) => setForm((prev) => ({ ...prev, artworkUrl: e.target.value }))}
                   className={styles.input}
-                  placeholder="https://example.com/cover.jpg"
+                  placeholder="e.g. https://myshow.com/episode-cover.jpg"
                   style={{ marginTop: '0.5rem' }}
                 />
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
@@ -197,7 +227,7 @@ export function EpisodeDetailsForm({
                       ? cover.debouncedArtworkUrl
                       : cover.pendingArtworkPreviewUrl ??
                         (cover.artworkFilename
-                          ? `/api/public/artwork/${cover.podcastId}/episodes/${cover.episodeId}/${encodeURIComponent(cover.artworkFilename)}`
+                          ? `/api/podcasts/${cover.podcastId}/episodes/${cover.episodeId}/artwork/${encodeURIComponent(cover.artworkFilename)}`
                           : '')
                   )}
                   alt="Cover preview"
@@ -213,7 +243,7 @@ export function EpisodeDetailsForm({
               value={form.artworkUrl}
               onChange={(e) => setForm((prev) => ({ ...prev, artworkUrl: e.target.value }))}
               className={styles.input}
-              placeholder="https://example.com/image.jpg"
+              placeholder="e.g. https://myshow.com/episode-cover.jpg"
             />
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
               URL for the episode cover image (optional)
@@ -221,28 +251,8 @@ export function EpisodeDetailsForm({
           </>
         )}
       </label>
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <label className={styles.label} style={{ flex: '1 1 80px' }}>
-          Season
-          <input
-            type="number"
-            min={0}
-            value={form.seasonNumber}
-            onChange={(e) => setForm((prev) => ({ ...prev, seasonNumber: e.target.value }))}
-            className={styles.input}
-          />
-        </label>
-        <label className={styles.label} style={{ flex: '1 1 80px' }}>
-          Episode
-          <input
-            type="number"
-            min={0}
-            value={form.episodeNumber}
-            onChange={(e) => setForm((prev) => ({ ...prev, episodeNumber: e.target.value }))}
-            className={styles.input}
-          />
-        </label>
-      </div>
+
+      <h3 className={styles.formSectionTitle}>Publish & visibility</h3>
       <label className={styles.label}>
         Status
         <div className={styles.statusToggle} role="group" aria-label="Episode status">
@@ -278,8 +288,46 @@ export function EpisodeDetailsForm({
         <span className="toggle__track" aria-hidden="true" />
         <span>Explicit</span>
       </label>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={form.subscriberOnly}
+          onChange={(e) => setForm((prev) => ({ ...prev, subscriberOnly: e.target.checked }))}
+        />
+        <span className="toggle__track" aria-hidden="true" />
+        <span>Subscriber Only</span>
+      </label>
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '-0.25rem 0 0.5rem 0' }}>
+        Subscriber-only episodes are omitted from the public RSS and episode list; they appear only in tokenized subscriber feeds.
+      </p>
+
+      <h3 className={styles.formSectionTitle}>Optional details</h3>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <label className={styles.label} style={{ flex: '1 1 80px' }}>
+          Season
+          <input
+            type="number"
+            min={0}
+            value={form.seasonNumber}
+            onChange={(e) => setForm((prev) => ({ ...prev, seasonNumber: e.target.value }))}
+            className={styles.input}
+            placeholder="e.g. 1"
+          />
+        </label>
+        <label className={styles.label} style={{ flex: '1 1 80px' }}>
+          Episode
+          <input
+            type="number"
+            min={0}
+            value={form.episodeNumber}
+            onChange={(e) => setForm((prev) => ({ ...prev, episodeNumber: e.target.value }))}
+            className={styles.input}
+            placeholder="e.g. 1"
+          />
+        </label>
+      </div>
       <label className={styles.label}>
-        Episode Type
+        Episode type
         <select
           value={form.episodeType || 'full'}
           onChange={(e) =>
@@ -293,34 +341,69 @@ export function EpisodeDetailsForm({
         </select>
       </label>
       <label className={styles.label}>
-        Episode Link
+        Episode link
         <input
           type="url"
           value={form.episodeLink}
           onChange={(e) => setForm((prev) => ({ ...prev, episodeLink: e.target.value }))}
           className={styles.input}
-          placeholder="https://example.com/episode-page"
+          placeholder="e.g. https://myshow.com/episodes/1"
         />
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-          URL to the episode's web page (optional)
+          URL to this episode's web page (optional)
         </p>
       </label>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={form.guidIsPermalink}
-          onChange={(e) => setForm((prev) => ({ ...prev, guidIsPermalink: e.target.checked }))}
-        />
-        <span className="toggle__track" aria-hidden="true" />
-        <span>GUID is permalink</span>
-      </label>
-      <div className={styles.actions}>
-        <button type="button" className={styles.cancel} onClick={onCancel} aria-label="Cancel editing episode">
-          Cancel
+
+      <div className={styles.advancedSection}>
+        <button
+          type="button"
+          className={styles.advancedToggle}
+          onClick={() => setShowAdvanced((v) => !v)}
+          aria-expanded={showAdvanced}
+          aria-controls="episode-details-advanced-fields"
+        >
+          {showAdvanced ? <ChevronDown size={18} aria-hidden /> : <ChevronRight size={18} aria-hidden />}
+          <span>More options</span>
         </button>
-        <button type="submit" className={styles.submit} disabled={savingOrUploading} aria-label="Save episode details">
-          {cover?.uploadArtworkPending ? 'Uploading...' : isSaving ? 'Saving...' : 'Save'}
-        </button>
+        {showAdvanced && (
+          <div id="episode-details-advanced-fields" className={styles.advancedFields}>
+            <label className={styles.label}>
+              Full show notes (HTML)
+              <textarea
+                value={form.contentEncoded}
+                onChange={(e) => setForm((prev) => ({ ...prev, contentEncoded: e.target.value }))}
+                className={styles.textarea}
+                rows={3}
+                placeholder="e.g. <p>Full transcript or show notes</p>"
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                Optional. Shown in apps that support full show notes.
+              </p>
+            </label>
+            <label className={styles.label}>
+              GUID
+              <input
+                type="text"
+                value={form.guid}
+                onChange={(e) => setForm((prev) => ({ ...prev, guid: e.target.value }))}
+                className={styles.input}
+                placeholder="Leave blank to auto-generate"
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+                Unique ID for this episode. Only change if you need to keep an existing ID.
+              </p>
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={form.guidIsPermalink}
+                onChange={(e) => setForm((prev) => ({ ...prev, guidIsPermalink: e.target.checked }))}
+              />
+              <span className="toggle__track" aria-hidden="true" />
+              <span>GUID is permalink</span>
+            </label>
+          </div>
+        )}
       </div>
     </form>
   );

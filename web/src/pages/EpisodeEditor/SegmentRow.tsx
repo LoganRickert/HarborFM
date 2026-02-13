@@ -104,7 +104,14 @@ export function SegmentRow({
   }
 
   useEffect(() => {
-    registerPause(segment.id, () => audioRef.current?.pause());
+    registerPause(segment.id, () => {
+      const el = audioRef.current;
+      if (el) {
+        el.pause();
+        el.currentTime = 0;
+        setCurrentTime(0);
+      }
+    });
     return () => unregisterPause(segment.id);
   }, [segment.id, registerPause, unregisterPause]);
 

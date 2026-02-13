@@ -98,7 +98,8 @@
   position: relative;
 }
 
-.adminDropdownWrap:hover .adminDropdown {
+/* Desktop: only show dropdown when state says so (not :hover/:focus-within) so it closes on link select */
+.adminDropdownWrap.adminDropdownWrapOpen .adminDropdown {
   display: flex;
 }
 
@@ -107,12 +108,16 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  cursor: default;
+  cursor: pointer;
   border: none;
   font: inherit;
+  background: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
-.adminDropdownWrap:hover .adminChevron {
+.adminDropdownWrap.adminDropdownWrapOpen .adminChevron {
   transform: rotate(180deg);
 }
 
@@ -293,6 +298,12 @@
   border-bottom: 1px solid var(--border);
 }
 
+.mobileMenuTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .mobileMenuProfile {
   display: inline-flex;
   align-items: center;
@@ -398,22 +409,35 @@
   font-size: 0.875rem;
 }
 
+.mobileMenuFooter {
+  margin-top: auto;
+  padding: 1rem 1.25rem;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px) + 100px);
+  border-top: 1px solid var(--border);
+}
+
 .mobileLogout {
-  margin: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+  width: 100%;
   padding: 0.875rem 1rem;
   font-size: 0.9375rem;
   font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
+  color: var(--text);
+  background: var(--bg-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
   text-align: left;
 }
 
 .mobileLogout:hover {
   color: var(--text);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.06));
   border-color: var(--text-muted);
 }
 

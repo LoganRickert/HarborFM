@@ -1,0 +1,14 @@
+.empty {
+  padding: 4rem 2rem;
+  text-align: center;
+  background: var(--bg-elevated);
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+}
+
+.emptyText {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}

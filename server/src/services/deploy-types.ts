@@ -6,6 +6,7 @@ export interface DeployEpisode {
   audio_final_path: string | null;
   audio_mime?: string | null;
   artwork_path?: string | null;
+  transcript_srt_path?: string | null;
 }
 
 export interface DeployResult {

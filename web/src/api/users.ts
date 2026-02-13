@@ -1,3 +1,4 @@
+import type { UserCreateBody, UserUpdateBody } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
@@ -17,6 +18,8 @@ export interface User {
   max_episodes?: number | null;
   max_storage_mb?: number | null;
   max_collaborators?: number | null;
+  max_subscriber_tokens?: number | null;
+  can_transcribe?: number; // 0 = false, 1 = true
 }
 
 export interface UsersResponse {
@@ -53,25 +56,28 @@ export function getUser(userId: string): Promise<User> {
   });
 }
 
-export function updateUser(
-  userId: string,
-  data: {
-    email?: string;
-    role?: 'user' | 'admin';
-    disabled?: boolean;
-    read_only?: boolean;
-    password?: string;
-    max_podcasts?: number | null;
-    max_episodes?: number | null;
-    max_storage_mb?: number | null;
-    max_collaborators?: number | null;
-  }
-): Promise<User> {
+export function updateUser(userId: string, data: UserUpdateBody): Promise<User> {
   return fetch(`${BASE}/users/${userId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     credentials: 'include',
     body: JSON.stringify(data),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json();
+  });
+}
+
+export function createUser(data: UserCreateBody): Promise<User> {
+  return fetch(`${BASE}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    credentials: 'include',
+    body: JSON.stringify({
+      email: data.email,
+      password: data.password,
+      role: data.role ?? 'user',
+    }),
   }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
     return r.json();

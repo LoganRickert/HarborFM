@@ -28,11 +28,17 @@
 
 .dialogHeader {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.25rem;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
   flex-shrink: 0;
+}
+
+.dialogHeader > div:first-child {
+  margin-right: auto;
+  flex: 1;
+  min-width: 0;
 }
 
 .bodyScroll {
@@ -79,7 +85,7 @@
 }
 
 .close {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 36px;
@@ -87,16 +93,17 @@
   padding: 0;
   color: var(--text-muted);
   background: transparent;
-  border: none;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.15s, background 0.15s;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .close:hover {
+  background: rgba(0, 212, 170, 0.14);
+  border-color: rgba(0, 212, 170, 0.45);
   color: var(--text);
-  background: var(--bg-muted);
 }
 
 .form {

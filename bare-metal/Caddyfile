@@ -1,0 +1,40 @@
+# Harbor FM - production Caddyfile for bare-metal (pm2/node on port 3001)
+# Copy to /etc/caddy/Caddyfile. Accepts any hostname (on-demand TLS).
+# Caddy will obtain and renew TLS automatically per hostname.
+
+:443 {
+	tls {
+		on_demand
+	}
+
+	respond /caddy-health 200
+
+	@auth path /api/auth/login /api/auth/register /api/auth/forgot-password /api/auth/reset-password /api/auth/verify-email /api/auth/validate-reset-token
+	handle @auth {
+		reverse_proxy 127.0.0.1:3001 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3001 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up Upgrade {http.request.header.Upgrade}
+			header_up Connection {http.request.header.Connection}
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+			}
+		}
+	}
+}

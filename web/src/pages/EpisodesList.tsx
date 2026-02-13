@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Plus } from 'lucide-react';
+import { ChevronRight, Lock, Plus } from 'lucide-react';
 import { getPodcast } from '../api/podcasts';
 import { listEpisodes } from '../api/episodes';
 import { me, isReadOnly } from '../api/auth';
@@ -124,27 +124,39 @@ export function EpisodesList() {
         )}
         {!episodesLoading && episodes.length > 0 && (
           <ul className={styles.list}>
-            {episodes.map((ep) => (
-              <li key={ep.id} className={styles.item}>
-                <Link to={`/episodes/${ep.id}`} className={styles.itemLink} aria-label={`Open ${ep.title}`}>
-                  <div className={styles.itemContent}>
-                    <span className={styles.itemTitle}>{ep.title}</span>
-                    <div className={styles.itemMeta}>
-                      <span className={styles.itemStatus}>{ep.status}</span>
-                      {(ep.season_number != null || ep.episode_number != null) && (
-                        <span className={styles.itemMetaItem}>
-                          S{ep.season_number ?? '?'} E{ep.episode_number ?? '?'}
-                        </span>
-                      )}
-                      {ep.audio_final_path && (
-                        <span className={styles.itemMetaItem}>✓ Audio</span>
-                      )}
+            {episodes.map((ep) => {
+              const isSubscriberOnly = ep.subscriber_only === 1;
+              
+              return (
+                <li
+                  key={ep.id}
+                  className={isSubscriberOnly ? `${styles.item} ${styles.itemSubscriberOnly}` : styles.item}
+                >
+                  <Link to={`/episodes/${ep.id}`} className={styles.itemLink} aria-label={`Open ${ep.title}`}>
+                    <div className={styles.itemContent}>
+                      <div className={styles.itemTitleRow}>
+                        {isSubscriberOnly && (
+                          <Lock size={14} strokeWidth={2.5} className={styles.itemTitleLockGold} aria-label="Subscriber only" />
+                        )}
+                        <span className={styles.itemTitle}>{ep.title}</span>
+                      </div>
+                      <div className={styles.itemMeta}>
+                        <span className={styles.itemStatus}>{ep.status}</span>
+                        {(ep.season_number != null || ep.episode_number != null) && (
+                          <span className={styles.itemMetaItem}>
+                            S{ep.season_number ?? '?'} E{ep.episode_number ?? '?'}
+                          </span>
+                        )}
+                        {ep.audio_final_path && (
+                          <span className={styles.itemMetaItem}>✓ Audio</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <ChevronRight className={styles.itemChevron} size={20} strokeWidth={2} aria-hidden />
-                </Link>
-              </li>
-            ))}
+                    <ChevronRight className={styles.itemChevron} size={20} strokeWidth={2} aria-hidden />
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

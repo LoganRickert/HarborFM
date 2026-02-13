@@ -1,21 +1,23 @@
-import Database from 'better-sqlite3';
-import { join } from 'path';
-import { mkdirSync, existsSync } from 'fs';
+import Database from "better-sqlite3";
+import { join } from "path";
+import { mkdirSync, existsSync } from "fs";
+import { getDataDir } from "../services/paths.js";
+import { DB_FILENAME } from "../config.js";
 
-const DATA_DIR = process.env.DATA_DIR ?? join(process.cwd(), 'data');
-const DB_PATH = join(DATA_DIR, 'harborfm.db');
+const DB_PATH = join(getDataDir(), DB_FILENAME);
 
 function ensureDataDir() {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
+  const dataDir = getDataDir();
+  if (!existsSync(dataDir)) {
+    mkdirSync(dataDir, { recursive: true });
   }
 }
 
 ensureDataDir();
 
 export const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
 
 export function closeDb() {
   db.close();

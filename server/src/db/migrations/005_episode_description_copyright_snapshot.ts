@@ -3,7 +3,9 @@
  * Appended to episode description in RSS/public output.
  */
 export const up = (db: { exec: (sql: string) => void }) => {
-  db.exec(`ALTER TABLE episodes ADD COLUMN description_copyright_snapshot TEXT;`);
+  db.exec(
+    `ALTER TABLE episodes ADD COLUMN description_copyright_snapshot TEXT;`,
+  );
 };
 
 export const down = (_db: { exec: (sql: string) => void }) => {

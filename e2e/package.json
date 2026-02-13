@@ -1,0 +1,9 @@
+{
+  "name": "e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "bash scripts/run-e2e.sh",
+    "e2e:run": "node run.js"
+  }
+}

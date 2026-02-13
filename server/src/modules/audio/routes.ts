@@ -1,0 +1,561 @@
+import type { FastifyInstance } from "fastify";
+import { statSync, unlinkSync, readFileSync } from "fs";
+import { extname, dirname, basename } from "path";
+import send from "@fastify/send";
+import { existsSync } from "fs";
+import { db } from "../../db/index.js";
+import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
+import {
+  canAccessEpisode,
+  canEditSegments,
+  canEditEpisodeOrPodcastMetadata,
+  getPodcastOwnerId,
+} from "../../services/access.js";
+import { getLocationForIp } from "../../services/geolocation.js";
+import { getClientIp, getUserAgent } from "../../services/loginAttempts.js";
+import {
+  clientKey,
+  recordEpisodeListenIfNew,
+  recordEpisodeRequest,
+} from "../../services/podcastStats.js";
+import {
+  uploadsDir,
+  processedDir,
+  assertPathUnder,
+} from "../../services/paths.js";
+import * as audioService from "../../services/audio.js";
+import {
+  FileTooLargeError,
+  streamToFileWithLimit,
+  extensionFromAudioMimetype,
+} from "../../services/uploads.js";
+import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
+import {
+  EPISODE_AUDIO_UPLOAD_MAX_BYTES,
+  WAVEFORM_EXTENSION,
+} from "../../config.js";
+import { readSettings } from "../settings/index.js";
+import { userRateLimitPreHandler } from "../../services/rateLimit.js";
+import { getSingleRangeRequestedLength } from "../../utils/parseRange.js";
+import { isHumanUserAgent } from "../../utils/isBot.js";
+
+const ALLOWED_MIME = [
+  "audio/wav",
+  "audio/wave",
+  "audio/x-wav",
+  "audio/mpeg",
+  "audio/mp3",
+];
+
+export async function audioRoutes(app: FastifyInstance) {
+  app.post(
+    "/episodes/:id/audio",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Audio"],
+        summary: "Upload episode audio",
+        description:
+          "Upload source audio (WAV/MP3, multipart). Max 500MB. Requires read-write access.",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        response: {
+          200: { description: "Episode with updated audio" },
+          400: { description: "No file or invalid type" },
+          403: { description: "Storage limit or permission" },
+          404: { description: "Episode not found" },
+          500: { description: "Upload failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: episodeId } = request.params as { id: string };
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access)
+        return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditEpisodeOrPodcastMetadata(access.role))
+        return reply
+          .status(403)
+          .send({
+            error: "You do not have permission to upload episode audio.",
+          });
+      const { podcastId } = access;
+
+      const data = await request.file();
+      if (!data) return reply.status(400).send({ error: "No file uploaded" });
+      const mimetype = data.mimetype || "";
+      if (!ALLOWED_MIME.includes(mimetype) && !mimetype.startsWith("audio/")) {
+        return reply
+          .status(400)
+          .send({ error: "Invalid file type. Use WAV or MP3." });
+      }
+      const ext = extensionFromAudioMimetype(mimetype);
+      const dir = uploadsDir(podcastId, episodeId);
+      const destPath = `${dir}/source.${ext}`;
+      // Remove any previous source files to avoid orphaned disk usage.
+      // We only ever write source.wav or source.mp3.
+      let bytesRemoved = 0;
+      for (const p of [`${dir}/source.wav`, `${dir}/source.mp3`]) {
+        if (p === destPath) continue;
+        if (!existsSync(p)) continue;
+        try {
+          bytesRemoved += statSync(p).size;
+        } catch {
+          // ignore
+        }
+        try {
+          unlinkSync(p);
+        } catch {
+          // ignore
+        }
+      }
+
+      let oldDestBytes = 0;
+      if (existsSync(destPath)) {
+        try {
+          oldDestBytes = statSync(destPath).size;
+        } catch {
+          oldDestBytes = 0;
+        }
+      }
+
+      let bytesWritten = 0;
+      try {
+        bytesWritten = await streamToFileWithLimit(
+          data.file,
+          destPath,
+          EPISODE_AUDIO_UPLOAD_MAX_BYTES,
+        );
+      } catch (err) {
+        if (err instanceof FileTooLargeError) {
+          return reply.status(400).send({ error: "File too large" });
+        }
+        request.log.error(err);
+        return reply.status(500).send({ error: "Upload failed" });
+      }
+
+      const storageUserId =
+        getPodcastOwnerId(access.podcastId) ?? request.userId;
+      const potentialDelta = bytesWritten - oldDestBytes - bytesRemoved;
+      if (
+        potentialDelta > 0 &&
+        wouldExceedStorageLimit(db, storageUserId, potentialDelta)
+      ) {
+        try {
+          unlinkSync(destPath);
+        } catch {
+          /* ignore */
+        }
+        return reply.status(403).send({
+          error:
+            "You have reached your storage limit. Delete some content to free space.",
+        });
+      }
+
+      let durationSec = 0;
+      let sizeBytes = bytesWritten;
+      let audioMime = mimetype;
+      try {
+        const probe = await audioService.probeAudio(destPath, dir);
+        durationSec = probe.durationSec;
+        sizeBytes = probe.sizeBytes;
+        audioMime = probe.mime ?? mimetype;
+      } catch {
+        // keep defaults
+      }
+
+      // Track disk usage delta against podcast owner (best-effort)
+      const delta = (sizeBytes || 0) - oldDestBytes - bytesRemoved;
+      if (delta !== 0) {
+        db.prepare(
+          `UPDATE users
+           SET disk_bytes_used =
+             CASE
+               WHEN COALESCE(disk_bytes_used, 0) + ? < 0 THEN 0
+               ELSE COALESCE(disk_bytes_used, 0) + ?
+             END
+           WHERE id = ?`,
+        ).run(delta, delta, storageUserId);
+      }
+
+      db.prepare(
+        `UPDATE episodes SET
+          audio_source_path = ?,
+          audio_mime = ?,
+          audio_bytes = ?,
+          audio_duration_sec = ?,
+          updated_at = datetime('now')
+         WHERE id = ?`,
+      ).run(destPath, audioMime, sizeBytes, durationSec, episodeId);
+
+      const row = db
+        .prepare("SELECT * FROM episodes WHERE id = ?")
+        .get(episodeId) as Record<string, unknown>;
+      return row;
+    },
+  );
+
+  app.post(
+    "/episodes/:id/process-audio",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({ bucket: "ffmpeg", windowMs: 1000 }),
+      ],
+      schema: {
+        tags: ["Audio"],
+        summary: "Process episode audio",
+        description:
+          "Transcode source to final format (MP3/M4A). Requires read-write access.",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        response: {
+          200: { description: "Episode" },
+          400: { description: "No source audio" },
+          403: { description: "Permission denied" },
+          404: { description: "Episode not found" },
+          500: { description: "Processing failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: episodeId } = request.params as { id: string };
+      const access = canAccessEpisode(request.userId, episodeId, {
+        includeEpisode: true,
+      });
+      if (!access)
+        return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role))
+        return reply
+          .status(403)
+          .send({
+            error: "You do not have permission to process episode audio.",
+          });
+      const { podcastId, episode } = access;
+      const sourcePath = episode!.audio_source_path as string | undefined;
+      if (!sourcePath || !existsSync(sourcePath)) {
+        return reply
+          .status(400)
+          .send({ error: "No audio uploaded for this episode" });
+      }
+      try {
+        const settings = readSettings();
+        const finalPath = await audioService.transcodeToFinal(
+          sourcePath,
+          podcastId,
+          episodeId,
+          {
+            format: settings.final_format,
+            bitrateKbps: settings.final_bitrate_kbps,
+            channels: settings.final_channels,
+          },
+        );
+        const meta = await audioService.getAudioMetaAfterProcess(
+          podcastId,
+          episodeId,
+          settings.final_format,
+        );
+        db.prepare(
+          `UPDATE episodes SET
+            audio_final_path = ?,
+            audio_mime = ?,
+            audio_bytes = ?,
+            audio_duration_sec = ?,
+            updated_at = datetime('now')
+           WHERE id = ?`,
+        ).run(
+          finalPath,
+          meta.mime,
+          meta.sizeBytes,
+          meta.durationSec,
+          episodeId,
+        );
+        const row = db
+          .prepare("SELECT * FROM episodes WHERE id = ?")
+          .get(episodeId) as Record<string, unknown>;
+        return row;
+      } catch (err) {
+        request.log.error(err);
+        return reply.status(500).send({ error: "Audio processing failed" });
+      }
+    },
+  );
+
+  app.get(
+    "/episodes/:id/final-waveform",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Audio"],
+        summary: "Get final waveform",
+        description: "Returns waveform JSON for processed episode audio.",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        response: {
+          200: { description: "Waveform JSON" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: episodeId } = request.params as { id: string };
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access)
+        return reply.status(404).send({ error: "Episode not found" });
+      const episode = db
+        .prepare("SELECT audio_final_path FROM episodes WHERE id = ?")
+        .get(episodeId) as { audio_final_path: string | null } | undefined;
+      const audioPath = episode?.audio_final_path;
+      if (!audioPath || !existsSync(audioPath))
+        return reply.status(404).send({ error: "Final audio not found" });
+      const base = processedDir(access.podcastId, episodeId);
+      assertPathUnder(audioPath, base);
+      const waveformPath = audioPath.replace(/\.[^.]+$/, WAVEFORM_EXTENSION);
+      if (!existsSync(waveformPath))
+        return reply.status(404).send({ error: "Waveform not found" });
+      assertPathUnder(waveformPath, base);
+      const json = readFileSync(waveformPath, "utf-8");
+      reply
+        .header("Content-Type", "application/json")
+        .header("Cache-Control", "private, max-age=3600");
+      return reply.send(json);
+    },
+  );
+
+  app.get(
+    "/episodes/:id/download",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Audio"],
+        summary: "Download episode audio",
+        description:
+          'Download source or final audio. Query type: "source" | "final" (default).',
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        querystring: {
+          type: "object",
+          properties: { type: { type: "string", enum: ["source", "final"] } },
+        },
+        response: {
+          200: { description: "Audio file" },
+          206: { description: "Partial content" },
+          404: { description: "Not found" },
+          500: { description: "Send error" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: episodeId } = request.params as { id: string };
+      const type = (request.query as { type?: string }).type ?? "final";
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access)
+        return reply.status(404).send({ error: "Episode not found" });
+      const episode = db
+        .prepare("SELECT * FROM episodes WHERE id = ?")
+        .get(episodeId) as Record<string, unknown>;
+      const path =
+        type === "source"
+          ? episode.audio_source_path
+          : episode.audio_final_path;
+      const p = path as string | null;
+      if (!p || !existsSync(p)) {
+        return reply
+          .status(404)
+          .send({
+            error:
+              type === "source"
+                ? "No source audio"
+                : "No processed audio. Run Process first.",
+          });
+      }
+      const allowedBase =
+        type === "source"
+          ? uploadsDir(access.podcastId, episodeId)
+          : processedDir(access.podcastId, episodeId);
+      const safePath = assertPathUnder(p, allowedBase);
+      const ext = extname(safePath) || (type === "source" ? "" : ".mp3");
+      const filename =
+        type === "source"
+          ? `episode-source-${episodeId}${ext}`
+          : `episode-${episodeId}${ext}`;
+      const mime =
+        type === "source"
+          ? (episode.audio_mime as string) || "audio/mpeg"
+          : (episode.audio_mime as string) || "audio/mpeg";
+
+      const result = await send(request.raw, basename(safePath), {
+        root: dirname(safePath),
+        contentType: false,
+        maxAge: 3600,
+        acceptRanges: true,
+        cacheControl: true,
+      });
+
+      if (result.type === "error") {
+        const err = result.metadata.error as Error & { status?: number };
+        const status = (err.status ?? 500) as 404 | 500;
+        return reply
+          .status(status)
+          .send({ error: err.message ?? "Internal Server Error" });
+      }
+
+      reply.status(result.statusCode as 200 | 206 | 404 | 500);
+      const headers = result.headers as Record<string, string>;
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== undefined) reply.header(key, value);
+      }
+      reply
+        .header("Content-Type", mime)
+        .header("Content-Disposition", `attachment; filename="${filename}"`);
+      return reply.send(result.stream);
+    },
+  );
+
+  // Public endpoint for serving episode MP3s with podcast ID in path (for RSS feed enclosures)
+  // Format: /<podcastId>/episodes/<episodeId> or /<podcastId>/episodes/<episodeId>.mp3 (extension optional)
+  app.get(
+    "/:podcastId/episodes/:episodeId",
+    {
+      schema: {
+        tags: ["Audio"],
+        summary: "Stream episode (public)",
+        description:
+          "Stream episode MP3 for RSS enclosures. Public when public feeds enabled. Supports Range.",
+        security: [],
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            episodeId: { type: "string" },
+          },
+          required: ["podcastId", "episodeId"],
+        },
+        response: {
+          200: { description: "Audio stream" },
+          206: { description: "Partial content" },
+          400: { description: "Invalid ID" },
+          404: { description: "Not found" },
+          500: { description: "Send error" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const settings = readSettings();
+      if (!settings.public_feeds_enabled) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const { podcastId, episodeId: rawEpisodeId } = request.params as {
+        podcastId: string;
+        episodeId: string;
+      };
+      // Strip optional trailing file extension so enclosure URLs like .../episodes/ID.mp3 resolve to the same episode
+      const episodeId =
+        rawEpisodeId.replace(/\.[a-zA-Z0-9]+$/, "") || rawEpisodeId;
+
+      // Validate IDs exist and are non-empty
+      if (!podcastId || !podcastId.trim() || !episodeId || !episodeId.trim()) {
+        return reply
+          .status(400)
+          .send({ error: "Invalid podcast or episode ID" });
+      }
+
+      // Same rules as public episode DTO and waveform: allow when feed is not subscriber-only (public_feed_disabled !== 1) and episode is not subscriber_only.
+      const podcast = db
+        .prepare(
+          "SELECT id, COALESCE(public_feed_disabled, 0) AS public_feed_disabled FROM podcasts WHERE id = ?",
+        )
+        .get(podcastId.trim()) as
+        | { id: string; public_feed_disabled: number }
+        | undefined;
+
+      if (!podcast || podcast.public_feed_disabled === 1) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+
+      // Verify episode exists, belongs to podcast, is published, and is not subscriber-only
+      const episode = db
+        .prepare(
+          `SELECT e.*, COALESCE(e.subscriber_only, 0) AS subscriber_only FROM episodes e
+           WHERE e.id = ? AND e.podcast_id = ? AND e.status = 'published'
+           AND (e.publish_at IS NULL OR datetime(e.publish_at) <= datetime('now'))`,
+        )
+        .get(episodeId.trim(), podcastId.trim()) as
+        | (Record<string, unknown> & { subscriber_only: number })
+        | undefined;
+
+      if (!episode || episode.subscriber_only === 1) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+
+      const path = episode.audio_final_path as string | null;
+      if (!path || !existsSync(path)) {
+        return reply.status(404).send({ error: "Audio file not found" });
+      }
+
+      const allowedBase = processedDir(podcastId.trim(), episodeId.trim());
+      const safePath = assertPathUnder(path, allowedBase);
+      const mime = (episode.audio_mime as string) || "audio/mpeg";
+
+      // Stats: only for GET (not HEAD). Location lookup only for human requests.
+      if (request.method === "GET") {
+        const ip = getClientIp(request);
+        const ua = getUserAgent(request);
+        const isBot = !isHumanUserAgent(ua);
+        const location = isBot
+          ? null
+          : ((await getLocationForIp(ip).catch(() => null)) ?? "(unknown)");
+        recordEpisodeRequest(episodeId.trim(), isBot, location);
+
+        const fileSize = statSync(safePath).size;
+        const r = request.headers["range"];
+        const rangeHeader =
+          typeof r === "string" ? r : Array.isArray(r) ? r[0] : undefined;
+        const requestedLength = getSingleRangeRequestedLength(
+          rangeHeader,
+          fileSize,
+        );
+        const acceptLanguage =
+          (request.headers["accept-language"] as string) ?? "";
+        const ck = clientKey(ip, ua, acceptLanguage);
+        recordEpisodeListenIfNew(episodeId.trim(), isBot, ck, requestedLength);
+      }
+
+      const result = await send(request.raw, basename(safePath), {
+        root: dirname(safePath),
+        contentType: false, // set manually from episode.audio_mime
+        maxAge: 3600,
+        acceptRanges: true,
+        cacheControl: true,
+      });
+
+      if (result.type === "error") {
+        const err = result.metadata.error as Error & { status?: number };
+        const status = (err.status ?? 500) as 400 | 404 | 500;
+        const message = err.message ?? "Internal Server Error";
+        return reply.status(status).send({ error: message });
+      }
+
+      reply.status(result.statusCode as 200 | 206 | 404 | 500);
+      const headers = result.headers as Record<string, string>;
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== undefined) reply.header(key, value);
+      }
+      reply.header("Content-Type", mime);
+      return reply.send(result.stream);
+    },
+  );
+}

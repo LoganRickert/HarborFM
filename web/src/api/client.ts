@@ -1,5 +1,17 @@
 const BASE = '/api';
 
+/** Error thrown by api() with optional HTTP status (0 = network failure). */
+export type ApiError = Error & { status?: number };
+
+/** True when error is network or 5xx (show "Feed temporarily unavailable" + Try again). */
+export function isFeedUnavailableError(error: unknown): boolean {
+  const status = (error as ApiError)?.status;
+  if (status === undefined) return true;
+  if (status === 0) return true; // network
+  if (status >= 500) return true;
+  return false;
+}
+
 const CSRF_COOKIE_NAME = 'harborfm_csrf';
 
 function readCookie(name: string): string | undefined {
@@ -50,13 +62,19 @@ export async function api<T>(
   if (isUnsafeMethod(method)) {
     Object.assign(headers as Record<string, string>, csrfHeaders());
   }
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    method,
-    credentials: 'include',
-    headers,
-    body: json !== undefined ? JSON.stringify(json) : init.body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      method,
+      credentials: 'include',
+      headers,
+      body: json !== undefined ? JSON.stringify(json) : init.body,
+    });
+  } catch {
+    const err = Object.assign(new Error('Network error'), { status: 0 });
+    throw err;
+  }
   if (!res.ok) {
     if (res.status === 429) {
       const retryAfter = res.headers.get('Retry-After');
@@ -64,10 +82,13 @@ export async function api<T>(
         retryAfter && /^\d+$/.test(retryAfter)
           ? `Too many requests. Please try again in ${retryAfter} second${retryAfter === '1' ? '' : 's'}.`
           : 'Too many requests. Please wait a moment and try again.';
-      throw new Error(msg);
+      throw Object.assign(new Error(msg), { status: 429 });
     }
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? res.statusText);
+    const apiErr = Object.assign(new Error((err as { error?: string }).error ?? res.statusText), {
+      status: res.status,
+    });
+    throw apiErr;
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

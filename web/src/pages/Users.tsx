@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Edit, Trash2, Library, Radio } from 'lucide-react';
+import { Edit, Plus, Trash2, Library, Radio, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { listUsers, deleteUser, updateUser, type User } from '../api/users';
+import { listUsers, deleteUser, updateUser, createUser, type User } from '../api/users';
+import { formatDate, formatDateTime } from '../utils/format';
+import { FailedToLoadCard } from '../components/FailedToLoadCard';
 import styles from './Users.module.css';
 
 function formatBytes(bytes: number): string {
@@ -34,6 +36,12 @@ export function Users() {
   const [editMaxEpisodes, setEditMaxEpisodes] = useState<number | null>(null);
   const [editMaxStorageMb, setEditMaxStorageMb] = useState<number | null>(null);
   const [editMaxCollaborators, setEditMaxCollaborators] = useState<number | null>(null);
+  const [editMaxSubscriberTokens, setEditMaxSubscriberTokens] = useState<number | null>(null);
+  const [editCanTranscribe, setEditCanTranscribe] = useState(false);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createRole, setCreateRole] = useState<'user' | 'admin'>('user');
   const limit = 50;
   const queryClient = useQueryClient();
 
@@ -66,11 +74,25 @@ export function Users() {
         max_podcasts?: number | null;
         max_episodes?: number | null;
         max_storage_mb?: number | null;
+        max_collaborators?: number | null;
+        max_subscriber_tokens?: number | null;
+        can_transcribe?: boolean;
       };
-    }) => updateUser(userId, data),
+    }) => updateUser(userId, data as Parameters<typeof updateUser>[1]),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setUserToEdit(null);
+    },
+  });
+
+  const createUserMutation = useMutation({
+    mutationFn: () => createUser({ email: createEmail.trim(), password: createPassword, role: createRole }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setCreateUserOpen(false);
+      setCreateEmail('');
+      setCreatePassword('');
+      setCreateRole('user');
     },
   });
 
@@ -90,6 +112,8 @@ export function Users() {
     setEditMaxEpisodes(user.max_episodes ?? null);
     setEditMaxStorageMb(user.max_storage_mb ?? null);
     setEditMaxCollaborators(user.max_collaborators ?? null);
+    setEditMaxSubscriberTokens(user.max_subscriber_tokens ?? null);
+    setEditCanTranscribe((user as { can_transcribe?: number }).can_transcribe === 1);
   }
 
   function handleEditSubmit(e: React.FormEvent) {
@@ -106,6 +130,8 @@ export function Users() {
       max_episodes?: number | null;
       max_storage_mb?: number | null;
       max_collaborators?: number | null;
+      max_subscriber_tokens?: number | null;
+      can_transcribe?: boolean;
     } = {};
     if (editEmail !== userToEdit.email) {
       updates.email = editEmail;
@@ -134,6 +160,13 @@ export function Users() {
     if (editMaxCollaborators !== (userToEdit.max_collaborators ?? null)) {
       updates.max_collaborators = editMaxCollaborators;
     }
+    if (editMaxSubscriberTokens !== (userToEdit.max_subscriber_tokens ?? null)) {
+      updates.max_subscriber_tokens = editMaxSubscriberTokens;
+    }
+    const currentCanTranscribe = (userToEdit as { can_transcribe?: number }).can_transcribe === 1;
+    if (editCanTranscribe !== currentCanTranscribe) {
+      updates.can_transcribe = editCanTranscribe;
+    }
 
     if (Object.keys(updates).length > 0) {
       updateUserMutation.mutate({ userId: userToEdit.id, data: updates });
@@ -160,37 +193,43 @@ export function Users() {
       <div className={styles.head}>
         <h1 className={styles.title}>Users</h1>
       </div>
-      <div className={styles.searchWrap}>
+      <div className={styles.searchRow}>
         <input
           type="text"
           className={styles.searchInput}
           placeholder="Search by email..."
           value={search}
           onChange={handleSearchChange}
+          aria-label="Search by email"
         />
+        <button
+          type="button"
+          className={styles.createUserBtn}
+          onClick={() => {
+            setCreateRole('user');
+            setCreateUserOpen(true);
+          }}
+          aria-label="Create user"
+        >
+          <Plus size={18} strokeWidth={2} aria-hidden />
+          Create User
+        </button>
       </div>
       {isLoading && <p className={styles.muted}>Loading users...</p>}
-      {isError && <p className={styles.error}>Failed to load users.</p>}
+      {isError && <FailedToLoadCard title="Failed to load users" />}
       {!isLoading && !isError && (
         <>
-          {pagination && (
-            <p className={styles.subtitle}>
-              Showing {users.length} of {pagination.total} users
-              {search && ` matching "${search}"`}
-            </p>
-          )}
           {users.length === 0 ? (
             <div className={styles.empty}>
               <p>No users found.</p>
             </div>
           ) : (
-            <>
-              <div className={styles.userList}>
-                {users.map((user) => (
+            <div className={styles.userList}>
+              {users.map((user) => (
                   <div key={user.id} className={styles.userCard}>
                     <div className={styles.userCardRow}>
                       <div className={styles.userCardLeft}>
-                        <h3 className={styles.userCardEmail}>{user.email}</h3>
+                        <h2 className={styles.userCardEmail}>{user.email}</h2>
                       </div>
                       <div className={styles.userCardActions}>
                         <button
@@ -240,13 +279,13 @@ export function Users() {
                           {user.role}
                         </span>
                         {' • '}
-                        Created {new Date(user.created_at).toLocaleDateString()}
+                        Created {formatDate(user.created_at)}
                         {' • '}
                         Storage {formatBytes(user.disk_bytes_used ?? 0)}
                       </p>
                       {(user.last_login_at != null || user.last_login_ip != null || user.last_login_location) && (
                         <p className={styles.userCardLastLogin}>
-                          Last login: {user.last_login_at != null ? new Date(user.last_login_at).toLocaleString() : '—'}
+                          Last login: {user.last_login_at != null ? formatDateTime(user.last_login_at) : '-'}
                           {user.last_login_ip != null && <> · {user.last_login_ip}</>}
                           {user.last_login_location != null && user.last_login_location !== '' && (
                             <> · {user.last_login_location}</>
@@ -255,34 +294,39 @@ export function Users() {
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-              {pagination && pagination.totalPages > 1 && (
-                <div className={styles.pagination}>
-                  <button
-                    type="button"
-                    className={styles.pageBtn}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    aria-label="Go to previous page"
-                  >
-                    Previous
-                  </button>
-                  <span className={styles.pageInfo}>
-                    Page {pagination.page} of {pagination.totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    className={styles.pageBtn}
-                    onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                    disabled={page >= pagination.totalPages}
-                    aria-label="Go to next page"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </>
+              ))}
+            </div>
+          )}
+          {pagination && (
+            <p className={styles.subtitleRight}>
+              Showing {users.length} of {pagination.total} users
+              {search && ` matching "${search}"`}
+            </p>
+          )}
+          {pagination && pagination.totalPages > 1 && (
+            <div className={styles.pagination}>
+              <button
+                type="button"
+                className={styles.pageBtn}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                aria-label="Go to previous page"
+              >
+                Previous
+              </button>
+              <span className={styles.pageInfo}>
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <button
+                type="button"
+                className={styles.pageBtn}
+                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                disabled={page >= pagination.totalPages}
+                aria-label="Go to next page"
+              >
+                Next
+              </button>
+            </div>
           )}
         </>
       )}
@@ -291,7 +335,14 @@ export function Users() {
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}>
-            <Dialog.Title className={styles.dialogTitle}>Edit User</Dialog.Title>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>Edit User</Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.dialogClose} aria-label="Close">
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
             <Dialog.Description className={styles.dialogDescription}>
               Update the user email, password, role, and limits.
             </Dialog.Description>
@@ -350,6 +401,20 @@ export function Users() {
                 </label>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
                   When enabled, the user can view content but cannot create or edit podcasts, episodes, library items, or run build/S3 export.
+                </p>
+              </div>
+              <div className={styles.formGroup}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={editCanTranscribe}
+                    onChange={(e) => setEditCanTranscribe(e.target.checked)}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Can Transcribe</span>
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
+                  When enabled, the user can generate episode and segment transcripts (when a transcription provider is configured).
                 </p>
               </div>
               <div className={styles.formGroup}>
@@ -441,14 +506,32 @@ export function Users() {
                     }}
                   />
                 </label>
+                <label className={styles.formLabel} style={{ marginTop: '0.5rem' }}>
+                  Max Subscriber Tokens
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className={styles.formInput}
+                    placeholder="No limit"
+                    value={editMaxSubscriberTokens ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditMaxSubscriberTokens(v === '' ? null : Number(v));
+                    }}
+                  />
+                </label>
               </div>
               </div>
               {updateUserMutation.isError && (
-                <p className={styles.error} style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                  {updateUserMutation.error instanceof Error ? updateUserMutation.error.message : 'Failed to update user'}
-                </p>
+                <div className={styles.noticeError} role="alert" style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span className={styles.noticeTitle}>Error</span>
+                  <p className={styles.noticeBody}>
+                    {updateUserMutation.error instanceof Error ? updateUserMutation.error.message : 'Failed to update user'}
+                  </p>
+                </div>
               )}
-              <div className={styles.dialogActions}>
+              <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
                 <Dialog.Close asChild>
                   <button type="button" className={styles.cancel} aria-label="Cancel editing user">Cancel</button>
                 </Dialog.Close>
@@ -466,11 +549,126 @@ export function Users() {
         </Dialog.Portal>
       </Dialog.Root>
 
+      <Dialog.Root open={createUserOpen} onOpenChange={(open) => !open && setCreateUserOpen(false)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className={styles.dialogOverlay} />
+          <Dialog.Content className={styles.dialogContent}>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>Create User</Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.dialogClose} aria-label="Close">
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className={styles.dialogDescription}>
+              Add a new user account. They can sign in with this email and password.
+            </Dialog.Description>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const email = createEmail.trim();
+                if (!email || !email.includes('@')) return;
+                if (createPassword.length < 8) return;
+                createUserMutation.mutate();
+              }}
+              className={styles.dialogFormWrap}
+            >
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>
+                  Email
+                  <input
+                    type="email"
+                    className={styles.formInput}
+                    value={createEmail}
+                    onChange={(e) => setCreateEmail(e.target.value)}
+                    required
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>
+                  Password
+                  <input
+                    type="password"
+                    className={styles.formInput}
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  At least 8 characters.
+                </p>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>
+                  Role
+                  <div className={styles.roleToggle} role="group" aria-label="User role">
+                    <button
+                      type="button"
+                      className={createRole === 'user' ? styles.roleToggleBtnActive : styles.roleToggleBtn}
+                      onClick={() => setCreateRole('user')}
+                      aria-pressed={createRole === 'user'}
+                    >
+                      User
+                    </button>
+                    <button
+                      type="button"
+                      className={createRole === 'admin' ? styles.roleToggleBtnActive : styles.roleToggleBtn}
+                      onClick={() => setCreateRole('admin')}
+                      aria-pressed={createRole === 'admin'}
+                    >
+                      Admin
+                    </button>
+                  </div>
+                </label>
+              </div>
+              {createUserMutation.isError && (
+                <div className={styles.noticeError} role="alert" style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span className={styles.noticeTitle}>Error</span>
+                  <p className={styles.noticeBody}>
+                    {createUserMutation.error instanceof Error ? createUserMutation.error.message : 'Failed to create user'}
+                  </p>
+                </div>
+              )}
+              <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
+                <Dialog.Close asChild>
+                  <button type="button" className={styles.cancel} aria-label="Cancel">
+                    <X size={16} strokeWidth={2} aria-hidden />
+                    Cancel
+                  </button>
+                </Dialog.Close>
+                <button
+                  type="submit"
+                  className={styles.dialogConfirm}
+                  disabled={createUserMutation.isPending || !createEmail.trim() || createPassword.length < 8}
+                  aria-label="Create user"
+                >
+                  <Plus size={16} strokeWidth={2} aria-hidden />
+                  {createUserMutation.isPending ? 'Creating...' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
       <Dialog.Root open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.dialogContent}>
-            <Dialog.Title className={styles.dialogTitle}>Delete user?</Dialog.Title>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>Delete user?</Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.dialogClose} aria-label="Close">
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
             <Dialog.Description className={styles.dialogDescription}>
               {userToDelete && (() => {
                 const user = users.find((u) => u.id === userToDelete);

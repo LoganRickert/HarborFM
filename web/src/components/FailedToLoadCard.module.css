@@ -1,0 +1,21 @@
+.card {
+  flex-grow: 1;
+  padding: 3rem 2rem;
+  text-align: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--error);
+}
+
+.message {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+}

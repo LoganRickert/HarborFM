@@ -1,0 +1,55 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { marked } from 'marked';
+
+function findChangelog() {
+  const fromFile = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'CHANGELOG.md');
+  if (existsSync(fromFile)) return fromFile;
+  const fromCwd = join(process.cwd(), '..', 'CHANGELOG.md');
+  if (existsSync(fromCwd)) return fromCwd;
+  const fromCwdRoot = join(process.cwd(), 'CHANGELOG.md');
+  if (existsSync(fromCwdRoot)) return fromCwdRoot;
+  return null;
+}
+
+const changelogPath = findChangelog();
+let changelogHtml = '<p>Changelog not found.</p>';
+if (changelogPath) {
+  try {
+    const raw = readFileSync(changelogPath, 'utf-8');
+    marked.setOptions({ gfm: true, breaks: true });
+    changelogHtml = marked.parse(raw, { async: false });
+  } catch {
+    // use default message
+  }
+}
+---
+
+<Layout title="Updates — HarborFM" description="Changelog and updates for HarborFM.">
+  <header class="header">
+    <div class="header-inner">
+      <h1><a href="/"><img src="/favicon.svg" alt="" class="logo-icon" width="24" height="24" /><div class="header-brand-text">HarborFM</div></a></h1>
+      <nav class="nav">
+        <a href="/updates/">Updates</a>
+        <a href="/server/">API (Swagger)</a>
+        <a href="https://github.com/LoganRickert/harborfm">GitHub</a>
+        <a href="https://app.harborfm.com/">Demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="updates-main">
+    <div class="updates-content">
+      <h1>Updates</h1>
+      <p class="updates-intro">All notable changes are documented here. Until version 1.0, versions are identified by the last commit of each day.</p>
+      <article class="changelog" set:html={changelogHtml} />
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p><a href="/">← Home</a></p>
+  </footer>
+</Layout>

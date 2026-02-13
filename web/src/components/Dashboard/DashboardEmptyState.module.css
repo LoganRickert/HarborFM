@@ -1,0 +1,76 @@
+/* Empty state - more visual */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  background: linear-gradient(145deg, rgba(20, 23, 30, 0.9) 0%, rgba(26, 30, 40, 0.6) 100%);
+  border: 1px dashed rgba(0, 212, 170, 0.25);
+  border-radius: 16px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.emptyIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 1.25rem;
+  background: rgba(0, 212, 170, 0.1);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.emptyTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.emptyMessage {
+  margin: 0 0 1.5rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.emptyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: var(--radius);
+  text-decoration: none;
+  box-shadow: 0 2px 12px rgba(0, 212, 170, 0.25);
+  transition: all 0.2s ease;
+}
+
+.emptyBtn:hover {
+  background: var(--accent-dim);
+  box-shadow: 0 4px 16px rgba(0, 212, 170, 0.35);
+  transform: translateY(-1px);
+  text-decoration: none;
+  color: var(--bg);
+}
+
+.emptyBtnDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.emptyBtnDisabled:hover {
+  background: var(--accent);
+  box-shadow: 0 2px 12px rgba(0, 212, 170, 0.25);
+  transform: none;
+}

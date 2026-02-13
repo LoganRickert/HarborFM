@@ -1,29 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { listMessages, type ContactMessage, type MessagesSort } from '../api/messages';
+import { formatDateTime } from '../utils/format';
+import { FailedToLoadCard } from '../components/FailedToLoadCard';
 import styles from './Messages.module.css';
 
 const LIMIT = 10;
-const MESSAGE_PREVIEW_LENGTH = 300;
 const SEARCH_DEBOUNCE_MS = 300;
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function truncateMessage(msg: string, maxLen: number): string {
-  const s = msg.trim();
-  if (s.length <= maxLen) return s;
-  return s.slice(0, maxLen).trimEnd() + '…';
-}
 
 export function Messages() {
   const [page, setPage] = useState(1);
@@ -106,7 +90,7 @@ export function Messages() {
         </div>
       </div>
       {isLoading && <p className={styles.muted}>Loading messages...</p>}
-      {isError && <p className={styles.error}>Failed to load messages.</p>}
+      {isError && <FailedToLoadCard title="Failed to load messages" />}
       {!isLoading && !isError && (
         <>
           {messages.length === 0 ? (
@@ -158,8 +142,32 @@ export function Messages() {
 }
 
 function MessageCard({ message }: { message: ContactMessage }) {
-  const preview = truncateMessage(message.message, MESSAGE_PREVIEW_LENGTH);
-  const isTruncated = message.message.trim().length > MESSAGE_PREVIEW_LENGTH;
+  const [expanded, setExpanded] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const fullMessage = message.message.trim();
+
+  useEffect(() => {
+    if (expanded || !fullMessage) return;
+    const el = textRef.current;
+    if (!el) return;
+    const check = () => {
+      if (!textRef.current) return;
+      const truncated = textRef.current.scrollHeight > textRef.current.clientHeight;
+      setHasOverflow(truncated);
+    };
+    check();
+    const t = requestAnimationFrame(() => {
+      requestAnimationFrame(check);
+    });
+    return () => cancelAnimationFrame(t);
+  }, [expanded, fullMessage]);
+
+  // Fallback: some browsers report scrollHeight === clientHeight when line-clamped; show toggle for long messages
+  const likelyOverflows = fullMessage.length > 200;
+  const showAsOverflow = hasOverflow || (likelyOverflows && !expanded);
+
+  const showToggle = showAsOverflow || expanded;
   const contextLabel =
     message.episode_title && message.podcast_title
       ? `${message.episode_title} - ${message.podcast_title}`
@@ -169,7 +177,7 @@ function MessageCard({ message }: { message: ContactMessage }) {
   return (
     <div className={styles.messageCard}>
       <div className={styles.messageCardRow}>
-        <h3 className={styles.messageCardName}>{message.name}</h3>
+        <h2 className={styles.messageCardName}>{message.name}</h2>
         <time className={styles.messageCardDate} dateTime={message.created_at}>
           {formatDateTime(message.created_at)}
         </time>
@@ -183,10 +191,28 @@ function MessageCard({ message }: { message: ContactMessage }) {
         </a>
       </p>
       <div className={styles.messageCardBody}>
-        <p className={styles.messageCardText}>
-          {preview}
-          {isTruncated && <span className={styles.ellipsis}> …</span>}
+        <p
+          ref={textRef}
+          className={
+            expanded
+              ? styles.messageCardText
+              : `${styles.messageCardText} ${styles.messageCardTextClamped}`
+          }
+        >
+          {fullMessage}
         </p>
+        {showToggle && (
+          <div className={styles.viewMoreWrap}>
+            <button
+              type="button"
+              className={styles.viewMoreBtn}
+              onClick={() => setExpanded((e) => !e)}
+              aria-expanded={expanded}
+            >
+              {expanded ? 'View less' : 'View more'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

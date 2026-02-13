@@ -94,7 +94,7 @@ if [ -n "$CERTBOT_EMAIL" ] && [ "$DOMAIN" != "localhost" ]; then
 else
   echo ""
   if [ "$DOMAIN" = "localhost" ] || [ -z "$CERTBOT_EMAIL" ]; then
-    echo "Domain is localhost or email not set — skipping certbot."
+    echo "Domain is localhost or email not set - skipping certbot."
     echo "Edit .env (DOMAIN, CERTBOT_EMAIL), then run: docker compose run --rm certbot"
   fi
 fi

@@ -11,7 +11,7 @@ import {
   applyNoiseSuppressionToSegment,
 } from '../../api/segments';
 import { getLlmAvailable, askLlm } from '../../api/llm';
-import { Play, Pause, FileText, Trash2, Plus, Minus } from 'lucide-react';
+import { Play, Pause, FileText, Trash2, Plus, Minus, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import styles from '../EpisodeEditor.module.css';
 
@@ -22,6 +22,7 @@ export function TranscriptModal({
   segmentDuration,
   segmentAudioPath,
   asrAvailable,
+  ownerCanTranscribe = true,
   onClose,
   onDeleteEntry,
 }: {
@@ -31,6 +32,8 @@ export function TranscriptModal({
   segmentDuration: number;
   segmentAudioPath?: string | null;
   asrAvailable: boolean;
+  /** When false, Generate transcript is shown but disabled (grayed out). */
+  ownerCanTranscribe?: boolean;
   onClose: () => void;
   onDeleteEntry?: (entryIndex: number) => void;
 }) {
@@ -512,12 +515,16 @@ export function TranscriptModal({
         setTrimEnd('');
         // Reload segments
         queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
-        // Generate new transcript after trimming
-        return generateSegmentTranscript(episodeId, segmentId, true);
-      })
-      .then((r) => {
-        setText(r.text);
-        setNotFound(false);
+        // Reload transcript display if one exists; do not auto-generate
+        return getSegmentTranscript(episodeId, segmentId)
+          .then((r) => {
+            setText(r.text ?? null);
+            setNotFound(r.text == null);
+          })
+          .catch(() => {
+            setText(null);
+            setNotFound(true);
+          });
       })
       .catch((err) => {
         setTrimError(err?.message ?? 'Failed to trim audio');
@@ -574,12 +581,16 @@ export function TranscriptModal({
         setTrimEnd('');
         // Reload segments
         queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
-        // Generate new transcript after removing silence
-        return generateSegmentTranscript(episodeId, segmentId, true);
-      })
-      .then((r) => {
-        setText(r.text);
-        setNotFound(false);
+        // Reload transcript display if one exists; do not auto-generate
+        return getSegmentTranscript(episodeId, segmentId)
+          .then((r) => {
+            setText(r.text ?? null);
+            setNotFound(r.text == null);
+          })
+          .catch(() => {
+            setText(null);
+            setNotFound(true);
+          });
       })
       .catch((err) => {
         setTrimError(err?.message ?? 'Failed to remove silence');
@@ -730,8 +741,16 @@ export function TranscriptModal({
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide}`} aria-describedby={undefined}>
-          <Dialog.Title className={styles.dialogTitle}>{segmentName}</Dialog.Title>
+        <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.segmentTranscriptDialog}`} aria-describedby={undefined}>
+          <div className={styles.dialogHeaderRow}>
+            <Dialog.Title className={styles.dialogTitle}>{segmentName}</Dialog.Title>
+            <Dialog.Close asChild>
+              <button type="button" className={styles.dialogClose} aria-label="Close">
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+          </div>
+          <div className={styles.dialogBodyScroll}>
           <div className={styles.dialogDescription}>
             {showTranscriptModeBar && (
               <div className={styles.transcriptToggleWrap}>
@@ -1026,13 +1045,20 @@ export function TranscriptModal({
                     e.preventDefault();
                   }}
                 >
-                  <Dialog.Title className={styles.dialogTitle}>
-                    Confirm Trim
-                  </Dialog.Title>
+                  <div className={styles.dialogHeaderRow}>
+                    <Dialog.Title className={styles.dialogTitle}>
+                      Confirm Trim
+                    </Dialog.Title>
+                    <Dialog.Close asChild>
+                      <button type="button" className={styles.dialogClose} aria-label="Close">
+                        <X size={18} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    </Dialog.Close>
+                  </div>
                   <Dialog.Description className={styles.dialogDescription}>
                     {pendingTrimAction?.isStart
-                      ? `Are you sure you want to trim ${pendingTrimAction.timeSec.toFixed(3)} seconds from the start? This will update the audio file and generate a new transcript.`
-                      : `Are you sure you want to trim ${pendingTrimAction?.timeSec.toFixed(3) ?? 0} seconds from the end? This will update the audio file and generate a new transcript.`}
+                      ? `Are you sure you want to trim ${pendingTrimAction.timeSec.toFixed(3)} seconds from the start? This will update the audio file.`
+                      : `Are you sure you want to trim ${pendingTrimAction?.timeSec.toFixed(3) ?? 0} seconds from the end? This will update the audio file.`}
                   </Dialog.Description>
                   <div className={styles.dialogActions}>
                     <button
@@ -1082,11 +1108,18 @@ export function TranscriptModal({
                     e.preventDefault();
                   }}
                 >
-                  <Dialog.Title className={styles.dialogTitle}>
-                    Remove Silence
-                  </Dialog.Title>
+                  <div className={styles.dialogHeaderRow}>
+                    <Dialog.Title className={styles.dialogTitle}>
+                      Remove Silence
+                    </Dialog.Title>
+                    <Dialog.Close asChild>
+                      <button type="button" className={styles.dialogClose} aria-label="Close">
+                        <X size={18} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    </Dialog.Close>
+                  </div>
                   <Dialog.Description className={styles.dialogDescription}>
-                    Are you sure you want to remove all silence periods longer than 2 seconds? This will update the audio file and generate a new transcript.
+                    Are you sure you want to remove all silence periods longer than 2 seconds? This will update the audio file.
                   </Dialog.Description>
                   <div className={styles.dialogActions}>
                     <button
@@ -1135,9 +1168,16 @@ export function TranscriptModal({
                     e.preventDefault();
                   }}
                 >
-                  <Dialog.Title className={styles.dialogTitle}>
-                    Noise Suppression
-                  </Dialog.Title>
+                  <div className={styles.dialogHeaderRow}>
+                    <Dialog.Title className={styles.dialogTitle}>
+                      Noise Suppression
+                    </Dialog.Title>
+                    <Dialog.Close asChild>
+                      <button type="button" className={styles.dialogClose} aria-label="Close">
+                        <X size={18} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    </Dialog.Close>
+                  </div>
                   <Dialog.Description className={styles.dialogDescription}>
                     Apply FFT-based noise suppression to reduce background noise? This will update the audio file. Transcript timings are unchanged.
                   </Dialog.Description>
@@ -1176,7 +1216,7 @@ export function TranscriptModal({
                     type="button"
                     className={`${styles.addSectionChoiceBtn} ${styles.addSectionChoiceBtnPrimary} ${styles.transcriptGenerateBtn}`}
                     onClick={handleGenerate}
-                    disabled={generating}
+                    disabled={generating || !ownerCanTranscribe}
                     aria-label={generating ? 'Generating transcript' : 'Generate transcript'}
                   >
                     <FileText size={24} strokeWidth={2} aria-hidden />
@@ -1196,13 +1236,14 @@ export function TranscriptModal({
               </p>
             )}
           </div>
+          </div>
           <div className={styles.dialogActions}>
             {!loading && text != null && mode === 'view' && (
               <button
                 type="button"
                 className={styles.cancel}
                 onClick={handleGenerate}
-                disabled={generating || !asrAvailable}
+                disabled={generating || !asrAvailable || !ownerCanTranscribe}
                 style={{ marginRight: 'auto' }}
                 aria-label="Generate new transcript"
               >

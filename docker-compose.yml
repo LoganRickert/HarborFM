@@ -1,10 +1,10 @@
-# Harbor FM stack: app, nginx (80/443 + Let's Encrypt), Whisper ASR, Fail2Ban
+# Harbor FM stack: app, reverse proxy (nginx or Caddy), Whisper ASR, Fail2Ban
 #
-# 1. Copy .env.example to .env and set DOMAIN=yourdomain.com, CERTBOT_EMAIL=you@example.com
-# 2. Point DNS A record for your domain to this host, then: docker compose up -d
-# 3. Get SSL cert (once): docker compose run --rm certbot
-#    Nginx will reload within ~60s when certs appear. Renew with: docker compose run --rm certbot renew
-# 4. Whisper is internal-only; use harborfm:3001, whisper:9000 from other containers.
+# Set REVERSE_PROXY=nginx or REVERSE_PROXY=caddy in .env. Then start with:
+#   docker compose --profile $REVERSE_PROXY up -d
+#
+# Nginx: set DOMAIN, CERTBOT_EMAIL. Get cert: docker compose run --rm certbot. Renew: docker compose run --rm certbot renew
+# Caddy: set DOMAIN; Caddy obtains and renews TLS automatically (no certbot).
 
 services:
   harborfm:
@@ -27,9 +27,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    # Not exposed to host; nginx proxies to this
+    # Not exposed to host; nginx or caddy proxies to this
 
   nginx:
+    profiles: ["nginx"]
     image: nginx:alpine
     container_name: harborfm-nginx
     restart: unless-stopped
@@ -60,7 +61,34 @@ services:
     networks:
       - internal
 
-  # Not started by default (profile: cert). Initial cert: docker compose run --rm certbot
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:alpine
+    container_name: harborfm-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:80/caddy-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      harborfm:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # Not started by default (profile: cert). Only used with nginx. Initial cert: docker compose run --rm certbot
   # Renew (cron): docker compose run --rm certbot renew
   certbot:
     profiles: ["cert"]
@@ -113,11 +141,10 @@ services:
       - ./fail2ban/filter.d:/etc/fail2ban/filter.d:ro
       - ./fail2ban/jail.d:/etc/fail2ban/jail.d:ro
       - nginx_logs:/var/log/nginx:ro
+      - caddy_logs:/var/log/caddy:ro
     environment:
       TZ: ${TZ:-UTC}
       F2B_LOG_LEVEL: info
-    depends_on:
-      - nginx
 
 # Named volumes backed by ${INSTALL_DIR}/harborfm-docker-data/ (install.sh sets INSTALL_DIR in .env)
 volumes:
@@ -151,6 +178,24 @@ volumes:
       type: none
       o: bind
       device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/logs
+  caddy_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/data
+  caddy_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/config
+  caddy_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/logs
   whisper_cache:
     driver: local
     driver_opts:

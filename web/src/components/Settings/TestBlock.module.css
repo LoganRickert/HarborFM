@@ -1,0 +1,74 @@
+.testBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.testRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.testBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.testBtn:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--text-muted);
+}
+
+.testBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.noticeSuccess,
+.noticeError {
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.noticeSuccess {
+  background: rgba(0, 212, 170, 0.08);
+  border-color: rgba(0, 212, 170, 0.3);
+}
+
+.noticeError {
+  background: rgba(229, 115, 115, 0.08);
+  border-color: rgba(229, 115, 115, 0.3);
+}
+
+.noticeTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.noticeSuccess .noticeTitle {
+  color: var(--accent);
+}
+
+.noticeError .noticeTitle {
+  color: var(--error, #e57373);
+}
+
+.noticeBody {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text);
+  line-height: 1.4;
+}

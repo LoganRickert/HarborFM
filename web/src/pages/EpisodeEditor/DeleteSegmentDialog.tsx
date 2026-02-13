@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import styles from '../EpisodeEditor.module.css';
 
@@ -22,7 +23,14 @@ export function DeleteSegmentDialog({
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content className={styles.dialogContent}>
-          <Dialog.Title className={styles.dialogTitle}>Remove section?</Dialog.Title>
+          <div className={styles.dialogHeaderRow}>
+            <Dialog.Title className={styles.dialogTitle}>Remove section?</Dialog.Title>
+            <Dialog.Close asChild>
+              <button type="button" className={styles.dialogClose} aria-label="Close">
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </Dialog.Close>
+          </div>
           <Dialog.Description className={styles.dialogDescription}>{description}</Dialog.Description>
           <div className={styles.dialogActions}>
             <Dialog.Close asChild>

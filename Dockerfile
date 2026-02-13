@@ -80,7 +80,7 @@ ENV NODE_ENV=production
 ENV PORT=3001
 # Persist app data (DB, uploads, processed audio, rss, artwork, library)
 ENV DATA_DIR=/data
-# Persist secrets (jwt-secret.txt, secrets-key.txt) — mount separately for stricter access
+# Persist secrets (jwt-secret.txt, secrets-key.txt) - mount separately for stricter access
 ENV SECRETS_DIR=/secrets
 ENV PUBLIC_DIR=/app/server/public
 

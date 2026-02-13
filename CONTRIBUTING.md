@@ -17,7 +17,7 @@ Thank you for your interest in contributing to HarborFM. This document explains 
 - **Node.js** 22 or newer
 - **pnpm** (the repo uses pnpm workspaces; npm/yarn are not supported for install)
 - **ffmpeg** (for audio processing)
-- **audiowaveform** ([bbc/audiowaveform](https://github.com/bbc/audiowaveform)) — e.g. `brew install audiowaveform` on macOS; on Linux, build from source or use a package if available
+- **audiowaveform** ([bbc/audiowaveform](https://github.com/bbc/audiowaveform)) - e.g. `brew install audiowaveform` on macOS; on Linux, build from source or use a package if available
 
 Clone the repo and install dependencies:
 
@@ -53,8 +53,19 @@ Useful scripts from the repo root:
 | `pnpm run dev:server` | Run only the API (tsx watch) |
 | `pnpm run dev:web` | Run only the web dev server (Vite) |
 | `pnpm run build` | Build shared, then server, then web |
+| `pnpm run e2e` | Run end-to-end / integration tests (starts a fresh server, runs API tests, then stops) |
 
 See [README.md](README.md#scripts) for the full list.
+
+## End-to-end tests
+
+From the repo root, run:
+
+```bash
+pnpm run e2e
+```
+
+This starts a temporary server (using `e2e/data` and `e2e/secrets`), runs the full API test suite (setup, auth, podcasts, episodes, public feeds, settings, users, subscriptions, collaboration, etc.), then stops the server. Results are printed to the console and written to `e2e/reports/e2e-report.json` and `e2e/reports/e2e-report.xml`. Requires Node 22+, bash, and a built server (`pnpm run build` is run automatically if needed).
 
 ## Code quality
 
@@ -99,9 +110,9 @@ When adding a new migration:
 
 ## Project structure
 
-- **shared** — Zod schemas and shared types used by server and web.
-- **server** — Fastify API, SQLite (better-sqlite3), ffmpeg-based audio processing. Serves the built web app in production.
-- **web** — React frontend (Vite, TanStack Query).
+- **shared** - Zod schemas and shared types used by server and web.
+- **server** - Fastify API, SQLite (better-sqlite3), ffmpeg-based audio processing. Serves the built web app in production.
+- **web** - React frontend (Vite, TanStack Query).
 
 Build order is shared → server → web. Root scripts run across workspaces where applicable.
 

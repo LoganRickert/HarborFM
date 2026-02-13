@@ -128,7 +128,7 @@ You also have the option to trim the start and end of a segment. You can also re
 
 ![HarborFM](screenshots/screenshot_10.jpg)
 
-Once you're finished building your episode, at the bottom you can click "Build Final Episode" and this will generate the final audio file. You can customize the settings, such as mono or stereo, on the site settings page. Whenever you change your podcast and are ready for a new version, just click it again. Once you've generated a final episode, an option to download it will appear so you can upload it to other platforms or share it before publishing.
+Once you're finished building your episode, at the bottom you can click "Make Final Episode" and this will generate the final audio file. You can customize the settings, such as mono or stereo, on the site settings page. Whenever you change your podcast and are ready for a new version, just click it again. Once you've generated a final episode, an option to download it will appear so you can upload it to other platforms or share it before publishing.
 
 ![HarborFM](screenshots/screenshota_5.jpg)
 
@@ -172,7 +172,7 @@ Lastly, there is an analytics page that has the statistics for views/listens tha
 - **Node.js** 22 or newer
 - **pnpm** (recommended; the repo uses pnpm workspaces)
 - **ffmpeg**
-- **audiowaveform** ([bbc/audiowaveform](https://github.com/bbc/audiowaveform)) — e.g. on macOS: `brew install audiowaveform`; on Linux, build from source or use a package if available
+- **audiowaveform** ([bbc/audiowaveform](https://github.com/bbc/audiowaveform)) - e.g. on macOS: `brew install audiowaveform`; on Linux, build from source or use a package if available
 
 ## Quick start (local)
 
@@ -235,30 +235,88 @@ Then open http://localhost:3001 (or your host and port). On first run, migration
 
 All environment variables supported by the server work the same in Docker. Set them with `-e` or an env file. The table below matches `server/src/config.ts`, `server/src/services/paths.ts`, and related server code.
 
-| Variable | Default in image | Description |
-|----------|------------------|-------------|
+| Variable | Default | Description |
+|----------|---------|-------------|
+| **Server** | | |
 | `PORT` | `3001` | Port the server listens on |
-| `DATA_DIR` | `/data` | Directory for DB, uploads, processed audio, RSS, artwork, library |
-| `SECRETS_DIR` | `/secrets` | Directory for jwt-secret.txt and secrets-key.txt (mount separately for stricter access) |
-| `PUBLIC_DIR` | `/app/server/public` | Directory to serve static web app from |
-| `JWT_SECRET` | (none) | Secret for signing JWTs (use a long random string) |
+| `HOST` | `0.0.0.0` | Listen host |
+| `LOGGER` | (true) | Set to `false` or `0` to disable Fastify logger |
+| `TRUST_PROXY` | (true) | Set to `false` or `0` when not behind a reverse proxy |
+| `API_PREFIX` | `api` | API path segment; routes live under `/${API_PREFIX}/` |
+| `CORS_ORIGIN` | (auto) | `true`/`1` to allow request origin; in production default is false |
+| **Paths** | | |
+| `DATA_DIR` | `./data` | Directory for DB, uploads, processed audio, RSS, artwork, library (Docker: often `/data`) |
+| `SECRETS_DIR` | `./secrets` | Directory for jwt-secret.txt and secrets-key.txt (Docker: often `/secrets`) |
+| `PUBLIC_DIR` | `./public` | Directory to serve static web app from |
+| `DB_FILENAME` | (from APP_NAME) | SQLite filename under DATA_DIR (e.g. `harborfm.db`) |
+| **Secrets & cookies** | | |
+| `JWT_SECRET` | (none) | Secret for signing JWTs; required in production (use a long random string) |
 | `HARBORFM_SECRETS_KEY` | (none) | Optional key for encrypting export credentials (base64/base64url) |
-| `COOKIE_SECURE` | (auto) | Set to `true` when using HTTPS so cookies are Secure |
-| `NODE_ENV` | `production` | Set by image; when `production`, cookies use Secure if `COOKIE_SECURE` is unset |
+| `COOKIE_SECURE` | (auto) | Set to `true` when using HTTPS so cookies are Secure; in production default is true if unset |
+| `NODE_ENV` | (development) | Set to `production` in Docker; affects CORS and cookie Secure default |
+| `CSRF_COOKIE_NAME` | (from APP_NAME) | Name of the CSRF cookie |
+| `CSRF_COOKIE_MAX_AGE_SECONDS` | `604800` | CSRF cookie max age (7 days) |
+| `JWT_COOKIE_NAME` | (from APP_NAME) | Name of the JWT session cookie |
+| `JWT_COOKIE_SIGNED` | (false) | Set to `true` or `1` to sign the JWT cookie (requires @fastify/cookie secret) |
+| **Recording & storage** | | |
 | `RECORD_MIN_FREE_MB` | `5` | Min free storage (MB) required to record a new section |
+| **RSS & sitemap** | | |
 | `RSS_CACHE_MAX_AGE_MS` | `3600000` | RSS/sitemap cache max age in ms (1 hour) |
-| `EPISODE_AUDIO_UPLOAD_MAX_MB` | `500` | Max episode source audio upload size (MB) |
-| `SEGMENT_UPLOAD_MAX_MB` | `100` | Max recorded segment upload size (MB) |
-| `LIBRARY_UPLOAD_MAX_MB` | `50` | Max library asset upload size (MB) |
-| `MULTIPART_MAX_MB` | `500` | Max multipart body size (MB) for Fastify |
-| `ARTWORK_MAX_MB` | `5` | Max podcast/episode artwork upload size (MB) |
+| `RSS_FEED_FILENAME` | `feed.xml` | RSS feed filename |
+| `SITEMAP_FILENAME` | `sitemap.xml` | Sitemap filename for per-podcast/static sitemaps |
+| `SITEMAP_INDEX_FILENAME` | `index.xml` | Sitemap index filename (root sitemap) |
+| **Upload limits (MB)** | | |
+| `EPISODE_AUDIO_UPLOAD_MAX_MB` | `500` | Max episode source audio upload size |
+| `SEGMENT_UPLOAD_MAX_MB` | `100` | Max recorded segment upload size |
+| `LIBRARY_UPLOAD_MAX_MB` | `50` | Max library asset upload size |
+| `MULTIPART_MAX_MB` | `500` | Max multipart body size for Fastify |
+| `ARTWORK_MAX_MB` | `5` | Max podcast/episode artwork upload size |
+| **Binaries** | | |
 | `FFMPEG_PATH` | `ffmpeg` | Path to ffmpeg binary |
 | `FFPROBE_PATH` | `ffprobe` | Path to ffprobe binary |
 | `AUDIOWAVEFORM_PATH` | `audiowaveform` | Path to audiowaveform binary |
-| `PLATFORM_INVITES_PER_DAY` | `10` | Max "invite to platform" emails per inviter per 24 hours |
+| `GEOIPUPDATE_PATH` | `geoipupdate` | Path to geoipupdate binary (MaxMind GeoIP) |
+| `SMBCLIENT_PATH` | `smbclient` | Path to smbclient binary (SMB export) |
+| **GeoIP** | | |
+| `GEOIP_CONF_FILENAME` | `GeoIP.conf` | GeoIP config filename for geoipupdate |
+| `GEOIP_EDITION_IDS` | `GeoLite2-Country GeoLite2-City` | GeoIP edition IDs (space-separated) |
+| **Audio** | | |
+| `WAVEFORM_EXTENSION` | `.waveform.json` | Extension for waveform JSON files |
+| **Auth & users** | | |
+| `MAX_PLATFORM_INVITES_PER_DAY` | `10` | Max "invite to platform" emails per inviter per 24 hours |
 | `API_KEY_PREFIX` | `hfm_` | Prefix for API keys |
 | `MAX_API_KEYS_PER_USER` | `5` | Max API keys per user |
-| `CSRF_COOKIE_NAME` | `harborfm_csrf` | Name of the CSRF cookie |
+| `FORGOT_PASSWORD_RATE_MINUTES` | `5` | Cooldown (minutes) between password-reset requests per email |
+| `RESET_TOKEN_EXPIRY_HOURS` | `1` | Password-reset and set-password link validity (hours) |
+| **Login protection** | | |
+| `LOGIN_FAILURE_THRESHOLD` | `3` | Ban after this many failed login attempts in the window |
+| `LOGIN_BAN_MINUTES` | `10` | Login ban duration (minutes) |
+| `LOGIN_WINDOW_MINUTES` | `10` | Window (minutes) for counting login failures |
+| **Rate limits** | | |
+| `RATE_LIMIT_MAX` | `100` | Global rate limit: max requests per time window |
+| `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
+| **Podcast stats** | | |
+| `STATS_FLUSH_INTERVAL_MS` | `60000` | Podcast stats flush interval (ms) |
+| `LISTEN_THRESHOLD_BYTES` | `256000` | Min bytes requested in one range to count as a listen (250 KB) |
+| **Swagger** | | |
+| `SWAGGER_UI_ROUTE_PREFIX` | (from API_PREFIX) | Swagger UI route (e.g. `/api/docs`) |
+| `SWAGGER_UI_THEME_CSS_FILENAME` | (from APP_NAME) | Swagger UI theme CSS filename |
+| `SWAGGER_ENABLED` | (true outside production) | Set to `true` to serve Swagger UI in production |
+| **OpenAI** | | |
+| `OPENAI_CHAT_COMPLETIONS_URL` | `https://api.openai.com/v1/chat/completions` | OpenAI chat completions API URL |
+| `OPENAI_MODELS_URL` | `https://api.openai.com/v1/models` | OpenAI models API URL (e.g. for testing API key) |
+| **SendGrid** | | |
+| `SENDGRID_SCOPES_URL` | `https://api.sendgrid.com/v3/scopes` | SendGrid scopes API URL (e.g. for testing API key) |
+| `SENDGRID_MAIL_SEND_URL` | `https://api.sendgrid.com/v3/mail/send` | SendGrid mail send API URL |
+| **CAPTCHA** | | |
+| `RECAPTCHA_VERIFY_URL` | `https://www.google.com/recaptcha/api/siteverify` | reCAPTCHA siteverify API URL |
+| `HCAPTCHA_VERIFY_URL` | `https://hcaptcha.com/siteverify` | hCaptcha siteverify API URL |
+| **FTP** | | |
+| `FTP_CLIENT_TIMEOUT_MS` | `60000` | FTP client timeout (ms) |
+| **Roles** | | |
+| `ROLE_MIN_EDIT_SEGMENTS` | `editor` | Minimum share role to edit segments (`view`, `editor`, `manager`, `owner`) |
+| `ROLE_MIN_EDIT_METADATA` | `manager` | Minimum share role to edit episode/podcast metadata |
+| `ROLE_MIN_MANAGE_COLLABORATORS` | `manager` | Minimum share role to manage collaborators |
 
 ## Running without Docker
 
@@ -581,7 +639,7 @@ services:
     ports:
       - "9412:80"
 
-  # IPFS (Kubo) — internal only; use ipfs-proxy for auth
+  # IPFS (Kubo) - internal only; use ipfs-proxy for auth
   ipfs:
     image: ipfs/kubo:latest
     environment:
@@ -613,7 +671,7 @@ services:
     volumes:
       - ./ipfs/Caddyfile:/etc/caddy/Caddyfile:ro
 
-  # SMB (Samba) — share name: share. Some clients expect port 445; use host 445 or test from another container.
+  # SMB (Samba) - share name: share. Some clients expect port 445; use host 445 or test from another container.
   smb:
     image: dperson/samba
     container_name: test-smb
@@ -632,7 +690,7 @@ networks:
     driver: bridge
 ```
 
-**IPFS Caddyfile** — save as `ipfs/Caddyfile`. The hash below is bcrypt for `ipfspass`; replace with your own via `caddy hash-password` if needed.
+**IPFS Caddyfile** - save as `ipfs/Caddyfile`. The hash below is bcrypt for `ipfspass`; replace with your own via `caddy hash-password` if needed.
 
 ```
 :9413 {
@@ -652,8 +710,8 @@ networks:
 
 ## Troubleshooting
 
-- **Setup URL / "Server not set up yet"** — On first run, the one-time setup URL is printed in the server (or container) logs. Open that URL in your browser (e.g. `https://your-host/setup?id=...`) to create the admin account. If you lost the URL, restart the server to see it again (the token is regenerated only if the secrets file is missing).
-- **ffmpeg or audiowaveform not found** — Ensure they are installed and on your `PATH`. The Docker image includes ffmpeg; for local dev, install via your package manager or [audiowaveform](https://github.com/bbc/audiowaveform) from source.
+- **Setup URL / "Server not set up yet"** - On first run, the one-time setup URL is printed in the server (or container) logs. Open that URL in your browser (e.g. `https://your-host/setup?id=...`) to create the admin account. If you lost the URL, restart the server to see it again (the token is regenerated only if the secrets file is missing).
+- **ffmpeg or audiowaveform not found** - Ensure they are installed and on your `PATH`. The Docker image includes ffmpeg; for local dev, install via your package manager or [audiowaveform](https://github.com/bbc/audiowaveform) from source.
 
 ## Backup and upgrading
 

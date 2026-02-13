@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { PodcastCreate } from '@harborfm/shared';
 import { createPodcast } from '../api/podcasts';
 import { me, isReadOnly } from '../api/auth';
 import { ArrowLeft, Plus } from 'lucide-react';
@@ -34,10 +35,10 @@ export function PodcastNew() {
   const mutation = useMutation({
     mutationFn: () =>
       createPodcast({
-        title,
-        slug: slug || slugify(title),
+        title: title ? title : 'Untitled',
+        slug: slug ? slug : slugify(title || '') || 'podcast',
         description: description || undefined,
-      }),
+      } as PodcastCreate),
     onSuccess: (podcast) => {
       queryClient.invalidateQueries({ queryKey: ['podcasts'] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -83,7 +84,7 @@ export function PodcastNew() {
           </label>
           <label className={styles.label}>
             Slug
-            <span className={styles.labelHint}>Used in URLs and feed — lowercase, hyphens only</span>
+            <span className={styles.labelHint}>Used in URLs and feed - lowercase, hyphens only</span>
             <input
               type="text"
               value={slug}

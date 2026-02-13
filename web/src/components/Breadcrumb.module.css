@@ -1,4 +1,4 @@
-/* Shared breadcrumb — little cards on desktop */
+/* Shared breadcrumb - little cards on desktop */
 .breadcrumb {
   margin-bottom: 1rem;
   min-height: 1.5rem;
@@ -32,7 +32,7 @@
   margin: 0 0.125rem;
 }
 
-/* Shared card pill for both link and current — same height and alignment */
+/* Shared card pill for both link and current - same height and alignment */
 .card {
   display: inline-flex;
   align-items: center;
@@ -60,7 +60,7 @@
   background: rgba(0, 212, 170, 0.06);
 }
 
-/* Current (active) card — same min-height, no underline, slightly emphasized */
+/* Current (active) card - same min-height, no underline, slightly emphasized */
 .current {
   color: var(--text);
   font-weight: 500;

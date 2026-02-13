@@ -106,20 +106,43 @@ export function Login() {
           <button
             type="submit"
             className={styles.submit}
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || !email.trim() || password.length < 4}
             aria-label="Sign in"
           >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <polyline points="10 17 15 12 10 7" />
+              <line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
             {mutation.isPending ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-        {setup?.registrationEnabled !== false && (
-          <p className={styles.footer}>
-            No account? <Link to="/register">Register</Link>
-          </p>
-        )}
-        <p className={styles.footer} style={{ marginTop: setup?.registrationEnabled !== false ? '0.5rem' : '1.5rem' }}>
-          Forgot your password? <Link to="/reset-password">Reset password</Link>
-        </p>
+        <div className={styles.footerActions}>
+          <div className={styles.footerAction}>
+            <span className={styles.footerActionIcon} aria-hidden>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 7a2 2 0 0 1 2 2m-4 2a6 6 0 0 1-3-5 6 6 0 0 1 6 0 6 6 0 0 1-3 5" />
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              </svg>
+            </span>
+            <span className={styles.footerActionLabel}>Forgot your password?</span>
+            <Link to="/reset-password" className={styles.footerActionLink}>Reset password</Link>
+          </div>
+          {setup?.registrationEnabled !== false && (
+            <div className={styles.footerAction}>
+              <span className={styles.footerActionIcon} aria-hidden>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <line x1="19" y1="8" x2="19" y2="14" />
+                  <line x1="22" y1="11" x2="16" y2="11" />
+                </svg>
+              </span>
+              <span className={styles.footerActionLabel}>No account?</span>
+              <Link to="/register" className={styles.footerActionLink}>Create account</Link>
+            </div>
+          )}
+        </div>
         </div>
         {setup?.welcomeBanner?.trim() && (
           <div className={styles.welcomeBanner} role="status">

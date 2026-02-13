@@ -1,0 +1,6 @@
+data/
+secrets/
+reports/
+server.log
+server.pid
+*.log

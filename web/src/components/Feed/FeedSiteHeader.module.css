@@ -1,0 +1,90 @@
+.siteHeader {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  margin-top: calc(-2rem - env(safe-area-inset-top, 0px));
+  margin-bottom: 2rem;
+  width: 100vw;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(calc(1rem + env(safe-area-inset-left, 0px)), calc(50vw - 400px));
+  padding-right: max(calc(1rem + env(safe-area-inset-right, 0px)), calc(50vw - 400px));
+}
+
+.siteHeaderContent {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0.75rem 0;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text);
+  text-decoration: none;
+  justify-self: center;
+  grid-column: 2;
+}
+
+.logo:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.logoIcon {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.loginLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.loginLink:hover {
+  background: var(--accent-glow);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.signInIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: all 0.15s ease;
+  justify-self: end;
+  grid-column: 3;
+  margin-right: 1rem;
+}
+
+.signInIcon:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  text-decoration: none;
+}

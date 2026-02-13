@@ -21,6 +21,8 @@ import {
 import { WaveformCanvas, type WaveformData } from './EpisodeEditor/WaveformCanvas';
 import { me, isReadOnly } from '../api/auth';
 import { getUser } from '../api/users';
+import { formatDateShort } from '../utils/format';
+import { FailedToLoadCard } from '../components/FailedToLoadCard';
 import styles from './Library.module.css';
 
 const LIBRARY_PAGE_SIZE = 25;
@@ -113,14 +115,6 @@ function formatDuration(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function formatLibraryDate(createdAt: string): string {
-  try {
-    const d = new Date(createdAt);
-    return Number.isFinite(d.getTime()) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : createdAt;
-  } catch {
-    return createdAt;
-  }
-}
 
 export function Library() {
   const { userId } = useParams<{ userId?: string }>();
@@ -141,7 +135,7 @@ export function Library() {
   const currentUserId = currentUser?.id ?? undefined;
   const readOnly = !isAdminView && isReadOnly(currentUser);
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['library', userId],
     queryFn: () => (userId ? listLibraryForUser(userId) : listLibrary()),
   });
@@ -459,7 +453,7 @@ export function Library() {
       {!isAdminView && !readOnly && (
         <section className={styles.uploadCard}>
           <div className={styles.uploadHeader}>
-            <h2 className={styles.uploadTitle}>Add to library</h2>
+            <h2 className={styles.uploadTitle}>Add to Library</h2>
             <p className={styles.uploadSub}>Upload a reusable clip you can insert into any episode.</p>
           </div>
           {!pendingFile ? (
@@ -661,13 +655,7 @@ export function Library() {
         </div>
       )}
 
-      {isError && (
-        <div className={styles.stateCard}>
-          <p className={styles.stateText}>
-            {error instanceof Error ? error.message : 'Failed to load library'}
-          </p>
-        </div>
-      )}
+      {isError && <FailedToLoadCard title="Failed to load library" />}
 
       {!isLoading && !isError && assets.length === 0 && (
         <div className={styles.stateCard}>
@@ -697,6 +685,11 @@ export function Library() {
                     <div className={styles.itemTitleRow}>
                       <span className={styles.itemName}>{asset.name}</span>
                     </div>
+                    {(asset.copyright?.trim() || asset.license?.trim()) && (
+                      <p className={styles.itemCopyrightLicense}>
+                        {[asset.copyright?.trim(), asset.license?.trim()].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
                     <div className={styles.itemMeta}>
                       {(asset.tag || asset.global_asset) && (
                         <span className={styles.itemMetaLabels}>
@@ -711,7 +704,7 @@ export function Library() {
                       <span className={styles.itemMetaRight}>
                         <span>{formatDuration(asset.duration_sec)}</span>
                         <span className={styles.itemMetaDot} aria-hidden />
-                        <span>{formatLibraryDate(asset.created_at)}</span>
+                        <span>{formatDateShort(asset.created_at)}</span>
                       </span>
                     </div>
                   </div>
@@ -782,7 +775,14 @@ export function Library() {
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.dialogContent}>
-            <Dialog.Title className={styles.dialogTitle}>Delete library item?</Dialog.Title>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>Delete library item?</Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.dialogClose} aria-label="Close">
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
             <Dialog.Description className={styles.dialogDescription}>
               {assetToDelete
                 ? `This will permanently delete "${assetToDelete.name}".`
@@ -809,7 +809,14 @@ export function Library() {
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.dialogContent}>
-            <Dialog.Title className={styles.dialogTitle}>Edit library item</Dialog.Title>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>Edit library item</Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.dialogClose} aria-label="Close">
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
             <Dialog.Description className={styles.dialogDescription}>
               Update the name and tag for this library item.
             </Dialog.Description>

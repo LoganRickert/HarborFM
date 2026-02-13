@@ -1,11 +1,8 @@
-import { createHash } from 'crypto';
-import { db } from '../db/index.js';
+import { createHash } from "crypto";
+import { LISTEN_THRESHOLD_BYTES, STATS_FLUSH_INTERVAL_MS } from "../config.js";
+import { db } from "../db/index.js";
 
-const FLUSH_INTERVAL_MS = 60_000; // 1 minute
-const LISTEN_THRESHOLD_BYTES = 250 * 1024; // 250 KB
 const DEDUP_RETAIN_DAYS = 2;
-
-export const LISTEN_THRESHOLD_BYTES_EXPORT = LISTEN_THRESHOLD_BYTES;
 
 function statDate(): string {
   return new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
@@ -15,9 +12,13 @@ function statDate(): string {
  * Short hash of (IP + UA + Accept-Language) for listen dedup.
  * Avoids collapsing multiple real listeners behind NAT (IP-only would undercount).
  */
-export function clientKey(ip: string, userAgent: string, acceptLanguage: string): string {
+export function clientKey(
+  ip: string,
+  userAgent: string,
+  acceptLanguage: string,
+): string {
   const raw = `${ip}\n${userAgent}\n${acceptLanguage}`;
-  return createHash('sha256').update(raw, 'utf8').digest('hex').slice(0, 24);
+  return createHash("sha256").update(raw, "utf8").digest("hex").slice(0, 24);
 }
 
 // In-memory counters: key -> count delta to flush
@@ -33,7 +34,11 @@ function rssKey(podcastId: string, date: string): Key {
 function episodeKey(episodeId: string, date: string): Key {
   return `ep:${episodeId}:${date}`;
 }
-function episodeLocationKey(episodeId: string, date: string, location: string): Key {
+function episodeLocationKey(
+  episodeId: string,
+  date: string,
+  location: string,
+): Key {
   return `eploc:${episodeId}:${date}:${location}`;
 }
 function listenKey(episodeId: string, date: string): Key {
@@ -49,7 +54,11 @@ function incRss(podcastId: string, isBot: boolean): void {
   rssCounters.set(key, cur);
 }
 
-function incEpisode(episodeId: string, isBot: boolean, location: string | null): void {
+function incEpisode(
+  episodeId: string,
+  isBot: boolean,
+  location: string | null,
+): void {
   const date = statDate();
   const ek = episodeKey(episodeId, date);
   const cur = episodeCounters.get(ek) ?? { bot: 0, human: 0 };
@@ -57,7 +66,7 @@ function incEpisode(episodeId: string, isBot: boolean, location: string | null):
   else cur.human += 1;
   episodeCounters.set(ek, cur);
 
-  if (location != null && location !== '') {
+  if (location != null && location !== "") {
     const lk = episodeLocationKey(episodeId, date, location);
     const locCur = episodeLocationCounters.get(lk) ?? { bot: 0, human: 0 };
     if (isBot) locCur.bot += 1;
@@ -70,9 +79,13 @@ function incEpisode(episodeId: string, isBot: boolean, location: string | null):
  * Returns true if this client was newly counted (so caller should increment listen).
  * Uses DB dedup: INSERT OR IGNORE; if row was inserted, count the listen in-memory.
  */
-function tryRecordListenDedup(episodeId: string, date: string, clientKeyVal: string): boolean {
+function tryRecordListenDedup(
+  episodeId: string,
+  date: string,
+  clientKeyVal: string,
+): boolean {
   const stmt = db.prepare(
-    `INSERT OR IGNORE INTO podcast_stats_listen_dedup (episode_id, stat_date, client_key) VALUES (?, ?, ?)`
+    `INSERT OR IGNORE INTO podcast_stats_listen_dedup (episode_id, stat_date, client_key) VALUES (?, ?, ?)`,
   );
   const result = stmt.run(episodeId, date, clientKeyVal);
   return result.changes === 1;
@@ -91,19 +104,26 @@ export function recordRssRequest(podcastId: string, isBot: boolean): void {
   incRss(podcastId, isBot);
 }
 
-export function recordEpisodeRequest(episodeId: string, isBot: boolean, location: string | null): void {
+export function recordEpisodeRequest(
+  episodeId: string,
+  isBot: boolean,
+  location: string | null,
+): void {
   incEpisode(episodeId, isBot, location);
 }
 
 /**
- * Call only when the request qualifies as a listen (single range >= LISTEN_THRESHOLD_BYTES).
+ * Record a listen if the requested length meets LISTEN_THRESHOLD_BYTES and the client hasn't been counted today.
  * Deduplicates by (episode_id, stat_date, client_key); at most one listen per client per episode per day.
  */
 export function recordEpisodeListenIfNew(
   episodeId: string,
   isBot: boolean,
-  clientKeyVal: string
+  clientKeyVal: string,
+  requestedLength: number | null,
 ): void {
+  if (requestedLength === null || requestedLength < LISTEN_THRESHOLD_BYTES)
+    return;
   const date = statDate();
   if (!tryRecordListenDedup(episodeId, date, clientKeyVal)) return;
   incListen(episodeId, isBot);
@@ -119,7 +139,7 @@ function flushRss(): void {
   `);
   for (const [key, counts] of rssCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const [, podcastId, date] = key.split(':');
+    const [, podcastId, date] = key.split(":");
     upsert.run(podcastId, date, counts.bot, counts.human);
   }
   rssCounters.clear();
@@ -135,7 +155,7 @@ function flushEpisode(): void {
   `);
   for (const [key, counts] of episodeCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const [, episodeId, date] = key.split(':');
+    const [, episodeId, date] = key.split(":");
     upsert.run(episodeId, date, counts.bot, counts.human);
   }
   episodeCounters.clear();
@@ -151,10 +171,10 @@ function flushEpisodeLocation(): void {
   `);
   for (const [key, counts] of episodeLocationCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const parts = key.split(':');
+    const parts = key.split(":");
     const episodeId = parts[1];
     const date = parts[2];
-    const location = parts.slice(3).join(':'); // location might contain ':'
+    const location = parts.slice(3).join(":"); // location might contain ':'
     upsert.run(episodeId, date, location, counts.bot, counts.human);
   }
   episodeLocationCounters.clear();
@@ -170,7 +190,7 @@ function flushListens(): void {
   `);
   for (const [key, counts] of listenCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const [, episodeId, date] = key.split(':');
+    const [, episodeId, date] = key.split(":");
     upsert.run(episodeId, date, counts.bot, counts.human);
   }
   listenCounters.clear();
@@ -187,7 +207,7 @@ let flushIntervalId: ReturnType<typeof setInterval> | null = null;
 
 export function startFlushInterval(): void {
   if (flushIntervalId != null) return;
-  flushIntervalId = setInterval(flush, FLUSH_INTERVAL_MS);
+  flushIntervalId = setInterval(flush, STATS_FLUSH_INTERVAL_MS);
 }
 
 export function stopFlushInterval(): void {
@@ -203,6 +223,6 @@ export function stopFlushInterval(): void {
  */
 export function pruneListenDedup(): void {
   db.prepare(
-    `DELETE FROM podcast_stats_listen_dedup WHERE stat_date < date('now', ?)`
+    `DELETE FROM podcast_stats_listen_dedup WHERE stat_date < date('now', ?)`,
   ).run(`-${DEDUP_RETAIN_DAYS} days`);
 }

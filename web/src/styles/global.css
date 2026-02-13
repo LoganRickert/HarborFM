@@ -1,4 +1,4 @@
-/* HarborFM — dark mode first, neon accents, no Tailwind */
+/* HarborFM - dark mode first, neon accents, no Tailwind */
 :root {
   --bg: #0c0e12;
   --bg-elevated: #14171e;
@@ -17,7 +17,7 @@
   /* Layout */
   --max-content: 1200px;
   --max-form: 720px;
-  --max-card: 400px;
+  --max-card: 450px;
 }
 
 *,
@@ -70,7 +70,7 @@ input, textarea, select {
   }
 }
 
-/* Toggle switch (e.g. Explicit) — modern pill switch */
+/* Toggle switch (e.g. Explicit) - modern pill switch */
 .toggle {
   display: inline-flex;
   align-items: center;

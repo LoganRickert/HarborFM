@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from './store/auth';
 import { me } from './api/auth';
@@ -17,7 +17,7 @@ import { Terms } from './pages/Terms';
 import { Contact } from './pages/Contact';
 import { Dashboard } from './pages/Dashboard';
 import { PodcastNew } from './pages/PodcastNew';
-import { PodcastSettings } from './pages/PodcastSettings';
+import { PodcastDetail } from './pages/PodcastDetail';
 import { PodcastAnalytics } from './pages/PodcastAnalytics';
 import { EpisodesList } from './pages/EpisodesList';
 import { EpisodeNew } from './pages/EpisodeNew';
@@ -26,9 +26,11 @@ import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
 import { Users } from './pages/Users';
 import { Messages } from './pages/Messages';
-import { PublicPodcast } from './pages/PublicPodcast';
-import { PublicEpisode } from './pages/PublicEpisode';
+import { FeedHome } from './pages/FeedHome';
+import { FeedPodcast } from './pages/FeedPodcast';
+import { FeedEpisode } from './pages/FeedEpisode';
 import { Library } from './pages/Library';
+import { SubscriberAuthProvider } from './hooks/useSubscriberAuth';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -184,7 +186,7 @@ function SetupGuard({ children }: { children: React.ReactNode }) {
 
 function PublicFeedsGuard({ children }: { children: React.ReactNode }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['publicConfig'],
+    queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
     queryFn: getPublicConfig,
     retry: false,
     staleTime: 10_000,
@@ -208,34 +210,101 @@ function PublicFeedsGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** At "/": if this host is a custom podcast domain, show that feed at root (URL stays /). Otherwise show app. */
+function RootRoute() {
+  const host = typeof window !== 'undefined' ? window.location.host : '';
+  const { data, isLoading, isFetching, isFetched } = useQuery({
+    queryKey: ['publicConfig', host],
+    queryFn: getPublicConfig,
+    retry: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
+  const waitingForConfig = !isFetched || isFetching || isLoading;
+  if (waitingForConfig) {
+    return (
+      <div className="app-loading">
+        <span className="app-loading__dot" />
+        <span className="app-loading__dot" />
+        <span className="app-loading__dot" />
+      </div>
+    );
+  }
+
+  if (data?.custom_feed_slug) {
+    return (
+      <PublicFeedsGuard>
+        <FeedPodcast podcastSlugOverride={data.custom_feed_slug} />
+      </PublicFeedsGuard>
+    );
+  }
+
+  return (
+    <SetupGuard>
+      <RequireAuth>
+        <Layout />
+      </RequireAuth>
+    </SetupGuard>
+  );
+}
+
+/** For path /:episodeSlug: on custom domain show episode at short URL; otherwise redirect to /. */
+function CustomFeedEpisodeWrapper() {
+  const host = typeof window !== 'undefined' ? window.location.host : '';
+  const { episodeSlug } = useParams<{ episodeSlug: string }>();
+  const { data, isLoading, isFetching, isFetched } = useQuery({
+    queryKey: ['publicConfig', host],
+    queryFn: getPublicConfig,
+    retry: false,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
+  const waiting = !isFetched || isFetching || isLoading;
+  if (waiting) {
+    return (
+      <div className="app-loading">
+        <span className="app-loading__dot" />
+        <span className="app-loading__dot" />
+        <span className="app-loading__dot" />
+      </div>
+    );
+  }
+
+  if (data?.custom_feed_slug && episodeSlug) {
+    return (
+      <FeedEpisode
+        podcastSlugOverride={data.custom_feed_slug}
+        episodeSlugOverride={episodeSlug}
+      />
+    );
+  }
+
+  return <Navigate to="/" replace />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <Routes>
-        <Route path="/setup" element={<Setup />} />
-        <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
-        <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />
-        <Route path="/reset-password" element={<SetupGuard><RequireGuest><ResetPassword /></RequireGuest></SetupGuard>} />
-        <Route path="/verify-email" element={<SetupGuard><VerifyEmail /></SetupGuard>} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/contact" element={<SetupGuard><Contact /></SetupGuard>} />
-        <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><PublicPodcast /></PublicFeedsGuard>} />
-        <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><PublicEpisode /></PublicFeedsGuard>} />
-        <Route
-          path="/"
-          element={
-            <SetupGuard>
-              <RequireAuth>
-                <Layout />
-              </RequireAuth>
-            </SetupGuard>
-          }
-        >
+      <SubscriberAuthProvider>
+        <Routes>
+          <Route path="/setup" element={<Setup />} />
+          <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
+          <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />
+          <Route path="/reset-password" element={<SetupGuard><RequireGuest><ResetPassword /></RequireGuest></SetupGuard>} />
+          <Route path="/verify-email" element={<SetupGuard><VerifyEmail /></SetupGuard>} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/contact" element={<SetupGuard><Contact /></SetupGuard>} />
+          <Route path="/feed" element={<PublicFeedsGuard><FeedHome /></PublicFeedsGuard>} />
+          <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><FeedPodcast /></PublicFeedsGuard>} />
+          <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><FeedEpisode /></PublicFeedsGuard>} />
+        <Route path="/" element={<RootRoute />}>
           <Route index element={<Dashboard />} />
           <Route path="podcasts/new" element={<PodcastNew />} />
-          <Route path="podcasts/:id" element={<PodcastSettings />} />
+          <Route path="podcasts/:id" element={<PodcastDetail />} />
           <Route path="podcasts/:id/analytics" element={<PodcastAnalytics />} />
           <Route path="podcasts/:id/episodes" element={<EpisodesList />} />
           <Route path="podcasts/:id/episodes/new" element={<EpisodeNew />} />
@@ -248,8 +317,10 @@ export default function App() {
           <Route path="messages" element={<Messages />} />
           <Route path="settings" element={<RequireAdmin><Settings /></RequireAdmin>} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="/:episodeSlug" element={<PublicFeedsGuard><CustomFeedEpisodeWrapper /></PublicFeedsGuard>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </SubscriberAuthProvider>
     </BrowserRouter>
   );
 }

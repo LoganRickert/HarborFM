@@ -9,14 +9,55 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${minutes}:${String(secs).padStart(2, '0')}`;
 }
 
+/**
+ * Parse a server datetime string as UTC (server stores UTC).
+ * If the string has no timezone, appends 'Z' and normalizes space to 'T' so it displays correctly in local time.
+ */
+export function parseUtc(dateStr: string | null | undefined): Date | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const s = dateStr.trim();
+  if (!s) return null;
+  const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(s);
+  const normalized = hasTz ? s : s.replace(/Z?$/, '').replace(' ', 'T') + 'Z';
+  const date = new Date(normalized);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+/** Format as date only (long style), in local time. */
 export function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
+  const d = parseUtc(dateStr);
+  if (!d) return '';
   try {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return d.toLocaleDateString(undefined, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     });
+  } catch {
+    return '';
+  }
+}
+
+/** Format as date + short time, in local time. */
+export function formatDateTime(dateStr: string | null | undefined): string {
+  const d = parseUtc(dateStr);
+  if (!d) return '';
+  try {
+    return d.toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  } catch {
+    return '';
+  }
+}
+
+/** Format as short date (e.g. "Feb 12, 2025") for lists. */
+export function formatDateShort(dateStr: string | null | undefined): string {
+  const d = parseUtc(dateStr);
+  if (!d) return '';
+  try {
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return '';
   }

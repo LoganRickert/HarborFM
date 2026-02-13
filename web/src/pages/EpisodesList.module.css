@@ -138,6 +138,14 @@
   margin: 0;
 }
 
+.itemSubscriberOnly .itemLink {
+  border-color: #d4a84b;
+}
+.itemSubscriberOnly .itemLink:hover {
+  border-color: #d4a84b;
+  background: rgba(212, 168, 75, 0.08);
+}
+
 .itemLink {
   display: flex;
   align-items: center;
@@ -172,6 +180,22 @@
   margin-left: auto;
   color: var(--text-muted);
   transition: color 0.15s ease;
+}
+
+.itemTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.itemTitleLock {
+  flex-shrink: 0;
+  color: #a0a0a0;
+}
+
+.itemTitleLockGold {
+  flex-shrink: 0;
+  color: #d4a84b;
 }
 
 .itemTitle {
