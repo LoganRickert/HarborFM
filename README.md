@@ -54,6 +54,8 @@ docker run --name harborfm -p 3001:3001 \
 
 Use nginx+letsencrypt to provide a secure connection.
 
+If you are using `http`, you need to set `COOKIE_SECURE=false` as an environment variable.
+
 ### Docker Compose Quick Start (Curl)
 
 To run the full stack on a fresh machine (app, nginx, Let's Encrypt, Whisper, Fail2Ban) without cloning the repo:
