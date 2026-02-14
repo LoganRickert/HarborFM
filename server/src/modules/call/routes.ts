@@ -3,7 +3,7 @@ import type { WebSocket } from "ws";
 import { db } from "../../db/index.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import type { JWTPayload } from "../../plugins/auth.js";
-import { canAccessEpisode, canEditSegments } from "../../services/access.js";
+import { canAccessEpisode, canEditSegments, getPodcastOwnerId } from "../../services/access.js";
 import { nanoid } from "nanoid";
 import {
   createSession,
@@ -29,6 +29,15 @@ import { getWebRtcConfig } from "../../services/webrtcConfig.js";
 import { join } from "path";
 import { pathRelativeToData, segmentPath } from "../../services/paths.js";
 import { createSegmentFromPath } from "../../services/segmentFromRecording.js";
+import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
+import { RECORD_MIN_FREE_BYTES } from "../../config.js";
+import {
+  getClientIp,
+  getIpBan,
+  recordFailureAndMaybeBan,
+} from "../../services/loginAttempts.js";
+
+const CALL_JOIN_CONTEXT = "call_join" as const;
 
 const sessionSockets = new Map<string, Set<WebSocket>>(); // sessionId -> Set<WebSocket>
 const socketToParticipant = new Map<
@@ -220,9 +229,21 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { code } = request.params as { code: string };
+      const ip = getClientIp(request);
+      const ban = getIpBan(ip, CALL_JOIN_CONTEXT);
+      if (ban.banned) {
+        return reply
+          .status(429)
+          .header("Retry-After", String(ban.retryAfterSec))
+          .send({ error: "Too many failed attempts", retryAfterSec: ban.retryAfterSec });
+      }
       const session = getSessionByCode(code);
-      if (!session)
+      if (!session) {
+        recordFailureAndMaybeBan(ip, CALL_JOIN_CONTEXT, {
+          userAgent: request.headers["user-agent"],
+        });
         return reply.status(404).send({ error: "No call found for this code" });
+      }
       return reply.send({ token: session.token });
     },
   );
@@ -264,9 +285,21 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { token } = request.params as { token: string };
+      const ip = getClientIp(request);
+      const ban = getIpBan(ip, CALL_JOIN_CONTEXT);
+      if (ban.banned) {
+        return reply
+          .status(429)
+          .header("Retry-After", String(ban.retryAfterSec))
+          .send({ error: "Too many failed attempts", retryAfterSec: ban.retryAfterSec });
+      }
       const session = getSessionForJoinInfo(token);
-      if (!session)
+      if (!session) {
+        recordFailureAndMaybeBan(ip, CALL_JOIN_CONTEXT, {
+          userAgent: request.headers["user-agent"],
+        });
         return reply.status(404).send({ error: "Invalid or expired link" });
+      }
 
       const podcast = db
         .prepare("SELECT title, artwork_path, artwork_url FROM podcasts WHERE id = ?")
@@ -359,6 +392,80 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         payload.roomId = session.roomId;
       }
       return reply.send(payload);
+    },
+  );
+
+  app.post(
+    "/call/internal/recording-check-storage",
+    {
+      schema: {
+        tags: ["Call"],
+        summary: "Check if owner would exceed storage (internal)",
+        description:
+          "Called by webrtc service during recording. Returns whether to stop. Requires X-Recording-Secret.",
+        body: {
+          type: "object",
+          properties: {
+            sessionId: { type: "string", nullable: true },
+            bytesRecordedSoFar: { type: "number" },
+          },
+          required: ["bytesRecordedSoFar"],
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const secret = request.headers["x-recording-secret"] as string | undefined;
+      const webrtcCfg = getWebRtcConfig();
+      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+      const body = request.body as { sessionId?: string | null; bytesRecordedSoFar: number };
+      const session = body.sessionId ? getSessionById(body.sessionId) : null;
+      const podcastId = session?.podcastId;
+      const ownerId = podcastId ? getPodcastOwnerId(podcastId) : undefined;
+      if (!ownerId) {
+        return reply.send({ stop: false });
+      }
+      const stop = wouldExceedStorageLimit(db, ownerId, body.bytesRecordedSoFar);
+      return reply.send({
+        stop,
+        error: stop ? "Storage limit reached. Free up space to record." : undefined,
+      });
+    },
+  );
+
+  app.post(
+    "/call/internal/recording-error",
+    {
+      schema: {
+        tags: ["Call"],
+        summary: "Notify recording stopped early (internal)",
+        description:
+          "Called by webrtc service when recording stops due to error. Requires X-Recording-Secret.",
+        body: {
+          type: "object",
+          properties: {
+            sessionId: { type: "string", nullable: true },
+            error: { type: "string" },
+          },
+          required: ["error"],
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const secret = request.headers["x-recording-secret"] as string | undefined;
+      const webrtcCfg = getWebRtcConfig();
+      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+      const body = request.body as { sessionId?: string | null; error: string };
+      if (body.sessionId) {
+        broadcastToSession(body.sessionId, {
+          type: "recordingError",
+          error: body.error,
+        });
+      }
+      return reply.send({ ok: true });
     },
   );
 
@@ -633,8 +740,24 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               socket.close();
               return;
             }
+            const ip = getClientIp(req);
+            const ban = getIpBan(ip, CALL_JOIN_CONTEXT);
+            if (ban.banned) {
+              socket.send(
+                JSON.stringify({
+                  type: "error",
+                  error: "Too many failed attempts",
+                  retryAfterSec: ban.retryAfterSec,
+                }),
+              );
+              socket.close();
+              return;
+            }
             const session = getSessionByToken(guestToken);
             if (!session) {
+              recordFailureAndMaybeBan(ip, CALL_JOIN_CONTEXT, {
+                userAgent: req.headers["user-agent"],
+              });
               socket.send(
                 JSON.stringify({
                   type: "error",
@@ -645,6 +768,9 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               return;
             }
             if (!verifyPassword(session, password ?? "")) {
+              recordFailureAndMaybeBan(ip, CALL_JOIN_CONTEXT, {
+                userAgent: req.headers["user-agent"],
+              });
               socket.send(
                 JSON.stringify({ type: "error", error: "Wrong password" }),
               );
@@ -771,6 +897,21 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           const session = getSessionById(sid);
           const name = (msg as { name?: string }).name?.trim() || null;
           const webrtcCfg = getWebRtcConfig();
+
+          const ownerId = session?.podcastId
+            ? getPodcastOwnerId(session.podcastId)
+            : undefined;
+          if (
+            ownerId &&
+            wouldExceedStorageLimit(db, ownerId, RECORD_MIN_FREE_BYTES)
+          ) {
+            broadcastToSession(sid, {
+              type: "recordingError",
+              error: "Storage limit reached. Free up space to record.",
+            });
+            return;
+          }
+
           if (
             session?.roomId &&
             webrtcCfg.serviceUrl &&

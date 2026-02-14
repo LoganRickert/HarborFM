@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb } from '../../components/Breadcrumb';
 import { useAuthStore } from '../../store/auth';
-import { me, canRecordNewSection, isReadOnly, RECORD_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
+import { me, canRecordNewSection, isReadOnly, RECORD_BLOCKED_STORAGE_MESSAGE, START_CALL_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
 import { updateEpisode, uploadEpisodeArtwork } from '../../api/episodes';
 import {
   addRecordedSegment,
@@ -417,8 +417,14 @@ export function EpisodeEditorContent({
             : undefined
         }
         onStartGroupCall={
-          !segmentReadOnly && canEditSegments && !activeCall ? handleStartGroupCall : undefined
+          !segmentReadOnly && canEditSegments && !activeCall && (canRecord || myRole !== 'owner')
+            ? handleStartGroupCall
+            : undefined
         }
+        startGroupCallDisabled={
+          !segmentReadOnly && canEditSegments && !canRecord && myRole === 'owner' && !activeCall
+        }
+        startGroupCallDisabledMessage={START_CALL_BLOCKED_STORAGE_MESSAGE}
         isCallActive={!!activeCall}
         onEndGroupCall={
           !segmentReadOnly && canEditSegments && activeCall ? () => setEndCallConfirmOpen(true) : undefined
@@ -618,6 +624,8 @@ export function EpisodeEditorContent({
           onCallEnded={handleCallEnded}
           onSegmentRecorded={() => queryClient.invalidateQueries({ queryKey: ['segments', id] })}
           onEndRequest={() => setEndCallConfirmOpen(true)}
+          recordDisabled={!canRecord}
+          recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
         />
       )}
       {showRecord && (

@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import * as mediasoup from "mediasoup";
 import { nanoid } from "nanoid";
-import { mkdirSync } from "fs";
+import { mkdirSync, statSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { dirname, join } from "path";
 
@@ -37,6 +37,7 @@ type ActiveRecording = RecordingMeta & {
   ffmpeg: ChildProcess;
   plainTransports: PlainTransport[];
   consumers: Consumer[];
+  checkStorageInterval?: ReturnType<typeof setInterval>;
 };
 
 const RECORDING_DATA_DIR = process.env.RECORDING_DATA_DIR?.trim() || process.env.DATA_DIR?.trim() || "/data";
@@ -235,7 +236,42 @@ app.post<{
     await new Promise((r) => setTimeout(r, 200));
     for (const c of consumers) await c.resume();
 
-    recordingByRoom.set(roomId, { ...meta, ffmpeg, plainTransports, consumers });
+    const secret = meta.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
+    let checkStorageInterval: ReturnType<typeof setInterval> | undefined;
+    if (MAIN_APP_URL && secret && meta.sessionId) {
+      checkStorageInterval = setInterval(async () => {
+        const state = recordingByRoom.get(roomId);
+        if (!state) return;
+        try {
+          const size = statSync(filePath).size;
+          const res = await fetch(`${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-check-storage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
+            body: JSON.stringify({ sessionId: meta.sessionId, bytesRecordedSoFar: size }),
+          });
+          if (!res.ok) return;
+          const data = (await res.json()) as { stop?: boolean; error?: string };
+          if (data.stop && data.error) {
+            if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
+            recordingByRoom.delete(roomId);
+            for (const c of state.consumers) try { c.close(); } catch { /* ignore */ }
+            for (const t of state.plainTransports) try { t.close(); } catch { /* ignore */ }
+            state.ffmpeg.kill("SIGINT");
+            await fetch(`${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-error`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
+              body: JSON.stringify({ sessionId: meta.sessionId, error: data.error }),
+            });
+            console.log("[webrtc] Recording roomId=%s stopped: storage limit", roomId);
+          }
+        } catch (e) {
+          request.log.warn({ err: e }, "recording-check-storage failed");
+        }
+      }, 20000);
+    }
+
+    const activeRecording: ActiveRecording = { ...meta, ffmpeg, plainTransports, consumers, checkStorageInterval };
+    recordingByRoom.set(roomId, activeRecording);
     console.log("[webrtc] POST /start-recording roomId=%s started ok", roomId);
     return reply.send({ ok: true });
   } catch (err) {
@@ -252,6 +288,7 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
   recordingByRoom.delete(roomId);
   console.log("[webrtc] POST /stop-recording roomId=%s hadState=%s", roomId, !!state);
   if (!state) return reply.send({ ok: true });
+  if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
 
   let callbackFired = false;
   const doCallback = () => {

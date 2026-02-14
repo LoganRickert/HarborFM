@@ -20,6 +20,10 @@ export interface EpisodeDetailsSummaryCardProps {
   embedCode?: string;
   /** When set, a "Start Group Call" or "End Group Call" button is shown to the left of Edit Details. */
   onStartGroupCall?: () => void;
+  /** When true, Start Group Call is shown but disabled (e.g. out of disk space). */
+  startGroupCallDisabled?: boolean;
+  /** Tooltip when startGroupCallDisabled (e.g. "You are out of disk space"). */
+  startGroupCallDisabledMessage?: string;
   /** When true, the button shows red "End Group Call" instead of "Start Group Call". */
   isCallActive?: boolean;
   /** When isCallActive, clicking the button triggers this (e.g. to show confirm dialog). */
@@ -38,6 +42,8 @@ export function EpisodeDetailsSummaryCard({
   shareTitle,
   embedCode,
   onStartGroupCall,
+  startGroupCallDisabled,
+  startGroupCallDisabledMessage,
   isCallActive,
   onEndGroupCall,
 }: EpisodeDetailsSummaryCardProps) {
@@ -47,7 +53,8 @@ export function EpisodeDetailsSummaryCard({
     metaParts.push(`S${seasonNumber ?? '?'} E${episodeNumber ?? '?'}`);
   }
   const isSubscriberOnly = subscriberOnly === 1;
-  const hasActions = onEditClick != null || shareUrl != null || onStartGroupCall != null || onEndGroupCall != null;
+  const showStartCallBtn = !isCallActive && (onStartGroupCall != null || startGroupCallDisabled);
+  const hasActions = onEditClick != null || shareUrl != null || showStartCallBtn || onEndGroupCall != null;
 
   return (
     <div className={isSubscriberOnly ? `${styles.detailsSummaryCard} ${styles.detailsSummaryCardSubscriberOnly}` : styles.detailsSummaryCard}>
@@ -71,14 +78,21 @@ export function EpisodeDetailsSummaryCard({
       </div>
       {hasActions && (
         <div className={styles.detailsSummaryActions}>
-          {(onStartGroupCall != null || onEndGroupCall != null) && (
+          {(showStartCallBtn || onEndGroupCall != null) && (
             isCallActive ? (
               <button type="button" className={styles.detailsSummaryEndCallBtn} onClick={onEndGroupCall} aria-label="End group call">
                 <Users size={18} strokeWidth={2} aria-hidden />
                 End Group Call
               </button>
-            ) : onStartGroupCall != null ? (
-              <button type="button" className={styles.detailsSummaryEditBtn} onClick={onStartGroupCall} aria-label="Start group call">
+            ) : showStartCallBtn ? (
+              <button
+                type="button"
+                className={styles.detailsSummaryEditBtn}
+                onClick={startGroupCallDisabled ? undefined : onStartGroupCall}
+                disabled={startGroupCallDisabled}
+                title={startGroupCallDisabled ? startGroupCallDisabledMessage : undefined}
+                aria-label={startGroupCallDisabled ? `Start group call (${startGroupCallDisabledMessage ?? 'disabled'})` : 'Start group call'}
+              >
                 <Users size={18} strokeWidth={2} aria-hidden />
                 Start Group Call
               </button>

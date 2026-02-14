@@ -31,12 +31,16 @@ export interface CallPanelProps {
   onSegmentRecorded?: () => void;
   /** When set, End call button triggers this (e.g. to show confirm dialog) instead of ending immediately. */
   onEndRequest?: () => void;
+  /** When true, Record segment button is disabled (e.g. owner out of disk space). */
+  recordDisabled?: boolean;
+  /** Message shown when recordDisabled (e.g. tooltip). */
+  recordDisabledMessage?: string;
 }
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
 
-export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onEndRequest }: CallPanelProps) {
+export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onEndRequest, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
   const [displayName, setDisplayName] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
@@ -506,7 +510,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
               type="button"
               className={styles.recordSegmentBtn}
               onClick={handleStartRecording}
-              aria-label="Record segment from call"
+              disabled={recordDisabled}
+              title={recordDisabled ? recordDisabledMessage : undefined}
+              aria-label={
+                recordDisabled
+                  ? (recordDisabledMessage ? `Record segment: ${recordDisabledMessage}` : 'Record segment from call (disabled)')
+                  : 'Record segment from call'
+              }
               data-producer-ready={effectiveWebrtcUrl && producerReady ? 'true' : undefined}
             >
               <Mic size={16} strokeWidth={2} aria-hidden />

@@ -10,7 +10,8 @@ export type AttemptContext =
   | "auth_login"
   | "setup"
   | "auth_apikey"
-  | "auth_subscriber_token";
+  | "auth_subscriber_token"
+  | "call_join";
 
 export function getClientIp(request: FastifyRequest): string {
   // Note: if you run behind a reverse proxy, configure Fastify trustProxy so request.ip is correct.

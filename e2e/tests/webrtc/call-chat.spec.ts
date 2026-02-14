@@ -131,10 +131,13 @@ test.describe('Call chat', () => {
       await page.getByTestId('chat-input').fill('Hello from host!');
       await page.getByTestId('chat-send').click();
 
-      // Guest chat is always visible, should see message
-      await expect(guestPage.getByTestId('chat-panel')).toBeVisible();
+      // Guest chat is always visible; expand if minimized, then assert message
+      const guestChatPanel = guestPage.getByTestId('chat-panel');
+      await expect(guestChatPanel).toBeVisible();
+      const maxBtn = guestChatPanel.getByRole('button', { name: /maximize/i });
+      if (await maxBtn.isVisible()) await maxBtn.click();
       await expect(guestPage.getByText('Hello from host!')).toBeVisible({ timeout: 5000 });
-      await expect(guestPage.getByText('E2E Host')).toBeVisible();
+      await expect(guestPage.getByTestId('chat-message-list').getByText('E2E Host')).toBeVisible();
     } finally {
       await guestContext.close();
     }
@@ -160,8 +163,11 @@ test.describe('Call chat', () => {
       await guestPage.getByRole('button', { name: /join call/i }).click();
       await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
 
-      // Guest chat is always visible, send message
-      await expect(guestPage.getByTestId('chat-panel')).toBeVisible();
+      // Guest chat is always visible; expand if minimized, then send message
+      const guestChatPanel = guestPage.getByTestId('chat-panel');
+      await expect(guestChatPanel).toBeVisible();
+      const maxBtn = guestChatPanel.getByRole('button', { name: /maximize/i });
+      if (await maxBtn.isVisible()) await maxBtn.click();
       await guestPage.getByTestId('chat-input').fill('Hello from guest!');
       await guestPage.getByTestId('chat-send').click();
 
@@ -169,7 +175,7 @@ test.describe('Call chat', () => {
       await page.getByTestId('chat-open-btn').click();
       await expect(page.getByTestId('chat-panel')).toBeVisible();
       await expect(page.getByText('Hello from guest!')).toBeVisible({ timeout: 5000 });
-      await expect(page.getByText('E2E Guest')).toBeVisible();
+      await expect(page.getByTestId('chat-message-list').getByText('E2E Guest')).toBeVisible();
     } finally {
       await guestContext.close();
     }

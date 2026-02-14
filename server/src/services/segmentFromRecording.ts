@@ -21,6 +21,13 @@ export async function createSegmentFromPath(
     return existing as Record<string, unknown>;
   }
 
+  const episode = db.prepare("SELECT podcast_id FROM episodes WHERE id = ?").get(episodeId) as
+    | { podcast_id: string }
+    | undefined;
+  if (!episode || episode.podcast_id !== podcastId) {
+    throw new Error("Episode does not belong to podcast");
+  }
+
   const segmentBase = uploadsDir(podcastId, episodeId);
   const resolvedPath = assertPathUnder(filePath, segmentBase);
 
