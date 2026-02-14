@@ -771,7 +771,7 @@ test.describe('Call recording golden path', () => {
       await expect(panel2.getByRole('button', { name: /migrate call to this tab/i })).toBeVisible();
 
       await panel2.getByRole('button', { name: /migrate call to this tab/i }).click();
-      await expect(panel2.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 15000 });
+      await expect(tab2.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 15000 });
       await expect(page.getByRole('region', { name: /group call/i })).toHaveCount(0);
     } finally {
       await tab2.close();

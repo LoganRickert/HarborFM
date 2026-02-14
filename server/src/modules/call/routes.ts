@@ -747,6 +747,25 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           return;
         }
 
+        if (type === "chat" && participantId) {
+          const text = (msg as { text?: string }).text;
+          if (text != null && typeof text === "string") {
+            const trimmed = text.trim().slice(0, 2000);
+            if (trimmed) {
+              const session = getSessionById(sessionId);
+              const p = session?.participants.find((x) => x.id === participantId);
+              const name = p?.name ?? "Unknown";
+              broadcastToSession(sessionId, {
+                type: "chat",
+                participantId,
+                participantName: name,
+                text: trimmed,
+              });
+            }
+          }
+          return;
+        }
+
         if (type === "startRecording" && isHost) {
           const sid = sessionId;
           const session = getSessionById(sid);

@@ -4,6 +4,7 @@ import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User } from 'luci
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
 import { RemoteAudio } from '../components/GroupCall/RemoteAudio';
+import { CallChatPanel, type ChatMessage } from '../components/GroupCall/CallChatPanel';
 import { CallJoinHeader } from '../components/CallJoinHeader';
 import { LeaveCallConfirmDialog } from '../components/GroupCall/LeaveCallConfirmDialog';
 import type { CallJoinInfo } from '../api/call';
@@ -31,6 +32,8 @@ export function CallJoin() {
   const [muted, setMutedState] = useState(false);
   const [mutedByHost, setMutedByHost] = useState(false);
   const [streamReady, setStreamReady] = useState(false);
+  const [chatMinimized, setChatMinimized] = useState(true);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const selfListenGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -88,7 +91,7 @@ export function CallJoin() {
   }, []);
 
   useEffect(() => {
-    if (!streamReady) return;
+    if (!streamReady || joined) return;
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     const s = streamRef.current;
     if (s) s.getTracks().forEach((t) => t.stop());
@@ -99,13 +102,12 @@ export function CallJoin() {
     selfListenGainRef.current = null;
     setStreamReady(false);
     setListeningToSelf(false);
-  }, [deviceId]);
+  }, [deviceId, joined]);
 
   const setupMicrophone = async (): Promise<boolean> => {
     if (streamRef.current) return true;
-    if (!deviceId) return false;
     const constraints: MediaStreamConstraints = {
-      audio: { deviceId: { exact: deviceId } },
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
       video: false,
     };
     try {
@@ -177,6 +179,8 @@ export function CallJoin() {
     if (!token || !name.trim()) return;
     setError(null);
     setJoining(true);
+    // Initialize microphone for level meter (user gesture from Join click)
+    setupMicrophone();
     const ws = new WebSocket(callWebSocketUrl());
     wsRef.current = ws;
     let resolved = false;
@@ -243,6 +247,16 @@ export function CallJoin() {
           setMutedState(m);
           setMutedRef.current(m);
           setMutedByHost(m && msg.mutedByHost === true);
+        } else if (msg.type === 'chat') {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              participantId: msg.participantId,
+              participantName: msg.participantName ?? 'Unknown',
+              text: msg.text ?? '',
+              timestamp: Date.now(),
+            },
+          ]);
         } else if (msg.type === 'disconnected') {
           clearJoinTimeout();
           setWebrtcUrl(undefined);
@@ -290,6 +304,12 @@ export function CallJoin() {
     setEditingName(false);
   };
 
+  const handleChatSend = (text: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'chat', text }));
+    }
+  };
+
   const pageLayout = (content: React.ReactNode) => (
     <div className={styles.page}>
       <CallJoinHeader />
@@ -324,10 +344,12 @@ export function CallJoin() {
           {joinInfo?.artworkUrl && (
             <img src={joinInfo.artworkUrl} alt="" className={styles.artwork} />
           )}
+          {joinInfo && (
+            <p className={`${styles.sub} ${styles.podcastEpisode}`}>
+              {joinInfo.podcast.title} — {joinInfo.episode.title}
+            </p>
+          )}
           <h1 className={styles.cardTitle}>You're In The Call</h1>
-          <p className={styles.sub}>
-            {joinInfo?.podcast.title} — {joinInfo?.episode.title}
-          </p>
           {audioUnavailable && (
             <p className={styles.audioUnavailable} role="status">
               Audio is unavailable — the host&apos;s WebRTC service is not running. You can stay in the call but won&apos;t hear or be heard until it&apos;s started.
@@ -357,7 +379,7 @@ export function CallJoin() {
               title={mutedByHost ? 'You were muted by the host' : muted ? 'Unmute' : 'Mute'}
             >
               {muted ? <MicOff size={18} strokeWidth={2} aria-hidden /> : <Mic size={18} strokeWidth={2} aria-hidden />}
-              {muted ? 'Unmute' : 'Mute'}
+              <span className={styles.callActionLabel}>{muted ? 'Unmute' : 'Mute'}</span>
             </button>
             <button
               type="button"
@@ -366,7 +388,7 @@ export function CallJoin() {
               aria-label="Leave call"
             >
               <PhoneOff size={18} strokeWidth={2} aria-hidden />
-              Leave Call
+              <span className={styles.callActionLabel}>Leave Call</span>
             </button>
           </div>
           <div
@@ -470,6 +492,14 @@ export function CallJoin() {
             <RemoteAudio key={id} track={track} />
           ))}
         </div>
+        <div className={styles.chatPanelWrapper}>
+          <CallChatPanel
+            messages={chatMessages}
+            onSend={handleChatSend}
+            minimized={chatMinimized}
+            onMinimizeToggle={() => setChatMinimized((m) => !m)}
+          />
+        </div>
         <LeaveCallConfirmDialog
           open={leaveConfirmOpen}
           onOpenChange={setLeaveConfirmOpen}
@@ -480,16 +510,17 @@ export function CallJoin() {
   }
 
   return pageLayout(
-    <div className={styles.card}>
-      {joinInfo?.artworkUrl && (
-        <img src={joinInfo.artworkUrl} alt="" className={styles.artwork} />
-      )}
-      <h1 className={styles.cardTitle}>Join Group Call</h1>
-      {joinInfo && (
+    <>
+      <div className={styles.card}>
+        {joinInfo?.artworkUrl && (
+          <img src={joinInfo.artworkUrl} alt="" className={styles.artwork} />
+        )}
+        {joinInfo && (
         <>
-          <p className={styles.sub}>
+          <p className={`${styles.sub} ${styles.podcastEpisode}`}>
             {joinInfo.podcast.title} — {joinInfo.episode.title}
           </p>
+          <h1 className={styles.cardTitle}>Join Group Call</h1>
           {joinInfo.hostName && (
             <p className={styles.hostName}>Host: {joinInfo.hostName}</p>
           )}
@@ -503,6 +534,11 @@ export function CallJoin() {
               className={styles.input}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !joining && name.trim()) {
+                  handleJoin();
+                }
+              }}
               placeholder="Enter your name"
               maxLength={100}
             />
@@ -578,6 +614,7 @@ export function CallJoin() {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

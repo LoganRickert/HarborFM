@@ -14,7 +14,7 @@ type Consumer = mediasoup.types.Consumer;
 
 const PORT = Number(process.env.PORT) || 3002;
 const RTC_MIN_PORT = Number(process.env.RTC_MIN_PORT) || 40000;
-const RTC_MAX_PORT = Number(process.env.RTC_MAX_PORT) || 40100;
+const RTC_MAX_PORT = Number(process.env.RTC_MAX_PORT) || 40200;
 const ANNOUNCED_IP = process.env.MEDIASOUP_ANNOUNCED_IP?.trim() || undefined;
 
 type RoomState = {
@@ -432,7 +432,14 @@ const wsHandler = (socket: any, req: any) => {
   socket.on("close", () => {
     const roomState = getRoom(roomId);
     const transport = socketTransports.get(socket);
-    if (transport && roomState) roomState.transports.delete(transport.id);
+    if (transport) {
+      try {
+        transport.close();
+      } catch (e) {
+        console.warn("[webrtc] socket close: transport.close() failed", e);
+      }
+      if (roomState) roomState.transports.delete(transport.id);
+    }
     socketTransports.delete(socket);
     socketRooms.delete(socket);
   });

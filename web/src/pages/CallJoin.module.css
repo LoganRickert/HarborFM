@@ -1,7 +1,15 @@
+.chatPanelWrapper {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 1000;
+}
+
 .page {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   padding: 1.5rem;
   background: var(--bg, #0d0d0d);
 }
@@ -9,19 +17,35 @@
 .container {
   flex: 1;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
   padding-top: 0.5rem;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 420px;
+  min-height: 150px;
+  max-height: 100%;
+  margin-bottom: 1.5rem;
   padding: 2rem;
+  overflow: hidden;
   background: var(--bg-elevated, #1a1a1a);
   border: 1px solid var(--border, #333);
   border-radius: var(--radius, 8px);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-height: 500px), (max-width: 379px) {
+  .podcastEpisode {
+    display: none;
+  }
 }
 
 .artwork {
@@ -31,6 +55,12 @@
   object-fit: cover;
   margin: 0 auto 1rem;
   display: block;
+}
+
+@media (max-height: 639px) {
+  .artwork {
+    display: none;
+  }
 }
 
 .cardTitle {
@@ -44,6 +74,16 @@
   margin: 0 0 1rem;
   font-size: 0.9375rem;
   color: var(--text-muted, #888);
+}
+
+.callActionLabel {
+  display: inline;
+}
+
+@media (max-width: 389px) {
+  .callActionLabel {
+    display: none;
+  }
 }
 
 .hostName {
@@ -243,12 +283,13 @@
 }
 
 .participantsList {
+  flex: 1;
   margin: 0 0 1rem;
   padding: 0;
   list-style: none;
   font-size: 0.875rem;
   color: var(--text, #e5e5e5);
-  max-height: 200px;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

@@ -1,3 +1,25 @@
+.panelsWrapper {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: 0.5rem;
+  z-index: 1000;
+}
+
+.panelsWrapper .panel {
+  position: relative;
+  bottom: auto;
+  right: auto;
+}
+
+.chatPanelInWrapper {
+  width: 320px;
+  flex-shrink: 0;
+}
+
 .panel {
   position: fixed;
   bottom: 1rem;
@@ -208,6 +230,22 @@
 .participantInfo .displayNameEditRow {
   flex: 1;
   min-width: 0;
+}
+
+.micLevel {
+  height: 6px;
+  margin: 0.5rem 0;
+  background: var(--bg-muted, #252525);
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.micLevelBar {
+  height: 100%;
+  background: var(--accent, #00d4aa);
+  border-radius: 3px;
+  transition: width 0.1s ease;
 }
 
 .participants {

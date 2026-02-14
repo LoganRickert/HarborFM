@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check } from 'lucide-react';
+import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, X } from 'lucide-react';
 import { callWebSocketUrl } from '../../api/call';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
 import { RemoteAudio } from './RemoteAudio';
 import { CallSoundboard } from './CallSoundboard';
+import { CallChatPanel, type ChatMessage } from './CallChatPanel';
 import styles from './CallPanel.module.css';
 
 export interface CallParticipant {
@@ -50,16 +51,29 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const [webrtcUrlFromWs, setWebrtcUrlFromWs] = useState<string | undefined>(undefined);
   const [roomIdFromWs, setRoomIdFromWs] = useState<string | undefined>(undefined);
   const [alreadyInCall, setAlreadyInCall] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatMinimized, setChatMinimized] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
-  const { remoteTracks, error: mediaError, ready: producerReady, setMuted, connectSoundboard } = useMediasoupRoom(
+  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, connectSoundboard } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
   );
   const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
+  const showChatView = isMobile && chatOpen;
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    setIsMobile(mq.matches);
+    const handler = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   useEffect(() => {
     setAlreadyInCall(false);
@@ -118,6 +132,16 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           onSegmentRecorded?.();
         } else if (msg.type === 'setMute') {
           setMuted(msg.muted === true);
+        } else if (msg.type === 'chat') {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              participantId: msg.participantId,
+              participantName: msg.participantName ?? 'Unknown',
+              text: msg.text ?? '',
+              timestamp: Date.now(),
+            },
+          ]);
         }
       } catch {
         // ignore
@@ -203,6 +227,16 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     }
   };
 
+  const handleChatSend = (text: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'chat', text }));
+    }
+  };
+
+  const handleChatOpen = () => {
+    setChatOpen((prev) => !prev);
+  };
+
   const handleMigrate = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'migrateHost' }));
@@ -231,12 +265,23 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     );
   }
 
-  return (
+  const panelContent = (
     <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`} data-minimized={minimized || undefined}>
       <div className={styles.header}>
         <Users size={18} strokeWidth={2} aria-hidden />
         <span className={styles.title}>Group Call ({participants.length})</span>
         <span className={styles.headerSpacer} />
+        <button
+          type="button"
+          className={styles.iconBtn}
+          onClick={handleChatOpen}
+          aria-label={chatOpen ? 'Close chat' : 'Open chat'}
+          title={chatOpen ? 'Close chat' : 'Open chat'}
+          data-testid="chat-open-btn"
+        >
+          {showChatView ? <X size={16} strokeWidth={2} aria-hidden /> : <MessageCircle size={16} strokeWidth={2} aria-hidden />}
+        </button>
+        {!showChatView && (
         <button
           type="button"
           className={styles.endBtnHeader}
@@ -246,6 +291,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         >
           <PhoneOff size={16} strokeWidth={2} aria-hidden />
         </button>
+        )}
         <button
           type="button"
           className={styles.iconBtn}
@@ -261,7 +307,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           Audio is unavailable — WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
         </p>
       )}
-      {!minimized && (
+      {!minimized && !showChatView && (
       <>
       <div className={styles.joinRow}>
         <input
@@ -293,6 +339,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           connectSoundboard={connectSoundboard}
           disabled={!effectiveWebrtcUrl || !producerReady}
         />
+        <div
+          className={styles.micLevel}
+          role="img"
+          aria-label="Microphone level"
+          title="Your microphone level"
+        >
+          <div className={styles.micLevelBar} style={{ width: `${micLevel}%` }} />
+        </div>
         <span className={styles.participantsLabel}>
           Participants ({participants.length})
         </span>
@@ -425,6 +479,16 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       </div>
       </>
       )}
+      {!minimized && showChatView && (
+        <CallChatPanel
+          messages={chatMessages}
+          onSend={handleChatSend}
+          minimized={false}
+          onMinimizeToggle={() => {}}
+          embedded
+        />
+      )}
+      {!showChatView && (
       <div className={styles.recordSection}>
         <div className={styles.recordRow}>
           {recording ? (
@@ -459,6 +523,26 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           <p className={styles.mediaError}>{recordingError}</p>
         )}
       </div>
+      )}
     </div>
   );
+
+  if (chatOpen && !isMobile) {
+    return (
+      <div className={styles.panelsWrapper}>
+        {panelContent}
+        <div className={styles.chatPanelInWrapper}>
+        <CallChatPanel
+          messages={chatMessages}
+          onSend={handleChatSend}
+          minimized={chatMinimized}
+          onMinimizeToggle={() => setChatMinimized((m) => !m)}
+          onClose={() => setChatOpen(false)}
+        />
+        </div>
+      </div>
+    );
+  }
+
+  return panelContent;
 }

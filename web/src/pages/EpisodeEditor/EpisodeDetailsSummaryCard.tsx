@@ -85,9 +85,8 @@ export function EpisodeDetailsSummaryCard({
             ) : null
           )}
           {onEditClick != null && (
-            <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
+            <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details" title="Edit episode details">
               <Settings size={18} strokeWidth={2} aria-hidden />
-              Edit Details
             </button>
           )}
           {shareUrl != null && (

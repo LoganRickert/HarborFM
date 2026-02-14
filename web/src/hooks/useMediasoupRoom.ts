@@ -5,6 +5,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
   const [remoteTracks, setRemoteTracks] = useState<Map<string, MediaStreamTrack>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
   const producerRef = useRef<mediasoupClient.types.Producer | null>(null);
   const setMutedRef = useRef<(muted: boolean) => void>((muted) => {
@@ -86,11 +87,29 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
         const mixNode = ctx.createGain();
         mixNode.gain.value = 1;
 
+        const micSource = ctx.createMediaStreamSource(micStream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.7;
+        analyser.minDecibels = -60;
+        analyser.maxDecibels = -10;
+        micSource.connect(analyser);
+        analyser.connect(mixNode);
+
         const dest = ctx.createMediaStreamDestination();
         mixNode.connect(dest);
 
-        const micSource = ctx.createMediaStreamSource(micStream);
-        micSource.connect(mixNode);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        let tickId: number | undefined;
+        function tick() {
+          if (closed) return;
+          analyser.getByteFrequencyData(data);
+          let max = 0;
+          for (let i = 0; i < data.length; i++) if (data[i] > max) max = data[i];
+          setMicLevel(Math.min(100, Math.round((max / 255) * 100)));
+          tickId = requestAnimationFrame(tick);
+        }
+        tickId = requestAnimationFrame(tick);
 
         const soundboardSources: MediaElementAudioSourceNode[] = [];
         function connectSoundboard(el: HTMLAudioElement | null) {
@@ -117,6 +136,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
         if (!track) throw new Error('No audio track');
 
         cleanupRef.current = () => {
+          if (tickId != null) cancelAnimationFrame(tickId);
           ctx.close();
         };
 
@@ -260,6 +280,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
     remoteTracks,
     error,
     ready,
+    micLevel,
     setMuted: (muted: boolean) => setMutedRef.current(muted),
     connectSoundboard: (el: HTMLAudioElement | null) => connectSoundboardRef.current(el),
   };
