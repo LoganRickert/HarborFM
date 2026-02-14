@@ -29,6 +29,7 @@ import { Messages } from './pages/Messages';
 import { FeedHome } from './pages/FeedHome';
 import { FeedPodcast } from './pages/FeedPodcast';
 import { FeedEpisode } from './pages/FeedEpisode';
+import { EmbedEpisode } from './pages/EmbedEpisode';
 import { Library } from './pages/Library';
 import { SubscriberAuthProvider } from './hooks/useSubscriberAuth';
 
@@ -301,6 +302,8 @@ export default function App() {
           <Route path="/feed" element={<PublicFeedsGuard><FeedHome /></PublicFeedsGuard>} />
           <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><FeedPodcast /></PublicFeedsGuard>} />
           <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><FeedEpisode /></PublicFeedsGuard>} />
+          <Route path="/embed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
+          <Route path="/embed/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
         <Route path="/" element={<RootRoute />}>
           <Route index element={<Dashboard />} />
           <Route path="podcasts/new" element={<PodcastNew />} />

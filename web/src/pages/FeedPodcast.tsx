@@ -140,6 +140,8 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               podcast={podcast}
               podcastSlug={podcastSlug}
               onMessageClick={() => setFeedbackOpen(true)}
+              shareUrl={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined}
+              shareTitle={podcast ? `${podcast.title} - HarborFM` : undefined}
             />
           </div>
 

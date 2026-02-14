@@ -103,22 +103,23 @@ export function useFeedAudioPlayer({
   const togglePlay = useCallback(() => {
     const el = audioRef.current;
     if (!el || !audioUrl) return;
-    
-    if (isPlaying) {
+
+    if (!el.paused) {
       el.pause();
       setIsPlaying(false);
       onPause?.();
     } else {
-      if (!el.src || el.ended) {
+      const needsLoad = !el.src || el.ended;
+      if (needsLoad) {
         el.src = audioUrl;
+        el.currentTime = currentTime;
       }
-      el.currentTime = currentTime;
       el.play().catch(() => {
         setIsPlaying(false);
         onPause?.();
       });
     }
-  }, [isPlaying, audioUrl, currentTime, onPause]);
+  }, [audioUrl, currentTime, onPause]);
 
   const seek = useCallback((time: number) => {
     const el = audioRef.current;

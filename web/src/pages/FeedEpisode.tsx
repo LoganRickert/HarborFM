@@ -103,6 +103,12 @@ export function FeedEpisode({
     return feedErrorLayout(<div className={sharedStyles.error}>Episode not found</div>);
   }
 
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const shareUrl = `${origin}${isCustomFeed ? `/${episodeSlug}` : `/feed/${podcastSlug}/${episodeSlug}`}`;
+  const shareTitle = `${episode.title} - ${podcast.title}`;
+  const embedUrl = `${origin}${isCustomFeed ? `/embed/${episodeSlug}` : `/embed/${podcastSlug}/${episodeSlug}`}`;
+  const embedCode = `<iframe src="${embedUrl}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>`;
+
   return (
     <div className={sharedStyles.wrapper}>
       <div className={sharedStyles.container}>
@@ -116,6 +122,9 @@ export function FeedEpisode({
               podcast={podcast}
               onMessageClick={() => setFeedbackOpen(true)}
               onLockClick={() => setShowLockInfo(true)}
+              shareUrl={shareUrl}
+              shareTitle={shareTitle}
+              embedCode={embedCode}
             />
 
             {audioUrl && (

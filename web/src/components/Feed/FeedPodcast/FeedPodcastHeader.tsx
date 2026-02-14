@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Rss, MessageCircle, Lock } from 'lucide-react';
+import { Rss, MessageCircle, Lock, Share2 } from 'lucide-react';
 import { FeedPodcastHeaderProps } from '../../../types/feed';
 import { SubscriptionInfoDialog } from '../SubscriptionInfoDialog';
+import { ShareDialog } from '../../ShareDialog';
 import { useSubscriberAuth } from '../../../hooks/useSubscriberAuth';
 import styles from './FeedPodcastHeader.module.css';
 
@@ -9,8 +10,11 @@ export function FeedPodcastHeader({
   podcast,
   podcastSlug,
   onMessageClick,
+  shareUrl,
+  shareTitle,
 }: FeedPodcastHeaderProps) {
   const [showLockInfo, setShowLockInfo] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const { getTokenIdForPodcast } = useSubscriberAuth();
   const isSubscriberOnly = podcast.subscriber_only_feed_enabled === 1 && podcast.public_feed_disabled === 1;
   const hasSubscriberFeatures = podcast.subscriber_only_feed_enabled === 1;
@@ -91,6 +95,17 @@ export function FeedPodcastHeader({
                   <Rss size={18} strokeWidth={2.5} />
                 </a>
               )}
+              {shareUrl != null && (
+                <button
+                  type="button"
+                  className={styles.shareBtn}
+                  onClick={() => setShareOpen(true)}
+                  aria-label="Share"
+                  title="Share"
+                >
+                  <Share2 size={18} strokeWidth={2.5} aria-hidden />
+                </button>
+              )}
             </div>
           </div>
           {podcast.description && (
@@ -104,6 +119,14 @@ export function FeedPodcastHeader({
           onClose={() => setShowLockInfo(false)}
           isSubscriberOnly={isSubscriberOnly}
           podcastSlug={podcastSlug}
+        />
+      )}
+      {shareUrl != null && (
+        <ShareDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          url={shareUrl}
+          title={shareTitle}
         />
       )}
     </>

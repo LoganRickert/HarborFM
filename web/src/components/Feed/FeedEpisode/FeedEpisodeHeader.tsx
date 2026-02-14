@@ -1,6 +1,8 @@
-import { MessageCircle, Lock } from 'lucide-react';
+import { useState } from 'react';
+import { MessageCircle, Lock, Share2 } from 'lucide-react';
 import { FeedEpisodeHeaderProps } from '../../../types/feed';
 import { formatDate, formatDuration, formatSeasonEpisode } from '../../../utils/format';
+import { ShareDialog } from '../../ShareDialog';
 import styles from './FeedEpisodeHeader.module.css';
 
 export function FeedEpisodeHeader({
@@ -8,7 +10,11 @@ export function FeedEpisodeHeader({
   podcast,
   onMessageClick,
   onLockClick,
+  shareUrl,
+  shareTitle,
+  embedCode,
 }: FeedEpisodeHeaderProps) {
+  const [shareOpen, setShareOpen] = useState(false);
   const hasSubscriberFeatures = podcast.subscriber_only_feed_enabled === 1;
   const isPodcastSubscriberOnly = podcast.public_feed_disabled === 1;
   const isEpisodeSubscriberOnly = episode.subscriber_only === 1;
@@ -81,7 +87,28 @@ export function FeedEpisodeHeader({
             <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
             Message
           </button>
+          {shareUrl != null && (
+            <button
+              type="button"
+              className={styles.shareBtn}
+              onClick={() => setShareOpen(true)}
+              aria-label="Share"
+              title="Share"
+            >
+              <Share2 size={18} strokeWidth={2.5} aria-hidden />
+              Share
+            </button>
+          )}
         </div>
+        {shareUrl != null && (
+          <ShareDialog
+            open={shareOpen}
+            onOpenChange={setShareOpen}
+            url={shareUrl}
+            title={shareTitle}
+            embedCode={embedCode}
+          />
+        )}
         <div className={styles.metaRow}>
           {episode.publish_at && (
             <span className={styles.date}>{formatDate(episode.publish_at)}</span>

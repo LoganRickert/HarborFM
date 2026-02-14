@@ -107,7 +107,8 @@
   color: #d4a84b;
 }
 
-.messageBtn {
+.messageBtn,
+.shareBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -123,7 +124,8 @@
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
-.messageBtn:hover {
+.messageBtn:hover,
+.shareBtn:hover {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-glow);
@@ -163,7 +165,8 @@
     justify-content: center;
   }
 
-  .messageBtn {
+  .messageBtn,
+  .shareBtn {
     width: 100%;
   }
 }

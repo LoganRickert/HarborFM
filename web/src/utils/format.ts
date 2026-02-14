@@ -9,6 +9,19 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${minutes}:${String(secs).padStart(2, '0')}`;
 }
 
+/** Embed player: ceil seconds, leading zeros for hours/minutes/seconds (e.g. 01:05:09). */
+export function formatDurationEmbed(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return '00:00';
+  const total = Math.ceil(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 /**
  * Parse a server datetime string as UTC (server stores UTC).
  * If the string has no timezone, appends 'Z' and normalizes space to 'T' so it displays correctly in local time.
@@ -75,6 +88,23 @@ export function formatSeasonEpisode(
   }
   if (episodeNumber != null) {
     return `E${episodeNumber}`;
+  }
+  return '';
+}
+
+/** Long form for embed: "Season 1 Episode 2", "Episode 2", or "Season 1". */
+export function formatSeasonEpisodeLong(
+  seasonNumber: number | null | undefined,
+  episodeNumber: number | null | undefined
+): string {
+  if (seasonNumber != null && episodeNumber != null) {
+    return `Season ${seasonNumber} Episode ${episodeNumber}`;
+  }
+  if (seasonNumber != null) {
+    return `Season ${seasonNumber}`;
+  }
+  if (episodeNumber != null) {
+    return `Episode ${episodeNumber}`;
   }
   return '';
 }

@@ -25,6 +25,7 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 - [Environment variables](#environment-variables)
 - [Running without Docker](#running-without-docker)
 - [Features](#features)
+- [Embed](#embed)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
 - [Scripts](#scripts)
@@ -382,6 +383,30 @@ pm2 start ecosystem.config.cjs --only harborfm
 - **Export to S3.** Configure an S3-compatible export per podcast (e.g. AWS S3, Cloudflare R2). Deploy feed and episode audio to a bucket; only changed files are uploaded (ETag comparison). Optional public base URL so the feed and enclosures use your CDN URL.
 
 - **Auth and users.** First-user setup, registration, login, password reset. Optional admin role and user management. Public podcast and episode pages for listeners when public feeds are enabled.
+
+## Embed
+
+When public feeds are enabled, you can embed a single episode player on another site using an iframe.
+
+**Embed URLs:**
+
+- **Main host:** `https://your-harborfm.example/embed/{podcast-slug}/{episode-slug}`
+- **Custom domain (linking hostname):** If your podcast uses a custom domain (e.g. `podcast.example.com`), use one segment: `https://podcast.example.com/embed/{episode-slug}`
+
+If a user opens the embed URL directly in the browser (not in an iframe), they are redirected to the full episode page.
+
+**Optional: resize iframe to content (e.g. for mobile)**  
+The embed page sends its content height to the parent window so you can avoid a fixed iframe height and double scrollbars. Listen for `message` events and set the iframe height:
+
+```javascript
+window.addEventListener('message', function (e) {
+  if (e.data?.type === 'harborfm-embed-height' && typeof e.data.height === 'number') {
+    document.getElementById('your-embed-iframe').style.height = e.data.height + 'px';
+  }
+});
+```
+
+Check `e.origin` against your HarborFM origin in production if you want to restrict which origins can resize the iframe.
 
 ## Tech stack
 
