@@ -1,0 +1,93 @@
+.banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--bg-elevated);
+  border-top: 3px solid rgba(255, 255, 255, 0.5);
+  padding: 1rem;
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.inner {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 520px) {
+  .inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+}
+
+.text {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 519px) {
+  .actions {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+.accept,
+.reject {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.reject {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.reject:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-muted);
+}
+
+.accept {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: black;
+}
+
+.accept:hover {
+  filter: brightness(1.1);
+}

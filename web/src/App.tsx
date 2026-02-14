@@ -32,6 +32,7 @@ import { FeedEpisode } from './pages/FeedEpisode';
 import { EmbedEpisode } from './pages/EmbedEpisode';
 import { Library } from './pages/Library';
 import { SubscriberAuthProvider } from './hooks/useSubscriberAuth';
+import { ConsentBanner } from './components/ConsentBanner/ConsentBanner';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -290,6 +291,7 @@ export default function App() {
     <BrowserRouter>
       <ScrollToTop />
       <SubscriberAuthProvider>
+        <ConsentBanner />
         <Routes>
           <Route path="/setup" element={<Setup />} />
           <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />

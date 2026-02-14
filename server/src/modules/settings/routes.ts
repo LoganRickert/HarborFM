@@ -174,6 +174,8 @@ export interface AppSettings {
   dns_default_domain: string;
   /** Default enable Cloudflare proxy. */
   dns_default_enable_cloudflare_proxy: boolean;
+  /** When true, show GDPR-style cookie/tracking consent banner on public pages. */
+  gdpr_consent_banner_enabled: boolean;
 }
 
 const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -239,6 +241,7 @@ const DEFAULTS: AppSettings = {
   dns_default_allow_sub_domain: false,
   dns_default_domain: "",
   dns_default_enable_cloudflare_proxy: false,
+  gdpr_consent_banner_enabled: false,
 };
 
 const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -582,6 +585,9 @@ export function readSettings(): AppSettings {
     else if (row.key === "dns_default_enable_cloudflare_proxy")
       (settings as Partial<AppSettings>).dns_default_enable_cloudflare_proxy =
         row.value === "true";
+    else if (row.key === "gdpr_consent_banner_enabled")
+      (settings as Partial<AppSettings>).gdpr_consent_banner_enabled =
+        row.value === "true";
   }
 
   return {
@@ -686,6 +692,9 @@ export function readSettings(): AppSettings {
     dns_default_enable_cloudflare_proxy:
       settings.dns_default_enable_cloudflare_proxy ??
       DEFAULTS.dns_default_enable_cloudflare_proxy,
+    gdpr_consent_banner_enabled:
+      (settings as Partial<AppSettings>).gdpr_consent_banner_enabled ??
+      DEFAULTS.gdpr_consent_banner_enabled,
   };
 }
 
@@ -794,6 +803,7 @@ function writeSettings(settings: AppSettings): void {
   stmt.run("dns_default_allow_sub_domain", String(settings.dns_default_allow_sub_domain));
   stmt.run("dns_default_domain", settings.dns_default_domain);
   stmt.run("dns_default_enable_cloudflare_proxy", String(settings.dns_default_enable_cloudflare_proxy));
+  stmt.run("gdpr_consent_banner_enabled", String(settings.gdpr_consent_banner_enabled));
 }
 
 /** Whether a transcription provider is configured and usable. */
@@ -1256,6 +1266,10 @@ export async function settingsRoutes(app: FastifyInstance) {
         body.dns_default_enable_cloudflare_proxy !== undefined
           ? Boolean(body.dns_default_enable_cloudflare_proxy)
           : current.dns_default_enable_cloudflare_proxy;
+      const gdpr_consent_banner_enabled =
+        body.gdpr_consent_banner_enabled !== undefined
+          ? Boolean(body.gdpr_consent_banner_enabled)
+          : current.gdpr_consent_banner_enabled;
 
       const next: AppSettings = {
         whisper_asr_url,
@@ -1322,6 +1336,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         dns_default_allow_sub_domain,
         dns_default_domain,
         dns_default_enable_cloudflare_proxy,
+        gdpr_consent_banner_enabled,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||

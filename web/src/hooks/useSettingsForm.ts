@@ -62,6 +62,7 @@ const DEFAULT_FORM_STATE: AppSettings = {
   dns_default_allow_sub_domain: false,
   dns_default_domain: '',
   dns_default_enable_cloudflare_proxy: false,
+  gdpr_consent_banner_enabled: false,
 };
 
 export function useSettingsForm(initialSettings?: AppSettings) {

@@ -66,6 +66,7 @@ export const settingsPatchBodySchema = z.object({
   dns_default_allow_sub_domain: z.boolean().optional(),
   dns_default_domain: z.string().optional(),
   dns_default_enable_cloudflare_proxy: z.boolean().optional(),
+  gdpr_consent_banner_enabled: z.boolean().optional(),
 });
 
 export type SettingsPatchBody = z.infer<typeof settingsPatchBodySchema>;

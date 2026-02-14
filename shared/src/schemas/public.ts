@@ -94,6 +94,8 @@ export const publicConfigSchema = z.object({
   public_feeds_enabled: z.boolean(),
   /** When request Host is a custom podcast domain, the podcast slug to show at /. */
   custom_feed_slug: z.string().optional(),
+  /** When true, show GDPR-style cookie/tracking consent banner on public pages. */
+  gdpr_consent_banner_enabled: z.boolean().optional(),
 });
 
 export type PublicPodcast = z.infer<typeof publicPodcastSchema>;

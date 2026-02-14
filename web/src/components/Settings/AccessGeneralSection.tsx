@@ -39,6 +39,19 @@ export function AccessGeneralSection({
         When disabled, public feed pages and RSS endpoints are hidden and require login to access the app.
       </p>
 
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={form.gdpr_consent_banner_enabled}
+          onChange={(e) => onFormChange({ gdpr_consent_banner_enabled: e.target.checked })}
+        />
+        <span className="toggle__track" aria-hidden="true" />
+        <span>Enable Cookie / Tracking Consent Banner</span>
+      </label>
+      <p className={styles.toggleHelp}>
+        Show cookie/tracking consent banner on public feed and embed pages. When enabled, visitors see a GDPR-style banner before optional analytics/tracking. Off by default.
+      </p>
+
       <label className={styles.label}>
         Hostname
         <input

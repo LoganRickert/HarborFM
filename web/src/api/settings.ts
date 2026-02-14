@@ -61,6 +61,7 @@ export interface AppSettings {
   dns_default_allow_sub_domain: boolean;
   dns_default_domain: string;
   dns_default_enable_cloudflare_proxy: boolean;
+  gdpr_consent_banner_enabled: boolean;
 }
 
 export function getSettings(): Promise<AppSettings> {

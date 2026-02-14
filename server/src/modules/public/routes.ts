@@ -456,6 +456,11 @@ export async function publicRoutes(app: FastifyInstance) {
                 description:
                   "When request Host is a custom podcast domain (link_domain, managed_domain, or managed_sub_domain), the podcast slug to show at /.",
               },
+              gdpr_consent_banner_enabled: {
+                type: "boolean",
+                description:
+                  "When true, show GDPR-style cookie/tracking consent banner on public pages.",
+              },
             },
             required: ["public_feeds_enabled"],
           },
@@ -469,8 +474,14 @@ export async function publicRoutes(app: FastifyInstance) {
         request.hostname ||
         "";
       const match = getPodcastByHost(host);
-      const payload: { public_feeds_enabled: boolean; custom_feed_slug?: string } =
-        { public_feeds_enabled: Boolean(settings.public_feeds_enabled) };
+      const payload: {
+        public_feeds_enabled: boolean;
+        custom_feed_slug?: string;
+        gdpr_consent_banner_enabled: boolean;
+      } = {
+        public_feeds_enabled: Boolean(settings.public_feeds_enabled),
+        gdpr_consent_banner_enabled: Boolean(settings.gdpr_consent_banner_enabled),
+      };
       if (match) payload.custom_feed_slug = match.slug;
       return reply.send(payload);
     },

@@ -96,6 +96,7 @@ export function Settings() {
         model: form.model,
         registration_enabled: form.registration_enabled,
         public_feeds_enabled: form.public_feeds_enabled,
+        gdpr_consent_banner_enabled: form.gdpr_consent_banner_enabled,
         websub_discovery_enabled: form.websub_discovery_enabled,
         hostname: form.hostname,
         websub_hub: form.websub_hub,
