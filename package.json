@@ -22,7 +22,7 @@
     "build:docs": "bash scripts/build-docs.sh",
     "docker:build": "docker build -t harborfm .",
     "e2e": "cd e2e && pnpm run e2e",
-    "test": "pnpm run lint && pnpm run build && pnpm run e2e"
+    "test": "pnpm run lint && pnpm run build && pnpm run e2e && pnpm run db:migrate:test"
   },
   "engines": {
     "node": ">=22"

@@ -240,6 +240,11 @@ export const IMPORT_USER_AGENT =
 export const IMPORT_FETCH_TIMEOUT_MS =
   Number(process.env.IMPORT_FETCH_TIMEOUT_MS) || 60_000;
 
+/** Allow import to fetch from private/internal URLs (localhost, 10.x, 192.168.x, etc). Env: IMPORT_ALLOW_PRIVATE_URLS. Default false. Set to "true" or "1" for dev/testing. */
+export const IMPORT_ALLOW_PRIVATE_URLS =
+  process.env.IMPORT_ALLOW_PRIVATE_URLS === "true" ||
+  process.env.IMPORT_ALLOW_PRIVATE_URLS === "1";
+
 /** Minimum role to edit segments. Env: ROLE_MIN_EDIT_SEGMENTS. Default "editor". */
 export const ROLE_MIN_EDIT_SEGMENTS = parseShareRole(
   process.env.ROLE_MIN_EDIT_SEGMENTS,

@@ -6,6 +6,7 @@
 
 import { XMLParser } from "fast-xml-parser";
 import { IMPORT_USER_AGENT, IMPORT_FETCH_TIMEOUT_MS } from "../config.js";
+import { assertUrlNotPrivate } from "../utils/ssrf.js";
 const MAX_RETRIES = 3;
 const CONSECUTIVE_EMPTY_PAGES_STOP = 2;
 
@@ -238,6 +239,7 @@ function parseExplicit(val: unknown): number {
 
 function parseChannelMeta(
   channelOrFeed: Record<string, unknown>,
+  baseUrl?: string,
 ): ImportChannelMeta {
   const title = textOfAny(channelOrFeed["title"]) || "Imported Podcast";
   const description = normalizeDescription(
@@ -320,11 +322,12 @@ function parseChannelMeta(
   let artwork_url: string | null = null;
   if (image && typeof image === "object" && image !== null) {
     const rec = image as Record<string, unknown>;
-    artwork_url =
+    let raw =
       typeof rec["@_href"] === "string" && rec["@_href"].trim()
         ? rec["@_href"].trim()
         : null;
-    if (!artwork_url) artwork_url = textOfAny(rec["url"])?.trim() || null;
+    if (!raw) raw = textOfAny(rec["url"])?.trim() || null;
+    artwork_url = raw && baseUrl ? normalizeUrl(baseUrl, raw) : raw;
   }
 
   const podcastGuidRaw =
@@ -541,7 +544,10 @@ function itemToEpisode(
     const href =
       (image as Record<string, unknown>)["@_href"] ??
       (image as Record<string, unknown>)["url"];
-    if (typeof href === "string") artwork_url = href.trim() || null;
+    if (typeof href === "string") {
+      const trimmed = href.trim();
+      artwork_url = trimmed ? normalizeUrl(baseUrl, trimmed) : null;
+    }
   }
   const link =
     textOfAny(item["link"]) ||
@@ -620,6 +626,7 @@ export async function fetchAndParseFeed(
   let consecutiveEmptyPages = 0;
 
   while (true) {
+    await assertUrlNotPrivate(currentUrl);
     const { body, finalUrl } = await fetchWithRetry(currentUrl, controller);
     visitedPageUrls.add(finalUrl);
 
@@ -635,7 +642,7 @@ export async function fetchAndParseFeed(
     const { channel, items } = extractItemsFromPage(parsed, finalUrl);
 
     if (!channelMeta && channel && Object.keys(channel).length > 0) {
-      channelMeta = parseChannelMeta(channel);
+      channelMeta = parseChannelMeta(channel, finalUrl);
     }
 
     let newInPage = 0;
@@ -656,6 +663,7 @@ export async function fetchAndParseFeed(
 
     const nextUrl = channel ? getNextPageUrl(channel, finalUrl) : null;
     if (!nextUrl || visitedPageUrls.has(nextUrl)) break;
+    await assertUrlNotPrivate(nextUrl);
     currentUrl = nextUrl;
   }
 

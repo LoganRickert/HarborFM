@@ -25,6 +25,7 @@ import {
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import { uploadsDir, segmentPath, processedDir, artworkDir } from "../../services/paths.js";
+import { assertUrlNotPrivate } from "../../utils/ssrf.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { readSettings, isTranscriptionProviderConfigured } from "../settings/index.js";
 import * as audioService from "../../services/audio.js";
@@ -78,6 +79,7 @@ async function downloadToFile(
     signal.addEventListener("abort", () => controller.abort());
   }
   try {
+    await assertUrlNotPrivate(url);
     const res = await fetch(url, {
       method: "GET",
       redirect: "follow",
@@ -141,6 +143,7 @@ async function downloadArtworkToPath(
     signal.addEventListener("abort", () => controller.abort());
   }
   try {
+    await assertUrlNotPrivate(url);
     const res = await fetch(url, {
       method: "GET",
       redirect: "follow",

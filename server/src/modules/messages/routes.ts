@@ -61,7 +61,10 @@ export async function messagesRoutes(app: FastifyInstance) {
       const sort = query?.sort === "oldest" ? "oldest" : "newest";
       const order = sort === "oldest" ? "ASC" : "DESC";
 
-      const searchParam = search ? `%${search}%` : null;
+      // LIKE pattern: escape % and _ so they match literally in SQLite
+      const likeEscape = (s: string) =>
+        s.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const searchParam = search ? `%${likeEscape(search)}%` : null;
       const ownerFilter = isAdmin
         ? ""
         : " AND m.podcast_id IN (SELECT id FROM podcasts WHERE owner_user_id = ?)";
@@ -71,7 +74,7 @@ export async function messagesRoutes(app: FastifyInstance) {
       const listParams: unknown[] = [];
 
       if (search) {
-        whereClause = `WHERE (m.name LIKE ? OR m.email LIKE ? OR m.message LIKE ?)${ownerFilter}`;
+        whereClause = `WHERE (m.name LIKE ? ESCAPE '\\' OR m.email LIKE ? ESCAPE '\\' OR m.message LIKE ? ESCAPE '\\')${ownerFilter}`;
         countParams.push(searchParam, searchParam, searchParam);
         listParams.push(searchParam, searchParam, searchParam);
         if (!isAdmin) {
