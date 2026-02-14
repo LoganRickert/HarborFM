@@ -14,6 +14,8 @@ export interface CallSession {
   podcastId: string;
   hostUserId: string;
   token: string;
+  /** 4-digit code (1000–9999) for quick join from Dashboard. */
+  joinCode: string;
   password: string | null;
   participants: CallParticipant[];
   createdAt: number;
@@ -27,6 +29,7 @@ const HOST_AWAY_MS = 5 * 60 * 1000; // 5 minutes
 
 const sessionsByToken = new Map<string, CallSession>();
 const sessionsById = new Map<string, CallSession>();
+const sessionsByCode = new Map<string, CallSession>();
 let hostAwayCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 function ensureHostAwayChecker(
@@ -45,6 +48,14 @@ function ensureHostAwayChecker(
   }, 30_000); // check every 30s
 }
 
+function generateJoinCode(): string {
+  for (let i = 0; i < 20; i++) {
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    if (!sessionsByCode.has(code)) return code;
+  }
+  return String(Math.floor(1000 + Math.random() * 9000)); // fallback, allow collision
+}
+
 export function createSession(
   episodeId: string,
   podcastId: string,
@@ -55,6 +66,7 @@ export function createSession(
 ): CallSession {
   const sessionId = nanoid();
   const token = nanoid(16);
+  const joinCode = generateJoinCode();
   const now = Date.now();
   const hostParticipant: CallParticipant = {
     id: nanoid(),
@@ -68,6 +80,7 @@ export function createSession(
     podcastId,
     hostUserId,
     token,
+    joinCode,
     password: password?.trim() || null,
     participants: [hostParticipant],
     createdAt: now,
@@ -76,6 +89,7 @@ export function createSession(
   };
   sessionsByToken.set(token, session);
   sessionsById.set(sessionId, session);
+  sessionsByCode.set(joinCode, session);
   ensureHostAwayChecker(onSessionEnd);
   return session;
 }
@@ -141,12 +155,27 @@ export function setParticipantMuted(
   return true;
 }
 
+export function setParticipantName(
+  sessionId: string,
+  participantId: string,
+  name: string,
+): boolean {
+  const session = sessionsById.get(sessionId);
+  if (!session || session.ended) return false;
+  const p = session.participants.find((x) => x.id === participantId);
+  if (!p) return false;
+  const trimmed = (name ?? "").trim();
+  if (trimmed) p.name = trimmed;
+  return true;
+}
+
 export function endSession(sessionId: string): CallSession | null {
   const session = sessionsById.get(sessionId);
   if (!session) return null;
   session.ended = true;
   sessionsByToken.delete(session.token);
   sessionsById.delete(sessionId);
+  if (session.joinCode) sessionsByCode.delete(session.joinCode);
   return session;
 }
 
@@ -158,6 +187,21 @@ export function verifyPassword(session: CallSession, password: string): boolean 
 export function setSessionRoomId(sessionId: string, roomId: string): void {
   const session = sessionsById.get(sessionId);
   if (session) session.roomId = roomId;
+}
+
+/** Ensure session has a joinCode (for legacy sessions created before joinCode was added). */
+export function ensureSessionJoinCode(session: CallSession): void {
+  if (session.joinCode) return;
+  const code = generateJoinCode();
+  session.joinCode = code;
+  sessionsByCode.set(code, session);
+}
+
+export function getSessionByCode(code: string): CallSession | undefined {
+  const normalized = String(code).trim();
+  if (normalized.length !== 4 || !/^\d{4}$/.test(normalized)) return undefined;
+  const s = sessionsByCode.get(normalized);
+  return s && !s.ended ? s : undefined;
 }
 
 export function getActiveSessionForEpisode(

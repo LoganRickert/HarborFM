@@ -41,6 +41,7 @@ import {
   getPodcastByHost,
   getCanonicalFeedUrl,
 } from "../../services/dns/custom-domain-resolver.js";
+import { getWebRtcConfig } from "../../services/webrtcConfig.js";
 import {
   API_PREFIX,
   RSS_CACHE_MAX_AGE_MS,
@@ -461,6 +462,11 @@ export async function publicRoutes(app: FastifyInstance) {
                 description:
                   "When true, show GDPR-style cookie/tracking consent banner on public pages.",
               },
+              webrtc_enabled: {
+                type: "boolean",
+                description:
+                  "When true, WebRTC group calls are configured ( Join Call on Dashboard).",
+              },
             },
             required: ["public_feeds_enabled"],
           },
@@ -474,13 +480,16 @@ export async function publicRoutes(app: FastifyInstance) {
         request.hostname ||
         "";
       const match = getPodcastByHost(host);
+      const webrtcCfg = getWebRtcConfig();
       const payload: {
         public_feeds_enabled: boolean;
         custom_feed_slug?: string;
         gdpr_consent_banner_enabled: boolean;
+        webrtc_enabled?: boolean;
       } = {
         public_feeds_enabled: Boolean(settings.public_feeds_enabled),
         gdpr_consent_banner_enabled: Boolean(settings.gdpr_consent_banner_enabled),
+        webrtc_enabled: Boolean(webrtcCfg.serviceUrl && webrtcCfg.publicWsUrl),
       };
       if (match) payload.custom_feed_slug = match.slug;
       return reply.send(payload);

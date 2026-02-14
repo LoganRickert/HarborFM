@@ -2210,6 +2210,32 @@
   outline-offset: 2px;
 }
 
+.detailsSummaryEndCallBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: #c53030;
+  border: 1px solid #c53030;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.detailsSummaryEndCallBtn:hover {
+  background: #e53e3e;
+  border-color: #e53e3e;
+}
+
+.detailsSummaryEndCallBtn:focus-visible {
+  outline: 2px solid #e53e3e;
+  outline-offset: 2px;
+}
+
 .detailsSummaryActions {
   display: flex;
   align-items: center;

@@ -9,7 +9,9 @@ import {
   createSession,
   getSessionByToken,
   getSessionById,
+  getSessionByCode,
   getSessionForJoinInfo,
+  ensureSessionJoinCode,
   updateHostHeartbeat,
   addParticipant,
   removeParticipant,
@@ -18,6 +20,7 @@ import {
   getActiveSessionForEpisode,
   setSessionRoomId,
   setParticipantMuted,
+  setParticipantName,
   type CallSession,
   type CallParticipant,
 } from "../../services/callSession.js";
@@ -31,6 +34,13 @@ const socketToParticipant = new Map<
   WebSocket,
   { sessionId: string; participantId: string }
 >();
+// Sockets that connected as host but were told "alreadyInCall" - awaiting migrateHost
+const pendingMigrateHosts = new Map<
+  WebSocket,
+  { sessionId: string; participantId: string; hostName?: string }
+>();
+// When each host socket was added (for detecting React StrictMode remount)
+const hostSocketAddedAt = new Map<WebSocket, number>();
 
 function broadcastToSession(sessionId: string, payload: object): void {
   const sockets = sessionSockets.get(sessionId);
@@ -77,6 +87,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               token: { type: "string" },
               sessionId: { type: "string" },
               joinUrl: { type: "string" },
+              joinCode: { type: "string", description: "4-digit code for quick join from Dashboard" },
+              webrtcUrl: { type: "string", nullable: true },
+              roomId: { type: "string", nullable: true },
+              webrtcUnavailable: { type: "boolean", nullable: true },
             },
           },
           403: { description: "No permission" },
@@ -97,6 +111,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
 
       const existing = getActiveSessionForEpisode(episodeId, request.userId);
       if (existing) {
+        ensureSessionJoinCode(existing);
         const origin =
           (request.headers["origin"] as string) ||
           (request.headers["referer"] as string)?.replace(/\/[^/]*$/, "") ||
@@ -106,6 +121,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           token: existing.token,
           sessionId: existing.sessionId,
           joinUrl: joinUrl || `/call/join/${existing.token}`,
+          joinCode: existing.joinCode,
         };
         const webrtcCfg = getWebRtcConfig();
         if (existing.roomId && webrtcCfg.publicWsUrl) {
@@ -166,6 +182,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         token: session.token,
         sessionId: session.sessionId,
         joinUrl: joinUrl || `/call/join/${session.token}`,
+        joinCode: session.joinCode,
       };
       if (webrtcUrl && roomId) {
         payload.webrtcUrl = webrtcUrl;
@@ -173,6 +190,39 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       }
       if (webrtcUnavailable) payload.webrtcUnavailable = true;
       return reply.send(payload);
+    },
+  );
+
+  app.get(
+    "/call/by-code/:code",
+    {
+      schema: {
+        tags: ["Call"],
+        summary: "Look up call by 4-digit code",
+        description:
+          "Returns the join token if a call exists with the given 4-digit code. No auth required.",
+        params: {
+          type: "object",
+          properties: { code: { type: "string" } },
+          required: ["code"],
+        },
+        response: {
+          200: {
+            description: "Token for joining",
+            type: "object",
+            properties: { token: { type: "string" } },
+            required: ["token"],
+          },
+          404: { description: "No call found for this code" },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { code } = request.params as { code: string };
+      const session = getSessionByCode(code);
+      if (!session)
+        return reply.status(404).send({ error: "No call found for this code" });
+      return reply.send({ token: session.token });
     },
   );
 
@@ -202,6 +252,9 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   id: { type: "string" },
                 },
               },
+              hostName: { type: "string", description: "Current host display name" },
+              passwordRequired: { type: "boolean", description: "True when host set a password" },
+              artworkUrl: { type: "string", nullable: true, description: "Podcast or episode cover URL" },
             },
           },
           404: { description: "Invalid or ended session" },
@@ -215,17 +268,37 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: "Invalid or expired link" });
 
       const podcast = db
-        .prepare("SELECT title FROM podcasts WHERE id = ?")
-        .get(session.podcastId) as { title: string } | undefined;
+        .prepare("SELECT title, artwork_path, artwork_url FROM podcasts WHERE id = ?")
+        .get(session.podcastId) as { title: string; artwork_path: string | null; artwork_url: string | null } | undefined;
       const episode = db
-        .prepare("SELECT id, title FROM episodes WHERE id = ?")
-        .get(session.episodeId) as { id: string; title: string } | undefined;
+        .prepare("SELECT id, title, artwork_path, artwork_url FROM episodes WHERE id = ? AND podcast_id = ?")
+        .get(session.episodeId, session.podcastId) as { id: string; title: string; artwork_path: string | null; artwork_url: string | null } | undefined;
       if (!podcast || !episode)
         return reply.status(404).send({ error: "Show or episode not found" });
+
+      const hostP = session.participants.find((p) => p.isHost);
+      const hostName = hostP?.name ?? "Host";
+      const passwordRequired = Boolean(session.password && session.password.trim());
+
+      let artworkUrl: string | null = null;
+      if (episode.artwork_url) {
+        artworkUrl = episode.artwork_url;
+      } else if (episode.artwork_path) {
+        const fn = episode.artwork_path.split(/[/\\]/).pop();
+        if (fn) artworkUrl = `/api/public/artwork/${session.podcastId}/episodes/${episode.id}/${encodeURIComponent(fn)}`;
+      }
+      if (!artworkUrl && podcast.artwork_url) artworkUrl = podcast.artwork_url;
+      if (!artworkUrl && podcast.artwork_path) {
+        const fn = podcast.artwork_path.split(/[/\\]/).pop();
+        if (fn) artworkUrl = `/api/public/artwork/${session.podcastId}/${encodeURIComponent(fn)}`;
+      }
 
       return reply.send({
         podcast: { title: podcast.title },
         episode: { id: episode.id, title: episode.title },
+        hostName,
+        passwordRequired,
+        artworkUrl,
       });
     },
   );
@@ -253,6 +326,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               sessionId: { type: "string" },
               token: { type: "string" },
               joinUrl: { type: "string" },
+              joinCode: { type: "string", description: "4-digit code for quick join from Dashboard" },
+              webrtcUrl: { type: "string", nullable: true },
+              roomId: { type: "string", nullable: true },
+              webrtcUnavailable: { type: "boolean", nullable: true },
             },
           },
         },
@@ -262,6 +339,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       const { episodeId } = request.query as { episodeId: string };
       const session = getActiveSessionForEpisode(episodeId, request.userId);
       if (!session) return reply.send(null);
+      ensureSessionJoinCode(session);
       const origin =
         (request.headers["origin"] as string) ||
         (request.headers["referer"] as string)?.replace(/\/[^/]*$/, "") ||
@@ -271,6 +349,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         sessionId: session.sessionId,
         token: session.token,
         joinUrl: joinUrl || `/call/join/${session.token}`,
+        joinCode: session.joinCode,
       };
       const webrtcCfg = getWebRtcConfig();
       if (session.roomId && webrtcCfg.publicWsUrl) {
@@ -374,6 +453,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         if (!initialized) {
           if (type === "host") {
             const sessionIdParam = (msg as { sessionId?: string }).sessionId;
+            const hostName = (msg as { name?: string }).name;
             if (!sessionIdParam) return;
             req.jwtVerify()
               .then(() => {
@@ -394,24 +474,75 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 const hostP = session.participants.find((p) => p.isHost);
                 participantId = hostP?.id ?? null;
                 isHost = true;
+
+                // Check if another tab already has the host connected.
+                // If existing host socket was added very recently (<500ms), treat as React StrictMode
+                // remount and auto-replace instead of showing "already in call".
+                const OPEN = 1;
+                const REMOUNT_GRACE_MS = 500;
+                const existingSockets = sessionSockets.get(sessionId);
+                let existingHostSocket: WebSocket | null = null;
+                if (existingSockets) {
+                  for (const s of existingSockets) {
+                    if (s === socket) continue;
+                    if ((s as WebSocket & { readyState?: number }).readyState !== OPEN) continue;
+                    const ent = socketToParticipant.get(s);
+                    if (ent?.participantId !== participantId) continue;
+                    const addedAt = hostSocketAddedAt.get(s);
+                    if (addedAt != null && Date.now() - addedAt < REMOUNT_GRACE_MS) {
+                      try {
+                        s.close();
+                      } catch {
+                        /* ignore */
+                      }
+                      sessionSockets.get(sessionId)?.delete(s);
+                      socketToParticipant.delete(s);
+                      hostSocketAddedAt.delete(s);
+                      break;
+                    }
+                    existingHostSocket = s;
+                    break;
+                  }
+                }
+
+                if (existingHostSocket) {
+                  socket.send(
+                    JSON.stringify({ type: "alreadyInCall", canMigrate: true }),
+                  );
+                  pendingMigrateHosts.set(socket as unknown as WebSocket, {
+                    sessionId,
+                    participantId: participantId!,
+                    hostName:
+                      hostName != null && String(hostName).trim()
+                        ? String(hostName).trim()
+                        : undefined,
+                  });
+                  return;
+                }
+
                 initialized = true;
+                if (participantId && hostName != null && String(hostName).trim()) {
+                  setParticipantName(sessionId, participantId, String(hostName).trim());
+                }
                 let set = sessionSockets.get(sessionId);
                 if (!set) {
                   set = new Set();
                   sessionSockets.set(sessionId, set);
                 }
                 set.add(socket);
-                if (participantId)
+                if (participantId) {
                   socketToParticipant.set(socket as unknown as WebSocket, {
                     sessionId,
                     participantId,
                   });
+                  hostSocketAddedAt.set(socket as unknown as WebSocket, Date.now());
+                }
                 const hostJoinedPayload: Record<string, unknown> = {
                     type: "joined",
                     sessionId,
                     participantId,
                     isHost: true,
-                    participants: session.participants,
+                    participants: [...session.participants],
                   };
                   const webrtcCfg = getWebRtcConfig();
                   if (session.roomId && webrtcCfg.publicWsUrl) {
@@ -427,6 +558,67 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 );
                 socket.close();
               });
+            return;
+          }
+          if (type === "migrateHost") {
+            const pending = pendingMigrateHosts.get(socket as unknown as WebSocket);
+            if (!pending) return;
+            const { sessionId: sid, participantId: pid, hostName: hn } = pending;
+            const sess = getSessionById(sid);
+            if (!sess || sess.ended) {
+              pendingMigrateHosts.delete(socket as unknown as WebSocket);
+              socket.send(JSON.stringify({ type: "error", error: "Session ended" }));
+              socket.close();
+              return;
+            }
+            // Close existing host socket(s)
+            const existingSet = sessionSockets.get(sid);
+            if (existingSet) {
+              for (const s of Array.from(existingSet)) {
+                const ent = socketToParticipant.get(s);
+                if (ent?.participantId === pid) {
+                  try {
+                    s.close();
+                  } catch {
+                    /* ignore */
+                  }
+                  existingSet.delete(s);
+                  socketToParticipant.delete(s);
+                }
+              }
+              if (existingSet.size === 0) sessionSockets.delete(sid);
+            }
+            // Add this socket as the new host
+            sessionId = sid;
+            participantId = pid;
+            isHost = true;
+            initialized = true;
+            pendingMigrateHosts.delete(socket as unknown as WebSocket);
+            if (hn) setParticipantName(sid, pid, hn);
+            let newSet = sessionSockets.get(sid);
+            if (!newSet) {
+              newSet = new Set();
+              sessionSockets.set(sid, newSet);
+            }
+            newSet.add(socket);
+            socketToParticipant.set(socket as unknown as WebSocket, {
+              sessionId: sid,
+              participantId: pid,
+            });
+            const hostJoinedPayload: Record<string, unknown> = {
+              type: "joined",
+              sessionId: sid,
+              participantId: pid,
+              isHost: true,
+              participants: [...sess.participants],
+            };
+            const webrtcCfg = getWebRtcConfig();
+            if (sess.roomId && webrtcCfg.publicWsUrl) {
+              hostJoinedPayload.webrtcUrl =
+                webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
+              hostJoinedPayload.roomId = sess.roomId;
+            }
+            socket.send(JSON.stringify(hostJoinedPayload));
             return;
           }
           if (type === "guest") {
@@ -508,6 +700,36 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         if (type === "heartbeat") {
           if (isHost && updateHostHeartbeat(sessionId)) {
             socket.send(JSON.stringify({ type: "heartbeatAck" }));
+          }
+          return;
+        }
+
+        if (type === "updateHostName" && isHost && participantId) {
+          const name = (msg as { name?: string }).name;
+          if (name != null && typeof name === "string") {
+            setParticipantName(sessionId, participantId, name);
+            const session = getSessionById(sessionId);
+            if (session) {
+              broadcastToSession(sessionId, {
+                type: "participants",
+                participants: [...session.participants],
+              });
+            }
+          }
+          return;
+        }
+
+        if (type === "updateParticipantName" && participantId) {
+          const name = (msg as { name?: string }).name;
+          if (name != null && typeof name === "string") {
+            setParticipantName(sessionId, participantId, name);
+            const session = getSessionById(sessionId);
+            if (session) {
+              broadcastToSession(sessionId, {
+                type: "participants",
+                participants: [...session.participants],
+              });
+            }
           }
           return;
         }
@@ -622,11 +844,21 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           return;
         }
 
-        if (type === "setMute" && isHost) {
+        if (type === "setMute") {
           const sid = sessionId;
           const targetParticipantId = (msg as { participantId?: string }).participantId;
           const muted = (msg as { muted?: boolean }).muted === true;
-          if (!targetParticipantId) return;
+          if (!targetParticipantId) {
+            if (participantId) {
+              setParticipantMuted(sid, participantId, muted);
+              broadcastToSession(sid, {
+                type: "participants",
+                participants: getSessionById(sid)?.participants ?? [],
+              });
+            }
+            return;
+          }
+          if (!isHost) return;
           if (!setParticipantMuted(sid, targetParticipantId, muted)) return;
           const sockets = sessionSockets.get(sid);
           if (sockets) {
@@ -686,6 +918,8 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       });
 
       socket.on("close", () => {
+        pendingMigrateHosts.delete(socket as unknown as WebSocket);
+        hostSocketAddedAt.delete(socket as unknown as WebSocket);
         socketToParticipant.delete(socket as unknown as WebSocket);
         if (sessionId && participantId && !isHost) {
           removeParticipant(sessionId, participantId);

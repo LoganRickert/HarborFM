@@ -10,6 +10,9 @@ export interface DashboardHeaderProps {
   total?: number;
   readOnly: boolean;
   atPodcastLimit: boolean;
+  /** When true, show Join Call button. */
+  webrtcEnabled?: boolean;
+  onJoinCallClick?: () => void;
 }
 
 export interface PodcastCardProps {

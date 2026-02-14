@@ -14,6 +14,7 @@ import {
   ImportPodcastCard,
   DashboardEmptyState,
 } from '../components/Dashboard';
+import { JoinCallDialog } from '../components/JoinCallDialog';
 import { FailedToLoadCard } from '../components/FailedToLoadCard';
 import styles from './Dashboard.module.css';
 
@@ -21,6 +22,7 @@ export function Dashboard() {
   const { userId } = useParams<{ userId?: string }>();
   const [editingPodcastId, setEditingPodcastId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [joinCallDialogOpen, setJoinCallDialogOpen] = useState(false);
   const [activeImportPodcastId, setActiveImportPodcastId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const userClosedImportDialogRef = useRef(false);
@@ -102,6 +104,8 @@ export function Dashboard() {
         total={total}
         readOnly={readOnly}
         atPodcastLimit={atPodcastLimit}
+        webrtcEnabled={publicConfig?.webrtc_enabled}
+        onJoinCallClick={() => setJoinCallDialogOpen(true)}
       />
 
       {isError && <FailedToLoadCard title="Failed to load podcasts" />}
@@ -192,6 +196,11 @@ export function Dashboard() {
           setActiveImportPodcastId(null);
           userClosedImportDialogRef.current = true;
         }}
+      />
+
+      <JoinCallDialog
+        open={joinCallDialogOpen}
+        onOpenChange={setJoinCallDialogOpen}
       />
     </div>
   );

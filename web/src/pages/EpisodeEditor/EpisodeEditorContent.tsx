@@ -39,6 +39,7 @@ import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
 import { startCall, getActiveSession } from '../../api/call';
 import { CallPanel } from '../../components/GroupCall/CallPanel';
+import { EndCallConfirmDialog } from '../../components/GroupCall/EndCallConfirmDialog';
 
 export interface EpisodeEditorContentProps {
   episode: Episode;
@@ -93,11 +94,13 @@ export function EpisodeEditorContent({
     sessionId: string;
     token: string;
     joinUrl: string;
+    joinCode?: string;
     webrtcUrl?: string;
     roomId?: string;
     webrtcUnavailable?: boolean;
   } | null>(null);
   const [startCallError, setStartCallError] = useState<string | null>(null);
+  const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
 
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -114,6 +117,7 @@ export function EpisodeEditorContent({
           sessionId: session.sessionId,
           token: session.token,
           joinUrl: session.joinUrl,
+          joinCode: session.joinCode,
           webrtcUrl: session.webrtcUrl,
           roomId: session.roomId,
           webrtcUnavailable: session.webrtcUnavailable,
@@ -123,6 +127,11 @@ export function EpisodeEditorContent({
 
   const handleCallEnded = useCallback(() => setActiveCall(null), []);
 
+  const handleEndGroupCallConfirmed = useCallback(() => {
+    setActiveCall(null);
+    setEndCallConfirmOpen(false);
+  }, []);
+
   const handleStartGroupCall = useCallback(() => {
     setStartCallError(null);
     startCall(id)
@@ -131,6 +140,7 @@ export function EpisodeEditorContent({
           sessionId: res.sessionId,
           token: res.token,
           joinUrl: res.joinUrl,
+          joinCode: res.joinCode,
           webrtcUrl: res.webrtcUrl,
           roomId: res.roomId,
           webrtcUnavailable: res.webrtcUnavailable,
@@ -407,7 +417,11 @@ export function EpisodeEditorContent({
             : undefined
         }
         onStartGroupCall={
-          !segmentReadOnly && canEditSegments ? handleStartGroupCall : undefined
+          !segmentReadOnly && canEditSegments && !activeCall ? handleStartGroupCall : undefined
+        }
+        isCallActive={!!activeCall}
+        onEndGroupCall={
+          !segmentReadOnly && canEditSegments && activeCall ? () => setEndCallConfirmOpen(true) : undefined
         }
       />
 
@@ -587,16 +601,23 @@ export function EpisodeEditorContent({
           </button>
         </div>
       )}
+      <EndCallConfirmDialog
+        open={endCallConfirmOpen}
+        onOpenChange={setEndCallConfirmOpen}
+        onConfirm={handleEndGroupCallConfirmed}
+      />
       {activeCall && (
         <CallPanel
           sessionId={activeCall.sessionId}
           joinUrl={activeCall.joinUrl}
+          joinCode={activeCall.joinCode}
           webrtcUrl={activeCall.webrtcUrl}
           roomId={activeCall.roomId}
           mediaUnavailable={!activeCall.webrtcUrl || !activeCall.roomId || activeCall.webrtcUnavailable}
           onEnd={handleCallEnded}
           onCallEnded={handleCallEnded}
           onSegmentRecorded={() => queryClient.invalidateQueries({ queryKey: ['segments', id] })}
+          onEndRequest={() => setEndCallConfirmOpen(true)}
         />
       )}
       {showRecord && (

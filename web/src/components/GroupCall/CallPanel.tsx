@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, PhoneOff, Users, Mic, Square, MicOff, UserX } from 'lucide-react';
+import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check } from 'lucide-react';
 import { callWebSocketUrl } from '../../api/call';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
 import { RemoteAudio } from './RemoteAudio';
+import { CallSoundboard } from './CallSoundboard';
 import styles from './CallPanel.module.css';
 
 export interface CallParticipant {
@@ -16,6 +17,8 @@ export interface CallParticipant {
 export interface CallPanelProps {
   sessionId: string;
   joinUrl: string;
+  /** 4-digit code for quick join from Dashboard. */
+  joinCode?: string;
   webrtcUrl?: string;
   roomId?: string;
   /** True when WebRTC is not available (service down or not configured). */
@@ -23,29 +26,41 @@ export interface CallPanelProps {
   onEnd: () => void;
   onCallEnded: () => void;
   onSegmentRecorded?: () => void;
+  /** When set, End call button triggers this (e.g. to show confirm dialog) instead of ending immediately. */
+  onEndRequest?: () => void;
 }
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
 
-export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded }: CallPanelProps) {
+export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onEndRequest }: CallPanelProps) {
+  const [displayName, setDisplayName] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
+  });
+  const [editingName, setEditingName] = useState(false);
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [copied, setCopied] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingProcessing, setRecordingProcessing] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [minimized, setMinimized] = useState(false);
   const [webrtcUrlFromWs, setWebrtcUrlFromWs] = useState<string | undefined>(undefined);
   const [roomIdFromWs, setRoomIdFromWs] = useState<string | undefined>(undefined);
+  const [alreadyInCall, setAlreadyInCall] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
-  const { remoteTracks, error: mediaError, ready: producerReady, setMuted } = useMediasoupRoom(
+  const { remoteTracks, error: mediaError, ready: producerReady, setMuted, connectSoundboard } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
   );
   const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
 
   useEffect(() => {
+    setAlreadyInCall(false);
     setWebrtcUrlFromWs(undefined);
     setRoomIdFromWs(undefined);
     const url = callWebSocketUrl();
@@ -53,13 +68,17 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'host', sessionId }));
+      const name = localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
+      ws.send(JSON.stringify({ type: 'host', sessionId, name: name || undefined }));
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data as string);
-        if (msg.type === 'joined' && msg.participants) {
+        if (msg.type === 'alreadyInCall') {
+          setAlreadyInCall(true);
+        } else if (msg.type === 'joined' && msg.participants) {
+          setAlreadyInCall(false);
           setParticipants(msg.participants);
           if (msg.webrtcUrl) setWebrtcUrlFromWs(msg.webrtcUrl);
           if (msg.roomId) setRoomIdFromWs(msg.roomId);
@@ -104,11 +123,11 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
     };
 
     ws.onclose = () => {
-      onCallEnded();
+      if (wsRef.current === ws) onCallEnded();
     };
 
     ws.onerror = () => {
-      onCallEnded();
+      if (wsRef.current === ws) onCallEnded();
     };
 
     heartbeatRef.current = setInterval(() => {
@@ -119,13 +138,27 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
 
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      wsRef.current = null;
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'endCall' }));
         ws.close();
       }
-      wsRef.current = null;
     };
   }, [sessionId, onCallEnded]);
+
+  const handleDisplayNameSave = (name: string) => {
+    const trimmed = name.trim();
+    if (trimmed) {
+      setDisplayName(trimmed);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DISPLAY_NAME_KEY, trimmed);
+      }
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'updateHostName', name: trimmed }));
+      }
+    }
+    setEditingName(false);
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(joinUrl).then(() => {
@@ -168,17 +201,66 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
     }
   };
 
+  const handleMigrate = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'migrateHost' }));
+    }
+  };
+
+  if (alreadyInCall) {
+    return (
+      <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`}>
+        <div className={styles.header}>
+          <Users size={18} strokeWidth={2} aria-hidden />
+          <span className={styles.title}>Group Call ({participants.length})</span>
+        </div>
+        <p className={styles.alreadyInCallMessage}>
+          This user is already in the call in another tab.
+        </p>
+        <button
+          type="button"
+          className={styles.migrateBtn}
+          onClick={handleMigrate}
+          aria-label="Migrate call to this tab"
+        >
+          Migrate call to this tab
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.panel} role="region" aria-label="Group call">
+    <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`} data-minimized={minimized || undefined}>
       <div className={styles.header}>
         <Users size={18} strokeWidth={2} aria-hidden />
-        <span className={styles.title}>Group call</span>
+        <span className={styles.title}>Group Call ({participants.length})</span>
+        <span className={styles.headerSpacer} />
+        <button
+          type="button"
+          className={styles.endBtnHeader}
+          onClick={onEndRequest ?? handleEndCall}
+          aria-label="End call"
+          title="End call"
+        >
+          <PhoneOff size={16} strokeWidth={2} aria-hidden />
+        </button>
+        <button
+          type="button"
+          className={styles.iconBtn}
+          onClick={() => setMinimized(!minimized)}
+          aria-label={minimized ? 'Maximize' : 'Minimize'}
+          title={minimized ? 'Maximize' : 'Minimize'}
+        >
+          {minimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
+        </button>
       </div>
-      {showMediaUnavailable && (
+      {!minimized && showMediaUnavailable && (
         <p className={styles.mediaUnavailableBanner} role="status">
           Audio is unavailable — WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
         </p>
       )}
+      {!minimized && (
+      <>
       <div className={styles.joinRow}>
         <input
           type="text"
@@ -198,29 +280,116 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
           {copied ? ' Copied' : ' Copy'}
         </button>
       </div>
+      {joinCode && (
+        <div className={styles.joinCodeCard} data-testid="call-join-code-card">
+          <span className={styles.joinCodeLabel}>Join code</span>
+          <span className={styles.joinCodeValue} data-testid="call-join-code-value">{joinCode}</span>
+        </div>
+      )}
       <div className={styles.participants}>
+        <CallSoundboard
+          connectSoundboard={connectSoundboard}
+          disabled={!effectiveWebrtcUrl || !producerReady}
+        />
         <span className={styles.participantsLabel}>
           Participants ({participants.length})
         </span>
+        {participants.length === 0 ? (
+          <p className={styles.noParticipants}>No participants yet</p>
+        ) : (
         <ul className={styles.participantsList}>
-          {participants.map((p) => (
-            <li key={p.id} className={styles.participant}>
-              <span className={styles.participantName}>
-                {p.name}
-                {p.isHost && ' (Host)'}
-                {p.muted && ' (muted)'}
+          {[...participants]
+            .sort((a, b) => (a.isHost === b.isHost ? 0 : a.isHost ? -1 : 1))
+            .map((p) => (
+            <li key={p.id} className={styles.participantCard} data-host={p.isHost || undefined}>
+              <span className={styles.participantRoleIcon} aria-hidden>
+                {p.isHost ? <Crown size={14} /> : <User size={14} />}
               </span>
-              {!p.isHost && (
-                <span className={styles.participantActions}>
-                  <button
-                    type="button"
-                    className={styles.muteBtn}
-                    onClick={() => handleSetMute(p.id, !p.muted)}
-                    aria-label={p.muted ? 'Unmute' : 'Mute'}
-                    title={p.muted ? 'Unmute' : 'Mute'}
-                  >
-                    {p.muted ? <MicOff size={14} /> : <Mic size={14} />}
-                  </button>
+              <span className={styles.participantInfo}>
+                {p.isHost ? (
+                  <>
+                    <button
+                      type="button"
+                      className={styles.participantEditBtn}
+                      onClick={() => setEditingName(true)}
+                      aria-label="Edit your name"
+                      title="Edit your name"
+                    >
+                      <Pencil size={10} />
+                    </button>
+                    {editingName ? (
+                      <span className={styles.displayNameEditRow}>
+                        <input
+                          ref={(el) => { displayNameInputRef.current = el; }}
+                          type="text"
+                          className={styles.displayNameInput}
+                          defaultValue={displayName}
+                          placeholder="Enter your name"
+                          maxLength={100}
+                          autoFocus
+                          onBlur={(e) => handleDisplayNameSave(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleDisplayNameSave((e.target as HTMLInputElement).value);
+                            } else if (e.key === 'Escape') {
+                              setEditingName(false);
+                            }
+                          }}
+                          aria-label="Your display name"
+                        />
+                        <button
+                          type="button"
+                          className={`${styles.participantEditBtn} ${styles.saveBtn}`}
+                          onClick={() => {
+                            const val = displayNameInputRef.current?.value;
+                            handleDisplayNameSave(val ?? '');
+                          }}
+                          aria-label="Save name"
+                          title="Save name"
+                        >
+                          <Check size={10} />
+                        </button>
+                      </span>
+                    ) : (
+                      <span className={styles.participantNameBlock}>
+                        {p.muted && (
+                          <span className={styles.mutedBadge}>
+                            <MicOff size={10} />
+                            Muted
+                          </span>
+                        )}
+                        <span className={styles.participantName} title={displayName || p.name}>
+                          {displayName || p.name}
+                        </span>
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className={styles.participantNameBlock}>
+                    {p.muted && (
+                      <span className={styles.mutedBadge}>
+                        <MicOff size={10} />
+                        Muted
+                      </span>
+                    )}
+                    <span className={styles.participantName} title={p.name}>
+                      {p.name}
+                    </span>
+                  </span>
+                )}
+              </span>
+              <span className={styles.participantActions}>
+                <button
+                  type="button"
+                  className={styles.muteBtn}
+                  onClick={() => handleSetMute(p.id, !p.muted)}
+                  disabled={p.isHost && (!effectiveWebrtcUrl || !producerReady)}
+                  aria-label={p.muted ? (p.isHost ? 'Unmute yourself' : 'Unmute') : (p.isHost ? 'Mute yourself' : 'Mute')}
+                  title={p.muted ? 'Unmute' : 'Mute'}
+                >
+                  {p.muted ? <MicOff size={14} /> : <Mic size={14} />}
+                </button>
+                {!p.isHost && (
                   <button
                     type="button"
                     className={styles.disconnectBtn}
@@ -230,11 +399,12 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
                   >
                     <UserX size={14} />
                   </button>
-                </span>
-              )}
+                )}
+              </span>
             </li>
           ))}
         </ul>
+        )}
         {mediaError && (
           <p className={styles.mediaError}>{mediaError}</p>
         )}
@@ -242,6 +412,8 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
           <RemoteAudio key={id} track={track} />
         ))}
       </div>
+      </>
+      )}
       <div className={styles.recordSection}>
         <div className={styles.recordRow}>
           {recording ? (
@@ -267,25 +439,14 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
             </button>
           )}
         </div>
-        {recordingProcessing && (
+        {!minimized && recordingProcessing && (
           <p className={styles.recordingProcessing} role="status">
             Recording stopped successfully. We&apos;re now processing the segment. It should be added shortly.
           </p>
         )}
-        {recordingError && (
+        {!minimized && recordingError && (
           <p className={styles.mediaError}>{recordingError}</p>
         )}
-      </div>
-      <div className={styles.footer}>
-        <button
-          type="button"
-          className={styles.endBtn}
-          onClick={handleEndCall}
-          aria-label="End call"
-        >
-          <PhoneOff size={18} strokeWidth={2} aria-hidden />
-          End call
-        </button>
       </div>
     </div>
   );

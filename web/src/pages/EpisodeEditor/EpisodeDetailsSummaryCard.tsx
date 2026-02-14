@@ -18,8 +18,12 @@ export interface EpisodeDetailsSummaryCardProps {
   shareUrl?: string;
   shareTitle?: string;
   embedCode?: string;
-  /** When set, a "Start Group Call" button is shown to the left of Edit Details. */
+  /** When set, a "Start Group Call" or "End Group Call" button is shown to the left of Edit Details. */
   onStartGroupCall?: () => void;
+  /** When true, the button shows red "End Group Call" instead of "Start Group Call". */
+  isCallActive?: boolean;
+  /** When isCallActive, clicking the button triggers this (e.g. to show confirm dialog). */
+  onEndGroupCall?: () => void;
 }
 
 export function EpisodeDetailsSummaryCard({
@@ -34,6 +38,8 @@ export function EpisodeDetailsSummaryCard({
   shareTitle,
   embedCode,
   onStartGroupCall,
+  isCallActive,
+  onEndGroupCall,
 }: EpisodeDetailsSummaryCardProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const metaParts: string[] = [status];
@@ -41,7 +47,7 @@ export function EpisodeDetailsSummaryCard({
     metaParts.push(`S${seasonNumber ?? '?'} E${episodeNumber ?? '?'}`);
   }
   const isSubscriberOnly = subscriberOnly === 1;
-  const hasActions = onEditClick != null || shareUrl != null || onStartGroupCall != null;
+  const hasActions = onEditClick != null || shareUrl != null || onStartGroupCall != null || onEndGroupCall != null;
 
   return (
     <div className={isSubscriberOnly ? `${styles.detailsSummaryCard} ${styles.detailsSummaryCardSubscriberOnly}` : styles.detailsSummaryCard}>
@@ -65,11 +71,18 @@ export function EpisodeDetailsSummaryCard({
       </div>
       {hasActions && (
         <div className={styles.detailsSummaryActions}>
-          {onStartGroupCall != null && (
-            <button type="button" className={styles.detailsSummaryEditBtn} onClick={onStartGroupCall} aria-label="Start group call">
-              <Users size={18} strokeWidth={2} aria-hidden />
-              Start Group Call
-            </button>
+          {(onStartGroupCall != null || onEndGroupCall != null) && (
+            isCallActive ? (
+              <button type="button" className={styles.detailsSummaryEndCallBtn} onClick={onEndGroupCall} aria-label="End group call">
+                <Users size={18} strokeWidth={2} aria-hidden />
+                End Group Call
+              </button>
+            ) : onStartGroupCall != null ? (
+              <button type="button" className={styles.detailsSummaryEditBtn} onClick={onStartGroupCall} aria-label="Start group call">
+                <Users size={18} strokeWidth={2} aria-hidden />
+                Start Group Call
+              </button>
+            ) : null
           )}
           {onEditClick != null && (
             <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">

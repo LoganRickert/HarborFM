@@ -137,8 +137,25 @@ test.describe('Call recording golden path', () => {
     await page.goto(`/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: /end call/i }).click();
-    await expect(page.getByRole('region', { name: /group call/i })).toHaveCount(0);
+    const panel = page.getByRole('region', { name: /group call/i });
+    await panel.getByRole('button', { name: /end call/i }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: /^end call$/i }).click();
+    await expect(panel).toHaveCount(0);
+  });
+
+  test('Join code is visible in call panel', async ({ page }) => {
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    const panel = page.getByRole('region', { name: /group call/i });
+    await expect(panel).toBeVisible({ timeout: 10000 });
+    const joinCodeCard = panel.getByTestId('call-join-code-card');
+    await expect(joinCodeCard).toBeVisible({ timeout: 5000 });
+    await expect(joinCodeCard.getByText('Join code')).toBeVisible();
+    const codeValue = panel.getByTestId('call-join-code-value');
+    await expect(codeValue).toBeVisible();
+    await expect(codeValue).toHaveText(/\d{4}/);
   });
 
   test('Copy join link', async ({ page }) => {
@@ -162,6 +179,58 @@ test.describe('Call recording golden path', () => {
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
     await expect(page.getByText(/Participants \(1\)/)).toBeVisible();
     await expect(page.getByText(/\(Host\)/)).toBeVisible();
+  });
+
+  test('End Group Call button shows when call active and ends on confirm', async ({ page }) => {
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: /end group call/i })).toBeVisible();
+    await page.getByRole('button', { name: /end group call/i }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(/end group call/i);
+    await dialog.getByRole('button', { name: /^end call$/i }).click();
+    await expect(page.getByRole('region', { name: /group call/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /start group call/i })).toBeVisible();
+  });
+
+  test('End call dialog Cancel keeps call active', async ({ page }) => {
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 10000 });
+    const panel = page.getByRole('region', { name: /group call/i });
+    await panel.getByRole('button', { name: /end call/i }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: /cancel/i }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(panel).toBeVisible();
+  });
+
+  test('Minimize and maximize panel', async ({ page }) => {
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    const panel = page.getByRole('region', { name: /group call/i });
+    await expect(panel).toBeVisible({ timeout: 10000 });
+    await expect(panel.getByRole('textbox', { name: 'Join link' })).toBeVisible();
+    await panel.getByRole('button', { name: /minimize/i }).click();
+    await expect(panel.getByRole('textbox', { name: 'Join link' })).not.toBeVisible();
+    await expect(panel.getByRole('button', { name: /record segment/i })).toBeVisible();
+    await panel.getByRole('button', { name: /maximize/i }).click();
+    await expect(panel.getByRole('textbox', { name: 'Join link' })).toBeVisible();
+  });
+
+  test('Host display name persists and shows in participants', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('harborfm_call_display_name', 'E2E Host');
+    });
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    const panel = page.getByRole('region', { name: /group call/i });
+    await expect(panel).toBeVisible({ timeout: 10000 });
+    await expect(panel.getByText(/E2E Host/)).toBeVisible();
+    await expect(panel.getByText(/Participants \(1\)/)).toBeVisible();
   });
 
   test('Guest joins and host sees them', async ({ page, context }) => {
@@ -189,6 +258,76 @@ test.describe('Call recording golden path', () => {
       await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
     } finally {
       await guestContext.close();
+    }
+  });
+
+  test('Join Call button on Dashboard opens dialog and code lookup redirects to join page', async ({ page, context }) => {
+    test.setTimeout(45000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+
+    // Host starts call and gets join code
+    await page.goto(`${baseURL}/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+    const joinCodeValue = page.getByRole('region', { name: /group call/i }).getByTestId('call-join-code-value');
+    await expect(joinCodeValue).toBeVisible({ timeout: 5000 });
+    const code = await joinCodeValue.textContent();
+    expect(code).toMatch(/^\d{4}$/);
+
+    // Open dashboard in new tab, click Join Call
+    const dashboardTab = await context.newPage();
+    try {
+      await dashboardTab.goto(`${baseURL}/`);
+      await expect(dashboardTab.getByRole('button', { name: /join call/i })).toBeVisible({ timeout: 10000 });
+      await dashboardTab.getByRole('button', { name: /join call/i }).click();
+
+      const dialog = dashboardTab.getByRole('dialog');
+      await expect(dialog).toBeVisible({ timeout: 5000 });
+      await expect(dialog).toContainText(/join call/i);
+      await dialog.getByRole('textbox', { name: /4-digit join code/i }).fill(code!);
+      await dialog.getByRole('button', { name: /^join$/i }).click();
+
+      await expect(dashboardTab).toHaveURL(new RegExp(`/call/join/`), { timeout: 10000 });
+      await expect(dashboardTab.getByLabel(/your name/i)).toBeVisible({ timeout: 5000 });
+    } finally {
+      await dashboardTab.close();
+    }
+  });
+
+  test('Join Call dialog shows error for invalid code', async ({ page }) => {
+    await page.goto(`/`);
+    await expect(page.getByRole('button', { name: /join call/i })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /join call/i }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await dialog.getByRole('textbox', { name: /4-digit join code/i }).fill('9999');
+    await dialog.getByRole('button', { name: /^join$/i }).click();
+
+    await expect(page.getByText(/no call found for this code/i)).toBeVisible({ timeout: 5000 });
+    await expect(dialog).toBeVisible();
+  });
+
+  test('Already in call shows migrate, migrate moves call to new tab', async ({ page, context }) => {
+    test.setTimeout(60000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+    await page.goto(`${baseURL}/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 10000 });
+
+    const tab2 = await context.newPage();
+    try {
+      await tab2.goto(`${baseURL}/episodes/${episodeId}`);
+      const panel2 = tab2.getByRole('region', { name: /group call/i });
+      await expect(panel2).toBeVisible({ timeout: 5000 });
+      await expect(panel2.getByText(/already in the call in another tab/i)).toBeVisible({ timeout: 5000 });
+      await expect(panel2.getByRole('button', { name: /migrate call to this tab/i })).toBeVisible();
+
+      await panel2.getByRole('button', { name: /migrate call to this tab/i }).click();
+      await expect(panel2.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 15000 });
+      await expect(page.getByRole('region', { name: /group call/i })).toHaveCount(0);
+    } finally {
+      await tab2.close();
     }
   });
 });

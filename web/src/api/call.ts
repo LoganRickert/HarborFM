@@ -4,6 +4,7 @@ export interface CallStartResponse {
   token: string;
   sessionId: string;
   joinUrl: string;
+  joinCode?: string;
   webrtcUrl?: string;
   roomId?: string;
   /** True when WebRTC was requested but room creation failed (e.g. service down). */
@@ -13,12 +14,16 @@ export interface CallStartResponse {
 export interface CallJoinInfo {
   podcast: { title: string };
   episode: { id: string; title: string };
+  hostName?: string;
+  passwordRequired?: boolean;
+  artworkUrl?: string | null;
 }
 
 export interface CallSessionResponse {
   sessionId: string;
   token: string;
   joinUrl: string;
+  joinCode?: string;
   webrtcUrl?: string;
   roomId?: string;
   webrtcUnavailable?: boolean;
@@ -34,6 +39,14 @@ export function getJoinInfo(token: string): Promise<CallJoinInfo> {
 
 export function getActiveSession(episodeId: string): Promise<CallSessionResponse | null> {
   return apiGet<CallSessionResponse | null>(`/call/session?episodeId=${encodeURIComponent(episodeId)}`);
+}
+
+export interface CallByCodeResponse {
+  token: string;
+}
+
+export function getCallByCode(code: string): Promise<CallByCodeResponse> {
+  return apiGet<CallByCodeResponse>(`/call/by-code/${encodeURIComponent(code)}`);
 }
 
 export function callWebSocketUrl(): string {

@@ -1,0 +1,58 @@
+.soundboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.soundboardLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.soundboardGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.soundboardBtn,
+.soundboardBtnActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  max-width: 120px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted, #888);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.soundboardBtn:hover:not(:disabled),
+.soundboardBtnActive {
+  color: var(--accent, #00d4aa);
+  border-color: var(--accent, #00d4aa);
+}
+
+.soundboardBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.soundboardBtnLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.soundboardEmpty {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+}

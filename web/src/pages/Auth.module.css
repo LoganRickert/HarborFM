@@ -1,4 +1,5 @@
 .wrap {
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -29,6 +30,31 @@
   text-align: center;
   overflow-wrap: break-word;
   word-break: break-word;
+}
+
+.joinCallFab {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.12);
+  border: 2px solid rgba(0, 212, 170, 0.5);
+  border-radius: 9999px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 212, 170, 0.15);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.joinCallFab:hover {
+  background: rgba(0, 212, 170, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 6px 24px rgba(0, 212, 170, 0.25);
 }
 
 .card {

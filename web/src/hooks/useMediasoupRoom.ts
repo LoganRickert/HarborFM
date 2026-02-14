@@ -11,6 +11,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
     const p = producerRef.current;
     if (p) (muted ? p.pause() : p.resume());
   });
+  const connectSoundboardRef = useRef<(el: HTMLAudioElement | null) => void>(() => {});
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
@@ -24,6 +25,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
     let sendTransport: mediasoupClient.types.Transport | null = null;
     let recvTransport: mediasoupClient.types.Transport | null = null;
     let localStream: MediaStream | null = null;
+    let micStream: MediaStream | null = null;
     const pendingResolvers = new Map<string, Array<(value: unknown) => void>>();
 
     function waitFor(type: string): Promise<unknown> {
@@ -75,9 +77,48 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
         await device.load({ routerRtpCapabilities: capsMsg.rtpCapabilities });
         if (closed) return;
 
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const micTrack = micStream.getAudioTracks()[0];
+        if (!micTrack) throw new Error('No audio track');
+
+        const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AudioCtx();
+        const mixNode = ctx.createGain();
+        mixNode.gain.value = 1;
+
+        const dest = ctx.createMediaStreamDestination();
+        mixNode.connect(dest);
+
+        const micSource = ctx.createMediaStreamSource(micStream);
+        micSource.connect(mixNode);
+
+        const soundboardSources: MediaElementAudioSourceNode[] = [];
+        function connectSoundboard(el: HTMLAudioElement | null) {
+          soundboardSources.forEach((src) => {
+            try {
+              src.disconnect();
+            } catch {
+              /* ignore */
+            }
+          });
+          soundboardSources.length = 0;
+          if (el && el.src) {
+            ctx.resume().catch(() => {});
+            const src = ctx.createMediaElementSource(el);
+            src.connect(mixNode);
+            src.connect(ctx.destination);
+            soundboardSources.push(src);
+          }
+        }
+        connectSoundboardRef.current = connectSoundboard;
+
+        localStream = dest.stream;
         const track = localStream.getAudioTracks()[0];
         if (!track) throw new Error('No audio track');
+
+        cleanupRef.current = () => {
+          ctx.close();
+        };
 
         webrtcWs.send(JSON.stringify({ type: 'createWebRtcTransport' }));
         const sendTransportMsg = (await waitFor('webRtcTransportCreated')) as {
@@ -209,6 +250,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
       pendingResolvers.forEach((queue) => queue.forEach((r) => r(null)));
       webrtcWs?.close();
       localStream?.getTracks().forEach((t) => t.stop());
+      micStream?.getTracks().forEach((t) => t.stop());
       sendTransport?.close();
       recvTransport?.close();
     };
@@ -219,5 +261,6 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
     error,
     ready,
     setMuted: (muted: boolean) => setMutedRef.current(muted),
+    connectSoundboard: (el: HTMLAudioElement | null) => connectSoundboardRef.current(el),
   };
 }

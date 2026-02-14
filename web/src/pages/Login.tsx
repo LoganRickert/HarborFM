@@ -1,9 +1,12 @@
 import { useState, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Phone } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { login } from '../api/auth';
 import { setupStatus } from '../api/setup';
+import { getPublicConfig } from '../api/public';
+import { JoinCallDialog } from '../components/JoinCallDialog/JoinCallDialog';
 import { Captcha, type CaptchaHandle } from '../components/Captcha';
 import styles from './Auth.module.css';
 
@@ -22,6 +25,13 @@ export function Login() {
     retry: false,
     staleTime: 10_000,
   });
+  const { data: publicConfig } = useQuery({
+    queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
+    queryFn: getPublicConfig,
+    staleTime: 60_000,
+  });
+  const webrtcEnabled = publicConfig?.webrtc_enabled === true;
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -156,6 +166,20 @@ export function Login() {
           <span className={styles.footerBelowCardSep} aria-hidden />
           <Link to="/contact">Contact</Link>
         </p>
+        {webrtcEnabled && (
+          <>
+            <button
+              type="button"
+              className={styles.joinCallFab}
+              onClick={() => setJoinDialogOpen(true)}
+              aria-label="Join call"
+            >
+              <Phone size={16} strokeWidth={2} aria-hidden />
+              Join Call
+            </button>
+            <JoinCallDialog open={joinDialogOpen} onOpenChange={setJoinDialogOpen} />
+          </>
+        )}
       </div>
     </main>
   );
