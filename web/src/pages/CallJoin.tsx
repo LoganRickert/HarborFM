@@ -26,9 +26,10 @@ export function CallJoin() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [webrtcUrl, setWebrtcUrl] = useState<string | undefined>(undefined);
   const [webrtcRoomId, setWebrtcRoomId] = useState<string | undefined>(undefined);
-  const [participants, setParticipants] = useState<Array<{ id: string; name: string; isHost: boolean; muted?: boolean }>>([]);
+  const [participants, setParticipants] = useState<Array<{ id: string; name: string; isHost: boolean; muted?: boolean; mutedByHost?: boolean }>>([]);
   const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
   const [muted, setMutedState] = useState(false);
+  const [mutedByHost, setMutedByHost] = useState(false);
   const [streamReady, setStreamReady] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const selfListenGainRef = useRef<GainNode | null>(null);
@@ -43,6 +44,11 @@ export function CallJoin() {
 
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
+
+  useEffect(() => {
+    if (myParticipant?.muted && myParticipant?.mutedByHost) setMutedByHost(true);
+    else if (!myParticipant?.muted) setMutedByHost(false);
+  }, [myParticipant?.muted, myParticipant?.mutedByHost]);
 
   useEffect(() => {
     if (!token) {
@@ -236,6 +242,7 @@ export function CallJoin() {
           const m = msg.muted === true;
           setMutedState(m);
           setMutedRef.current(m);
+          setMutedByHost(m && msg.mutedByHost === true);
         } else if (msg.type === 'disconnected') {
           clearJoinTimeout();
           setWebrtcUrl(undefined);
@@ -326,11 +333,17 @@ export function CallJoin() {
               Audio is unavailable — the host&apos;s WebRTC service is not running. You can stay in the call but won&apos;t hear or be heard until it&apos;s started.
             </p>
           )}
+          {mutedByHost && (
+            <p className={styles.mutedByHostHint} role="status">
+              You were muted by the host. Ask them to unmute you.
+            </p>
+          )}
           <div className={styles.callActions}>
             <button
               type="button"
               className={styles.iconBtn}
               onClick={() => {
+                if (mutedByHost) return;
                 const next = !muted;
                 setMutedState(next);
                 setMuted(next);
@@ -339,9 +352,9 @@ export function CallJoin() {
                   ws.send(JSON.stringify({ type: 'setMute', muted: next }));
                 }
               }}
-              disabled={audioUnavailable}
+              disabled={audioUnavailable || mutedByHost}
               aria-label={muted ? 'Unmute' : 'Mute'}
-              title={muted ? 'Unmute' : 'Mute'}
+              title={mutedByHost ? 'You were muted by the host' : muted ? 'Unmute' : 'Mute'}
             >
               {muted ? <MicOff size={18} strokeWidth={2} aria-hidden /> : <Mic size={18} strokeWidth={2} aria-hidden />}
               {muted ? 'Unmute' : 'Mute'}

@@ -12,6 +12,8 @@ export interface CallParticipant {
   isHost: boolean;
   joinedAt: number;
   muted?: boolean;
+  /** When true, host muted this participant; host can unmute. When false, participant muted themselves; host cannot unmute. */
+  mutedByHost?: boolean;
 }
 
 export interface CallPanelProps {
@@ -209,7 +211,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
 
   if (alreadyInCall) {
     return (
-      <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`}>
+      <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`} data-testid="already-in-call-panel">
         <div className={styles.header}>
           <Users size={18} strokeWidth={2} aria-hidden />
           <span className={styles.title}>Group Call ({participants.length})</span>
@@ -383,9 +385,18 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
                   type="button"
                   className={styles.muteBtn}
                   onClick={() => handleSetMute(p.id, !p.muted)}
-                  disabled={p.isHost && (!effectiveWebrtcUrl || !producerReady)}
+                  disabled={
+                    (p.isHost && (!effectiveWebrtcUrl || !producerReady))
+                    || (p.muted && !p.isHost && p.mutedByHost === false)
+                  }
                   aria-label={p.muted ? (p.isHost ? 'Unmute yourself' : 'Unmute') : (p.isHost ? 'Mute yourself' : 'Mute')}
-                  title={p.muted ? 'Unmute' : 'Mute'}
+                  title={
+                    p.muted && !p.isHost && p.mutedByHost === false
+                      ? 'Guest muted themselves'
+                      : p.muted
+                        ? 'Unmute'
+                        : 'Mute'
+                  }
                 >
                   {p.muted ? <MicOff size={14} /> : <Mic size={14} />}
                 </button>

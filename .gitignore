@@ -15,6 +15,7 @@ secrets/
 harborfm-docker-data/
 openapi.json
 docs-dist/
+server/public/
 ci-data/
 ci-secrets/
 

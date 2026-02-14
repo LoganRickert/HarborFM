@@ -788,7 +788,7 @@ export function Library() {
                 ? `This will permanently delete "${assetToDelete.name}".`
                 : 'This will permanently delete this item.'}
             </Dialog.Description>
-            <div className={styles.dialogActions}>
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
               <Dialog.Close asChild>
                 <button type="button" className={styles.cancel} aria-label="Cancel deleting library item">Cancel</button>
               </Dialog.Close>

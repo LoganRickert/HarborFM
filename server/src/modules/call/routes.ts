@@ -19,7 +19,8 @@ import {
   verifyPassword,
   getActiveSessionForEpisode,
   setSessionRoomId,
-  setParticipantMuted,
+  setParticipantMutedBySelf,
+  setParticipantMutedByHost,
   setParticipantName,
   type CallSession,
   type CallParticipant,
@@ -850,22 +851,33 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           const muted = (msg as { muted?: boolean }).muted === true;
           if (!targetParticipantId) {
             if (participantId) {
-              setParticipantMuted(sid, participantId, muted);
+              const ok = setParticipantMutedBySelf(sid, participantId, muted);
               broadcastToSession(sid, {
                 type: "participants",
                 participants: getSessionById(sid)?.participants ?? [],
               });
+              if (!muted && !ok) {
+                const sockets = sessionSockets.get(sid);
+                if (sockets) {
+                  for (const s of sockets) {
+                    if (socketToParticipant.get(s as unknown as WebSocket)?.participantId === participantId) {
+                      s.send(JSON.stringify({ type: "setMute", muted: true, mutedByHost: true }));
+                      break;
+                    }
+                  }
+                }
+              }
             }
             return;
           }
           if (!isHost) return;
-          if (!setParticipantMuted(sid, targetParticipantId, muted)) return;
+          if (!setParticipantMutedByHost(sid, targetParticipantId, muted)) return;
           const sockets = sessionSockets.get(sid);
           if (sockets) {
             for (const s of sockets) {
               const info = socketToParticipant.get(s as unknown as WebSocket);
               if (info?.participantId === targetParticipantId) {
-                s.send(JSON.stringify({ type: "setMute", muted }));
+                s.send(JSON.stringify({ type: "setMute", muted, mutedByHost: muted }));
                 break;
               }
             }

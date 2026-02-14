@@ -6,6 +6,8 @@ export interface CallParticipant {
   isHost: boolean;
   joinedAt: number;
   muted?: boolean;
+  /** When true, host muted this guest; host can unmute, guest cannot. When false, guest muted self; guest can unmute, host cannot. */
+  mutedByHost?: boolean;
 }
 
 export interface CallSession {
@@ -152,6 +154,49 @@ export function setParticipantMuted(
   const p = session.participants.find((x) => x.id === participantId);
   if (!p) return false;
   p.muted = muted;
+  if (!muted) p.mutedByHost = undefined;
+  return true;
+}
+
+/** Guest mutes/unmutes themselves. Unmute only allowed when not host-muted. Returns false if action rejected. */
+export function setParticipantMutedBySelf(
+  sessionId: string,
+  participantId: string,
+  muted: boolean,
+): boolean {
+  const session = sessionsById.get(sessionId);
+  if (!session) return false;
+  const p = session.participants.find((x) => x.id === participantId);
+  if (!p) return false;
+  if (muted) {
+    p.muted = true;
+    p.mutedByHost = false;
+    return true;
+  }
+  if (p.mutedByHost === true) return false;
+  p.muted = false;
+  p.mutedByHost = undefined;
+  return true;
+}
+
+/** Host mutes/unmutes a guest. Unmute only allowed when host was the one who muted. Returns false if action rejected. */
+export function setParticipantMutedByHost(
+  sessionId: string,
+  participantId: string,
+  muted: boolean,
+): boolean {
+  const session = sessionsById.get(sessionId);
+  if (!session) return false;
+  const p = session.participants.find((x) => x.id === participantId);
+  if (!p) return false;
+  if (muted) {
+    p.muted = true;
+    p.mutedByHost = true;
+    return true;
+  }
+  if (p.mutedByHost !== true) return false;
+  p.muted = false;
+  p.mutedByHost = undefined;
   return true;
 }
 

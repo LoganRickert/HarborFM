@@ -29,7 +29,7 @@ export function EndCallConfirmDialog({
           <Dialog.Description className={styles.dialogDescription}>
             The call will end for all participants. This cannot be undone.
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.cancel} aria-label="Cancel ending call">
                 Cancel

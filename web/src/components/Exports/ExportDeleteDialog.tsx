@@ -38,7 +38,7 @@ export function ExportDeleteDialog({
               ? `This will permanently remove "${exportToDelete.name}". This cannot be undone.`
               : 'This will permanently remove this destination. This cannot be undone.'}
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.cancel} aria-label="Cancel">Cancel</button>
             </Dialog.Close>

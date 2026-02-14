@@ -40,7 +40,7 @@ export function CastDeleteDialog({
               ? `This will remove ${cast.name} from the show cast. They can be added again later.`
               : 'This will remove this cast member from the show.'}
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.cancel} aria-label="Cancel">
                 Cancel

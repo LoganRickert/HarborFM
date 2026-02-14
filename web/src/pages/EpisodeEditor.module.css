@@ -2091,6 +2091,9 @@
   align-items: center;
   padding: 1rem 0 0;
 }
+.dialogActionsCancelLeft {
+  justify-content: space-between;
+}
 .episodeTranscriptDialogActions {
   justify-content: space-between;
 }
@@ -2098,7 +2101,7 @@
   padding: 0.5rem 1rem;
   font-size: 0.9375rem;
   font-weight: 600;
-  color: white;
+  color: black;
   background: var(--error);
   border: none;
   border-radius: var(--radius);

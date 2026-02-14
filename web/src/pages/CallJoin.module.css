@@ -62,6 +62,16 @@
   border-radius: 6px;
 }
 
+.mutedByHostHint {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text, #e5e5e5);
+  background: rgba(229, 62, 62, 0.12);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  border-radius: 6px;
+}
+
 .callActions {
   display: flex;
   gap: 0.75rem;

@@ -39,7 +39,7 @@ export function SubscriberTokenDeleteDialog({
               ? `This will permanently delete the token "${token.name}". Subscribers using this feed URL will no longer be able to access the feed. This cannot be undone.`
               : 'This will permanently delete this token. This cannot be undone.'}
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.subscriberDialogCancelBtn} aria-label="Cancel">Cancel</button>
             </Dialog.Close>

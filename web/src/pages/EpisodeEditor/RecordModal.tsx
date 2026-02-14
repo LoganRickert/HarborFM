@@ -512,7 +512,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
             <Dialog.Description className={styles.dialogDescription}>
               {pendingConfirm === 'discard_preview' ? 'Your recording or upload will not be saved.' : 'Your recording will not be saved.'}
             </Dialog.Description>
-            <div className={styles.dialogActions}>
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
               <Dialog.Close asChild>
                 <button type="button" className={styles.cancel} onClick={dismissConfirm} aria-label="Stay and continue">
                   Stay

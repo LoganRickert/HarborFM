@@ -29,7 +29,7 @@ export function LeaveCallConfirmDialog({
           <Dialog.Description className={styles.dialogDescription}>
             You will leave the call. You can rejoin with the link if the call is still active.
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.cancel} aria-label="Cancel">
                 Cancel
