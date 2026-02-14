@@ -335,6 +335,8 @@ All environment variables supported by the server work the same in Docker. Set t
 | `HCAPTCHA_VERIFY_URL` | `https://hcaptcha.com/siteverify` | hCaptcha siteverify API URL |
 | **FTP** | | |
 | `FTP_CLIENT_TIMEOUT_MS` | `60000` | FTP client timeout (ms) |
+| **Import** | | |
+| `IMPORT_ALLOW_PRIVATE_URLS` | (false) | Set to `true` or `1` to allow podcast import from private/internal URLs (localhost, 10.x, 192.168.x, etc). Dev/testing only; disables SSRF protection. |
 | **Roles** | | |
 | `ROLE_MIN_EDIT_SEGMENTS` | `editor` | Minimum share role to edit segments (`view`, `editor`, `manager`, `owner`) |
 | `ROLE_MIN_EDIT_METADATA` | `manager` | Minimum share role to edit episode/podcast metadata |
