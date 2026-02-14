@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import type { Export, ExportCreate, ExportMode, ExportUpdate } from '../../api/exports';
 import { EXPORT_MODE_LABELS } from '../../api/exports';
 import localStyles from './Exports.module.css';
@@ -35,6 +36,10 @@ export function ExportForm({
     share: '', domain: '',
   }));
   const isEdit = formMode === 'edit';
+  const privateKeyRef = useRef<HTMLTextAreaElement>(null);
+  const set = (key: string, value: string | number | boolean) => setFields((p) => ({ ...p, [key]: value }));
+  const v = (key: string) => fields[key] ?? '';
+  useAutoResizeTextarea(privateKeyRef, String(v('private_key')), { minHeight: 60 });
 
   useEffect(() => {
     if (!open) return;
@@ -52,9 +57,6 @@ export function ExportForm({
       share: '', domain: '',
     });
   }, [open, initial, formMode]);
-
-  const set = (key: string, value: string | number | boolean) => setFields((p) => ({ ...p, [key]: value }));
-  const v = (key: string) => fields[key] ?? '';
 
   const buildCreateBody = (): ExportCreate => {
     const nameTrim = name.trim();
@@ -281,7 +283,7 @@ export function ExportForm({
             </label>
             {exportMode === 'SFTP' && (
               <label className={styles.label}>Private key (optional, alternative to password)
-                <textarea className={styles.input} rows={3} value={String(v('private_key'))} onChange={(e) => set('private_key', e.target.value)} placeholder={placeholderKeep} />
+                <textarea ref={privateKeyRef} className={styles.input} rows={2} value={String(v('private_key'))} onChange={(e) => set('private_key', e.target.value)} placeholder={placeholderKeep} style={{ overflow: 'hidden', resize: 'none' }} />
               </label>
             )}
             <label className={styles.label}>Path

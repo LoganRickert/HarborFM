@@ -281,6 +281,10 @@
 }
 
 /* RSS Feed Section */
+.rssSectionSub {
+  margin-top: 1rem;
+}
+
 .rssHeader {
   display: flex;
   align-items: center;

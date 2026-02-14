@@ -217,6 +217,8 @@ async function main() {
     join(E2E_DIR, 'tests', 'scenarios', 'managed-domain.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'dns-domain-switch.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'dns-use-cname-a-record.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'show-cast-permissions.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'show-cast-list.js'),
   ];
 
   console.log('E2E tests starting...\n');

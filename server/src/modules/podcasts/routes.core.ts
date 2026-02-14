@@ -97,8 +97,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
       combined.sort(
         (a: Record<string, unknown>, b: Record<string, unknown>) => {
-          const aTime = new Date((a.updated_at as string) ?? 0).getTime();
-          const bTime = new Date((b.updated_at as string) ?? 0).getTime();
+          const aTime = new Date((a.created_at as string) ?? 0).getTime();
+          const bTime = new Date((b.created_at as string) ?? 0).getTime();
           return sortOrder === "newest" ? bTime - aTime : aTime - bTime;
         },
       );

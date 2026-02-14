@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef } from 'react';
+import { useAutoResizeTextarea } from '../hooks/useAutoResizeTextarea';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -29,12 +30,7 @@ export function FeedbackModal({ open, onOpenChange, context }: FeedbackModalProp
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const captchaRef = useRef<CaptchaHandle>(null);
 
-  const resizeMessage = useCallback(() => {
-    const el = messageRef.current;
-    if (!el) return;
-    el.style.height = '0';
-    el.style.height = `${Math.max(el.scrollHeight, MESSAGE_MIN_HEIGHT)}px`;
-  }, []);
+  useAutoResizeTextarea(messageRef, message, { minHeight: MESSAGE_MIN_HEIGHT });
 
   const { data: setup } = useQuery({
     queryKey: ['setupStatus'],
@@ -61,10 +57,6 @@ export function FeedbackModal({ open, onOpenChange, context }: FeedbackModalProp
       });
     },
   });
-
-  useEffect(() => {
-    if (open) resizeMessage();
-  }, [open, message, resizeMessage]);
 
   function handleOpenChange(openValue: boolean) {
     onOpenChange(openValue);
@@ -148,12 +140,11 @@ export function FeedbackModal({ open, onOpenChange, context }: FeedbackModalProp
                   ref={messageRef}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  onInput={resizeMessage}
                   className={styles.input}
                   required
                   rows={2}
                   maxLength={10000}
-                  style={{ resize: 'none', overflow: 'hidden', minHeight: MESSAGE_MIN_HEIGHT }}
+                  style={{ resize: 'none', overflow: 'hidden' }}
                 />
               </label>
               {setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey && (

@@ -1,0 +1,445 @@
+/* Show Cast Component Styles */
+
+.castSectionHeader {
+  flex-wrap: nowrap;
+}
+
+.castSectionHeader > button {
+  flex-shrink: 0;
+}
+
+.castSearchWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.castSearchWrap .statusToggle {
+  width: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.castSearchInput {
+  flex: 1;
+  min-width: 160px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.castSearchInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.castPagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.castPaginationBtn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.castPaginationBtn:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
+
+.castPaginationBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.castPaginationLabel {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.castList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.castRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg-muted) 80%, var(--bg) 20%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+@media (max-width: 640px) {
+  .castSectionHeader {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .castRow {
+    flex-wrap: nowrap;
+  }
+
+  .castRowMeta {
+    flex: 1;
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+
+  .castRowNameWrap {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .castRowName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .castRowActions {
+    flex-shrink: 0;
+  }
+
+  .castRowEditBtn {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .castRowDeleteBtn {
+    flex-shrink: 0;
+  }
+}
+
+.castRow:hover {
+  border-color: rgba(139, 146, 163, 0.4);
+}
+
+.castAvatar {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.castAvatarPlaceholder {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.castRowMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.castRowHostIcon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--success);
+}
+
+.castRowName {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.castRowNameWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.castRowActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.castRowEditBtn {
+  justify-content: center;
+}
+
+
+.castEmpty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* Cast chip variant (e.g. assigned episode cast) */
+.castChip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  word-break: break-all;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.castChipAvatar {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.castChipAvatarPlaceholder {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 50%;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.castChipName {
+  font-size: 0.875rem;
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.castChipsWrap {
+  margin-bottom: 1rem;
+}
+
+.castChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.castChipRemove {
+  padding: 0.125rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.castChipRemove:hover {
+  color: var(--text);
+}
+
+.castDialogFormWrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.castDialogFormGroup {
+  margin-bottom: 1rem;
+}
+
+.castDialogFormLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.625rem;
+}
+
+.castDialogRequired {
+  color: var(--error);
+  margin-left: 0.125rem;
+}
+
+.castDialogFormInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s;
+}
+
+.castDialogFormInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.castDialogFormInput::placeholder {
+  color: var(--text-muted);
+}
+
+.castDialogFormTextarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 0.15s;
+}
+
+.castDialogFormTextarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.castDialogFormTextarea::placeholder {
+  color: var(--text-muted);
+}
+
+.castDialogFormGroupDescription {
+  margin-bottom: 1.5rem;
+}
+
+.castDialogRoleToggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.castDialogRoleToggleBtn,
+.castDialogRoleToggleBtnActive {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.castDialogRoleToggleBtn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.castDialogRoleToggleBtnActive {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.castDialogRoleToggleBtnActive:hover {
+  background: var(--accent-dim);
+  color: var(--bg);
+}
+
+.castDialogActions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.castDialogFileInput {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.castDialogFileInput::file-selector-button {
+  padding: 0.5rem 1rem;
+  margin-right: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.castDialogFileInput::file-selector-button:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
+
+.castPhotoPreview {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.castPhotoPreviewPlaceholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+}

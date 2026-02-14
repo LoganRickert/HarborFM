@@ -443,7 +443,7 @@ export function Users() {
                 </label>
               </div>
               <div className={styles.formGroup}>
-                <p className={styles.formLabel} style={{ marginBottom: '0.5rem' }}>
+                <p className={styles.formSectionHeader}>
                   Limits (Leave Empty for No Limit)
                 </p>
                 <label className={styles.formLabel}>

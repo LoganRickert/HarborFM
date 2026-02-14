@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useAutoResizeTextarea } from '../hooks/useAutoResizeTextarea';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth';
@@ -37,13 +38,7 @@ export function Contact() {
     retry: false,
   });
 
-  const resizeMessage = useCallback(() => {
-    const el = messageRef.current;
-    if (!el) return;
-    el.style.height = '0';
-    const h = Math.max(el.scrollHeight, MESSAGE_MIN_HEIGHT);
-    el.style.height = `${h}px`;
-  }, []);
+  useAutoResizeTextarea(messageRef, message, { minHeight: MESSAGE_MIN_HEIGHT });
 
   const { data: setup } = useQuery({
     queryKey: ['setupStatus'],
@@ -67,10 +62,6 @@ export function Contact() {
       prefillDone.current = true;
     }
   }, [user?.email]);
-
-  useEffect(() => {
-    resizeMessage();
-  }, [message, resizeMessage]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -168,12 +159,11 @@ export function Contact() {
                   ref={messageRef}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  onInput={resizeMessage}
                   className={styles.input}
                   required
                   rows={2}
                   maxLength={10000}
-                  style={{ resize: 'none', overflow: 'hidden', minHeight: MESSAGE_MIN_HEIGHT }}
+                  style={{ resize: 'none', overflow: 'hidden' }}
                 />
               </label>
               {setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey && (

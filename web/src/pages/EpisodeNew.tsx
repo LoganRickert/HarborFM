@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAutoResizeTextarea } from '../hooks/useAutoResizeTextarea';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus } from 'lucide-react';
@@ -28,6 +29,8 @@ export function EpisodeNew() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  useAutoResizeTextarea(descriptionRef, description, { minHeight: 80 });
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -90,10 +93,12 @@ export function EpisodeNew() {
           <label className={styles.label}>
             Description
             <textarea
+              ref={descriptionRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className={styles.textarea}
-              rows={3}
+              rows={2}
+              style={{ overflow: 'hidden', resize: 'none' }}
               placeholder="What's this episode about? (optional)"
             />
           </label>

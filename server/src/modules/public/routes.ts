@@ -16,6 +16,7 @@ import {
   assertPathUnder,
   assertSafeId,
   artworkDir,
+  castPhotoDir,
   processedDir,
   rssDir,
   transcriptSrtPath,
@@ -357,6 +358,83 @@ export async function publicRoutes(app: FastifyInstance) {
     },
   );
 
+  // Serve cast member photo (public).
+  app.get(
+    "/public/artwork/:podcastId/cast/:castId/:filename",
+    {
+      schema: {
+        tags: ["Public"],
+        summary: "Get cast photo",
+        description:
+          "Returns a cast member photo (PNG/WebP/JPG). No authentication required.",
+        security: [],
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            castId: { type: "string" },
+            filename: { type: "string" },
+          },
+          required: ["podcastId", "castId", "filename"],
+        },
+        response: {
+          200: { description: "Image binary" },
+          206: { description: "Partial content" },
+          416: { description: "Range not satisfiable" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, castId, filename } = request.params as {
+        podcastId: string;
+        castId: string;
+        filename: string;
+      };
+      try {
+        assertSafeId(podcastId, "podcastId");
+        assertSafeId(castId, "castId");
+      } catch {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      if (!ARTWORK_FILENAME_REGEX.test(filename)) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const row = db
+        .prepare(
+          "SELECT photo_path FROM podcast_cast WHERE id = ? AND podcast_id = ? AND is_public = 1",
+        )
+        .get(castId, podcastId) as { photo_path: string | null } | undefined;
+      if (!row?.photo_path || basename(row.photo_path) !== filename) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      try {
+        const safePath = assertPathUnder(row.photo_path, castPhotoDir(podcastId));
+        const ext = extname(safePath).toLowerCase();
+        const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? "image/jpeg";
+        const result = await send(request.raw, basename(safePath), {
+          root: dirname(safePath),
+          contentType: false,
+          acceptRanges: true,
+          cacheControl: true,
+          maxAge: 86400,
+        });
+        if (result.type === "error") {
+          return reply.status(404).send({ error: "Not found" });
+        }
+        reply.status(result.statusCode as 200 | 206 | 416);
+        const headers = result.headers as Record<string, string>;
+        for (const [key, value] of Object.entries(headers)) {
+          if (value !== undefined) reply.header(key, value);
+        }
+        reply.header("Content-Type", contentType);
+        return reply.send(result.stream);
+      } catch {
+        return reply.status(404).send({ error: "Not found" });
+      }
+    },
+  );
+
   // Public config (no auth): used by the web client to gate /feed routes.
   app.get(
     "/public/config",
@@ -561,6 +639,119 @@ export async function publicRoutes(app: FastifyInstance) {
     },
   );
 
+  // Get public cast (hosts and guests) for a podcast by slug.
+  app.get(
+    "/public/podcasts/:podcastSlug/cast",
+    {
+      schema: {
+        tags: ["Public"],
+        summary: "List podcast cast",
+        description:
+          "Returns public hosts and guests. Hosts first (all), then guests (paginated with limit/offset).",
+        security: [],
+        params: {
+          type: "object",
+          properties: { podcastSlug: { type: "string" } },
+          required: ["podcastSlug"],
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+        response: {
+          200: {
+            description: "Hosts and guests",
+            type: "object",
+            properties: {
+              hosts: { type: "array" },
+              guests: { type: "array" },
+              guests_total: { type: "number" },
+              guests_has_more: { type: "boolean" },
+            },
+          },
+          404: { description: "Podcast not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!ensurePublicFeedsEnabled(reply)) return;
+      const { podcastSlug } = request.params as { podcastSlug: string };
+      const query = request.query as { limit?: string; offset?: string };
+      const limit = Math.min(parseInt(query.limit || "10", 10) || 10, 100);
+      const offset = Math.max(parseInt(query.offset || "0", 10) || 0, 0);
+
+      const podcast = db
+        .prepare(
+          "SELECT id FROM podcasts WHERE slug = ? AND (COALESCE(unlisted, 0) = 0)",
+        )
+        .get(podcastSlug) as { id: string } | undefined;
+      if (!podcast) {
+        return reply.status(404).send({ error: "Podcast not found" });
+      }
+
+      const hosts = db
+        .prepare(
+          `SELECT id, name, role, description, photo_path, photo_url, social_link_text
+           FROM podcast_cast
+           WHERE podcast_id = ? AND role = 'host' AND is_public = 1
+           ORDER BY created_at DESC`,
+        )
+        .all(podcast.id) as Record<string, unknown>[];
+
+      const guestsCount = db
+        .prepare(
+          "SELECT COUNT(*) as count FROM podcast_cast WHERE podcast_id = ? AND role = 'guest' AND is_public = 1",
+        )
+        .get(podcast.id) as { count: number };
+      const guestsTotal = guestsCount?.count ?? 0;
+
+      const guests = db
+        .prepare(
+          `SELECT id, name, role, description, photo_path, photo_url, social_link_text
+           FROM podcast_cast
+           WHERE podcast_id = ? AND role = 'guest' AND is_public = 1
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(podcast.id, limit, offset) as Record<string, unknown>[];
+
+      const guestsHasMore = offset + guests.length < guestsTotal;
+
+      return {
+        hosts: hosts.map((r) => publicCastDto(r, podcast.id)),
+        guests: guests.map((r) => publicCastDto(r, podcast.id)),
+        guests_total: guestsTotal,
+        guests_has_more: guestsHasMore,
+      };
+    },
+  );
+
+  function publicCastDto(row: Record<string, unknown>, podcastId: string) {
+    const path = row.photo_path as string | null | undefined;
+    let photo_url = row.photo_url as string | null | undefined;
+    if (path && typeof path === "string") {
+      try {
+        const dir = castPhotoDir(podcastId);
+        assertPathUnder(path, dir);
+        const fn = basename(path);
+        photo_url = `/${API_PREFIX}/public/artwork/${podcastId}/cast/${row.id}/${fn}`;
+      } catch {
+        photo_url = row.photo_url as string | null;
+      }
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      description: row.description ?? null,
+      photo_url: photo_url ?? null,
+      social_link_text: row.social_link_text ?? null,
+    };
+  }
+
   // Get published episodes for a podcast by podcast slug (public, no auth required)
   app.get(
     "/public/podcasts/:podcastSlug/episodes",
@@ -578,7 +769,12 @@ export async function publicRoutes(app: FastifyInstance) {
         },
         querystring: {
           type: "object",
-          properties: { limit: { type: "string" }, offset: { type: "string" } },
+          properties: {
+            limit: { type: "string" },
+            offset: { type: "string" },
+            sort: { type: "string", enum: ["newest", "oldest"] },
+            q: { type: "string" },
+          },
         },
         response: {
           200: {
@@ -591,9 +787,15 @@ export async function publicRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!ensurePublicFeedsEnabled(reply)) return;
       const { podcastSlug } = request.params as { podcastSlug: string };
-      const query = request.query as { limit?: string; offset?: string };
+      const query = request.query as { limit?: string; offset?: string; sort?: string; q?: string };
       const limit = Math.min(parseInt(query.limit || "50", 10) || 50, 100); // Default 50, max 100
       const offset = Math.max(parseInt(query.offset || "0", 10) || 0, 0);
+      const sort = query.sort === "oldest" ? "oldest" : "newest";
+      const orderDir = sort === "oldest" ? "ASC" : "DESC";
+      const searchQ = (query.q ?? "").trim();
+      const likeEscapeEp = (s: string) =>
+        s.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const likePatternEp = searchQ ? `%${likeEscapeEp(searchQ)}%` : null;
 
       const podcast = db
         .prepare(
@@ -620,15 +822,19 @@ export async function publicRoutes(app: FastifyInstance) {
         ? ""
         : " AND (COALESCE(subscriber_only, 0) = 0)";
       const subscriberOnlyFeed = podcast.public_feed_disabled === 1;
+      const searchFilterEp = likePatternEp
+        ? ` AND (title LIKE ? ESCAPE '\\' OR COALESCE(description, '') LIKE ? ESCAPE '\\')`
+        : "";
+      const searchArgs = likePatternEp ? [likePatternEp, likePatternEp] : [];
 
       // Get total count
       const totalCount = db
         .prepare(
           `SELECT COUNT(*) as count FROM episodes 
          WHERE podcast_id = ? AND status = 'published'
-         AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))${episodeFilter}`,
+         AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))${episodeFilter}${searchFilterEp}`,
         )
-        .get(podcast.id) as { count: number };
+        .get(podcast.id, ...searchArgs) as { count: number };
 
       // Get paginated episodes (include subscriber_only when feed is subscriber-only so visitors see locked cards)
       const rows = db
@@ -639,11 +845,11 @@ export async function publicRoutes(app: FastifyInstance) {
                 COALESCE(subscriber_only, 0) AS subscriber_only, created_at, updated_at
          FROM episodes 
          WHERE podcast_id = ? AND status = 'published'
-         AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))${episodeFilter}
-         ORDER BY publish_at DESC, created_at DESC
+         AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))${episodeFilter}${searchFilterEp}
+         ORDER BY publish_at ${orderDir}, created_at ${orderDir}
          LIMIT ? OFFSET ?`,
         )
-        .all(podcast.id, limit, offset) as Record<string, unknown>[];
+        .all(podcast.id, ...searchArgs, limit, offset) as Record<string, unknown>[];
 
       let episodes = rows.map((r) =>
         publicEpisodeDto(podcast.id, r, { subscriberOnlyFeed, podcastSlug }),
@@ -774,6 +980,72 @@ export async function publicRoutes(app: FastifyInstance) {
       }
 
       return episode;
+    },
+  );
+
+  // Get episode cast (assigned hosts/guests) - public, no auth required
+  app.get(
+    "/public/podcasts/:podcastSlug/episodes/:episodeSlug/cast",
+    {
+      schema: {
+        tags: ["Public"],
+        summary: "List episode cast",
+        description:
+          "Returns cast members assigned to this episode (hosts and guests). No authentication required.",
+        security: [],
+        params: {
+          type: "object",
+          properties: {
+            podcastSlug: { type: "string" },
+            episodeSlug: { type: "string" },
+          },
+          required: ["podcastSlug", "episodeSlug"],
+        },
+        response: {
+          200: {
+            description: "Cast list",
+            type: "object",
+            properties: { cast: { type: "array" } },
+          },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!ensurePublicFeedsEnabled(reply)) return;
+      const { podcastSlug, episodeSlug } = request.params as {
+        podcastSlug: string;
+        episodeSlug: string;
+      };
+      const podcast = db
+        .prepare(
+          "SELECT id FROM podcasts WHERE slug = ? AND (COALESCE(unlisted, 0) = 0)",
+        )
+        .get(podcastSlug) as { id: string } | undefined;
+      if (!podcast) {
+        return reply.status(404).send({ error: "Podcast not found" });
+      }
+      const episodeRow = db
+        .prepare(
+          `SELECT id FROM episodes
+           WHERE podcast_id = ? AND slug = ? AND status = 'published'
+           AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))`,
+        )
+        .get(podcast.id, episodeSlug) as { id: string } | undefined;
+      if (!episodeRow) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT c.* FROM podcast_cast c
+           JOIN episode_cast ec ON ec.cast_id = c.id
+           WHERE ec.episode_id = ? AND c.is_public = 1
+           ORDER BY c.role ASC, c.created_at DESC`,
+        )
+        .all(episodeRow.id) as Record<string, unknown>[];
+      return {
+        cast: rows.map((r) => publicCastDto(r, podcast.id)),
+      };
     },
   );
 

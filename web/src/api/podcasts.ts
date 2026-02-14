@@ -1,4 +1,5 @@
 import type { PodcastAnalyticsQuery, PodcastCreate, PodcastUpdate, PodcastsListQuery } from '@harborfm/shared';
+import type { CastCreate, CastResponse, CastUpdate } from '@harborfm/shared';
 import { apiGet, apiPost, apiPatch, apiDelete, csrfHeaders } from './client';
 
 /** Thrown by addCollaborator when response is not ok; may include data from body (e.g. USER_NOT_FOUND). */
@@ -310,4 +311,60 @@ export function updateSubscriberToken(
 
 export function deleteSubscriberToken(podcastId: string, tokenId: string) {
   return apiDelete(`/podcasts/${podcastId}/subscriber-tokens/${tokenId}`);
+}
+
+// Show cast (hosts and guests)
+export type CastMember = CastResponse & { photo_filename?: string | null };
+
+export function listCast(
+  podcastId: string,
+  params?: {
+    limit?: number;
+    offset?: number;
+    q?: string;
+    sort?: 'newest' | 'oldest';
+    /** Exclude cast already assigned to this episode */
+    episode_id?: string;
+  }
+) {
+  const search = new URLSearchParams();
+  if (params?.limit != null) search.set('limit', String(params.limit));
+  if (params?.offset != null) search.set('offset', String(params.offset));
+  if (params?.q) search.set('q', params.q);
+  if (params?.sort) search.set('sort', params.sort);
+  if (params?.episode_id) search.set('episode_id', params.episode_id);
+  const query = search.toString();
+  return apiGet<{ cast: CastMember[]; total: number }>(`/podcasts/${podcastId}/cast${query ? `?${query}` : ''}`);
+}
+
+export function createCast(podcastId: string, body: CastCreate) {
+  return apiPost<CastMember>(`/podcasts/${podcastId}/cast`, body);
+}
+
+export function updateCast(podcastId: string, castId: string, body: CastUpdate) {
+  return apiPatch<CastMember>(`/podcasts/${podcastId}/cast/${castId}`, body);
+}
+
+export function deleteCast(podcastId: string, castId: string) {
+  return apiDelete(`/podcasts/${podcastId}/cast/${castId}`);
+}
+
+export async function uploadCastPhoto(podcastId: string, castId: string, file: File): Promise<CastMember> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/podcasts/${podcastId}/cast/${castId}/photo`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? res.statusText);
+  }
+  return res.json();
+}
+
+export function castPhotoUrl(podcastId: string, castId: string, filename: string): string {
+  return `/api/podcasts/${podcastId}/cast/${castId}/artwork/${encodeURIComponent(filename)}`;
 }

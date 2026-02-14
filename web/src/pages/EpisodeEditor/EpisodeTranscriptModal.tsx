@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
@@ -20,6 +21,8 @@ export function EpisodeTranscriptModal({
   const [text, setText] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(true);
+  const transcriptRef = useRef<HTMLTextAreaElement>(null);
+  useAutoResizeTextarea(transcriptRef, editValue, { minHeight: 200 });
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -97,13 +100,15 @@ export function EpisodeTranscriptModal({
               <>
                 {canEdit ? (
                   <textarea
+                    ref={transcriptRef}
                     className={styles.transcriptText}
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     placeholder="Transcript (SRT format)"
                     spellCheck={false}
                     aria-label="Transcript text"
-                    rows={16}
+                    rows={4}
+                    style={{ overflow: 'hidden', resize: 'none' }}
                   />
                 ) : (
                   <pre className={styles.transcriptText}>{text ?? '(empty)'}</pre>

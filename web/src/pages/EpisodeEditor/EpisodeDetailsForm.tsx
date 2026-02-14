@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { slugify, type EpisodeForm } from './utils';
 import localStyles from '../EpisodeEditor.module.css';
@@ -62,13 +63,12 @@ export function EpisodeDetailsForm({
   const cover = coverImageConfig;
   const savingOrUploading = isSaving || (cover?.uploadArtworkPending ?? false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const contentEncodedRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    if (descriptionTextareaRef.current) {
-      descriptionTextareaRef.current.style.height = 'auto';
-      descriptionTextareaRef.current.style.height = `${descriptionTextareaRef.current.scrollHeight}px`;
-    }
-  }, [form.description, descriptionTextareaRef]);
+  useAutoResizeTextarea(descriptionTextareaRef, form.description, { minHeight: 80 });
+  useAutoResizeTextarea(summaryRef, form.summary ?? '', { minHeight: 60 });
+  useAutoResizeTextarea(contentEncodedRef, form.contentEncoded ?? '', { minHeight: 80 });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -118,15 +118,10 @@ export function EpisodeDetailsForm({
         <textarea
           ref={descriptionTextareaRef}
           value={form.description}
-          onChange={(e) => {
-            const ta = e.target;
-            setForm((prev) => ({ ...prev, description: ta.value }));
-            ta.style.height = 'auto';
-            ta.style.height = `${ta.scrollHeight}px`;
-          }}
+          onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
           className={styles.textarea}
-          rows={4}
-          style={{ minHeight: '80px', overflow: 'hidden' }}
+          rows={2}
+          style={{ overflow: 'hidden', resize: 'none' }}
           placeholder="What this episode is about. Shown in podcast apps."
         />
       </label>
@@ -143,10 +138,12 @@ export function EpisodeDetailsForm({
       <label className={styles.label}>
         Summary
         <textarea
+          ref={summaryRef}
           value={form.summary}
           onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
           className={styles.textarea}
           rows={2}
+          style={{ overflow: 'hidden', resize: 'none' }}
           placeholder="Extended description for podcast apps (optional)"
         />
       </label>
@@ -370,10 +367,12 @@ export function EpisodeDetailsForm({
             <label className={styles.label}>
               Full show notes (HTML)
               <textarea
+                ref={contentEncodedRef}
                 value={form.contentEncoded}
                 onChange={(e) => setForm((prev) => ({ ...prev, contentEncoded: e.target.value }))}
                 className={styles.textarea}
-                rows={3}
+                rows={2}
+                style={{ overflow: 'hidden', resize: 'none' }}
                 placeholder="e.g. <p>Full transcript or show notes</p>"
               />
               <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>

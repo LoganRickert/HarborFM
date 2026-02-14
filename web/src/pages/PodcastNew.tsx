@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAutoResizeTextarea } from '../hooks/useAutoResizeTextarea';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PodcastCreate } from '@harborfm/shared';
@@ -21,6 +22,8 @@ export function PodcastNew() {
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  useAutoResizeTextarea(descriptionRef, description, { minHeight: 80 });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
@@ -96,10 +99,12 @@ export function PodcastNew() {
           <label className={styles.label}>
             Description
             <textarea
+              ref={descriptionRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className={styles.textarea}
-              rows={3}
+              rows={2}
+              style={{ overflow: 'hidden', resize: 'none' }}
               placeholder="What's your show about? (optional)"
             />
           </label>

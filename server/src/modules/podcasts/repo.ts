@@ -4,7 +4,7 @@ import { PODCAST_LIST_SELECT, podcastRowWithFilename } from "./utils.js";
 export function listOwned(userId: string): Record<string, unknown>[] {
   return db
     .prepare(
-      `${PODCAST_LIST_SELECT} WHERE owner_user_id = ? ORDER BY updated_at DESC`,
+      `${PODCAST_LIST_SELECT} WHERE owner_user_id = ? ORDER BY created_at DESC`,
     )
     .all(userId) as Record<string, unknown>[];
 }
@@ -14,7 +14,7 @@ export function listShared(userId: string): Record<string, unknown>[] {
     .prepare(
       `${PODCAST_LIST_SELECT}
          WHERE id IN (SELECT podcast_id FROM podcast_shares WHERE user_id = ?)
-         ORDER BY updated_at DESC`,
+         ORDER BY created_at DESC`,
     )
     .all(userId) as Record<string, unknown>[];
 }
@@ -79,7 +79,7 @@ export function listByOwnerUserId(
 ): Record<string, unknown>[] {
   return db
     .prepare(
-      `${PODCAST_LIST_SELECT} WHERE owner_user_id = ? ORDER BY updated_at ${sortDir}`,
+      `${PODCAST_LIST_SELECT} WHERE owner_user_id = ? ORDER BY created_at ${sortDir}`,
     )
     .all(userId) as Record<string, unknown>[];
 }

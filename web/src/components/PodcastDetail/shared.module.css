@@ -3,7 +3,7 @@
 /* Card Components */
 .card {
   padding: 1.25rem;
-  background: var(--bg-elevated);
+  background: var(--bg-muted);
   border: 1px solid var(--border);
   border-radius: 12px;
   margin-bottom: 1.5rem;
@@ -30,6 +30,26 @@
   font-size: 0.875rem;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+/* PodcastDetail card-only: unique classes so page CSS doesn't override */
+.pdCardSectionSub {
+  margin: 0.5rem 0 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  text-align: left;
+}
+
+.pdCardEmptyState {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--bg) 50%, var(--bg-elevated) 50%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin: 0 0 0;
 }
 
 /* Section Headers */
@@ -280,7 +300,7 @@ textarea.input:disabled {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: var(--bg-elevated);
+  background: var(--bg-muted);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 1.5rem;
@@ -401,6 +421,10 @@ textarea.input:disabled {
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
+}
+
+.dialogFooterCancelLeft {
+  justify-content: space-between;
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
@@ -465,7 +489,14 @@ textarea.input:disabled {
   gap: 0.75rem;
 }
 
-.exportCard,
+.exportCard {
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg-muted) 80%, var(--bg) 20%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
 .collabCard,
 .tokenCard {
   padding: 1rem;
@@ -475,10 +506,14 @@ textarea.input:disabled {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.exportCard:hover,
+.exportCard:hover {
+  background: color-mix(in srgb, var(--bg-muted) 80%, var(--bg) 20%);
+  border-color: rgba(139, 146, 163, 0.4);
+}
+
 .collabCard:hover,
 .tokenCard:hover {
-  background: var(--bg-elevated);
+  background: var(--bg-muted);
   border-color: rgba(139, 146, 163, 0.4);
 }
 
@@ -778,10 +813,91 @@ textarea.input:disabled {
   max-width: 600px;
 }
 
-.advancedSection {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
+/* Edit Podcast Details tabs */
+.editDetailsTabSelectWrap {
+  display: none;
+}
+
+.editDetailsTabSelect {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b92a3' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2rem;
+}
+
+.editDetailsTabSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.editDetailsTabs {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0 0 1rem;
+  padding: 0.25rem;
+  min-height: 2.75rem;
+  background: var(--bg);
+}
+
+.editDetailsTab {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.editDetailsTab:hover {
+  color: var(--accent);
+}
+
+.editDetailsTabActive {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.editDetailsTabPanel {
+  display: none;
+}
+
+.editDetailsTabPanelActive {
+  display: block;
+}
+
+@media (max-width: 560px) {
+  .editDetailsTabSelectWrap {
+    display: block;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .editDetailsTabs {
+    display: none;
+  }
 }
 
 .advancedToggle {
@@ -806,11 +922,121 @@ textarea.input:disabled {
   border-color: var(--accent);
 }
 
-.advancedFields {
-  margin-top: 1rem;
+.overviewFieldsStack,
+.tabPanelFields {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.advancedFields {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.coverImageWrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-top: 0.375rem;
+}
+
+.coverImagePreview {
+  width: 80px;
+  height: 80px;
+  min-width: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.coverImagePreviewPlaceholder {
+  width: 80px;
+  height: 80px;
+  min-width: 80px;
+  border-radius: 8px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.coverImageControls {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.coverSourceToggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.coverSourceToggleBtn,
+.coverSourceToggleActive {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.coverSourceToggleBtn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.coverSourceToggleActive {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.coverSourceToggleActive:hover {
+  background: var(--accent-dim);
+  color: var(--bg);
+}
+
+.coverFileInput {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.coverFileInput::file-selector-button {
+  padding: 0.5rem 1rem;
+  margin-right: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.coverFileInput::file-selector-button:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
 }
 
 .gearBtn {
@@ -891,7 +1117,7 @@ textarea.input:disabled {
 
 .statusToggleBtn:hover {
   color: var(--text);
-  background: var(--bg-elevated);
+  background: var(--bg-muted);
 }
 
 .statusToggleActive {

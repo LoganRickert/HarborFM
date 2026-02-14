@@ -137,12 +137,12 @@ export function ExportsSection({ podcastId, readOnly = false }: ExportsSectionPr
           </div>
         )}
       </div>
-      <p className={styles.sectionSub}>
+      <p className={styles.pdCardSectionSub}>
         Deploy your RSS feed and episode audio files to one or more destinations. Credentials are stored encrypted and cannot be viewed after saving.
       </p>
 
       {exportsList.length === 0 ? (
-        <p className={styles.exportMuted}>No delivery destinations configured. Add one to get started.</p>
+        <p className={styles.pdCardEmptyState}>No delivery destinations configured. Add one to get started.</p>
       ) : (
         <ExportsList
           exports={exportsList}

@@ -46,7 +46,7 @@ export function CollaboratorsSection({ podcastId, effectiveMaxCollaborators }: C
           <h2 className={styles.sectionTitle}>Collaborators</h2>
         </div>
       </div>
-      <p className={styles.sectionSub}>
+      <p className={styles.pdCardSectionSub}>
         Invite others to this show. View: read-only. Editor: edit segments and build the episode. Manager: edit metadata, episodes, and exports.
       </p>
 
@@ -58,9 +58,9 @@ export function CollaboratorsSection({ podcastId, effectiveMaxCollaborators }: C
       />
 
       {isLoading ? (
-        <p className={styles.exportMuted}>Loading...</p>
+        <p className={styles.pdCardEmptyState}>Loading...</p>
       ) : collaborators.length === 0 ? (
-        <p className={`${styles.exportMuted} ${styles.collabEmptyState}`}>No collaborators yet. Add someone by email above.</p>
+        <p className={styles.pdCardEmptyState}>No collaborators yet. Add someone by email above.</p>
       ) : (
         <>
           <CollaboratorsList

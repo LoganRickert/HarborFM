@@ -11,8 +11,9 @@ import {
   getPodcastRole,
   canAccessEpisode,
   canEditEpisodeOrPodcastMetadata,
+  canAssignCastToEpisode,
 } from "../../services/access.js";
-import { episodeCreateSchema, episodeUpdateSchema } from "@harborfm/shared";
+import { episodeCreateSchema, episodeUpdateSchema, episodeCastAssignBodySchema } from "@harborfm/shared";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import {
@@ -601,6 +602,132 @@ export async function episodeRoutes(app: FastifyInstance) {
         .prepare("SELECT * FROM episodes WHERE id = ?")
         .get(episodeId) as Record<string, unknown>;
       return episodeRowWithFilename(row);
+    },
+  );
+
+  // Episode cast (assign hosts/guests to episode)
+  app.get(
+    "/podcasts/:podcastId/episodes/:episodeId/cast",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Episodes"],
+        summary: "List episode cast",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            episodeId: { type: "string" },
+          },
+          required: ["podcastId", "episodeId"],
+        },
+        response: {
+          200: { description: "Assigned cast" },
+          404: { description: "Episode not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, episodeId } = request.params as {
+        podcastId: string;
+        episodeId: string;
+      };
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access || access.podcastId !== podcastId) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      const episode = db
+        .prepare("SELECT id FROM episodes WHERE id = ? AND podcast_id = ?")
+        .get(episodeId, podcastId);
+      if (!episode) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT c.* FROM podcast_cast c
+           JOIN episode_cast ec ON ec.cast_id = c.id
+           WHERE ec.episode_id = ?
+           ORDER BY c.role ASC, c.created_at DESC`,
+        )
+        .all(episodeId) as Record<string, unknown>[];
+      return { cast: rows };
+    },
+  );
+
+  app.put(
+    "/podcasts/:podcastId/episodes/:episodeId/cast",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Episodes"],
+        summary: "Assign cast to episode",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            episodeId: { type: "string" },
+          },
+          required: ["podcastId", "episodeId"],
+        },
+        body: { type: "object", properties: { cast_ids: { type: "array", items: { type: "string" } } } },
+        response: {
+          200: { description: "Updated" },
+          400: { description: "Invalid cast_ids" },
+          404: { description: "Episode not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, episodeId } = request.params as {
+        podcastId: string;
+        episodeId: string;
+      };
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access || !canAssignCastToEpisode(access.role)) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      const episode = db
+        .prepare("SELECT id FROM episodes WHERE id = ? AND podcast_id = ?")
+        .get(episodeId, podcastId);
+      if (!episode) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      const parsed = episodeCastAssignBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Validation failed",
+        });
+      }
+      const castIds = parsed.data.cast_ids;
+      if (castIds.length > 0) {
+        const placeholders = castIds.map(() => "?").join(",");
+        const existingCast = db
+          .prepare(
+            `SELECT id FROM podcast_cast WHERE id IN (${placeholders}) AND podcast_id = ?`,
+          )
+          .all(...castIds, podcastId) as { id: string }[];
+        if (existingCast.length !== castIds.length) {
+          return reply
+            .status(400)
+            .send({ error: "One or more cast IDs are invalid or do not belong to this podcast" });
+        }
+      }
+      db.prepare("DELETE FROM episode_cast WHERE episode_id = ?").run(episodeId);
+      for (const castId of castIds) {
+        db.prepare("INSERT INTO episode_cast (episode_id, cast_id) VALUES (?, ?)").run(
+          episodeId,
+          castId,
+        );
+      }
+      const rows = db
+        .prepare(
+          `SELECT c.* FROM podcast_cast c
+           JOIN episode_cast ec ON ec.cast_id = c.id
+           WHERE ec.episode_id = ?
+           ORDER BY c.role ASC, c.created_at DESC`,
+        )
+        .all(episodeId) as Record<string, unknown>[];
+      return { cast: rows };
     },
   );
 }

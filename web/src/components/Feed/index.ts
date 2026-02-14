@@ -1,4 +1,5 @@
 // Shared components
+export { FeedCastCard, FeedCastList } from './FeedCastCard';
 export { FeedSiteHeader } from './FeedSiteHeader';
 export { PodcastLinks, PodcastLinksCard, hasPodcastLinks } from './PodcastLinks';
 export { FeedSearchControls } from './FeedSearchControls';

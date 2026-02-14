@@ -76,3 +76,22 @@
   white-space: pre-wrap;
   font-size: 0.9375rem;
 }
+
+/* Episode cast card (reuses FeedCastList from FeedCastCard) */
+.castCard {
+  margin-top: 1rem;
+}
+
+.castTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  color: var(--text);
+}
+
+.castSectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+}

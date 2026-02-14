@@ -13,6 +13,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:clear-ip-bans": "tsx src/db/clear-ip-bans.ts",
     "db:seed-analytics": "tsx src/db/seed-analytics.ts",
+    "db:seed-podcast-episodes": "tsx src/db/seed-podcast-with-episodes.ts",
     "reset-password": "tsx src/db/reset-first-user-password.ts",
     "assets:pixabay": "node scripts/pixabay-import.mjs"
   },

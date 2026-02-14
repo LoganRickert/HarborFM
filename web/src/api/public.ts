@@ -31,15 +31,54 @@ export function getPublicPodcast(slug: string) {
   return apiGet<PublicPodcast>(`/public/podcasts/${slug}`);
 }
 
-export function getPublicEpisodes(podcastSlug: string, limit = 50, offset = 0) {
+export function getPublicEpisodes(
+  podcastSlug: string,
+  limit = 50,
+  offset = 0,
+  sort: 'newest' | 'oldest' = 'newest',
+  q?: string
+) {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   params.set('offset', String(offset));
+  params.set('sort', sort);
+  if (q?.trim()) params.set('q', q.trim());
   return apiGet<PublicEpisodesResponse>(`/public/podcasts/${podcastSlug}/episodes?${params.toString()}`);
 }
 
 export function getPublicEpisode(podcastSlug: string, episodeSlug: string) {
   return apiGet<PublicEpisode>(`/public/podcasts/${podcastSlug}/episodes/${episodeSlug}`);
+}
+
+export interface PublicCastMember {
+  id: string;
+  name: string;
+  role: 'host' | 'guest';
+  description: string | null;
+  photo_url: string | null;
+  social_link_text: string | null;
+}
+
+export function getPublicEpisodeCast(podcastSlug: string, episodeSlug: string) {
+  return apiGet<{ cast: PublicCastMember[] }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/episodes/${encodeURIComponent(episodeSlug)}/cast`
+  );
+}
+
+export function getPublicCast(
+  podcastSlug: string,
+  params?: { limit?: number; offset?: number }
+) {
+  const search = new URLSearchParams();
+  if (params?.limit != null) search.set('limit', String(params.limit));
+  if (params?.offset != null) search.set('offset', String(params.offset));
+  const query = search.toString();
+  return apiGet<{
+    hosts: PublicCastMember[];
+    guests: PublicCastMember[];
+    guests_total: number;
+    guests_has_more: boolean;
+  }>(`/public/podcasts/${podcastSlug}/cast${query ? `?${query}` : ''}`);
 }
 
 export function publicEpisodeWaveformUrl(podcastSlug: string, episodeSlug: string): string {

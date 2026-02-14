@@ -41,7 +41,7 @@ export function RssFeedCard({ podcast }: RssFeedCardProps) {
           </a>
         </div>
       </div>
-      <p className={styles.sectionSub}>
+      <p className={`${styles.pdCardSectionSub} ${styles.rssSectionSub}`}>
         The feed updates automatically when you save show details or create/update episodes. With an export destination you can deploy your feed and media to storage (S3, FTP, SFTP, WebDAV, IPFS, or SMB).
       </p>
     </div>

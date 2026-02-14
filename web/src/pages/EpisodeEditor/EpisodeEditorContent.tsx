@@ -18,6 +18,7 @@ import { episodeToForm, formToApiPayload } from './utils';
 import { EpisodeDetailsSummaryCard } from './EpisodeDetailsSummaryCard';
 import { EpisodeDetailsForm } from './EpisodeDetailsForm';
 import { GenerateFinalBar } from './GenerateFinalBar';
+import { EpisodeCastCard } from './EpisodeCastCard';
 import { EpisodeSectionsPanel } from './EpisodeSectionsPanel';
 import { RecordModal } from './RecordModal';
 import { LibraryModal } from './LibraryModal';
@@ -121,12 +122,6 @@ export function EpisodeEditorContent({
 
   useEffect(() => {
     setEpisodeForm(episodeToForm(episode));
-    setTimeout(() => {
-      if (descriptionTextareaRef.current) {
-        descriptionTextareaRef.current.style.height = 'auto';
-        descriptionTextareaRef.current.style.height = `${descriptionTextareaRef.current.scrollHeight}px`;
-      }
-    }, 0);
   }, [episode]);
 
   useEffect(() => {
@@ -419,6 +414,12 @@ export function EpisodeEditorContent({
           (renderMutation.isError ? renderMutation.error?.message : null) ??
           (generateTranscriptMutation.isError ? generateTranscriptMutation.error?.message : null)
         }
+      />
+
+      <EpisodeCastCard
+        podcastId={podcastId}
+        episodeId={id}
+        canAssign={canEditSegments && !readOnly}
       />
 
       {showEpisodeTranscript && (

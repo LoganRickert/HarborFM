@@ -191,7 +191,7 @@ export function SubscriberTokensSection({
         </div>
       ) : (
         <>
-          <p className={styles.sectionSub}>
+          <p className={styles.pdCardSectionSub}>
             Create tokens for private RSS feeds. Each token gets a unique feed URL that includes subscriber-only episodes. Share the URL only with the intended subscriber. Disabled and read-only users cannot create or delete tokens.
           </p>
 
@@ -223,9 +223,9 @@ export function SubscriberTokensSection({
           />
 
           {isLoading ? (
-            <p className={styles.tokenMuted}>Loading...</p>
+            <p className={styles.pdCardEmptyState}>Loading...</p>
           ) : allTokensCount === 0 ? (
-            <p className={styles.tokenMuted}>No subscriber tokens yet. Create one above to share a private feed URL.</p>
+            <p className={styles.pdCardEmptyState}>No subscriber tokens yet. Create one above to share a private feed URL.</p>
           ) : totalTokens === 0 ? (
             <div className={styles.tokenNoMatch}>
               <p className={styles.tokenNoMatchText}>No tokens match your search.</p>

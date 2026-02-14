@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Crown, Shield, Pencil, Eye } from 'lucide-react';
 import { updateCollaborator } from '../../api/podcasts';
 import localStyles from './Collaborators.module.css';
 import sharedStyles from '../PodcastDetail/shared.module.css';
@@ -17,17 +17,34 @@ interface CollaboratorsListProps {
   isRemoving: boolean;
 }
 
+const ROLE_ICONS = {
+  owner: Crown,
+  manager: Shield,
+  editor: Pencil,
+  view: Eye,
+} as const;
+
+const ROLE_ICON_SIZE = 14;
+
 export function CollaboratorsList({ collaborators, podcastId, onRemove, isRemoving }: CollaboratorsListProps) {
   const queryClient = useQueryClient();
 
   return (
     <ul className={styles.exportList}>
-      {collaborators.map((c) => (
+      {collaborators.map((c) => {
+        const RoleIcon = ROLE_ICONS[c.role as keyof typeof ROLE_ICONS];
+        return (
         <li key={c.user_id} className={styles.exportCard}>
           <div className={styles.exportCardRow}>
             <div className={styles.exportCardMeta}>
-              <strong>{c.email}</strong>
-              <span className={styles.exportModeBadge}>{c.role}</span>
+              <div className={styles.collabMetaWrap}>
+                {RoleIcon && (
+                  <span className={styles.collabRoleIcon} aria-hidden>
+                    <RoleIcon size={ROLE_ICON_SIZE} />
+                  </span>
+                )}
+                <strong>{c.email}</strong>
+              </div>
             </div>
             <div className={styles.collabCardActions}>
               <div className={styles.statusToggle} role="group" aria-label={`Role for ${c.email}`}>
@@ -62,7 +79,8 @@ export function CollaboratorsList({ collaborators, podcastId, onRemove, isRemovi
             </div>
           </div>
         </li>
-      ))}
+      );
+      })}
     </ul>
   );
 }

@@ -2,7 +2,13 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { Play, Pause } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublicPodcast, getPublicEpisode, publicEpisodeWaveformUrl, type PublicEpisodeWithAuth } from '../api/public';
+import {
+  getPublicPodcast,
+  getPublicEpisode,
+  getPublicEpisodeCast,
+  publicEpisodeWaveformUrl,
+  type PublicEpisodeWithAuth,
+} from '../api/public';
 import { FullPageLoading } from '../components/Loading';
 import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
@@ -18,6 +24,7 @@ import {
   SubscriptionInfoDialog,
   PodcastLinksCard,
   hasPodcastLinks,
+  FeedCastList,
 } from '../components/Feed';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedEpisode.module.css';
@@ -52,6 +59,13 @@ export function FeedEpisode({
     queryFn: () => getPublicEpisode(podcastSlug!, episodeSlug!) as Promise<PublicEpisodeWithAuth>,
     enabled: !!podcastSlug && !!episodeSlug,
   });
+  const { data: episodeCast } = useQuery({
+    queryKey: ['public-episode-cast', podcastSlug, episodeSlug],
+    queryFn: () => getPublicEpisodeCast(podcastSlug!, episodeSlug!),
+    enabled: !!podcastSlug && !!episodeSlug,
+  });
+  const episodeHosts = episodeCast?.cast?.filter((c) => c.role === 'host') ?? [];
+  const episodeGuests = episodeCast?.cast?.filter((c) => c.role === 'guest') ?? [];
 
   // Use private URLs if available, otherwise fallback to public
   const audioUrl = episode?.private_audio_url || episode?.audio_url || null;
@@ -178,6 +192,24 @@ export function FeedEpisode({
               </div>
             )}
           </div>
+
+          {(episodeHosts.length > 0 || episodeGuests.length > 0) && (
+            <div className={`${sharedStyles.card} ${styles.castCard}`}>
+              <h2 className={styles.castTitle}>Cast</h2>
+              {episodeHosts.length > 0 && (
+                <section style={{ marginBottom: '1.5rem' }}>
+                  <h3 className={styles.castSectionTitle}>Hosts</h3>
+                  <FeedCastList cast={episodeHosts} />
+                </section>
+              )}
+              {episodeGuests.length > 0 && (
+                <section>
+                  <h3 className={styles.castSectionTitle}>Guests</h3>
+                  <FeedCastList cast={episodeGuests} />
+                </section>
+              )}
+            </div>
+          )}
 
           {hasPodcastLinks(podcast) && (
             <div className={styles.linksCardWrap}>

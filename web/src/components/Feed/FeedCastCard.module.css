@@ -1,0 +1,128 @@
+.castCard {
+  margin-top: 1rem;
+}
+
+.castTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  color: var(--text);
+}
+
+.castSectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+}
+
+.castList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 641px) {
+  .castList {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.castRow {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--bg) 50%, var(--bg-elevated) 50%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.castAvatar {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.castAvatarPlaceholder {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 50%;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.castMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.castName {
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+}
+
+.castDesc {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.castSocial {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+a.castSocial {
+  text-decoration: none;
+}
+
+a.castSocial:hover {
+  text-decoration: underline;
+}
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.loadMoreBtn {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.loadMoreBtn:hover:not(:disabled) {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
+.loadMoreBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

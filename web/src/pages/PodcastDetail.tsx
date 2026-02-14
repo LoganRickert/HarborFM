@@ -11,6 +11,7 @@ import { Breadcrumb } from '../components/Breadcrumb';
 import { PodcastHero } from '../components/PodcastDetail/PodcastHero';
 import { PodcastDetailsGrid } from '../components/PodcastDetail/PodcastDetailsGrid';
 import { RssFeedCard } from '../components/PodcastDetail/RssFeedCard';
+import { ShowCastCard } from '../components/ShowCast';
 import { ExportsSection } from '../components/Exports/ExportsSection';
 import { CollaboratorsSection } from '../components/Collaborators/CollaboratorsSection';
 import { SubscriberTokensSection } from '../components/SubscriberTokens/SubscriberTokensSection';
@@ -84,7 +85,7 @@ export function PodcastDetail() {
 
       <RssFeedCard podcast={podcast} />
 
-      {canManageShow && <ExportsSection podcastId={id} readOnly={readOnly} />}
+      <ShowCastCard podcastId={id} myRole={myRole} />
 
       {canManageShow && (
         <CollaboratorsSection
@@ -92,6 +93,8 @@ export function PodcastDetail() {
           effectiveMaxCollaborators={podcast?.effective_max_collaborators ?? undefined}
         />
       )}
+
+      {canManageShow && <ExportsSection podcastId={id} readOnly={readOnly} />}
 
       {canManageShow && (
         <SubscriberTokensSection

@@ -61,7 +61,7 @@ export function ExportDialog({
               error={error}
             />
           </div>
-          <div className={styles.dialogFooter}>
+          <div className={`${styles.dialogFooter} ${styles.dialogFooterCancelLeft}`}>
             <Dialog.Close asChild>
               <button
                 type="button"

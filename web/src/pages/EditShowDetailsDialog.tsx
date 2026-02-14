@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useAutoResizeTextarea } from '../hooks/useAutoResizeTextarea';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { X, Image } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useAuthStore } from '../store/auth';
 import type { PodcastUpdate } from '@harborfm/shared';
@@ -51,25 +52,18 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
   const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
   const [coverUploadKey, setCoverUploadKey] = useState(0);
   const [debouncedArtworkUrl, setDebouncedArtworkUrl] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [linkDomainError, setLinkDomainError] = useState<string | null>(null);
+  type DetailsTab = 'overview' | 'author' | 'categories' | 'distribution' | 'more';
+  const [activeTab, setActiveTab] = useState<DetailsTab>('overview');
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const summaryRef = useRef<HTMLTextAreaElement>(null);
 
-  function resizeTextarea(ta: HTMLTextAreaElement | null) {
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${ta.scrollHeight}px`;
-  }
+  useAutoResizeTextarea(descriptionRef, form.description ?? '', { minHeight: 80 });
+  useAutoResizeTextarea(summaryRef, form.summary ?? '', { minHeight: 60 });
 
   useEffect(() => {
     formRef.current = form;
   }, [form]);
-
-  useEffect(() => {
-    resizeTextarea(descriptionRef.current);
-    resizeTextarea(summaryRef.current);
-  }, [form.description, form.summary, open]);
 
   useEffect(() => {
     const raw = (form.artwork_url ?? '').trim();
@@ -139,8 +133,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
     if (!open) {
       mutation.reset();
       uploadArtworkMutation.reset();
-      setShowAdvanced(false);
       setLinkDomainError(null);
+      setActiveTab('overview');
     }
   }, [open, mutation, uploadArtworkMutation]);
 
@@ -258,12 +252,63 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
           <Dialog.Description className={styles.dialogDescription}>
             Update the podcast title, slug, and other feed details.
           </Dialog.Description>
+          {podcast && (
+            <>
+              <div className={styles.editDetailsTabSelectWrap}>
+                <select
+                  className={styles.editDetailsTabSelect}
+                  value={activeTab}
+                  onChange={(e) => setActiveTab(e.target.value as DetailsTab)}
+                  aria-label="Jump to section"
+                >
+                <option value="overview">Overview</option>
+                <option value="author">Author</option>
+                <option value="categories">Categories</option>
+                <option value="distribution">Distribution</option>
+                <option value="more">More</option>
+                </select>
+              </div>
+              <div
+                className={styles.editDetailsTabs}
+                role="tablist"
+                aria-label="Edit sections"
+                onKeyDown={(e) => {
+                  const tabs: DetailsTab[] = ['overview', 'author', 'categories', 'distribution', 'more'];
+                  const i = tabs.indexOf(activeTab);
+                  if (e.key === 'ArrowLeft' && i > 0) {
+                    e.preventDefault();
+                    setActiveTab(tabs[i - 1]!);
+                  } else if (e.key === 'ArrowRight' && i < tabs.length - 1) {
+                    e.preventDefault();
+                    setActiveTab(tabs[i + 1]!);
+                  }
+                }}
+              >
+                {(['overview', 'author', 'categories', 'distribution', 'more'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    tabIndex={activeTab === tab ? 0 : -1}
+                    aria-selected={activeTab === tab}
+                    aria-controls={`edit-details-panel-${tab}`}
+                    id={`edit-details-tab-${tab}`}
+                    className={`${styles.editDetailsTab} ${activeTab === tab ? styles.editDetailsTabActive : ''}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab === 'overview' ? 'Overview' : tab === 'author' ? 'Author' : tab === 'categories' ? 'Categories' : tab === 'distribution' ? 'Distribution' : 'More'}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <div className={styles.dialogBodyScroll}>
             {isLoading && !podcast ? (
               <p style={{ padding: '1.5rem', color: 'var(--text-muted)', margin: 0 }}>Loading...</p>
             ) : podcast ? (
               <form id="edit-show-details-form" onSubmit={handleSubmit} className={styles.form}>
-                <h3 className={styles.dialogSectionTitle}>Basics</h3>
+                <div role="tabpanel" id="edit-details-panel-overview" aria-labelledby="edit-details-tab-overview" className={`${styles.editDetailsTabPanel} ${activeTab === 'overview' ? styles.editDetailsTabPanelActive : ''}`}>
+                <div className={styles.overviewFieldsStack}>
                 <label className={styles.label}>
                   Title
                   <input
@@ -313,7 +358,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Unlisted</span>
                 </label>
-                <p id="unlisted-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '-0.25rem 0 0.5rem 0', gridColumn: '1 / -1' }}>
+                <p id="unlisted-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                   Unlisted shows do not appear on the public /feed page or in the sitemap. Use a secret slug to share the feed link only with subscribers.
                 </p>
                 <label className="toggle" aria-describedby="subscribers-enabled-desc">
@@ -332,7 +377,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Subscribers Enabled</span>
                 </label>
-                <p id="subscribers-enabled-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '-0.25rem 0 0.5rem 0', gridColumn: '1 / -1' }}>
+                <p id="subscribers-enabled-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                   Allow adding subscribers and sharing a private feed link. Subscribers can see episodes that include subscriber-only ones when using their link.
                 </p>
                 {form.subscriber_only_feed_enabled === 1 && (
@@ -346,7 +391,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                       <span className="toggle__track" aria-hidden="true" />
                       <span>Subscriber Only</span>
                     </label>
-                    <p id="subscriber-only-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '-0.25rem 0 0.5rem 0', gridColumn: '1 / -1' }}>
+                    <p id="subscriber-only-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                       When on, the public feed does not load at all. The show is only available to people with a subscriber link.
                     </p>
                   </>
@@ -356,15 +401,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   <textarea
                     ref={descriptionRef}
                     value={form.description ?? ''}
-                    onChange={(e) => {
-                      const ta = e.target;
-                      setForm((f) => ({ ...f, description: ta.value }));
-                      ta.style.height = 'auto';
-                      ta.style.height = `${ta.scrollHeight}px`;
-                    }}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     className={styles.textarea}
-                    rows={3}
-                    style={{ minHeight: '80px', overflow: 'hidden', resize: 'none' }}
+                    rows={2}
+                    style={{ overflow: 'hidden', resize: 'none' }}
                     placeholder="What your show is about. Shown in podcast apps and directories."
                   />
                 </label>
@@ -384,95 +424,23 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     ref={summaryRef}
                     value={form.summary ?? ''}
                     onChange={(e) => {
-                      const ta = e.target;
-                      const v = ta.value;
+                      const v = e.target.value;
                       setForm((f) => ({ ...f, summary: v.trim() === '' ? null : v }));
-                      ta.style.height = 'auto';
-                      ta.style.height = `${ta.scrollHeight}px`;
                     }}
                     className={styles.textarea}
                     rows={2}
-                    style={{ minHeight: '60px', overflow: 'hidden', resize: 'none' }}
+                    style={{ overflow: 'hidden', resize: 'none' }}
                     placeholder="Extended description for podcast apps (optional)"
                   />
                 </label>
 
-                <h3 className={styles.dialogSectionTitle}>Cover image</h3>
                 <label className={styles.label}>
-                  Cover Image
-                  <div className={styles.statusToggle} role="group" aria-label="Cover image source">
-                    <button
-                      type="button"
-                      className={coverMode === 'url' ? styles.statusToggleActive : styles.statusToggleBtn}
-                      onClick={() => setCoverMode('url')}
-                      aria-pressed={coverMode === 'url'}
-                      aria-label="Cover image from URL"
-                    >
-                      URL
-                    </button>
-                    <button
-                      type="button"
-                      className={coverMode === 'upload' ? styles.statusToggleActive : styles.statusToggleBtn}
-                      onClick={() => setCoverMode('upload')}
-                      aria-pressed={coverMode === 'upload'}
-                      aria-label="Upload cover image"
-                    >
-                      Upload
-                    </button>
-                  </div>
-                  {coverMode === 'url' && (
-                    <>
-                      <input
-                        type="url"
-                        value={form.artwork_url ?? ''}
-                        onChange={(e) => {
-                          const value = e.target.value.trim();
-                          setForm((f) => ({ ...f, artwork_url: value === '' ? null : value }));
-                        }}
-                        className={styles.input}
-                        placeholder="e.g. https://myshow.com/cover.jpg"
-                        style={{ marginTop: '0.5rem' }}
-                      />
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-                        Public URL for the podcast cover (optional)
-                      </p>
-                    </>
-                  )}
-                  {coverMode === 'upload' && (
-                    <>
-                      <input
-                        key={coverUploadKey}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className={styles.input}
-                        style={{ marginTop: '0.5rem' }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) setPendingArtworkFile(file);
-                        }}
-                        disabled={mutation.isPending}
-                        aria-label="Choose cover image"
-                      />
-                      {pendingArtworkFile && (
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', margin: '0.25rem 0 0 0' }}>
-                          {pendingArtworkFile.name} will be uploaded when you save.
-                        </p>
-                      )}
-                      {uploadArtworkMutation.isError && (
-                        <p className={styles.error} style={{ marginTop: '0.25rem' }}>
-                          {uploadArtworkMutation.error?.message}
-                        </p>
-                      )}
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-                        JPG, PNG or WebP, max 5MB. Uploads when you click Save changes.
-                      </p>
-                    </>
-                  )}
-                  {(coverMode === 'url'
-                    ? debouncedArtworkUrl && (debouncedArtworkUrl.startsWith('http://') || debouncedArtworkUrl.startsWith('https://'))
-                    : (pendingArtworkFile || podcast?.artwork_filename)
-                  ) && (
-                    <p style={{ marginTop: '0.75rem', marginBottom: 0, display: 'flex', justifyContent: 'center' }}>
+                  Cover
+                  <div className={styles.coverImageWrap}>
+                    {(coverMode === 'url'
+                      ? debouncedArtworkUrl && (debouncedArtworkUrl.startsWith('http://') || debouncedArtworkUrl.startsWith('https://'))
+                      : (pendingArtworkFile || podcast?.artwork_filename)
+                    ) ? (
                       <img
                         key={coverMode === 'url' ? `url-${debouncedArtworkUrl}` : `upload-${podcast?.artwork_filename ?? ''}-${Boolean(pendingArtworkPreviewUrl)}`}
                         src={safeImageSrc(
@@ -483,14 +451,89 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                                 ? `/api/podcasts/${podcastId}/artwork/${encodeURIComponent(podcast.artwork_filename)}`
                                 : '')
                         )}
-                        alt="Cover preview"
-                        style={{ maxWidth: '160px', maxHeight: '160px', borderRadius: '8px', border: '1px solid var(--border)', objectFit: 'cover' }}
+                        alt=""
+                        className={styles.coverImagePreview}
                       />
-                    </p>
-                  )}
+                    ) : (
+                      <div className={styles.coverImagePreviewPlaceholder}>
+                        <Image size={28} aria-hidden />
+                      </div>
+                    )}
+                    <div className={styles.coverImageControls}>
+                      <div className={styles.coverSourceToggle} role="group" aria-label="Cover image source">
+                        <button
+                          type="button"
+                          className={coverMode === 'url' ? styles.coverSourceToggleActive : styles.coverSourceToggleBtn}
+                          onClick={() => setCoverMode('url')}
+                          aria-pressed={coverMode === 'url'}
+                          aria-label="Cover image from URL"
+                        >
+                          URL
+                        </button>
+                        <button
+                          type="button"
+                          className={coverMode === 'upload' ? styles.coverSourceToggleActive : styles.coverSourceToggleBtn}
+                          onClick={() => setCoverMode('upload')}
+                          aria-pressed={coverMode === 'upload'}
+                          aria-label="Upload cover image"
+                        >
+                          Upload
+                        </button>
+                      </div>
+                      {coverMode === 'url' ? (
+                        <input
+                          type="url"
+                          value={form.artwork_url ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value.trim();
+                            setForm((f) => ({ ...f, artwork_url: value === '' ? null : value }));
+                          }}
+                          className={styles.input}
+                          placeholder="https://..."
+                        />
+                      ) : (
+                        <input
+                          key={coverUploadKey}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className={styles.coverFileInput}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) setPendingArtworkFile(file);
+                          }}
+                          disabled={mutation.isPending}
+                          aria-label="Choose cover image"
+                        />
+                      )}
+                      {coverMode === 'upload' && pendingArtworkFile && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                          {pendingArtworkFile.name} will be uploaded when you save.
+                        </p>
+                      )}
+                      {coverMode === 'upload' && uploadArtworkMutation.isError && (
+                        <p className={styles.error} style={{ margin: 0, marginTop: '0.25rem' }}>
+                          {uploadArtworkMutation.error?.message}
+                        </p>
+                      )}
+                      {coverMode === 'url' && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                          Public URL (optional)
+                        </p>
+                      )}
+                      {coverMode === 'upload' && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                          JPG, PNG or WebP, max 5MB
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </label>
 
-                <h3 className={styles.dialogSectionTitle}>Author & contact</h3>
+                </div>
+                </div>
+
+                <div role="tabpanel" id="edit-details-panel-author" aria-labelledby="edit-details-tab-author" className={`${styles.editDetailsTabPanel} ${activeTab === 'author' ? styles.editDetailsTabPanelActive : ''}`}>
+                <div className={styles.tabPanelFields}>
                 <label className={styles.label}>
                   Author Name
                   <input
@@ -521,8 +564,12 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     placeholder="e.g. contact@example.com"
                   />
                 </label>
+                </div>
 
-                <h3 className={styles.dialogSectionTitle}>Categories</h3>
+                </div>
+
+                <div role="tabpanel" id="edit-details-panel-categories" aria-labelledby="edit-details-tab-categories" className={`${styles.editDetailsTabPanel} ${activeTab === 'categories' ? styles.editDetailsTabPanelActive : ''}`}>
+                <div className={styles.tabPanelFields}>
                 <label className={styles.label}>
                   Primary Category
                   <input
@@ -598,8 +645,12 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     disabled={!(form.category_primary_three ?? '').trim()}
                   />
                 </label>
+                </div>
 
-                <h3 className={styles.dialogSectionTitle}>Distribution & visibility</h3>
+                </div>
+
+                <div role="tabpanel" id="edit-details-panel-distribution" aria-labelledby="edit-details-tab-distribution" className={`${styles.editDetailsTabPanel} ${activeTab === 'distribution' ? styles.editDetailsTabPanelActive : ''}`}>
+                <div className={styles.tabPanelFields}>
                 <label className={styles.label}>
                   Site URL
                   <input
@@ -640,7 +691,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   />
                 </label>
 
-                {podcast.my_role === 'owner' &&
+                {podcast?.my_role === 'owner' &&
                   podcast.dns_config &&
                   (podcast.dns_config.allow_linking_domain ||
                     podcast.dns_config.allow_domain ||
@@ -740,20 +791,12 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     )}
                   </>
                 )}
+                </div>
 
-                <div className={styles.advancedSection}>
-                  <button
-                    type="button"
-                    className={styles.advancedToggle}
-                    onClick={() => setShowAdvanced((v) => !v)}
-                    aria-expanded={showAdvanced}
-                    aria-controls="edit-show-advanced-fields"
-                  >
-                    {showAdvanced ? <ChevronDown size={18} aria-hidden /> : <ChevronRight size={18} aria-hidden />}
-                    <span>More Feed Options</span>
-                  </button>
-                  {showAdvanced && (
-                    <div id="edit-show-advanced-fields" className={styles.advancedFields}>
+                </div>
+
+                <div role="tabpanel" id="edit-details-panel-more" aria-labelledby="edit-details-tab-more" className={`${styles.editDetailsTabPanel} ${activeTab === 'more' ? styles.editDetailsTabPanelActive : ''}`}>
+                <div id="edit-show-advanced-fields" className={styles.advancedFields}>
                       <label className={styles.label}>
                         Podcast GUID
                         <input
@@ -914,9 +957,9 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                           placeholder="From Apple Podcasts Connect"
                         />
                       </label>
-                    </div>
-                  )}
                 </div>
+                </div>
+
                 {mutation.isError && (
                   <p className={styles.error}>
                     {mutation.error instanceof Error
@@ -931,11 +974,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
             ) : null}
           </div>
           {podcast && (
-            <div className={styles.dialogFooter}>
+            <div className={`${styles.dialogFooter} ${styles.dialogFooterCancelLeft}`}>
               <button type="button" className={styles.cancel} onClick={onClose} aria-label="Cancel editing show">
                 Cancel
               </button>
-              <button type="submit" form="edit-show-details-form" className={styles.submit} disabled={mutation.isPending || uploadArtworkMutation.isPending} aria-label="Save show changes">
+              <button type="submit" form="edit-show-details-form" className={styles.dialogConfirm} disabled={mutation.isPending || uploadArtworkMutation.isPending} aria-label="Save show changes">
                 {uploadArtworkMutation.isPending ? 'Uploading...' : mutation.isPending ? 'Saving...' : 'Save'}
               </button>
             </div>

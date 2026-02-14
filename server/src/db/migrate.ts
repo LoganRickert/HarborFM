@@ -31,6 +31,7 @@ import * as m029 from "./migrations/029_api_keys_name_valid_until.js";
 import * as m030 from "./migrations/030_api_keys_disabled_valid_from.js";
 import * as m031 from "./migrations/031_podcast_dns_fields.js";
 import * as m032 from "./migrations/032_podcast_social_links.js";
+import * as m033 from "./migrations/033_podcast_cast.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -65,6 +66,7 @@ const migrations = [
   { name: "030_api_keys_disabled_valid_from", ...m030 },
   { name: "031_podcast_dns_fields", ...m031 },
   { name: "032_podcast_social_links", ...m032 },
+  { name: "033_podcast_cast", ...m033 },
 ];
 
 const MIGRATIONS_TABLE = `

@@ -1,4 +1,5 @@
 export * from './schemas/auth.js';
+export * from './schemas/cast.js';
 export * from './schemas/contact.js';
 export * from './schemas/user.js';
 export * from './schemas/podcast.js';

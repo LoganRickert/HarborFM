@@ -137,6 +137,14 @@ export function artworkDir(podcastId: string): string {
   return dir;
 }
 
+/** Directory for cast member photos (within podcast artwork dir). */
+export function castPhotoDir(podcastId: string): string {
+  assertSafeId(podcastId, "podcastId");
+  const dir = join(artworkDir(podcastId), "cast");
+  ensureDir(dir);
+  return dir;
+}
+
 export function episodeArtworkPath(
   podcastId: string,
   episodeId: string,

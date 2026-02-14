@@ -95,10 +95,10 @@ function LinkGroup({
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function hasPodcastLinks(podcast: { [key: string]: unknown }) {
-  const allPlatforms = [...PODCAST_PLATFORMS, ...SOCIAL_PLATFORMS];
-  return allPlatforms.some((p) => {
-    const url = podcast[p.key];
+  return LINK_KEYS.some((key) => {
+    const url = podcast[key];
     return url && typeof url === 'string' && url.trim().length > 0;
   });
 }

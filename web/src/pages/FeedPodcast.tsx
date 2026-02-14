@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useParams } from 'react-router-dom';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublicPodcast, getPublicEpisodes } from '../api/public';
@@ -14,6 +15,7 @@ import {
   hasPodcastLinks,
   FeedSearchControls,
   FeedEpisodesList,
+  FeedCastCard,
 } from '../components/Feed';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedPodcast.module.css';
@@ -24,6 +26,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   const podcastSlug = podcastSlugOverride ?? podcastSlugParam ?? '';
   const [playingEpisodeId, setPlayingEpisodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchDebounced = useDebouncedValue(searchQuery);
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
@@ -47,8 +50,15 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     isFetchingNextPage,
     isLoading: episodesLoading,
   } = useInfiniteQuery({
-    queryKey: ['public-episodes', podcastSlug],
-    queryFn: ({ pageParam = 0 }) => getPublicEpisodes(podcastSlug!, 50, pageParam),
+    queryKey: ['public-episodes', podcastSlug, sortNewestFirst, searchDebounced],
+    queryFn: ({ pageParam = 0 }) =>
+      getPublicEpisodes(
+        podcastSlug!,
+        10,
+        pageParam,
+        sortNewestFirst ? 'newest' : 'oldest',
+        searchDebounced || undefined
+      ),
     enabled: !!podcastSlug,
     refetchOnMount: 'always',
     getNextPageParam: (lastPage) => {
@@ -82,23 +92,14 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     setPlayingEpisodeId(null);
   }, []);
 
-  // Filter and sort episodes (client-side filtering on loaded episodes)
+  // Episodes from server are already filtered (by search) and sorted
   const filteredAndSortedEpisodes = useMemo(() => {
-    return allEpisodes
-      .filter((ep) => {
-        if (!searchQuery.trim()) return true;
-        const query = searchQuery.toLowerCase();
-        return (
-          ep.title.toLowerCase().includes(query) ||
-          ep.description?.toLowerCase().includes(query)
-        );
-      })
-      .sort((a, b) => {
-        const dateA = a.publish_at ? new Date(a.publish_at).getTime() : new Date(a.created_at).getTime();
-        const dateB = b.publish_at ? new Date(b.publish_at).getTime() : new Date(b.created_at).getTime();
-        return sortNewestFirst ? dateB - dateA : dateA - dateB;
-      });
-  }, [allEpisodes, searchQuery, sortNewestFirst]);
+    return [...allEpisodes].sort((a, b) => {
+      const dateA = a.publish_at ? new Date(a.publish_at).getTime() : new Date(a.created_at).getTime();
+      const dateB = b.publish_at ? new Date(b.publish_at).getTime() : new Date(b.created_at).getTime();
+      return sortNewestFirst ? dateB - dateA : dateA - dateB;
+    });
+  }, [allEpisodes, sortNewestFirst]);
 
   // Update meta tags
   useMeta({
@@ -190,6 +191,8 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               )}
             </div>
           </div>
+
+          <FeedCastCard podcastSlug={podcastSlug} />
         </main>
       </div>
 

@@ -117,6 +117,21 @@ export function canManageCollaborators(role: string | null): boolean {
   return hasRoleAtLeast(role, ROLE_MIN_MANAGE_COLLABORATORS);
 }
 
+/** Owner or manager can add/edit/delete hosts. */
+export function canAddEditHost(role: string | null): boolean {
+  return canManageCollaborators(role);
+}
+
+/** Editor, manager, or owner can add/edit/delete guests. */
+export function canAddEditGuest(role: string | null): boolean {
+  return canEditSegments(role);
+}
+
+/** Editor, manager, or owner can assign cast to episodes. */
+export function canAssignCastToEpisode(role: string | null): boolean {
+  return canEditSegments(role);
+}
+
 /**
  * Returns true if the user can edit DNS-related fields on a podcast.
  * Only owner or admin may set link_domain, managed_domain, managed_sub_domain, cloudflare_api_key.

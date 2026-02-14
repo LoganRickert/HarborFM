@@ -42,9 +42,9 @@ export function FeedEpisodesList({
             onClick={onLoadMore}
             disabled={isFetchingNextPage}
             className={styles.loadMoreBtn}
-            aria-label="Load more episodes"
+            aria-label="Load More Episodes"
           >
-            {isFetchingNextPage ? 'Loading...' : 'Load more episodes'}
+            {isFetchingNextPage ? 'Loading...' : 'Load More Episodes'}
           </button>
         </div>
       )}
