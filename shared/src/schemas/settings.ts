@@ -67,6 +67,10 @@ export const settingsPatchBodySchema = z.object({
   dns_default_domain: z.string().optional(),
   dns_default_enable_cloudflare_proxy: z.boolean().optional(),
   gdpr_consent_banner_enabled: z.boolean().optional(),
+  // WebRTC group call
+  webrtc_service_url: z.string().optional(),
+  webrtc_public_ws_url: z.string().optional(),
+  recording_callback_secret: z.string().optional(),
 });
 
 export type SettingsPatchBody = z.infer<typeof settingsPatchBodySchema>;

@@ -15,6 +15,7 @@ import {
   WhisperSection,
   LLMSection,
   CaptchaSection,
+  WebRTCSection,
   EmailSection,
   DnsConfigurationSection,
   CustomLegalSection,
@@ -163,6 +164,10 @@ export function Settings() {
         dns_default_allow_sub_domain: form.dns_default_allow_sub_domain,
         dns_default_domain: form.dns_default_domain,
         dns_default_enable_cloudflare_proxy: form.dns_default_enable_cloudflare_proxy,
+        webrtc_service_url: form.webrtc_service_url?.trim() ?? '',
+        webrtc_public_ws_url: form.webrtc_public_ws_url?.trim() ?? '',
+        recording_callback_secret:
+          form.recording_callback_secret === '(set)' ? undefined : form.recording_callback_secret,
       } as unknown as Parameters<typeof updateSettings>[0]),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -325,6 +330,8 @@ export function Settings() {
         />
 
         <CaptchaSection form={form} onFormChange={updateForm} />
+
+        <WebRTCSection form={form} onFormChange={updateForm} />
 
         <EmailSection
           form={form}

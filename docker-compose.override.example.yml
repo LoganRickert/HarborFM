@@ -1,0 +1,11 @@
+# For local dev: server runs with pnpm dev, webrtc runs in Docker.
+# Copy to docker-compose.override.yml so webrtc writes to your server/data:
+#
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#
+# This overrides webrtc's /data to use your host server/data.
+
+services:
+  webrtc:
+    volumes:
+      - ./server/data:/data

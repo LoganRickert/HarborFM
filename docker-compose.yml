@@ -130,6 +130,29 @@ services:
     networks:
       - internal
 
+  webrtc:
+    profiles: ["webrtc"]
+    build:
+      context: .
+      dockerfile: webrtc-service/Dockerfile
+    container_name: harborfm-webrtc
+    restart: unless-stopped
+    environment:
+      PORT: "3002"
+      RTC_MIN_PORT: "40000"
+      RTC_MAX_PORT: "40100"
+      MEDIASOUP_ANNOUNCED_IP: "${MEDIASOUP_ANNOUNCED_IP:-}"
+      MAIN_APP_URL: "${MAIN_APP_URL:-http://harborfm:3001}"
+      RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
+      RECORDING_DATA_DIR: "/data"
+    volumes:
+      - harborfm_data:/data
+    ports:
+      - "3002:3002"
+      - "40000-40100:40000-40100/udp"
+    networks:
+      - internal
+
   fail2ban:
     image: crazymax/fail2ban:latest
     container_name: harborfm-fail2ban

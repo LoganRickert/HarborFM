@@ -25,3 +25,4 @@ e2e/reports/
 e2e/server.log.pnpm-store
 .pnpm-store/
 Infrastructure/
+docker-compose.override.yml

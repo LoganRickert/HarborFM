@@ -8,6 +8,7 @@ export { GeoliteSection } from './GeoliteSection';
 export { WhisperSection } from './WhisperSection';
 export { LLMSection } from './LLMSection';
 export { CaptchaSection } from './CaptchaSection';
+export { WebRTCSection } from './WebRTCSection';
 export { EmailSection } from './EmailSection';
 export { DnsConfigurationSection } from './DnsConfigurationSection';
 export { CustomLegalSection } from './CustomLegalSection';

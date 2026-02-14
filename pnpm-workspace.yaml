@@ -3,6 +3,7 @@ packages:
   - web
   - shared
   - docs
+  - webrtc-service
 
 ignoredBuiltDependencies:
   - argon2

@@ -1,0 +1,150 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--bg, #0d0d0d);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  padding: 2rem;
+  background: var(--bg-elevated, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius, 8px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text, #e5e5e5);
+}
+
+.sub {
+  margin: 0 0 1.5rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted, #888);
+}
+
+.audioUnavailable {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text, #e5e5e5);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 6px;
+}
+
+.loading {
+  margin: 0;
+  color: var(--text-muted, #888);
+}
+
+.error {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  color: #e53e3e;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+}
+
+.input,
+.select {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text, #e5e5e5);
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--accent, #00d4aa);
+}
+
+.joinBtn {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent, #00d4aa);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.joinBtn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.joinBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.micTestHint {
+  margin: -0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+}
+
+.micLevel {
+  height: 6px;
+  background: var(--bg-muted, #252525);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+
+.micLevelBar {
+  height: 100%;
+  background: var(--accent, #00d4aa);
+  border-radius: 3px;
+  transition: width 0.1s ease;
+}
+
+.participantsLabel {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.participantsList {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9375rem;
+  color: var(--text, #e5e5e5);
+}
+
+.participantsList li {
+  padding: 0.25rem 0;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #888);
+}

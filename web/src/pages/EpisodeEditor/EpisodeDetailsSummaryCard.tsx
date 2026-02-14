@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, Settings, Share2 } from 'lucide-react';
+import { Lock, Settings, Share2, Users } from 'lucide-react';
 import { ShareDialog } from '../../components/ShareDialog';
 import styles from '../EpisodeEditor.module.css';
 
@@ -18,6 +18,8 @@ export interface EpisodeDetailsSummaryCardProps {
   shareUrl?: string;
   shareTitle?: string;
   embedCode?: string;
+  /** When set, a "Start Group Call" button is shown to the left of Edit Details. */
+  onStartGroupCall?: () => void;
 }
 
 export function EpisodeDetailsSummaryCard({
@@ -31,6 +33,7 @@ export function EpisodeDetailsSummaryCard({
   shareUrl,
   shareTitle,
   embedCode,
+  onStartGroupCall,
 }: EpisodeDetailsSummaryCardProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const metaParts: string[] = [status];
@@ -38,7 +41,8 @@ export function EpisodeDetailsSummaryCard({
     metaParts.push(`S${seasonNumber ?? '?'} E${episodeNumber ?? '?'}`);
   }
   const isSubscriberOnly = subscriberOnly === 1;
-  
+  const hasActions = onEditClick != null || shareUrl != null || onStartGroupCall != null;
+
   return (
     <div className={isSubscriberOnly ? `${styles.detailsSummaryCard} ${styles.detailsSummaryCardSubscriberOnly}` : styles.detailsSummaryCard}>
       <div className={styles.detailsSummaryRow}>
@@ -59,8 +63,14 @@ export function EpisodeDetailsSummaryCard({
           <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
         </div>
       </div>
-      {(onEditClick != null || shareUrl != null) && (
+      {hasActions && (
         <div className={styles.detailsSummaryActions}>
+          {onStartGroupCall != null && (
+            <button type="button" className={styles.detailsSummaryEditBtn} onClick={onStartGroupCall} aria-label="Start group call">
+              <Users size={18} strokeWidth={2} aria-hidden />
+              Start Group Call
+            </button>
+          )}
           {onEditClick != null && (
             <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
               <Settings size={18} strokeWidth={2} aria-hidden />

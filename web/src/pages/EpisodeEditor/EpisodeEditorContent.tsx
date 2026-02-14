@@ -37,6 +37,8 @@ import type { Episode, EpisodeUpdate } from '../../api/episodes';
 import type { Podcast } from '../../api/podcasts';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
+import { startCall, getActiveSession } from '../../api/call';
+import { CallPanel } from '../../components/GroupCall/CallPanel';
 
 export interface EpisodeEditorContentProps {
   episode: Episode;
@@ -87,6 +89,15 @@ export function EpisodeEditorContent({
   const [buildAlreadyInProgressMessage, setBuildAlreadyInProgressMessage] = useState<string | null>(null);
   const [renderPollError, setRenderPollError] = useState<string | null>(null);
   const [showEpisodeTranscript, setShowEpisodeTranscript] = useState(false);
+  const [activeCall, setActiveCall] = useState<{
+    sessionId: string;
+    token: string;
+    joinUrl: string;
+    webrtcUrl?: string;
+    roomId?: string;
+    webrtcUnavailable?: boolean;
+  } | null>(null);
+  const [startCallError, setStartCallError] = useState<string | null>(null);
 
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -94,6 +105,41 @@ export function EpisodeEditorContent({
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const finalPauseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (!id || segmentReadOnly) return;
+    getActiveSession(id).then((session) => {
+      if (session)
+        setActiveCall({
+          sessionId: session.sessionId,
+          token: session.token,
+          joinUrl: session.joinUrl,
+          webrtcUrl: session.webrtcUrl,
+          roomId: session.roomId,
+          webrtcUnavailable: session.webrtcUnavailable,
+        });
+    }).catch(() => {});
+  }, [id, segmentReadOnly]);
+
+  const handleCallEnded = useCallback(() => setActiveCall(null), []);
+
+  const handleStartGroupCall = useCallback(() => {
+    setStartCallError(null);
+    startCall(id)
+      .then((res) => {
+        setActiveCall({
+          sessionId: res.sessionId,
+          token: res.token,
+          joinUrl: res.joinUrl,
+          webrtcUrl: res.webrtcUrl,
+          roomId: res.roomId,
+          webrtcUnavailable: res.webrtcUnavailable,
+        });
+      })
+      .catch((err) => {
+        setStartCallError(err?.message ?? 'Failed to start call. Please try again.');
+      });
+  }, [id]);
 
   const handleSegmentPlayRequest = useCallback((segmentId: string) => {
     // Pause and reset all other segments to 0
@@ -360,6 +406,9 @@ export function EpisodeEditorContent({
               })()
             : undefined
         }
+        onStartGroupCall={
+          !segmentReadOnly && canEditSegments ? handleStartGroupCall : undefined
+        }
       />
 
       <div className={styles.card}>
@@ -525,6 +574,31 @@ export function EpisodeEditorContent({
         </Dialog.Portal>
       </Dialog.Root>
 
+      {startCallError && (
+        <div className={styles.callErrorBanner} role="alert">
+          {startCallError}
+          <button
+            type="button"
+            className={styles.callErrorBannerDismiss}
+            onClick={() => setStartCallError(null)}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {activeCall && (
+        <CallPanel
+          sessionId={activeCall.sessionId}
+          joinUrl={activeCall.joinUrl}
+          webrtcUrl={activeCall.webrtcUrl}
+          roomId={activeCall.roomId}
+          mediaUnavailable={!activeCall.webrtcUrl || !activeCall.roomId || activeCall.webrtcUnavailable}
+          onEnd={handleCallEnded}
+          onCallEnded={handleCallEnded}
+          onSegmentRecorded={() => queryClient.invalidateQueries({ queryKey: ['segments', id] })}
+        />
+      )}
       {showRecord && (
         <RecordModal
           onClose={() => setShowRecord(false)}

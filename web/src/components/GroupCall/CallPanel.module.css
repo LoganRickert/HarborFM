@@ -1,0 +1,235 @@
+.panel {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  width: 320px;
+  max-width: calc(100vw - 2rem);
+  background: var(--bg-elevated, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius, 8px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+@media (max-width: 768px) {
+  .panel {
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+    bottom: 1rem;
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text, #e5e5e5);
+}
+
+.title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.mediaUnavailableBanner {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 6px;
+}
+
+.joinRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.joinInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text, #e5e5e5);
+}
+
+.copyBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.copyBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent, #00d4aa);
+}
+
+.participants {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recordingProcessing {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #888);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.3);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+.mediaError {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: #e53e3e;
+}
+
+.participantsLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.participantsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.participant {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  color: var(--text, #e5e5e5);
+}
+
+.participantName {
+  flex: 1;
+  min-width: 0;
+}
+
+.participantActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.muteBtn,
+.disconnectBtn {
+  padding: 0.25rem;
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+}
+
+.muteBtn:hover,
+.disconnectBtn:hover {
+  color: var(--text, #e5e5e5);
+  border-color: var(--accent, #00d4aa);
+}
+
+.disconnectBtn:hover {
+  border-color: #e53e3e;
+  color: #e53e3e;
+}
+
+.recordSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.recordRow {
+  display: flex;
+  justify-content: center;
+}
+
+.recordSegmentBtn,
+.stopRecordBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.recordSegmentBtn:hover,
+.stopRecordBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent, #00d4aa);
+}
+
+.stopRecordBtn {
+  color: #e53e3e;
+  border-color: #e53e3e;
+}
+
+.stopRecordBtn:hover {
+  border-color: #c53030;
+  background: rgba(229, 62, 62, 0.1);
+}
+
+.footer {
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border, #333);
+}
+
+.endBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #fff;
+  background: #c53030;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.endBtn:hover {
+  background: #e53e3e;
+}
+
+.endBtn:focus-visible {
+  outline: 2px solid #e53e3e;
+  outline-offset: 2px;
+}

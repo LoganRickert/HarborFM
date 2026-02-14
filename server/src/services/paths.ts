@@ -1,4 +1,4 @@
-import { join, resolve, sep } from "path";
+import { join, relative, resolve, sep } from "path";
 import { mkdirSync, existsSync, realpathSync } from "fs";
 
 const DATA_DIR = resolve(process.env.DATA_DIR ?? join(process.cwd(), "data"));
@@ -188,4 +188,14 @@ export function segmentPath(
   ensureDir(dir);
   const filename = generateTimestampedFilename(segmentId, ext);
   return join(dir, filename);
+}
+
+/** Path relative to DATA_DIR. Used so webrtc can write to its own data mount and server can resolve. */
+export function pathRelativeToData(absolutePath: string): string {
+  const base = resolve(DATA_DIR);
+  const p = resolve(absolutePath);
+  if (p !== base && !p.startsWith(base + sep)) {
+    throw new Error("Path is not under DATA_DIR");
+  }
+  return relative(base, p);
 }

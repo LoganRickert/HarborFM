@@ -176,6 +176,12 @@ export interface AppSettings {
   dns_default_enable_cloudflare_proxy: boolean;
   /** When true, show GDPR-style cookie/tracking consent banner on public pages. */
   gdpr_consent_banner_enabled: boolean;
+  /** WebRTC service base URL (e.g. http://webrtc:3002). When set with webrtc_public_ws_url, group calls create a mediasoup room. */
+  webrtc_service_url: string;
+  /** Public WebSocket URL for the WebRTC service (e.g. wss://example.com/webrtc-ws). Returned to clients so the browser can connect. */
+  webrtc_public_ws_url: string;
+  /** Secret for webrtc service to call back when a recording is ready. Env RECORDING_CALLBACK_SECRET can override. */
+  recording_callback_secret: string;
 }
 
 const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -242,6 +248,9 @@ const DEFAULTS: AppSettings = {
   dns_default_domain: "",
   dns_default_enable_cloudflare_proxy: false,
   gdpr_consent_banner_enabled: false,
+  webrtc_service_url: "",
+  webrtc_public_ws_url: "",
+  recording_callback_secret: "",
 };
 
 const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -588,6 +597,12 @@ export function readSettings(): AppSettings {
     else if (row.key === "gdpr_consent_banner_enabled")
       (settings as Partial<AppSettings>).gdpr_consent_banner_enabled =
         row.value === "true";
+    else if (row.key === "webrtc_service_url")
+      (settings as Partial<AppSettings>).webrtc_service_url = row.value;
+    else if (row.key === "webrtc_public_ws_url")
+      (settings as Partial<AppSettings>).webrtc_public_ws_url = row.value;
+    else if (row.key === "recording_callback_secret")
+      (settings as Partial<AppSettings>).recording_callback_secret = row.value;
   }
 
   return {
@@ -695,6 +710,15 @@ export function readSettings(): AppSettings {
     gdpr_consent_banner_enabled:
       (settings as Partial<AppSettings>).gdpr_consent_banner_enabled ??
       DEFAULTS.gdpr_consent_banner_enabled,
+    webrtc_service_url:
+      (settings as Partial<AppSettings>).webrtc_service_url ??
+      DEFAULTS.webrtc_service_url,
+    webrtc_public_ws_url:
+      (settings as Partial<AppSettings>).webrtc_public_ws_url ??
+      DEFAULTS.webrtc_public_ws_url,
+    recording_callback_secret:
+      (settings as Partial<AppSettings>).recording_callback_secret ??
+      DEFAULTS.recording_callback_secret,
   };
 }
 
@@ -804,6 +828,9 @@ function writeSettings(settings: AppSettings): void {
   stmt.run("dns_default_domain", settings.dns_default_domain);
   stmt.run("dns_default_enable_cloudflare_proxy", String(settings.dns_default_enable_cloudflare_proxy));
   stmt.run("gdpr_consent_banner_enabled", String(settings.gdpr_consent_banner_enabled));
+  stmt.run("webrtc_service_url", settings.webrtc_service_url ?? "");
+  stmt.run("webrtc_public_ws_url", settings.webrtc_public_ws_url ?? "");
+  stmt.run("recording_callback_secret", settings.recording_callback_secret ?? "");
 }
 
 /** Whether a transcription provider is configured and usable. */
@@ -884,6 +911,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         captcha_secret_key: settings.captcha_secret_key ? "(set)" : "",
         smtp_password: settings.smtp_password ? "(set)" : "",
         sendgrid_api_key: settings.sendgrid_api_key ? "(set)" : "",
+        recording_callback_secret: settings.recording_callback_secret ? "(set)" : "",
         custom_terms: settings.custom_terms ?? "",
         custom_privacy: settings.custom_privacy ?? "",
         dns_provider_api_token_enc: "", // never send to client
@@ -1270,6 +1298,19 @@ export async function settingsRoutes(app: FastifyInstance) {
         body.gdpr_consent_banner_enabled !== undefined
           ? Boolean(body.gdpr_consent_banner_enabled)
           : current.gdpr_consent_banner_enabled;
+      const webrtc_service_url =
+        body.webrtc_service_url !== undefined
+          ? String(body.webrtc_service_url).trim()
+          : current.webrtc_service_url;
+      const webrtc_public_ws_url =
+        body.webrtc_public_ws_url !== undefined
+          ? String(body.webrtc_public_ws_url).trim()
+          : current.webrtc_public_ws_url;
+      let recording_callback_secret = current.recording_callback_secret;
+      if (body.recording_callback_secret !== undefined) {
+        const v = String(body.recording_callback_secret).trim();
+        recording_callback_secret = v === "(set)" ? current.recording_callback_secret : v;
+      }
 
       const next: AppSettings = {
         whisper_asr_url,
@@ -1337,6 +1378,9 @@ export async function settingsRoutes(app: FastifyInstance) {
         dns_default_domain,
         dns_default_enable_cloudflare_proxy,
         gdpr_consent_banner_enabled,
+        webrtc_service_url,
+        webrtc_public_ws_url,
+        recording_callback_secret,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||
@@ -1373,6 +1417,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         captcha_secret_key: next.captcha_secret_key ? "(set)" : "",
         smtp_password: next.smtp_password ? "(set)" : "",
         sendgrid_api_key: next.sendgrid_api_key ? "(set)" : "",
+        recording_callback_secret: next.recording_callback_secret ? "(set)" : "",
         custom_terms: next.custom_terms ?? "",
         custom_privacy: next.custom_privacy ?? "",
         dns_provider_api_token_enc: "",

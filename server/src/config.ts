@@ -91,6 +91,16 @@ export const FFPROBE_PATH = process.env.FFPROBE_PATH ?? "ffprobe";
 export const AUDIOWAVEFORM_PATH =
   process.env.AUDIOWAVEFORM_PATH ?? "audiowaveform";
 
+/** WebRTC service base URL (e.g. http://webrtc:3002). When set, group call creates a mediasoup room. Env: WEBRTC_SERVICE_URL. */
+export const WEBRTC_SERVICE_URL = process.env.WEBRTC_SERVICE_URL?.trim() || null;
+
+/** Public WebSocket URL for the WebRTC service (e.g. wss://example.com/webrtc-ws or ws://localhost:3002 for dev). Returned to the client so the browser can connect. Env: WEBRTC_PUBLIC_WS_URL. */
+export const WEBRTC_PUBLIC_WS_URL = process.env.WEBRTC_PUBLIC_WS_URL?.trim() || null;
+
+/** Secret for webrtc service to call back when a recording is ready (create segment from path). Env: RECORDING_CALLBACK_SECRET. */
+export const RECORDING_CALLBACK_SECRET =
+  process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
+
 /** Path to geoipupdate binary. Env: GEOIPUPDATE_PATH. Default "geoipupdate". */
 export const GEOIPUPDATE_PATH = process.env.GEOIPUPDATE_PATH ?? "geoipupdate";
 

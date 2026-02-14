@@ -50,6 +50,8 @@ import { contactRoutes } from "./modules/contact/index.js";
 import { messagesRoutes } from "./modules/messages/index.js";
 import { sitemapRoutes } from "./modules/sitemap/index.js";
 import { bansRoutes } from "./modules/bans/index.js";
+import { callRoutes } from "./modules/call/index.js";
+import fastifyWebsocket from "@fastify/websocket";
 import {
   flush,
   pruneListenDedup,
@@ -138,6 +140,7 @@ async function main() {
     cookie: { cookieName: JWT_COOKIE_NAME, signed: JWT_COOKIE_SIGNED },
   });
   await app.register(authPlugin);
+  await app.register(fastifyWebsocket);
 
   const apiPrefix = `/${API_PREFIX}`;
   await app.register(fastifySwagger, {
@@ -244,6 +247,7 @@ async function main() {
   await app.register(publicRoutes, { prefix: apiPrefix });
   await app.register(sitemapRoutes, { prefix: apiPrefix });
   await app.register(bansRoutes, { prefix: apiPrefix });
+  await app.register(callRoutes, { prefix: apiPrefix });
 
   pruneListenDedup();
   startFlushInterval();

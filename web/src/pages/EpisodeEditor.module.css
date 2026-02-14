@@ -861,6 +861,36 @@
   cursor: not-allowed;
 }
 
+/* Group call start failed */
+.callErrorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: rgba(229, 62, 62, 0.12);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  border-radius: var(--radius);
+}
+.callErrorBannerDismiss {
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.callErrorBannerDismiss:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.1);
+}
+
 .error {
   margin: 0;
   font-size: 0.875rem;

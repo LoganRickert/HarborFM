@@ -1,0 +1,23 @@
+{
+  "name": "webrtc-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^5.7.4",
+    "@fastify/websocket": "^11.0.0",
+    "mediasoup": "^3.19.16",
+    "nanoid": "^5.1.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
