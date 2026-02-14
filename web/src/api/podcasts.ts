@@ -82,6 +82,19 @@ export interface Podcast {
   cloudflare_api_key_set?: boolean;
   /** Client-only: new API key when editing (sent in PATCH; never returned by API). */
   cloudflare_api_key?: string;
+  /** When the podcast has an active custom domain, the preferred URL for sharing (e.g. https://myshow.com/). */
+  canonical_feed_url?: string | null;
+  apple_podcasts_url?: string | null;
+  spotify_url?: string | null;
+  amazon_music_url?: string | null;
+  podcast_index_url?: string | null;
+  listen_notes_url?: string | null;
+  castbox_url?: string | null;
+  x_url?: string | null;
+  facebook_url?: string | null;
+  instagram_url?: string | null;
+  tiktok_url?: string | null;
+  youtube_url?: string | null;
   /** DNS config from server settings (allow toggles and default domain list for edit UI). */
   dns_config?: {
     allow_linking_domain: boolean;

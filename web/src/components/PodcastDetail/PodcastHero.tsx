@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BarChart3, List, Settings as GearIcon, Lock } from 'lucide-react';
+import { BarChart3, List, Link2, Settings as GearIcon, Lock } from 'lucide-react';
 import localStyles from './PodcastDetail.module.css';
 import sharedStyles from './shared.module.css';
 
@@ -18,11 +18,13 @@ interface PodcastHeroProps {
   readOnly: boolean;
   canManageShow: boolean;
   onEditClick: () => void;
+  /** Opens the Edit Social Links dialog. */
+  onLinksClick?: () => void;
   /** When true, center the podcast title (e.g. on the podcast detail page). */
   centerTitle?: boolean;
 }
 
-export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, centerTitle }: PodcastHeroProps) {
+export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onLinksClick, centerTitle }: PodcastHeroProps) {
   return (
     <div className={styles.podcastHero}>
       {(podcast.artwork_url || podcast.artwork_filename) && (
@@ -61,14 +63,27 @@ export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, cen
             Episodes
           </Link>
           {!readOnly && canManageShow && (
-            <button
-              type="button"
-              className={styles.cardSettings}
-              onClick={onEditClick}
-              aria-label={`Edit details for ${podcast.title}`}
-            >
-              <GearIcon size={18} strokeWidth={2} />
-            </button>
+            <>
+              <button
+                type="button"
+                className={styles.cardSettings}
+                onClick={onEditClick}
+                aria-label={`Edit details for ${podcast.title}`}
+              >
+                <GearIcon size={18} strokeWidth={2} />
+              </button>
+              {onLinksClick && (
+                <button
+                  type="button"
+                  className={styles.cardSettings}
+                  onClick={onLinksClick}
+                  aria-label={`Edit links for ${podcast.title}`}
+                  title="Edit links"
+                >
+                  <Link2 size={18} strokeWidth={2} />
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

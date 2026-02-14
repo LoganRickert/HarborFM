@@ -1,4 +1,6 @@
-import { Lock, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { Lock, Settings, Share2 } from 'lucide-react';
+import { ShareDialog } from '../../components/ShareDialog';
 import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeDetailsSummaryCardProps {
@@ -12,6 +14,10 @@ export interface EpisodeDetailsSummaryCardProps {
   onEditClick?: () => void;
   /** When 1, episode is subscriber-only. */
   subscriberOnly?: number;
+  /** When set, a Share button is shown. */
+  shareUrl?: string;
+  shareTitle?: string;
+  embedCode?: string;
 }
 
 export function EpisodeDetailsSummaryCard({
@@ -22,7 +28,11 @@ export function EpisodeDetailsSummaryCard({
   artworkUrl,
   onEditClick,
   subscriberOnly,
+  shareUrl,
+  shareTitle,
+  embedCode,
 }: EpisodeDetailsSummaryCardProps) {
+  const [shareOpen, setShareOpen] = useState(false);
   const metaParts: string[] = [status];
   if (seasonNumber != null || episodeNumber != null) {
     metaParts.push(`S${seasonNumber ?? '?'} E${episodeNumber ?? '?'}`);
@@ -49,11 +59,35 @@ export function EpisodeDetailsSummaryCard({
           <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
         </div>
       </div>
-      {onEditClick != null && (
-        <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
-          <Settings size={18} strokeWidth={2} aria-hidden />
-          Edit Details
-        </button>
+      {(onEditClick != null || shareUrl != null) && (
+        <div className={styles.detailsSummaryActions}>
+          {onEditClick != null && (
+            <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
+              <Settings size={18} strokeWidth={2} aria-hidden />
+              Edit Details
+            </button>
+          )}
+          {shareUrl != null && (
+            <button
+              type="button"
+              className={styles.detailsSummaryShareBtn}
+              onClick={() => setShareOpen(true)}
+              aria-label="Share"
+              title="Share"
+            >
+              <Share2 size={18} strokeWidth={2} aria-hidden />
+            </button>
+          )}
+        </div>
+      )}
+      {shareUrl != null && (
+        <ShareDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          url={shareUrl}
+          title={shareTitle}
+          embedCode={embedCode}
+        />
       )}
     </div>
   );

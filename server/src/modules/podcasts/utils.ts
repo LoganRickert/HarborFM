@@ -7,6 +7,8 @@ export const PODCAST_LIST_SELECT = `
            copyright, podcast_guid, locked, license, itunes_type, medium,
            funding_url, funding_label, persons, update_frequency_rrule, update_frequency_label,
            spotify_recent_count, spotify_country_of_origin, apple_podcasts_verify,
+           apple_podcasts_url, spotify_url, amazon_music_url, podcast_index_url, listen_notes_url, castbox_url,
+           x_url, facebook_url, instagram_url, tiktok_url, youtube_url,
            link_domain, managed_domain, managed_sub_domain,
            created_at, updated_at,
            COALESCE(unlisted, 0) AS unlisted, COALESCE(subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled,

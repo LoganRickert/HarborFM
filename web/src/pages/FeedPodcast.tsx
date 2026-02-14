@@ -10,6 +10,8 @@ import { useMeta } from '../hooks/useMeta';
 import {
   FeedSiteHeader,
   FeedPodcastHeader,
+  PodcastLinksCard,
+  hasPodcastLinks,
   FeedSearchControls,
   FeedEpisodesList,
 } from '../components/Feed';
@@ -140,10 +142,19 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               podcast={podcast}
               podcastSlug={podcastSlug}
               onMessageClick={() => setFeedbackOpen(true)}
-              shareUrl={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined}
+              shareUrl={
+                podcast?.canonical_feed_url ??
+                (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined)
+              }
               shareTitle={podcast ? `${podcast.title} - HarborFM` : undefined}
             />
           </div>
+
+          {podcast && hasPodcastLinks(podcast) && (
+            <div className={styles.linksCardWrap}>
+              <PodcastLinksCard podcast={podcast} />
+            </div>
+          )}
 
           <div className={`${sharedStyles.card} ${styles.episodesCard}`}>
             <div className={styles.episodes}>

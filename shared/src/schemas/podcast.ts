@@ -41,6 +41,17 @@ export const podcastCreateSchema = z.object({
   spotify_recent_count: z.number().int().min(0).nullable().optional(),
   spotify_country_of_origin: nullableOptionalString,
   apple_podcasts_verify: nullableOptionalString,
+  apple_podcasts_url: nullableOptionalUrl,
+  spotify_url: nullableOptionalUrl,
+  amazon_music_url: nullableOptionalUrl,
+  podcast_index_url: nullableOptionalUrl,
+  listen_notes_url: nullableOptionalUrl,
+  castbox_url: nullableOptionalUrl,
+  x_url: nullableOptionalUrl,
+  facebook_url: nullableOptionalUrl,
+  instagram_url: nullableOptionalUrl,
+  tiktok_url: nullableOptionalUrl,
+  youtube_url: nullableOptionalUrl,
 });
 
 /** Partial of create schema plus optional per-podcast limits and flags. */

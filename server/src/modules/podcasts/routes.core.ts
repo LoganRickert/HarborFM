@@ -26,6 +26,7 @@ import {
 import { assertPathUnder, artworkDir } from "../../services/paths.js";
 import { readSettings } from "../settings/index.js";
 import { encryptSecret } from "../../services/secrets.js";
+import { getCanonicalFeedUrl } from "../../services/dns/custom-domain-resolver.js";
 import { runDnsUpdateTask } from "../../services/dns/update-task.js";
 import { podcastRowWithFilename } from "./utils.js";
 import * as repo from "./repo.js";
@@ -409,6 +410,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         allow_sub_domain: settings.dns_default_allow_sub_domain ?? false,
         allow_custom_key: settings.dns_default_allow_custom_key ?? false,
       };
+      const canonicalUrl = getCanonicalFeedUrl(
+        row as { link_domain?: string | null; managed_domain?: string | null; managed_sub_domain?: string | null },
+        settings,
+      );
+      if (canonicalUrl) (out as Record<string, unknown>).canonical_feed_url = canonicalUrl;
       return {
         ...out,
         my_role: role ?? "view",
@@ -870,6 +876,63 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (ext.apple_podcasts_verify !== undefined) {
         fields.push("apple_podcasts_verify = ?");
         values.push(ext.apple_podcasts_verify);
+      }
+      const links = data as {
+        apple_podcasts_url?: string | null;
+        spotify_url?: string | null;
+        amazon_music_url?: string | null;
+        podcast_index_url?: string | null;
+        listen_notes_url?: string | null;
+        castbox_url?: string | null;
+        x_url?: string | null;
+        facebook_url?: string | null;
+        instagram_url?: string | null;
+        tiktok_url?: string | null;
+        youtube_url?: string | null;
+      };
+      if (links.apple_podcasts_url !== undefined) {
+        fields.push("apple_podcasts_url = ?");
+        values.push(links.apple_podcasts_url);
+      }
+      if (links.spotify_url !== undefined) {
+        fields.push("spotify_url = ?");
+        values.push(links.spotify_url);
+      }
+      if (links.amazon_music_url !== undefined) {
+        fields.push("amazon_music_url = ?");
+        values.push(links.amazon_music_url);
+      }
+      if (links.podcast_index_url !== undefined) {
+        fields.push("podcast_index_url = ?");
+        values.push(links.podcast_index_url);
+      }
+      if (links.listen_notes_url !== undefined) {
+        fields.push("listen_notes_url = ?");
+        values.push(links.listen_notes_url);
+      }
+      if (links.castbox_url !== undefined) {
+        fields.push("castbox_url = ?");
+        values.push(links.castbox_url);
+      }
+      if (links.x_url !== undefined) {
+        fields.push("x_url = ?");
+        values.push(links.x_url);
+      }
+      if (links.facebook_url !== undefined) {
+        fields.push("facebook_url = ?");
+        values.push(links.facebook_url);
+      }
+      if (links.instagram_url !== undefined) {
+        fields.push("instagram_url = ?");
+        values.push(links.instagram_url);
+      }
+      if (links.tiktok_url !== undefined) {
+        fields.push("tiktok_url = ?");
+        values.push(links.tiktok_url);
+      }
+      if (links.youtube_url !== undefined) {
+        fields.push("youtube_url = ?");
+        values.push(links.youtube_url);
       }
       const d = data as {
         category_primary_two?: string | null;

@@ -346,6 +346,25 @@ export function EpisodeEditorContent({
         }
         onEditClick={metadataReadOnly ? undefined : () => setDetailsDialogOpen(true)}
         subscriberOnly={episode.subscriber_only}
+        shareUrl={
+          podcast && episode.slug && (episode.status === 'scheduled' || episode.status === 'published')
+            ? podcast.canonical_feed_url
+              ? `${podcast.canonical_feed_url.replace(/\/$/, '')}/${episode.slug}`
+              : typeof window !== 'undefined'
+                ? `${window.location.origin}/feed/${podcast.slug}/${episode.slug}`
+                : undefined
+            : undefined
+        }
+        shareTitle={podcast ? `${episode.title} - ${podcast.title}` : undefined}
+        embedCode={
+          podcast && episode.slug && (episode.status === 'scheduled' || episode.status === 'published') && typeof window !== 'undefined'
+            ? (() => {
+                const base = podcast.canonical_feed_url ? podcast.canonical_feed_url.replace(/\/$/, '') : window.location.origin;
+                const embedSrc = podcast.canonical_feed_url ? `${base}/embed/${episode.slug}` : `${base}/embed/${podcast.slug}/${episode.slug}`;
+                return `<iframe src="${embedSrc}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>`;
+              })()
+            : undefined
+        }
       />
 
       <div className={styles.card}>

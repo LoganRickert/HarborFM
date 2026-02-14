@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Copy, Code, X, Check } from 'lucide-react';
 import { SiX, SiFacebook, SiReddit } from 'react-icons/si';
 import styles from './ShareDialog.module.css';
@@ -40,6 +40,13 @@ export function ShareDialog({
 }: ShareDialogProps) {
   const [copied, setCopied] = useState<'link' | 'embed' | null>(null);
   const [showEmbed, setShowEmbed] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setShowEmbed(false);
+      setCopied(null);
+    }
+  }, [open]);
 
   if (!open) return null;
 

@@ -19,6 +19,19 @@ export const publicPodcastSchema = z.object({
   subscriber_only_feed_enabled: z.number().optional(),
   /** When 1, feed is subscriber-only (public feed disabled); use with subscriber_only_feed_enabled for gold lock. */
   public_feed_disabled: z.number().optional(),
+  /** When the podcast has an active custom domain, the preferred URL for sharing (e.g. https://myshow.com/). Omit when none. */
+  canonical_feed_url: z.string().optional(),
+  apple_podcasts_url: z.string().nullable().optional(),
+  spotify_url: z.string().nullable().optional(),
+  amazon_music_url: z.string().nullable().optional(),
+  podcast_index_url: z.string().nullable().optional(),
+  listen_notes_url: z.string().nullable().optional(),
+  castbox_url: z.string().nullable().optional(),
+  x_url: z.string().nullable().optional(),
+  facebook_url: z.string().nullable().optional(),
+  instagram_url: z.string().nullable().optional(),
+  tiktok_url: z.string().nullable().optional(),
+  youtube_url: z.string().nullable().optional(),
 });
 
 /** Querystring for GET /public/podcasts (paginated list). */

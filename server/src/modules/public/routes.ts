@@ -36,7 +36,10 @@ import {
 } from "../../services/subscriberTokens.js";
 import { readSettings } from "../settings/index.js";
 import { getCookieSecureFlag } from "../../services/cookies.js";
-import { getPodcastByHost } from "../../services/dns/custom-domain-resolver.js";
+import {
+  getPodcastByHost,
+  getCanonicalFeedUrl,
+} from "../../services/dns/custom-domain-resolver.js";
 import {
   API_PREFIX,
   RSS_CACHE_MAX_AGE_MS,
@@ -108,6 +111,17 @@ export async function publicRoutes(app: FastifyInstance) {
       explicit: row.explicit ?? 0,
       subscriber_only_feed_enabled: row.subscriber_only_feed_enabled ?? 0,
       public_feed_disabled: row.public_feed_disabled ?? 0,
+      apple_podcasts_url: row.apple_podcasts_url ?? null,
+      spotify_url: row.spotify_url ?? null,
+      amazon_music_url: row.amazon_music_url ?? null,
+      podcast_index_url: row.podcast_index_url ?? null,
+      listen_notes_url: row.listen_notes_url ?? null,
+      castbox_url: row.castbox_url ?? null,
+      x_url: row.x_url ?? null,
+      facebook_url: row.facebook_url ?? null,
+      instagram_url: row.instagram_url ?? null,
+      tiktok_url: row.tiktok_url ?? null,
+      youtube_url: row.youtube_url ?? null,
     };
   }
 
@@ -453,7 +467,9 @@ export async function publicRoutes(app: FastifyInstance) {
         .prepare(
           `SELECT id, title, slug, description, language, author_name, artwork_url, artwork_path, site_url, explicit, created_at,
                 COALESCE(public_feed_disabled, 0) AS public_feed_disabled,
-                COALESCE(subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled
+                COALESCE(subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled,
+                apple_podcasts_url, spotify_url, amazon_music_url, podcast_index_url, listen_notes_url, castbox_url,
+                x_url, facebook_url, instagram_url, tiktok_url, youtube_url
          FROM podcasts ${whereClause} ${orderClause} LIMIT ? OFFSET ?`,
         )
         .all(...[...args, limit, offset]) as Record<string, unknown>[];
@@ -510,7 +526,10 @@ export async function publicRoutes(app: FastifyInstance) {
         .prepare(
           `SELECT id, title, slug, description, language, author_name, artwork_url, artwork_path, site_url, explicit,
                 COALESCE(public_feed_disabled, 0) AS public_feed_disabled,
-                COALESCE(subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled
+                COALESCE(subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled,
+                link_domain, managed_domain, managed_sub_domain,
+                apple_podcasts_url, spotify_url, amazon_music_url, podcast_index_url, listen_notes_url, castbox_url,
+                x_url, facebook_url, instagram_url, tiktok_url, youtube_url
          FROM podcasts WHERE slug = ?`,
         )
         .get(slug) as Record<string, unknown> | undefined;
@@ -521,6 +540,9 @@ export async function publicRoutes(app: FastifyInstance) {
       if (publicFeedDisabled && !subscriberOnlyFeedEnabled)
         return reply.status(404).send({ error: "Podcast not found" });
       const dto = publicPodcastDto(row) as Record<string, unknown>;
+      const settings = readSettings();
+      const canonicalUrl = getCanonicalFeedUrl(row as { link_domain?: string | null; managed_domain?: string | null; managed_sub_domain?: string | null }, settings);
+      if (canonicalUrl) dto.canonical_feed_url = canonicalUrl;
       const exportRow = db
         .prepare(
           `SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? AND public_base_url IS NOT NULL AND LENGTH(TRIM(public_base_url)) > 0 LIMIT 1`,

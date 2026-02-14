@@ -6,6 +6,7 @@ import { getPublicConfig } from '../api/public';
 import { me, isReadOnly } from '../api/auth';
 import { FullPageLoading } from '../components/Loading';
 import { EditShowDetailsDialog } from './EditShowDetailsDialog';
+import { EditSocialLinksDialog } from './EditSocialLinksDialog';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { PodcastHero } from '../components/PodcastDetail/PodcastHero';
 import { PodcastDetailsGrid } from '../components/PodcastDetail/PodcastDetailsGrid';
@@ -38,6 +39,7 @@ export function PodcastDetail() {
   const canManageShow = myRole === 'owner' || myRole === 'manager';
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [linksDialogOpen, setLinksDialogOpen] = useState(false);
 
   if (!id) return null;
   if (isLoading || (!podcast && isFetching)) return <FullPageLoading />;
@@ -58,6 +60,7 @@ export function PodcastDetail() {
           readOnly={readOnly}
           canManageShow={canManageShow}
           onEditClick={() => setDetailsDialogOpen(true)}
+          onLinksClick={() => setLinksDialogOpen(true)}
           centerTitle
         />
         <PodcastDetailsGrid podcast={podcast} publicFeedsEnabled={publicFeedsEnabled} />
@@ -68,6 +71,14 @@ export function PodcastDetail() {
           open
           podcastId={id}
           onClose={() => setDetailsDialogOpen(false)}
+        />
+      )}
+
+      {linksDialogOpen && (
+        <EditSocialLinksDialog
+          open
+          podcastId={id}
+          onClose={() => setLinksDialogOpen(false)}
         />
       )}
 

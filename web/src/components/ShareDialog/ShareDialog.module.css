@@ -165,10 +165,12 @@
 
 .backLink {
   all: unset;
+  display: block;
   cursor: pointer;
   font-size: 0.875rem;
   color: var(--accent);
   margin-top: 0.25rem;
+  text-align: center;
 }
 
 .backLink:hover {

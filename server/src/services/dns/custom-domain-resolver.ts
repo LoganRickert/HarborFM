@@ -1,5 +1,34 @@
 import { db } from "../../db/index.js";
 import { readSettings } from "../../modules/settings/index.js";
+import type { AppSettings } from "../../modules/settings/routes.js";
+
+/**
+ * Get the canonical feed URL for a podcast when it has an active custom domain.
+ * Returns https://{domain}/ or null. Uses same "active" logic as getPodcastByHost.
+ */
+export function getCanonicalFeedUrl(
+  row: {
+    link_domain?: string | null;
+    managed_domain?: string | null;
+    managed_sub_domain?: string | null;
+  },
+  settings: AppSettings,
+): string | null {
+  const link = row.link_domain?.trim();
+  if (link && settings.dns_allow_linking_domain) {
+    return `https://${link}/`;
+  }
+  const managed = row.managed_domain?.trim();
+  if (managed && settings.dns_default_allow_domain) {
+    return `https://${managed}/`;
+  }
+  const sub = row.managed_sub_domain?.trim();
+  const defaultDomain = (settings.dns_default_domain ?? "").trim();
+  if (sub && defaultDomain && settings.dns_default_allow_sub_domain) {
+    return `https://${sub}.${defaultDomain}/`;
+  }
+  return null;
+}
 
 /**
  * Resolve request host to a podcast for custom-domain redirect.

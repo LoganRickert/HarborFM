@@ -16,6 +16,8 @@ import {
   FeedEpisodeHeader,
   FeedSubscriberOnlyMessage,
   SubscriptionInfoDialog,
+  PodcastLinksCard,
+  hasPodcastLinks,
 } from '../components/Feed';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedEpisode.module.css';
@@ -176,6 +178,12 @@ export function FeedEpisode({
               </div>
             )}
           </div>
+
+          {hasPodcastLinks(podcast) && (
+            <div className={styles.linksCardWrap}>
+              <PodcastLinksCard podcast={podcast} />
+            </div>
+          )}
         </main>
       </div>
 

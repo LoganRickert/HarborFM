@@ -1,3 +1,8 @@
+/* Links card spacing */
+.linksCardWrap {
+  margin-top: 1rem;
+}
+
 /* Player section */
 .player {
   margin-bottom: 1rem;
