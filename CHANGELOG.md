@@ -1,10 +1,21 @@
 # Changelog
 
-## v1.0.0 - 2026-02-13
+## v1.1 - 2026-02-13
+
+- **Cast (hosts & guests):** Add cast members to podcasts and episodes; assign hosts and guests per episode; episode cast shown on public feed; cast list filters out already-assigned members.
+- **Listen on & Follow links:** Per-podcast links for Apple Podcasts, Spotify, Amazon Music, and other platforms; social links (X, Facebook, Instagram, TikTok, YouTube).
+- **Share & embed:** Share button on episode page with share dialog and embed options.
+- **Analytics:** Improved analytics view page.
+- **Public feed:** Episode list supports pagination, server-side search, and sort (newest/oldest).
+- **Dashboard sort:** Podcast list now sorts by `created_at` instead of `updated_at` for newest/oldest.
+- **Seed script:** `pnpm run db:seed-podcast-episodes` to create a podcast with 100 episodes and cast assignments.
+- **Docs & install:** Updated documentation; note for `COOKIE_SECURE=false` when using HTTP; install and update script fixes.
+
+## v1.0 - 2026-02-13
 
 Officially version 1.0!
 
-## v0.9.0 - 2026-02-12
+## v0.9 - 2026-02-12
 
 - **API keys:** Optional name and expiry (`valid_until`); can be disabled or restricted to a `valid_from` datetime.
 - **Subscription tokens:** Per-podcast tokenized RSS for private or subscriber-only feeds; optional validity window and per-user limit on tokens.

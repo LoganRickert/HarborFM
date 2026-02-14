@@ -1,7 +1,7 @@
 {
   "name": "harborfm",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Open source podcast creator.",
   "scripts": {
     "dev": "pnpm run dev:server & pnpm run dev:web",
