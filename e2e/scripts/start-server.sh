@@ -11,10 +11,13 @@ export NODE_ENV="${NODE_ENV:-development}"
 export RATE_LIMIT_MAX="${RATE_LIMIT_MAX:-2000}"
 export RATE_LIMIT_TIME_WINDOW="${RATE_LIMIT_TIME_WINDOW:-1 minute}"
 
+echo "$E2E_DIR/server.log"
+
 # Ensure server is built
 pnpm --filter server build 1>/dev/null 2>&1 || true
 
 cd "$ROOT"
+
 node server/dist/app.js 1>>"$E2E_DIR/server.log" 2>&1 &
 echo $! > "$E2E_DIR/server.pid"
 

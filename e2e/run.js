@@ -183,6 +183,7 @@ async function main() {
     join(E2E_DIR, 'tests', 'Auth', 'auth.js'),
     join(E2E_DIR, 'tests', 'Podcasts', 'podcasts.js'),
     join(E2E_DIR, 'tests', 'Episodes', 'episodes.js'),
+    join(E2E_DIR, 'tests', 'Call', 'call.js'),
     join(E2E_DIR, 'tests', 'Public', 'public.js'),
     join(E2E_DIR, 'tests', 'Settings', 'settings.js'),
     join(E2E_DIR, 'tests', 'Users', 'users.js'),

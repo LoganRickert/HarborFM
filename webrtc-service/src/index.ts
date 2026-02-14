@@ -95,6 +95,8 @@ app.addContentTypeParser(/^application\/json\b/i, { parseAs: "string" }, (req, b
   }
 });
 
+app.get("/health", async (_request, reply) => reply.send({ ok: true }));
+
 app.post<{
   Body: { roomId?: string };
   Reply: { roomId: string; rtpCapabilities: mediasoup.types.RtpCapabilities };
@@ -150,7 +152,9 @@ app.post<{
   if (!room) return reply.status(404).send({ error: "Room not found" });
 
   const audioProducers = Array.from(room.producers.values()).filter((p) => p.kind === "audio");
+  console.log("[webrtc] POST /start-recording roomId=%s totalProducers=%d audioProducers=%d", roomId, room.producers.size, audioProducers.length);
   if (audioProducers.length === 0) {
+    console.log("[webrtc] POST /start-recording roomId=%s rejected: no audio producer", roomId);
     return reply.status(400).send({ error: "No audio producer in room" });
   }
 
@@ -232,6 +236,7 @@ app.post<{
     for (const c of consumers) await c.resume();
 
     recordingByRoom.set(roomId, { ...meta, ffmpeg, plainTransports, consumers });
+    console.log("[webrtc] POST /start-recording roomId=%s started ok", roomId);
     return reply.send({ ok: true });
   } catch (err) {
     request.log.error({ err }, "Failed to start recording");
@@ -245,6 +250,7 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
   if (!roomId) return reply.status(400).send({ error: "roomId required" });
   const state = recordingByRoom.get(roomId);
   recordingByRoom.delete(roomId);
+  console.log("[webrtc] POST /stop-recording roomId=%s hadState=%s", roomId, !!state);
   if (!state) return reply.send({ ok: true });
 
   let callbackFired = false;
@@ -253,7 +259,9 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
     callbackFired = true;
     const secret = state.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
     if (MAIN_APP_URL && secret) {
-      fetch(`${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-segment`, {
+      const callbackUrl = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-segment`;
+      request.log.info({ callbackUrl, filePath: state.filePathRelative }, "Firing recording callback");
+      fetch(callbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
         body: JSON.stringify({
@@ -265,8 +273,15 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
           sessionId: state.sessionId,
         }),
       })
-        .then((res) => { if (!res.ok) request.log.warn({ status: res.status }, "Recording callback failed"); })
-        .catch((err) => request.log.error(err, "Recording callback failed"));
+        .then(async (res) => {
+          if (res.ok) {
+            request.log.info({ status: res.status }, "Recording callback succeeded");
+          } else {
+            const body = await res.text();
+            request.log.warn({ status: res.status, body }, "Recording callback failed");
+          }
+        })
+        .catch((err) => request.log.error({ err }, "Recording callback failed"));
     }
   };
 
@@ -304,10 +319,11 @@ const socketTransports = new Map<unknown, WebRtcTransport>();
 const wsHandler = (socket: any, req: any) => {
   const url = new URL(req.url ?? "", `http://${req.headers?.host ?? "localhost"}`);
   const roomId = url.searchParams.get("roomId");
-  if (!roomId) { socket.close(); return; }
+  if (!roomId) { console.log("[webrtc] WS rejected: no roomId"); socket.close(); return; }
   const room = getRoom(roomId);
-  if (!room) { socket.close(); return; }
+  if (!room) { console.log("[webrtc] WS rejected: room not found", roomId); socket.close(); return; }
   socketRooms.set(socket, roomId);
+  console.log("[webrtc] WS connected roomId=%s producers=%d", roomId, room.producers.size);
 
   socket.on("message", async (raw: Buffer | ArrayBuffer | Buffer[]) => {
     const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
@@ -321,6 +337,7 @@ const wsHandler = (socket: any, req: any) => {
     if (!roomState) return;
     try {
       if (type === "getRouterRtpCapabilities") {
+        console.log("[webrtc] WS roomId=%s getRouterRtpCapabilities", roomId);
         socket.send(JSON.stringify({ type: "routerRtpCapabilities", rtpCapabilities: roomState.router.rtpCapabilities }));
         return;
       }
@@ -336,6 +353,7 @@ const wsHandler = (socket: any, req: any) => {
           roomState.transports.delete(transport.id);
           socketTransports.delete(socket);
         });
+        console.log("[webrtc] WS roomId=%s createWebRtcTransport id=%s", roomId, transport.id);
         socket.send(JSON.stringify({
           type: "webRtcTransportCreated",
           id: transport.id,
@@ -353,6 +371,7 @@ const wsHandler = (socket: any, req: any) => {
           return;
         }
         await transport.connect({ dtlsParameters });
+        console.log("[webrtc] WS roomId=%s connectWebRtcTransport transportId=%s", roomId, (msg as { transportId?: string }).transportId);
         socket.send(JSON.stringify({ type: "webRtcTransportConnected" }));
         return;
       }
@@ -366,6 +385,7 @@ const wsHandler = (socket: any, req: any) => {
         const producer = await transport.produce({ kind, rtpParameters });
         roomState.producers.set(producer.id, producer);
         producer.on("@close", () => roomState.producers.delete(producer.id));
+        console.log("[webrtc] WS roomId=%s produce kind=%s id=%s totalProducers=%d", roomId, kind, producer.id, roomState.producers.size);
         socket.send(JSON.stringify({ type: "produced", id: producer.id, kind: producer.kind }));
         for (const [s, r] of socketRooms.entries()) {
           if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
@@ -398,11 +418,13 @@ const wsHandler = (socket: any, req: any) => {
       }
       if (type === "getProducers") {
         const ids = Array.from(roomState.producers.keys());
+        console.log("[webrtc] WS roomId=%s getProducers count=%d ids=%s", roomId, ids.length, ids.join(",") || "none");
         socket.send(JSON.stringify({ type: "producers", producerIds: ids }));
         return;
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
+      console.log("[webrtc] WS roomId=%s error type=%s: %s", roomId, type, message);
       socket.send(JSON.stringify({ type: "error", error: message }));
     }
   });

@@ -588,7 +588,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 });
               });
           } else {
-            broadcastToSession(sid, { type: "recordingStarted" });
+            broadcastToSession(sid, {
+              type: "recordingError",
+              error: "WebRTC not configured or call not ready for recording",
+            });
           }
           return;
         }
@@ -606,8 +609,12 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               .then(() => {
                 broadcastToSession(sid, { type: "recordingStopped" });
               })
-              .catch(() => {
-                broadcastToSession(sid, { type: "recordingStopped" });
+              .catch((err) => {
+                req.log.warn({ err, roomId: session.roomId }, "WebRTC stop-recording failed");
+                broadcastToSession(sid, {
+                  type: "recordingStopFailed",
+                  error: "Failed to stop recording",
+                });
               });
           } else {
             broadcastToSession(sid, { type: "recordingStopped" });

@@ -268,6 +268,83 @@ export async function processEpisodeAudio(jar, episodeId) {
   return res.json();
 }
 
+/** WebSocket URL for call signaling (derived from baseURL). */
+export function callWsUrl() {
+  const u = baseURL.replace(/^https?:/, (s) => (s === 'https:' ? 'wss:' : 'ws:'));
+  return `${u}/call/ws`;
+}
+
+/**
+ * Start a group call for an episode. Returns { token, sessionId, joinUrl, webrtcUrl?, roomId?, webrtcUnavailable? }.
+ * When webrtc is not configured: webrtcUnavailable may be true; webrtcUrl/roomId absent.
+ */
+export async function startCall(jar, episodeId, opts = {}) {
+  const res = await apiFetch('/call/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ episodeId, password: opts.password ?? null }),
+  }, jar);
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Start call failed: ${res.status} ${t}`);
+  }
+  return res.json();
+}
+
+/**
+ * Connect to call WebSocket as host. Sends { type: 'host', sessionId } and returns a promise that resolves
+ * when 'joined' is received. Requires jar (cookie jar from login) for JWT auth.
+ * @param {string} sessionId - from startCall
+ * @param {{ jar?: object, onMessage?: (msg: object) => void }} opts - jar required for host auth
+ * @returns {Promise<{ ws: WebSocket, participants?: unknown[], webrtcUrl?: string, roomId?: string }>}
+ */
+export async function callWebSocketConnect(sessionId, opts = {}) {
+  const { default: WebSocket } = await import('ws');
+  const headers = {};
+  if (opts.jar) {
+    const cookie = Object.entries(opts.jar.get())
+      .map(([k, v]) => `${k}=${v}`)
+      .join('; ');
+    if (cookie) headers.Cookie = cookie;
+  }
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(callWsUrl(), { headers });
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error('call WebSocket connect timeout'));
+    }, 10000);
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ type: 'host', sessionId }));
+    });
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'joined') {
+          clearTimeout(timeout);
+          resolve({
+            ws,
+            participants: msg.participants,
+            webrtcUrl: msg.webrtcUrl,
+            roomId: msg.roomId,
+          });
+        } else if (opts.onMessage) {
+          opts.onMessage(msg);
+        }
+      } catch {
+        // ignore
+      }
+    });
+    ws.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+    ws.on('close', (code) => {
+      clearTimeout(timeout);
+      if (code !== 1000) reject(new Error(`call WebSocket closed: ${code}`));
+    });
+  });
+}
+
 /**
  * Add a recorded segment to an episode (multipart upload). Uses test mp3 by default.
  * Returns the created segment object.

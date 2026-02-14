@@ -39,7 +39,10 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
-  const { remoteTracks, error: mediaError, setMuted } = useMediasoupRoom(effectiveWebrtcUrl, effectiveRoomId);
+  const { remoteTracks, error: mediaError, ready: producerReady, setMuted } = useMediasoupRoom(
+    effectiveWebrtcUrl,
+    effectiveRoomId,
+  );
   const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
 
   useEffect(() => {
@@ -80,8 +83,13 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
           setRecordingError(null);
           setRecordingProcessing(true);
         } else if (msg.type === 'recordingError') {
+          setRecording(false);
           setRecordingProcessing(false);
           setRecordingError(msg.error ?? 'Recording failed');
+        } else if (msg.type === 'recordingStopFailed') {
+          setRecording(false);
+          setRecordingProcessing(false);
+          setRecordingError(msg.error ?? 'Failed to stop recording');
         } else if (msg.type === 'segmentRecorded') {
           setRecording(false);
           setRecordingError(null);
@@ -252,6 +260,7 @@ export function CallPanel({ sessionId, joinUrl, webrtcUrl, roomId, mediaUnavaila
               className={styles.recordSegmentBtn}
               onClick={handleStartRecording}
               aria-label="Record segment from call"
+              data-producer-ready={effectiveWebrtcUrl && producerReady ? 'true' : undefined}
             >
               <Mic size={16} strokeWidth={2} aria-hidden />
               Record segment

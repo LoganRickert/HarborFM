@@ -4,6 +4,14 @@
   "type": "module",
   "scripts": {
     "e2e": "bash scripts/run-e2e.sh",
-    "e2e:run": "node run.js"
+    "e2e:run": "node run.js",
+    "e2e:webrtc": "bash scripts/run-e2e-webrtc.sh"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.19.9"
   }
 }

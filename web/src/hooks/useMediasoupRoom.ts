@@ -4,6 +4,7 @@ import * as mediasoupClient from 'mediasoup-client';
 export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string | undefined) {
   const [remoteTracks, setRemoteTracks] = useState<Map<string, MediaStreamTrack>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
   const producerRef = useRef<mediasoupClient.types.Producer | null>(null);
   const setMutedRef = useRef<(muted: boolean) => void>((muted) => {
@@ -13,6 +14,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
+    setReady(false);
 
     const url = webrtcUrl;
     const rid = roomId;
@@ -118,6 +120,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
         const producer = await sendTransport.produce({ track });
         if (closed) return;
         producerRef.current = producer;
+        setReady(true);
         const myProducerId = producer.id;
 
         webrtcWs.send(JSON.stringify({ type: 'createWebRtcTransport' }));
@@ -214,6 +217,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
   return {
     remoteTracks,
     error,
+    ready,
     setMuted: (muted: boolean) => setMutedRef.current(muted),
   };
 }

@@ -1,6 +1,10 @@
 data/
 secrets/
 reports/
+test-results/
 server.log
 server.pid
+webrtc.log
+webrtc.pid
 *.log
+assets/

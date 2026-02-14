@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" fill="none">
+  <defs>
+    <radialGradient id="glow-center" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#00ffd0;stop-opacity:0.08" />
+      <stop offset="60%" style="stop-color:#00ffd0;stop-opacity:0.03" />
+      <stop offset="100%" style="stop-color:#00d4aa;stop-opacity:0" />
+    </radialGradient>
+    <linearGradient id="stroke-fade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00ffd0;stop-opacity:0" />
+      <stop offset="20%" style="stop-color:#00ffd0;stop-opacity:0.06" />
+      <stop offset="50%" style="stop-color:#00ffd0;stop-opacity:0.09" />
+      <stop offset="80%" style="stop-color:#00ffd0;stop-opacity:0.06" />
+      <stop offset="100%" style="stop-color:#00ffd0;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  <!-- Soft central glow -->
+  <circle cx="600" cy="400" r="500" fill="url(#glow-center)"/>
+  <!-- Concentric rings (broadcast signal from center) -->
+  <circle cx="600" cy="400" r="120" stroke="#00ffd0" stroke-width="1" fill="none" opacity="0.09"/>
+  <circle cx="600" cy="400" r="220" stroke="#00ffd0" stroke-width="0.8" fill="none" opacity="0.08"/>
+  <circle cx="600" cy="400" r="340" stroke="#00ffd0" stroke-width="0.6" fill="none" opacity="0.06"/>
+  <circle cx="600" cy="400" r="480" stroke="#00ffd0" stroke-width="0.5" fill="none" opacity="0.045"/>
+  <!-- Soft horizontal waves (frequency bands) -->
+  <path d="M 0 150 Q 300 130 600 150 T 1200 150" stroke="url(#stroke-fade)" stroke-width="1" fill="none"/>
+  <path d="M 0 280 Q 400 260 800 280 T 1200 270" stroke="url(#stroke-fade)" stroke-width="0.8" fill="none"/>
+  <path d="M 0 400 Q 600 380 1200 400" stroke="url(#stroke-fade)" stroke-width="0.6" fill="none"/>
+  <path d="M 0 520 Q 400 540 800 520 T 1200 530" stroke="url(#stroke-fade)" stroke-width="0.8" fill="none"/>
+  <path d="M 0 650 Q 300 670 600 650 T 1200 650" stroke="url(#stroke-fade)" stroke-width="1" fill="none"/>
+  <!-- Subtle diagonal accent (one soft band) -->
+  <path d="M -50 750 Q 400 400 850 50" stroke="#00ffd0" stroke-width="0.5" fill="none" opacity="0.05"/>
+</svg>
