@@ -12,17 +12,18 @@ const DATA_DIR = process.env.E2E_DATA_DIR || join(E2E_DIR, 'data');
 
 let episodeId: string;
 
-function getSetupToken(): string {
+function getSetupToken(): string | null {
   const path = join(DATA_DIR, 'setup-token.txt');
-  if (!existsSync(path)) throw new Error('setup-token.txt not found');
+  if (!existsSync(path)) return null;
   return readFileSync(path, 'utf8').trim();
 }
 
 test.describe('Call recording golden path', () => {
   test.beforeEach(async ({ page }) => {
     const token = getSetupToken();
-    console.log('[call-recording] Completing setup...');
-    await page.request.post(`${API_BASE}/setup/complete?id=${encodeURIComponent(token)}`, {
+    if (token) {
+      console.log('[call-recording] Completing setup...');
+      await page.request.post(`${API_BASE}/setup/complete?id=${encodeURIComponent(token)}`, {
       data: {
         email: 'admin@e2e.test',
         password: 'admin-password-123',
@@ -32,6 +33,7 @@ test.describe('Call recording golden path', () => {
         import_pixabay_assets: false,
       },
     });
+    }
 
     console.log('[call-recording] Logging in...');
     const loginRes = await page.request.post(`${API_BASE}/auth/login`, {
@@ -129,5 +131,64 @@ test.describe('Call recording golden path', () => {
     }
     expect(recorded).toBeDefined();
     expect(recorded!.duration_sec).toBeGreaterThanOrEqual(0);
+  });
+
+  test('End call', async ({ page }) => {
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /end call/i }).click();
+    await expect(page.getByRole('region', { name: /group call/i })).toHaveCount(0);
+  });
+
+  test('Copy join link', async ({ page }) => {
+    // Clipboard is often blocked in automation; stub so the UI still shows "Copied"
+    await page.addInitScript(() => {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText = () => Promise.resolve();
+      }
+    });
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    const panel = page.getByRole('region', { name: /group call/i });
+    await expect(panel).toBeVisible({ timeout: 10000 });
+    await panel.getByRole('button', { name: /copy join link/i }).click();
+    await expect(panel.getByRole('button', { name: /copied/i })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('Host sees self in participants', async ({ page }) => {
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/Participants \(1\)/)).toBeVisible();
+    await expect(page.getByText(/\(Host\)/)).toBeVisible();
+  });
+
+  test('Guest joins and host sees them', async ({ page, context }) => {
+    test.setTimeout(45000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+
+    const joinUrlRaw = await page.getByRole('textbox', { name: 'Join link' }).inputValue();
+    const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;
+
+    const browser = context.browser()!;
+    const guestContext = await browser.newContext({
+      baseURL,
+      permissions: ['microphone'],
+    });
+    const guestPage = await guestContext.newPage();
+    try {
+      await guestPage.goto(joinUrl);
+      await guestPage.getByLabel(/your name/i).fill('E2E Guest');
+      await guestPage.getByRole('button', { name: /join call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
+
+      await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
+    } finally {
+      await guestContext.close();
+    }
   });
 });
