@@ -70,6 +70,12 @@ export function getSecretsDir() {
   return SECRETS_DIR;
 }
 
+/** Directory where WebRTC service writes recordings. Server copies from here to segment path. */
+export function getWebrtcRecordingsDir(): string {
+  const dir = process.env.WEBRTC_RECORDINGS_DIR?.trim();
+  return dir ? resolve(dir) : join(DATA_DIR, "webrtc-recordings");
+}
+
 export function ensureSecretsDir() {
   if (!existsSync(SECRETS_DIR)) {
     mkdirSync(SECRETS_DIR, { recursive: true });

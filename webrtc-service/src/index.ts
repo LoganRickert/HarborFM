@@ -172,10 +172,11 @@ app.post<{
   for (let i = 0; i < audioProducers.length; i++) {
     try {
       const stats = await audioProducers[i]!.getStats();
-      const bytesReceived = (stats as Array<{ bytesReceived?: number }>).reduce((sum, s) => sum + (s.bytesReceived ?? 0), 0);
-      const packetsReceived = (stats as Array<{ packetsReceived?: number }>).reduce((sum, s) => sum + (s.packetsReceived ?? 0), 0);
+      // mediasoup Producer stats use byteCount/packetCount (RtpStreamRecvStats), not bytesReceived/packetsReceived
+      const bytesReceived = (stats as Array<{ byteCount?: number }>).reduce((sum, s) => sum + (s.byteCount ?? 0), 0);
+      const packetsReceived = (stats as Array<{ packetCount?: number }>).reduce((sum, s) => sum + (s.packetCount ?? 0), 0);
       const paused = audioProducers[i]!.paused;
-      console.log("[webrtc] start-recording roomId=%s producer %d id=%s paused=%s bytesReceived=%d packetsReceived=%d",
+      console.log("[webrtc] start-recording roomId=%s producer %d id=%s paused=%s byteCount=%d packetCount=%d",
         roomId, i, audioProducers[i]!.id, paused, bytesReceived, packetsReceived);
       if (bytesReceived > 0 || packetsReceived > 0) allProducersNoPackets = false;
       if (paused) anyProducerPaused = true;

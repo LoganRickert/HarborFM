@@ -6,6 +6,7 @@ ROOT="$(cd "$E2E_DIR/.." && pwd)"
 PORT="${E2E_PORT:-3099}"
 export DATA_DIR="$E2E_DIR/data"
 export SECRETS_DIR="$E2E_DIR/secrets"
+export WEBRTC_RECORDINGS_DIR="$E2E_DIR/webrtc-recordings"
 export PORT
 export NODE_ENV="${NODE_ENV:-development}"
 export RATE_LIMIT_MAX="${RATE_LIMIT_MAX:-2000}"

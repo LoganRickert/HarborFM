@@ -139,6 +139,7 @@ export INSTALL_DIR
 echo "Ensuring harborfm-docker-data directories exist..."
 mkdir -p \
   "$INSTALL_DIR/harborfm-docker-data/data" \
+  "$INSTALL_DIR/harborfm-docker-data/webrtc" \
   "$INSTALL_DIR/harborfm-docker-data/secrets" \
   "$INSTALL_DIR/harborfm-docker-data/certbot/webroot" \
   "$INSTALL_DIR/harborfm-docker-data/certbot/certs" \

@@ -17,9 +17,11 @@ services:
       PORT: "3001"
       DATA_DIR: /data
       SECRETS_DIR: /secrets
+      WEBRTC_RECORDINGS_DIR: /webrtc
     volumes:
       - harborfm_data:/data
       - harborfm_secrets:/secrets
+      - webrtc_recordings:/webrtc
     networks:
       - internal
     healthcheck:
@@ -144,9 +146,9 @@ services:
       MEDIASOUP_ANNOUNCED_IP: "${MEDIASOUP_ANNOUNCED_IP:-}"
       MAIN_APP_URL: "${MAIN_APP_URL:-http://harborfm:3001}"
       RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
-      RECORDING_DATA_DIR: "/data"
+      RECORDING_DATA_DIR: "/webrtc"
     volumes:
-      - harborfm_data:/data
+      - webrtc_recordings:/webrtc
     ports:
       - "3002:3002"
       - "41000-41100:41000-41100/udp"
@@ -233,6 +235,12 @@ volumes:
       type: none
       o: bind
       device: ${INSTALL_DIR:-.}/harborfm-docker-data/whisper/cache
+  webrtc_recordings:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${INSTALL_DIR:-.}/harborfm-docker-data/webrtc
 
 networks:
   internal:

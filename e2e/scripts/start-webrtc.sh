@@ -5,7 +5,7 @@ E2E_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ROOT="$(cd "$E2E_DIR/.." && pwd)"
 WEBRTC_PORT="${WEBRTC_PORT:-3098}"
 export WEBRTC_PORT
-export RECORDING_DATA_DIR="${E2E_DATA_DIR:-$E2E_DIR/data}"
+export RECORDING_DATA_DIR="${E2E_DIR}/webrtc-recordings"
 export MAIN_APP_URL="${MAIN_APP_BASE_URL:-http://127.0.0.1:${E2E_PORT:-3099}}"
 export PORT="$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="${RECORDING_CALLBACK_SECRET:-e2e-secret}"

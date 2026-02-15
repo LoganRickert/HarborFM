@@ -26,8 +26,10 @@ import {
   type CallParticipant,
 } from "../../services/callSession.js";
 import { getWebRtcConfig } from "../../services/webrtcConfig.js";
-import { join } from "path";
-import { pathRelativeToData, segmentPath } from "../../services/paths.js";
+import { join, resolve } from "path";
+import { copyFileSync, unlinkSync, existsSync } from "fs";
+import { segmentPath, getWebrtcRecordingsDir } from "../../services/paths.js";
+import { assertResolvedPathUnder } from "../../services/paths.js";
 import { createSegmentFromPath } from "../../services/segmentFromRecording.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { RECORD_MIN_FREE_BYTES } from "../../config.js";
@@ -480,7 +482,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         body: {
           type: "object",
           properties: {
-            filePath: { type: "string", description: "Path relative to DATA_DIR" },
+            filePath: { type: "string", description: "Path relative to WebRTC recordings dir (e.g. recordings/segmentId.wav)" },
             segmentId: { type: "string" },
             episodeId: { type: "string" },
             podcastId: { type: "string" },
@@ -506,10 +508,22 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         sessionId?: string | null;
       };
       try {
-        const { getDataDir } = await import("../../services/paths.js");
-        const resolvedPath = join(getDataDir(), body.filePath);
+        const webrtcDir = getWebrtcRecordingsDir();
+        const sourcePath = resolve(join(webrtcDir, body.filePath));
+        assertResolvedPathUnder(sourcePath, webrtcDir);
+        if (!existsSync(sourcePath)) {
+          return reply.status(400).send({ error: "Recording file not found" });
+        }
+        const destPath = segmentPath(
+          body.podcastId,
+          body.episodeId,
+          body.segmentId,
+          "wav",
+        );
+        copyFileSync(sourcePath, destPath);
+        unlinkSync(sourcePath);
         const row = await createSegmentFromPath(
-          resolvedPath,
+          destPath,
           body.segmentId,
           body.episodeId,
           body.podcastId,
@@ -919,13 +933,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             session.podcastId
           ) {
             const segId = nanoid();
-            const filePath = segmentPath(
-              session.podcastId,
-              session.episodeId,
-              segId,
-              "wav",
-            );
-            const filePathRelative = pathRelativeToData(filePath);
+            const filePathRelative = `recordings/${segId}.wav`;
             const startRecordingUrl = `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/start-recording`;
             const payload = {
               roomId: session.roomId,

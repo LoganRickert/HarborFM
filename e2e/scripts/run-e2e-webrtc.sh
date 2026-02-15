@@ -18,8 +18,8 @@ export RECORDING_CALLBACK_SECRET="e2e-secret"
 export MAIN_APP_BASE_URL="http://127.0.0.1:$PORT"
 
 # Clean and create data/secrets
-rm -rf "$E2E_DIR/data" "$E2E_DIR/secrets" "$E2E_DIR/reports"
-mkdir -p "$E2E_DIR/data" "$E2E_DIR/secrets" "$E2E_DIR/reports" "$E2E_DIR/assets"
+rm -rf "$E2E_DIR/data" "$E2E_DIR/secrets" "$E2E_DIR/webrtc-recordings" "$E2E_DIR/reports"
+mkdir -p "$E2E_DIR/data" "$E2E_DIR/secrets" "$E2E_DIR/webrtc-recordings" "$E2E_DIR/reports" "$E2E_DIR/assets"
 
 # Create sine-wave WAV for Chromium --use-file-for-fake-audio-capture (real audio frames for mediasoup)
 if command -v ffmpeg &>/dev/null; then
