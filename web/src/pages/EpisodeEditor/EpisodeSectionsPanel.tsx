@@ -1,6 +1,7 @@
 import { Mic, Library } from 'lucide-react';
 import { SegmentRow } from './SegmentRow';
 import type { EpisodeSegment } from '../../api/segments';
+import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeSectionsPanelProps {
@@ -95,9 +96,9 @@ export function EpisodeSectionsPanel({
       )}
 
       {segmentsLoading ? (
-        <p className={styles.sectionSub}>Loading sections...</p>
+        <p className={sharedStyles.pdCardEmptyState}>Loading sections...</p>
       ) : segments.length === 0 ? (
-        <p className={styles.sectionSub}>No sections yet. Record or add from library above.</p>
+        <p className={sharedStyles.pdCardEmptyState}>No sections yet. Record or add from library above.</p>
       ) : (
         <ul className={styles.segmentList}>
           {segments.map((seg, index) => (

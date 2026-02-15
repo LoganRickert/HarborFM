@@ -415,14 +415,49 @@
 
 .recordRow {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
   align-self: stretch;
 }
 
+.recordRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.recordRowRecording .recordRowLeft {
+  flex: 1;
+}
+
+.recordRowMuteBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.recordRowMuteBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent, #00d4aa);
+}
+
+.recordRowMuteBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .recordRowRecording {
-  justify-content: space-between;
+  /* space-between from .recordRow keeps layout */
 }
 
 .recordDurationBadge {

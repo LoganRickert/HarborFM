@@ -422,21 +422,9 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
       });
   };
 
-  console.log("[webrtc] stop-recording roomId=%s closing %d consumers, %d transports, sending SIGINT to FFmpeg", roomId, state.consumers.length, state.plainTransports.length);
-  for (const c of state.consumers) {
-    try {
-      c.close();
-    } catch (e) {
-      request.log.warn({ err: e }, "Error closing consumer");
-    }
-  }
-  for (const t of state.plainTransports) {
-    try {
-      t.close();
-    } catch (e) {
-      request.log.warn({ err: e }, "Error closing plain transport");
-    }
-  }
+  console.log("[webrtc] stop-recording roomId=%s sending SIGINT to FFmpeg (will close %d consumers, %d transports after exit)", roomId, state.consumers.length, state.plainTransports.length);
+  // SIGINT first so FFmpeg can flush its output buffers and finalize the WAV file.
+  // Closing consumers/transports first can leave FFmpeg stuck waiting for RTP.
   state.ffmpeg.kill("SIGINT");
   const sigkillDelayMs = 15000;
   const exitTimeout = setTimeout(() => {
@@ -445,6 +433,20 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
   }, sigkillDelayMs);
   state.ffmpeg.once("close", () => {
     clearTimeout(exitTimeout);
+    for (const c of state.consumers) {
+      try {
+        c.close();
+      } catch (e) {
+        request.log.warn({ err: e }, "Error closing consumer");
+      }
+    }
+    for (const t of state.plainTransports) {
+      try {
+        t.close();
+      } catch (e) {
+        request.log.warn({ err: e }, "Error closing plain transport");
+      }
+    }
     const filePath = join(RECORDING_DATA_DIR, state.filePathRelative);
     const exists = existsSync(filePath);
     const size = exists ? statSync(filePath).size : 0;

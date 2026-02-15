@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
 
-export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string | undefined) {
+export function useMediasoupRoom(
+  webrtcUrl: string | undefined,
+  roomId: string | undefined,
+  deviceId?: string,
+) {
   const [remoteTracks, setRemoteTracks] = useState<Map<string, MediaStreamTrack>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -81,7 +85,10 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
         await device.load({ routerRtpCapabilities: capsMsg.rtpCapabilities });
         if (closed) return;
 
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const audioConstraints: MediaTrackConstraints = deviceId
+          ? { deviceId: { exact: deviceId } }
+          : true;
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
         const micTrack = micStream.getAudioTracks()[0];
         if (!micTrack) throw new Error('No audio track');
 
@@ -277,7 +284,7 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId]);
+  }, [webrtcUrl, roomId, deviceId]);
 
   return {
     remoteTracks,

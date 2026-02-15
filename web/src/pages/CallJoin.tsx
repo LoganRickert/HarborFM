@@ -41,7 +41,7 @@ export function CallJoin() {
   const animationRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
-  const { remoteTracks, setMuted } = useMediasoupRoom(webrtcUrl, webrtcRoomId);
+  const { remoteTracks, setMuted } = useMediasoupRoom(webrtcUrl, webrtcRoomId, deviceId || undefined);
   const setMutedRef = useRef(setMuted);
   setMutedRef.current = setMuted;
 

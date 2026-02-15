@@ -217,6 +217,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const handleStartRecording = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'startRecording' }));
+      setRecordingSeconds(0);
       setRecording(true);
     }
   };
@@ -504,39 +505,62 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       {!showChatView && (
       <div className={styles.recordSection}>
         <div className={`${styles.recordRow} ${recording ? styles.recordRowRecording : ''}`}>
-          {recording ? (
-            <>
+          <span className={styles.recordRowLeft}>
+            {recording ? (
+              <>
+                <button
+                  type="button"
+                  className={styles.stopRecordBtn}
+                  onClick={handleStopRecording}
+                  aria-label="Stop recording"
+                >
+                  <Square size={16} strokeWidth={2} aria-hidden />
+                  Stop recording
+                </button>
+                <span className={styles.recordDurationBadge} aria-live="polite">
+                  {formatDurationHMS(recordingSeconds)}
+                </span>
+              </>
+            ) : (
               <button
                 type="button"
-                className={styles.stopRecordBtn}
-                onClick={handleStopRecording}
-                aria-label="Stop recording"
+                className={styles.recordSegmentBtn}
+                onClick={handleStartRecording}
+                disabled={recordDisabled}
+                title={recordDisabled ? recordDisabledMessage : undefined}
+                aria-label={
+                  recordDisabled
+                    ? (recordDisabledMessage ? `Record segment: ${recordDisabledMessage}` : 'Record segment from call (disabled)')
+                    : 'Record segment from call'
+                }
+                data-producer-ready={effectiveWebrtcUrl && producerReady ? 'true' : undefined}
               >
-                <Square size={16} strokeWidth={2} aria-hidden />
-                Stop recording
+                <Mic size={16} strokeWidth={2} aria-hidden />
+                Record segment
               </button>
-              <span className={styles.recordDurationBadge} aria-live="polite">
-                {formatDurationHMS(recordingSeconds)}
-              </span>
-            </>
-          ) : (
-            <button
-              type="button"
-              className={styles.recordSegmentBtn}
-              onClick={handleStartRecording}
-              disabled={recordDisabled}
-              title={recordDisabled ? recordDisabledMessage : undefined}
-              aria-label={
-                recordDisabled
-                  ? (recordDisabledMessage ? `Record segment: ${recordDisabledMessage}` : 'Record segment from call (disabled)')
-                  : 'Record segment from call'
-              }
-              data-producer-ready={effectiveWebrtcUrl && producerReady ? 'true' : undefined}
-            >
-              <Mic size={16} strokeWidth={2} aria-hidden />
-              Record segment
-            </button>
-          )}
+            )}
+          </span>
+          {(() => {
+            const host = participants.find((p) => p.isHost);
+            if (!host) return null;
+            return (
+              <button
+                type="button"
+                className={styles.recordRowMuteBtn}
+                onClick={() => handleSetMute(host.id, !host.muted)}
+                disabled={!effectiveWebrtcUrl || !producerReady}
+                aria-label={host.muted ? 'Unmute' : 'Mute'}
+                title={host.muted ? 'Unmute' : 'Mute'}
+              >
+                {host.muted ? (
+                  <MicOff size={16} strokeWidth={2} aria-hidden />
+                ) : (
+                  <Mic size={16} strokeWidth={2} aria-hidden />
+                )}
+                <span>{host.muted ? 'Unmute' : 'Mute'}</span>
+              </button>
+            );
+          })()}
         </div>
         {!minimized && recordingProcessing && (
           <p className={styles.recordingProcessing} role="status">

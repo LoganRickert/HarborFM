@@ -22,8 +22,6 @@ import {
   setParticipantMutedBySelf,
   setParticipantMutedByHost,
   setParticipantName,
-  type CallSession,
-  type CallParticipant,
 } from "../../services/callSession.js";
 import { getWebRtcConfig } from "../../services/webrtcConfig.js";
 import { join, resolve } from "path";
@@ -565,13 +563,6 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       let participantId: string | null = null;
       let isHost = false;
       let initialized = false;
-
-      const sendParticipants = (session: CallSession) => {
-        broadcastToSession(session.sessionId, {
-          type: "participants",
-          participants: session.participants,
-        });
-      };
 
       socket.on("message", (raw: Buffer | ArrayBuffer | Buffer[]) => {
         const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
