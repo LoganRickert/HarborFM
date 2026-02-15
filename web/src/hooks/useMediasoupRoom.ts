@@ -58,6 +58,12 @@ export function useMediasoupRoom(
       });
     }
 
+    function safeSend(ws: WebSocket | null, msg: object): void {
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    }
+
     async function run(wsUrl: string, roomIdParam: string) {
       try {
         const baseUrl = wsUrl.startsWith('ws') ? wsUrl : wsUrl.replace(/^http/, 'ws');
@@ -103,7 +109,7 @@ export function useMediasoupRoom(
           }
         };
 
-        webrtcWs.send(JSON.stringify({ type: 'getRouterRtpCapabilities' }));
+        safeSend(webrtcWs, { type: 'getRouterRtpCapabilities' });
         const capsMsg = (await waitFor('routerRtpCapabilities')) as { rtpCapabilities: mediasoupClient.types.RtpCapabilities };
         if (closed) return;
         device = new mediasoupClient.Device();
@@ -158,14 +164,12 @@ export function useMediasoupRoom(
         cleanupRef.current = () => {
           if (tickId != null) cancelAnimationFrame(tickId);
           const ws = webrtcWsRef.current;
-          if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'stopSoundboard' }));
-          }
+          safeSend(ws, { type: 'stopSoundboard' });
           ctxRef.current = null;
           ctx.close();
         };
 
-        webrtcWs.send(JSON.stringify({ type: 'createWebRtcTransport' }));
+        safeSend(webrtcWs, { type: 'createWebRtcTransport' });
         const sendTransportMsg = (await waitFor('webRtcTransportCreated')) as {
           id: string;
           iceParameters: mediasoupClient.types.IceParameters;
@@ -180,11 +184,11 @@ export function useMediasoupRoom(
           dtlsParameters: sendTransportMsg.dtlsParameters,
         });
         sendTransport.on('connect', async ({ dtlsParameters }, callback) => {
-          webrtcWs?.send(JSON.stringify({
+          safeSend(webrtcWs, {
             type: 'connectWebRtcTransport',
             transportId: sendTransportMsg.id,
             dtlsParameters,
-          }));
+          });
           await waitFor('webRtcTransportConnected');
           callback();
         });
@@ -201,16 +205,16 @@ export function useMediasoupRoom(
               payload.source = nextProduceSource;
               nextProduceSource = undefined;
             }
-            webrtcWs?.send(JSON.stringify(payload));
+            safeSend(webrtcWs, payload);
             const producedMsg = (await waitFor('produced')) as { id: string };
             if (closed) return;
             if (participantId && participantName) {
-              webrtcWs?.send(JSON.stringify({
+              safeSend(webrtcWs, {
                 type: 'associateProducer',
                 producerId: producedMsg.id,
                 participantId,
                 participantName,
-              }));
+              });
             }
             callback({ id: producedMsg.id });
           } catch (e) {
@@ -226,7 +230,7 @@ export function useMediasoupRoom(
         // Soundboard producer is created when panel opens (setSoundboardPanelOpen(true)),
         // and torn down when panel closes (setSoundboardPanelOpen(false)).
 
-        webrtcWs.send(JSON.stringify({ type: 'createWebRtcTransport' }));
+        safeSend(webrtcWs, { type: 'createWebRtcTransport' });
         const recvTransportMsg = (await waitFor('webRtcTransportCreated')) as {
           id: string;
           iceParameters: mediasoupClient.types.IceParameters;
@@ -241,22 +245,22 @@ export function useMediasoupRoom(
           dtlsParameters: recvTransportMsg.dtlsParameters,
         });
         recvTransport.on('connect', async ({ dtlsParameters }, callback) => {
-          webrtcWs?.send(JSON.stringify({
+          safeSend(webrtcWs, {
             type: 'connectWebRtcTransport',
             transportId: recvTransportMsg.id,
             dtlsParameters,
-          }));
+          });
           await waitFor('webRtcTransportConnected');
           callback();
         });
 
         async function consumeProducer(pid: string) {
-          webrtcWs?.send(JSON.stringify({
+          safeSend(webrtcWs, {
             type: 'consume',
             transportId: recvTransportMsg.id,
             producerId: pid,
             rtpCapabilities: device!.rtpCapabilities,
-          }));
+          });
           const consumedMsg = (await waitFor('consumed')) as {
             id: string;
             producerId: string;
@@ -273,7 +277,7 @@ export function useMediasoupRoom(
           return { consumer, source: consumedMsg.source };
         }
 
-        webrtcWs.send(JSON.stringify({ type: 'getProducers' }));
+        safeSend(webrtcWs, { type: 'getProducers' });
         const producersMsg = (await waitFor('producers')) as { producerIds: string[] };
         if (closed) return;
         const consumedProducerIds = new Set<string>();

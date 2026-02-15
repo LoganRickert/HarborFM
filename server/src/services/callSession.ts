@@ -78,7 +78,8 @@ function ensureHostAwayChecker(
       if (session.hostDisconnectedAt != null && session.hostDisconnectGraceMs != null) {
         shouldEnd = now >= session.hostDisconnectedAt + session.hostDisconnectGraceMs;
       } else {
-        // Missed socket close (e.g. server restart); use current state for grace
+        // No hostDisconnectedAt: host socket never closed. Use configured grace.
+        // lastHostHeartbeatAt is updated when host connects (not just heartbeat), so host has full grace.
         const grace = getHostDisconnectGraceMs(session);
         shouldEnd = now - session.lastHostHeartbeatAt >= grace;
       }

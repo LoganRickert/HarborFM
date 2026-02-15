@@ -39,23 +39,26 @@ test.describe('Call recording core', () => {
     await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
 
     const panel = page.getByRole('region', { name: /group call/i });
+    const stopBtn = page.getByRole('button', { name: /stop recording/i });
+    const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i);
     let recordingStarted = false;
     for (let attempt = 0; attempt < 3; attempt++) {
       await page.waitForTimeout(attempt === 0 ? 2000 : 3000);
       await recordBtn.click();
-      await page.waitForTimeout(2000);
 
-      const stopVisible = await page.getByRole('button', { name: /stop recording/i }).isVisible();
-      const errorVisible = await page.getByText(/failed to start recording|no audio producer|no audio received/i).isVisible();
-
-      if (stopVisible && !errorVisible) {
-        recordingStarted = true;
-        break;
+      try {
+        await expect(stopBtn).toBeVisible({ timeout: 15000 });
+        const errorVisible = await errorEl.isVisible();
+        if (!errorVisible) {
+          recordingStarted = true;
+          break;
+        }
+      } catch {
+        // Stop button didn't appear in time
       }
     }
     if (!recordingStarted) {
-      const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i).first();
-      const errorText = (await errorEl.isVisible()) ? await errorEl.textContent() : null;
+      const errorText = (await errorEl.isVisible()) ? await errorEl.first().textContent() : null;
       const mediaBanner = page.getByText(/audio is unavailable|webrtc.*not.*running/i);
       const mediaUnavail = (await mediaBanner.isVisible()) ? await mediaBanner.first().textContent() : null;
       throw new Error(
@@ -64,9 +67,8 @@ test.describe('Call recording core', () => {
           `Media unavailable: ${mediaUnavail ?? 'no'}.`
       );
     }
-    await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(2500);
-    await page.getByRole('button', { name: /stop recording/i }).click();
+    await stopBtn.click();
 
     const successOrError = await Promise.race([
       page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 }),

@@ -132,6 +132,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data as string);
+        console.log('[CallPanel] ws message type=', msg.type);
         if (msg.type === 'alreadyInCall') {
           setAlreadyInCall(true);
         } else if (msg.type === 'joined' && msg.participants) {
@@ -272,9 +273,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   };
 
   const handleStartRecording = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    const ws = wsRef.current;
+    console.log('[CallPanel] handleStartRecording wsState=', ws?.readyState);
+    if (ws?.readyState === WebSocket.OPEN) {
       console.log('[CallPanel] handleStartRecording → startRecording');
-      wsRef.current.send(JSON.stringify({ type: 'startRecording', clientEpochMs: Date.now() }));
+      ws.send(JSON.stringify({ type: 'startRecording', clientEpochMs: Date.now() }));
       setRecordingSeconds(0);
       setRecording(true);
       setRecordingConfirmed(false);
@@ -284,9 +287,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   };
 
   const handleStopRecording = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    const ws = wsRef.current;
+    console.log('[CallPanel] handleStopRecording wsState=', ws?.readyState);
+    if (ws?.readyState === WebSocket.OPEN) {
       console.log('[CallPanel] handleStopRecording → stopRecording');
-      wsRef.current.send(JSON.stringify({ type: 'stopRecording' }));
+      ws.send(JSON.stringify({ type: 'stopRecording' }));
       setRecording(false);
     } else {
       console.log('[CallPanel] handleStopRecording skipped (ws not open)');

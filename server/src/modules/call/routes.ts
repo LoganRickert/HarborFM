@@ -869,6 +869,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   });
                   hostSocketAddedAt.set(socket as unknown as WebSocket, Date.now());
                 }
+                updateHostHeartbeat(sessionId);
                 clearHostDisconnected(sessionId);
                 broadcastToSession(sessionId, {
                   type: "participants",
@@ -933,6 +934,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             isHost = true;
             initialized = true;
             pendingMigrateHosts.delete(socket as unknown as WebSocket);
+            updateHostHeartbeat(sid);
             if (hn) setParticipantName(sid, pid, hn);
             let newSet = sessionSockets.get(sid);
             if (!newSet) {
@@ -1145,7 +1147,9 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
 
         if (type === "startRecording" && isHost) {
           const sid = sessionId;
+          if (sid) updateHostHeartbeat(sid);
           const session = getSessionById(sid);
+          req.log.info({ sid, hasSession: !!session, roomId: session?.roomId }, "[call] startRecording received");
           if (session?.recordingInProgress) {
             broadcastToSession(sid, {
               type: "recordingError",
@@ -1208,6 +1212,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     sessionForRecording.recordingStartedAtEpochMs =
                       typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : Date.now();
                   }
+                  req.log.info({ sid }, "[call] broadcasting recordingStarted");
                   broadcastToSession(sid, {
                     type: "recordingStarted",
                     recordingEpochMs: typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : undefined,
@@ -1282,7 +1287,9 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
 
         if (type === "stopRecording" && isHost) {
           const sid = sessionId;
+          if (sid) updateHostHeartbeat(sid);
           const session = getSessionById(sid);
+          req.log.info({ sid, hasSession: !!session, roomId: session?.roomId }, "[call] stopRecording received");
           if (session) {
             session.recordingInProgress = false;
             session.recordingStartedAtEpochMs = undefined;
@@ -1292,22 +1299,35 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             const events = session.recordingEvents ?? [];
             session.recordingEvents = undefined;
             const recordingEndedAtMs = Date.now();
-            fetch(`${webrtcCfg.serviceUrl}/stop-recording`, {
+            const roomId = session.roomId;
+            const stopUrl = `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`;
+            req.log.info({ stopUrl, roomId }, "[call] stopRecording POSTing to webrtc");
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            fetch(stopUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ roomId: session.roomId, events, recordingEndedAtMs }),
+              body: JSON.stringify({ roomId, events, recordingEndedAtMs }),
+              signal: controller.signal,
             })
-              .then(() => {
+              .then((res) => {
+                clearTimeout(timeout);
+                req.log.info({ status: res.status, sid }, "[call] stop-recording response");
+                if (!res.ok) throw new Error(`stop-recording returned ${res.status}`);
+                const sockets = sessionSockets.get(sid);
+                req.log.info({ sid, socketCount: sockets?.size ?? 0 }, "[call] broadcasting recordingStopped");
                 broadcastToSession(sid, { type: "recordingStopped" });
               })
               .catch((err) => {
-                req.log.warn({ err, roomId: session.roomId }, "WebRTC stop-recording failed");
+                clearTimeout(timeout);
+                req.log.warn({ err, roomId, sid }, "[call] WebRTC stop-recording failed");
                 broadcastToSession(sid, {
                   type: "recordingStopFailed",
                   error: "Failed to stop recording",
                 });
               });
           } else {
+            req.log.info({ sid, reason: !session?.roomId ? "no roomId" : "no serviceUrl" }, "[call] stopRecording else branch, broadcasting recordingStopped");
             broadcastToSession(sid, { type: "recordingStopped" });
           }
           return;

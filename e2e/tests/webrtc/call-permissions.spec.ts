@@ -280,9 +280,7 @@ test.describe('Call permissions', () => {
     test.setTimeout(60000);
     page.on('console', (msg) => {
       const text = msg.text();
-      if (msg.type() === 'error' || /recording|Recording|No audio|failed|webrtc/i.test(text)) {
-        console.log(`[call-permissions] BROWSER ${msg.type()}:`, text.slice(0, 300));
-      }
+      console.log(`[call-permissions] BROWSER ${msg.type()}:`, text.slice(0, 400));
     });
     console.log('[call-permissions] Logging in...');
     await page.goto('/');
@@ -327,30 +325,37 @@ test.describe('Call permissions', () => {
     console.log('[call-permissions] Panel before Record:', (await panel.textContent())?.slice(0, 250));
 
     let recordingStarted = false;
+    const stopBtn = page.getByRole('button', { name: /stop recording/i });
+    const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i);
     for (let attempt = 0; attempt < 3; attempt++) {
       await page.waitForTimeout(attempt === 0 ? 2000 : 3000);
       console.log(`[call-permissions] Attempt ${attempt + 1}/3: clicking Record...`);
+      console.log(`[call-permissions] Panel before click:`, (await panel.textContent())?.slice(0, 300));
       await recordBtn.click();
-      await page.waitForTimeout(2000);
+      console.log(`[call-permissions] Record clicked, waiting 500ms...`);
+      await page.waitForTimeout(500);
 
-      const stopVisible = await page.getByRole('button', { name: /stop recording/i }).isVisible();
-      const errorVisible = await page.getByText(/failed to start recording|no audio producer|no audio received/i).isVisible();
-      const errorText = errorVisible
-        ? await page.getByText(/failed to start recording|no audio producer|no audio received/i).first().textContent()
-        : null;
-      console.log(`[call-permissions] Attempt ${attempt + 1}: stopVisible=${stopVisible} errorVisible=${errorVisible} errorText=${errorText ?? 'none'}`);
-      console.log(`[call-permissions] Attempt ${attempt + 1}: panel=`, (await panel.textContent())?.slice(0, 350));
-
-      if (stopVisible && !errorVisible) {
-        recordingStarted = true;
-        console.log(`[call-permissions] Attempt ${attempt + 1}: SUCCESS`);
-        break;
+      try {
+        console.log(`[call-permissions] Waiting for Stop button (timeout 15s)...`);
+        await expect(stopBtn).toBeVisible({ timeout: 15000 });
+        const errorVisible = await errorEl.isVisible();
+        if (!errorVisible) {
+          recordingStarted = true;
+          console.log(`[call-permissions] Attempt ${attempt + 1}: SUCCESS - Stop visible, no error`);
+          break;
+        }
+        console.log(`[call-permissions] Stop visible but error also visible, retrying`);
+      } catch (e) {
+        console.log(`[call-permissions] Attempt ${attempt + 1}: Stop button NOT visible after 15s`, e);
       }
-      if (errorVisible && errorText) console.log(`[call-permissions] Attempt ${attempt + 1}: error="${errorText.trim()}"`);
+      const stopVisible = await stopBtn.isVisible();
+      const errorText = (await errorEl.isVisible()) ? await errorEl.first().textContent() : null;
+      console.log(`[call-permissions] Attempt ${attempt + 1}: stopVisible=${stopVisible} errorVisible=${!!errorText} errorText=${errorText ?? 'none'}`);
+      console.log(`[call-permissions] Attempt ${attempt + 1}: full panel=`, (await panel.textContent())?.slice(0, 500));
+      if (errorText) console.log(`[call-permissions] Attempt ${attempt + 1}: error="${errorText.trim()}"`);
     }
     if (!recordingStarted) {
-      const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i).first();
-      const errorText = (await errorEl.isVisible()) ? await errorEl.textContent() : null;
+      const errorText = (await errorEl.isVisible()) ? await errorEl.first().textContent() : null;
       const mediaBanner = page.getByText(/audio is unavailable|webrtc.*not.*running/i);
       const mediaUnavail = (await mediaBanner.isVisible()) ? await mediaBanner.first().textContent() : null;
       console.log('[call-permissions] FAILURE - full panel:', await panel.textContent());
@@ -361,9 +366,17 @@ test.describe('Call permissions', () => {
       );
     }
     console.log('[call-permissions] Clicking Stop recording...');
+    console.log('[call-permissions] Panel before Stop:', (await panel.textContent())?.slice(0, 350));
     await page.getByRole('button', { name: /stop recording/i }).click();
-    console.log('[call-permissions] Waiting for "recording stopped successfully"...');
-    await expect(page.getByText(/recording stopped successfully/i)).toBeVisible({ timeout: 15000 });
+    console.log('[call-permissions] Stop clicked, waiting for "recording stopped successfully" (15s)...');
+    for (let i = 0; i < 15; i++) {
+      await page.waitForTimeout(1000);
+      const successVisible = await page.getByText(/recording stopped successfully/i).isVisible();
+      const processingVisible = await page.getByText(/processing the segment/i).isVisible();
+      console.log(`[call-permissions] t=${i + 1}s successVisible=${successVisible} processingVisible=${processingVisible} panel=`, (await panel.textContent())?.slice(0, 200));
+      if (successVisible) break;
+    }
+    await expect(page.getByText(/recording stopped successfully/i)).toBeVisible({ timeout: 1000 });
     console.log('[call-permissions] Test passed');
   });
 

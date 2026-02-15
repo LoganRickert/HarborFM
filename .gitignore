@@ -23,6 +23,7 @@ ci-secrets/
 e2e/data/
 e2e/secrets/
 e2e/reports/
+e2e/webrtc-recordings/
 e2e/server.log.pnpm-store
 .pnpm-store/
 Infrastructure/
