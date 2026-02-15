@@ -947,6 +947,13 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   broadcastToSession(sid, { type: "recordingStarted" });
                 } else {
                   const text = await res.text();
+                  let errorMsg = "Failed to start recording";
+                  try {
+                    const parsed = JSON.parse(text) as { error?: string };
+                    if (parsed?.error) errorMsg = parsed.error;
+                  } catch {
+                    /* use default */
+                  }
                   req.log.warn(
                     {
                       status: res.status,
@@ -959,7 +966,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   );
                   broadcastToSession(sid, {
                     type: "recordingError",
-                    error: "Failed to start recording",
+                    error: errorMsg,
                   });
                 }
               })
@@ -1079,12 +1086,27 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         }
 
         if (type === "endCall" && isHost) {
-          const session = endSession(sessionId);
-          if (session) {
-            broadcastToSession(sessionId, { type: "callEnded" });
-            sessionSockets.delete(sessionId);
-          }
-          removeSocketFromSession(sessionId, socket);
+          (async () => {
+            const session = getSessionById(sessionId);
+            const webrtcCfg = getWebRtcConfig();
+            if (session?.roomId && webrtcCfg?.serviceUrl) {
+              try {
+                await fetch(`${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ roomId: session.roomId }),
+                });
+              } catch (err) {
+                req.log.warn({ err, roomId: session.roomId }, "WebRTC stop-recording failed on end call");
+              }
+            }
+            const endedSession = endSession(sessionId);
+            if (endedSession) {
+              broadcastToSession(sessionId, { type: "callEnded" });
+              sessionSockets.delete(sessionId);
+            }
+            removeSocketFromSession(sessionId, socket);
+          })();
           return;
         }
       });

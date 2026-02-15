@@ -139,8 +139,8 @@ services:
     restart: unless-stopped
     environment:
       PORT: "3002"
-      RTC_MIN_PORT: "40000"
-      RTC_MAX_PORT: "40100"
+      RTC_MIN_PORT: "41000"
+      RTC_MAX_PORT: "41100"
       MEDIASOUP_ANNOUNCED_IP: "${MEDIASOUP_ANNOUNCED_IP:-}"
       MAIN_APP_URL: "${MAIN_APP_URL:-http://harborfm:3001}"
       RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
@@ -149,7 +149,7 @@ services:
       - harborfm_data:/data
     ports:
       - "3002:3002"
-      - "40000-40100:40000-40100/udp"
+      - "41000-41100:41000-41100/udp"
     networks:
       - internal
 

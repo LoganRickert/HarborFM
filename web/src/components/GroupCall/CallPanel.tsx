@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, X } from 'lucide-react';
 import { callWebSocketUrl } from '../../api/call';
+import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
 import { RemoteAudio } from './RemoteAudio';
 import { CallSoundboard } from './CallSoundboard';
@@ -49,6 +50,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [copied, setCopied] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingProcessing, setRecordingProcessing] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
@@ -78,6 +80,12 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  useEffect(() => {
+    if (!recording) return;
+    const id = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [recording]);
 
   useEffect(() => {
     setAlreadyInCall(false);
@@ -116,6 +124,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           onCallEnded();
         } else if (msg.type === 'recordingStarted') {
           setRecording(true);
+          setRecordingSeconds(0);
           setRecordingProcessing(false);
         } else if (msg.type === 'recordingStopped') {
           setRecording(false);
@@ -494,17 +503,22 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       )}
       {!showChatView && (
       <div className={styles.recordSection}>
-        <div className={styles.recordRow}>
+        <div className={`${styles.recordRow} ${recording ? styles.recordRowRecording : ''}`}>
           {recording ? (
-            <button
-              type="button"
-              className={styles.stopRecordBtn}
-              onClick={handleStopRecording}
-              aria-label="Stop recording"
-            >
-              <Square size={16} strokeWidth={2} aria-hidden />
-              Stop recording
-            </button>
+            <>
+              <button
+                type="button"
+                className={styles.stopRecordBtn}
+                onClick={handleStopRecording}
+                aria-label="Stop recording"
+              >
+                <Square size={16} strokeWidth={2} aria-hidden />
+                Stop recording
+              </button>
+              <span className={styles.recordDurationBadge} aria-live="polite">
+                {formatDurationHMS(recordingSeconds)}
+              </span>
+            </>
           ) : (
             <button
               type="button"

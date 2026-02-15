@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import * as mediasoup from "mediasoup";
 import { nanoid } from "nanoid";
-import { mkdirSync, statSync } from "fs";
+import { existsSync, mkdirSync, statSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { dirname, join } from "path";
 
@@ -70,6 +70,7 @@ function createMultiAudioSdp(specs: StreamSpec[]): string {
 
 async function getWorker(): Promise<mediasoup.types.Worker> {
   if (worker) return worker;
+  console.log("[webrtc] Creating mediasoup worker RTC_MIN_PORT=%d RTC_MAX_PORT=%d", RTC_MIN_PORT, RTC_MAX_PORT);
   worker = await mediasoup.createWorker({
     logLevel: "warn",
     rtcMinPort: RTC_MIN_PORT,
@@ -106,16 +107,22 @@ app.post<{
   const roomId = body?.roomId ?? nanoid(10);
   if (rooms.has(roomId)) {
     const room = rooms.get(roomId)!;
+    console.log("[webrtc] POST /room roomId=%s (existing, producers=%d)", roomId, room.producers.size);
     return reply.send({ roomId, rtpCapabilities: room.router.rtpCapabilities });
   }
+  console.log("[webrtc] POST /room creating new roomId=%s", roomId);
   const w = await getWorker();
   const router = await w.createRouter({
     mediaCodecs: [
       { kind: "audio", mimeType: "audio/opus", clockRate: 48000, channels: 2 },
     ],
   });
-  router.on("workerclose", () => rooms.delete(roomId));
+  router.on("workerclose", () => {
+    console.log("[webrtc] roomId=%s router closed (worker died)", roomId);
+    rooms.delete(roomId);
+  });
   rooms.set(roomId, { router, transports: new Map(), producers: new Map() });
+  console.log("[webrtc] POST /room roomId=%s created", roomId);
   return reply.send({ roomId, rtpCapabilities: router.rtpCapabilities });
 });
 
@@ -153,10 +160,45 @@ app.post<{
   if (!room) return reply.status(404).send({ error: "Room not found" });
 
   const audioProducers = Array.from(room.producers.values()).filter((p) => p.kind === "audio");
-  console.log("[webrtc] POST /start-recording roomId=%s totalProducers=%d audioProducers=%d", roomId, room.producers.size, audioProducers.length);
+  console.log("[webrtc] POST /start-recording roomId=%s segmentId=%s totalProducers=%d audioProducers=%d",
+    roomId, segmentId, room.producers.size, audioProducers.length);
   if (audioProducers.length === 0) {
     console.log("[webrtc] POST /start-recording roomId=%s rejected: no audio producer", roomId);
     return reply.status(400).send({ error: "No audio producer in room" });
+  }
+
+  let allProducersNoPackets = true;
+  let anyProducerPaused = false;
+  for (let i = 0; i < audioProducers.length; i++) {
+    try {
+      const stats = await audioProducers[i]!.getStats();
+      const bytesReceived = (stats as Array<{ bytesReceived?: number }>).reduce((sum, s) => sum + (s.bytesReceived ?? 0), 0);
+      const packetsReceived = (stats as Array<{ packetsReceived?: number }>).reduce((sum, s) => sum + (s.packetsReceived ?? 0), 0);
+      const paused = audioProducers[i]!.paused;
+      console.log("[webrtc] start-recording roomId=%s producer %d id=%s paused=%s bytesReceived=%d packetsReceived=%d",
+        roomId, i, audioProducers[i]!.id, paused, bytesReceived, packetsReceived);
+      if (bytesReceived > 0 || packetsReceived > 0) allProducersNoPackets = false;
+      if (paused) anyProducerPaused = true;
+      if (bytesReceived === 0 && packetsReceived === 0) {
+        console.log("[webrtc] start-recording roomId=%s WARNING producer %s has received no packets - ICE may have failed (check MEDIASOUP_ANNOUNCED_IP and UDP ports %d-%d)",
+          roomId, audioProducers[i]!.id, RTC_MIN_PORT, RTC_MAX_PORT);
+      }
+      if (paused) {
+        console.log("[webrtc] start-recording roomId=%s WARNING producer %s is paused (muted) - no audio will be recorded", roomId, audioProducers[i]!.id);
+      }
+    } catch (e) {
+      request.log.warn({ err: e, producerId: audioProducers[i]!.id }, "Could not get producer stats");
+    }
+  }
+  if (allProducersNoPackets) {
+    console.log("[webrtc] start-recording roomId=%s rejected: no producer has received any RTP packets (ICE/connectivity issue)", roomId);
+    return reply.status(400).send({
+      error: "No audio received from any participant. Ensure UDP ports " + RTC_MIN_PORT + "-" + RTC_MAX_PORT + " are both open and reachable. If behind NAT, set MEDIASOUP_ANNOUNCED_IP to your server's public IP.",
+    });
+  }
+  if (anyProducerPaused && audioProducers.every((p) => p.paused)) {
+    console.log("[webrtc] start-recording roomId=%s rejected: all producers are muted", roomId);
+    return reply.status(400).send({ error: "Unmute your microphone before recording." });
   }
 
   const secret = recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
@@ -173,6 +215,7 @@ app.post<{
     const consumers: Consumer[] = [];
     const sdpSpecs: StreamSpec[] = [];
 
+    console.log("[webrtc] start-recording roomId=%s creating %d consumers for FFmpeg", roomId, audioProducers.length);
     for (let i = 0; i < audioProducers.length; i++) {
       const rtpPort = RECORD_PORT_BASE + i * 4;
       const rtcpPort = RECORD_PORT_BASE + i * 4 + 1;
@@ -192,9 +235,11 @@ app.post<{
       plainTransports.push(plainTransport);
       consumers.push(consumer);
       sdpSpecs.push({ rtpPort, rtcpPort, payloadType });
+      console.log("[webrtc] start-recording roomId=%s consumer %d producerId=%s rtpPort=%d", roomId, i, audioProducers[i]!.id, rtpPort);
     }
 
     const filePath = join(RECORDING_DATA_DIR, filePathRelative);
+    console.log("[webrtc] start-recording roomId=%s output filePath=%s", roomId, filePath);
     mkdirSync(dirname(filePath), { recursive: true });
 
     const sdp = createMultiAudioSdp(sdpSpecs);
@@ -203,6 +248,7 @@ app.post<{
     const ffmpegArgs: string[] = [
       "-loglevel", "warning",
       "-protocol_whitelist", "pipe,udp,rtp",
+      "-reorder_queue_size", "500",
       "-f", "sdp", "-i", "pipe:0",
     ];
     if (numInputs === 1) {
@@ -217,13 +263,25 @@ app.post<{
       );
     }
     ffmpegArgs.push("-y", filePath);
+    console.log("[webrtc] start-recording roomId=%s spawning FFmpeg numInputs=%d", roomId, numInputs);
     const ffmpeg = spawn("ffmpeg", ffmpegArgs, { stdio: ["pipe", "pipe", "pipe"] });
     ffmpeg.stdin?.write(sdp);
     ffmpeg.stdin?.end();
     ffmpeg.on("error", (err) => request.log.error({ err }, "FFmpeg error"));
-    ffmpeg.on("close", (code) => request.log.info({ code }, "FFmpeg exited"));
+    ffmpeg.on("close", (code, signal) => {
+      request.log.info({ code, signal }, "FFmpeg exited");
+      console.log("[webrtc] FFmpeg exited roomId=%s code=%s signal=%s", roomId, code, signal);
+    });
+    ffmpeg.stderr?.on("data", (chunk: Buffer) => {
+      const line = chunk.toString().trim();
+      if (line) {
+        request.log.info({ ffmpeg: line }, "FFmpeg stderr");
+        console.log("[webrtc] FFmpeg roomId=%s: %s", roomId, line);
+      }
+    });
 
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 1000));
+    console.log("[webrtc] start-recording roomId=%s connecting PlainTransports to FFmpeg", roomId);
     for (let i = 0; i < plainTransports.length; i++) {
       const t = plainTransports[i]!;
       const spec = sdpSpecs[i]!;
@@ -234,6 +292,7 @@ app.post<{
       });
     }
     await new Promise((r) => setTimeout(r, 200));
+    console.log("[webrtc] start-recording roomId=%s resuming %d consumers", roomId, consumers.length);
     for (const c of consumers) await c.resume();
 
     const secret = meta.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
@@ -243,7 +302,7 @@ app.post<{
         const state = recordingByRoom.get(roomId);
         if (!state) return;
         try {
-          const size = statSync(filePath).size;
+          const size = existsSync(filePath) ? statSync(filePath).size : 0;
           const res = await fetch(`${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-check-storage`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
@@ -252,6 +311,7 @@ app.post<{
           if (!res.ok) return;
           const data = (await res.json()) as { stop?: boolean; error?: string };
           if (data.stop && data.error) {
+            console.log("[webrtc] Storage limit reached roomId=%s bytesRecorded=%d stopping", roomId, size);
             if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
             recordingByRoom.delete(roomId);
             for (const c of state.consumers) try { c.close(); } catch { /* ignore */ }
@@ -286,7 +346,7 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
   if (!roomId) return reply.status(400).send({ error: "roomId required" });
   const state = recordingByRoom.get(roomId);
   recordingByRoom.delete(roomId);
-  console.log("[webrtc] POST /stop-recording roomId=%s hadState=%s", roomId, !!state);
+  console.log("[webrtc] POST /stop-recording roomId=%s hadState=%s filePath=%s", roomId, !!state, state?.filePathRelative ?? "n/a");
   if (!state) return reply.send({ ok: true });
   if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
 
@@ -298,6 +358,7 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
     if (MAIN_APP_URL && secret) {
       const callbackUrl = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-segment`;
       request.log.info({ callbackUrl, filePath: state.filePathRelative }, "Firing recording callback");
+      console.log("[webrtc] Firing recording callback roomId=%s segmentId=%s filePath=%s", roomId, state.segmentId, state.filePathRelative);
       fetch(callbackUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
@@ -313,15 +374,21 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
         .then(async (res) => {
           if (res.ok) {
             request.log.info({ status: res.status }, "Recording callback succeeded");
+            console.log("[webrtc] Recording callback roomId=%s segmentId=%s OK", roomId, state.segmentId);
           } else {
             const body = await res.text();
             request.log.warn({ status: res.status, body }, "Recording callback failed");
+            console.log("[webrtc] Recording callback roomId=%s segmentId=%s FAILED status=%d body=%s", roomId, state.segmentId, res.status, body);
           }
         })
-        .catch((err) => request.log.error({ err }, "Recording callback failed"));
+        .catch((err) => {
+          request.log.error({ err }, "Recording callback failed");
+          console.log("[webrtc] Recording callback roomId=%s segmentId=%s ERROR %s", roomId, state.segmentId, err);
+        });
     }
   };
 
+  console.log("[webrtc] stop-recording roomId=%s closing %d consumers, %d transports, sending SIGINT to FFmpeg", roomId, state.consumers.length, state.plainTransports.length);
   for (const c of state.consumers) {
     try {
       c.close();
@@ -389,8 +456,9 @@ const wsHandler = (socket: any, req: any) => {
         transport.on("@close", () => {
           roomState.transports.delete(transport.id);
           socketTransports.delete(socket);
+          console.log("[webrtc] WS roomId=%s transport closed id=%s transportsRemaining=%d", roomId, transport.id, roomState.transports.size);
         });
-        console.log("[webrtc] WS roomId=%s createWebRtcTransport id=%s", roomId, transport.id);
+        console.log("[webrtc] WS roomId=%s createWebRtcTransport id=%s iceCandidateCount=%d", roomId, transport.id, transport.iceCandidates?.length ?? 0);
         socket.send(JSON.stringify({
           type: "webRtcTransportCreated",
           id: transport.id,
@@ -421,7 +489,10 @@ const wsHandler = (socket: any, req: any) => {
         }
         const producer = await transport.produce({ kind, rtpParameters });
         roomState.producers.set(producer.id, producer);
-        producer.on("@close", () => roomState.producers.delete(producer.id));
+        producer.on("@close", () => {
+          roomState.producers.delete(producer.id);
+          console.log("[webrtc] WS roomId=%s producer closed id=%s producersRemaining=%d", roomId, producer.id, roomState.producers.size);
+        });
         console.log("[webrtc] WS roomId=%s produce kind=%s id=%s totalProducers=%d", roomId, kind, producer.id, roomState.producers.size);
         socket.send(JSON.stringify({ type: "produced", id: producer.id, kind: producer.kind }));
         for (const [s, r] of socketRooms.entries()) {
@@ -444,6 +515,7 @@ const wsHandler = (socket: any, req: any) => {
           return;
         }
         const consumer = await transport.consume({ producerId, rtpCapabilities });
+        console.log("[webrtc] WS roomId=%s consume producerId=%s consumerId=%s", roomId, producerId, consumer.id);
         socket.send(JSON.stringify({
           type: "consumed",
           id: consumer.id,
@@ -469,6 +541,8 @@ const wsHandler = (socket: any, req: any) => {
   socket.on("close", () => {
     const roomState = getRoom(roomId);
     const transport = socketTransports.get(socket);
+    console.log("[webrtc] WS closed roomId=%s hadTransport=%s producersRemaining=%d",
+      roomId, !!transport, roomState?.producers.size ?? 0);
     if (transport) {
       try {
         transport.close();
@@ -486,4 +560,6 @@ app.get("/ws", { websocket: true }, wsHandler);
 app.get("/webrtc-ws/ws", { websocket: true }, wsHandler);
 
 await app.listen({ port: PORT, host: "0.0.0.0" });
-console.log(`WebRTC service listening on port ${PORT}`);
+console.log("[webrtc] Service listening on port %d", PORT);
+console.log("[webrtc] Config: RTC_MIN_PORT=%d RTC_MAX_PORT=%d ANNOUNCED_IP=%s RECORDING_DATA_DIR=%s MAIN_APP_URL=%s",
+  RTC_MIN_PORT, RTC_MAX_PORT, ANNOUNCED_IP || "(none)", RECORDING_DATA_DIR, MAIN_APP_URL || "(none)");

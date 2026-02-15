@@ -1027,6 +1027,37 @@
   cursor: not-allowed;
 }
 
+.recordRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.recordRow .recordBtn {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.recordDurationBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text, #e5e5e5);
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  min-width: 5.5ch;
+}
+
 .recordTime {
   text-align: center;
   font-variant-numeric: tabular-nums;

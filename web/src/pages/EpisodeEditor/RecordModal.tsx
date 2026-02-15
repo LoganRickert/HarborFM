@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { RotateCcw, PlusCircle, Play, Pause, X, Upload } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { formatDuration } from './utils';
+import { formatDurationHMS } from '../../utils/format';
 import styles from '../EpisodeEditor.module.css';
 
 export interface RecordModalProps {
@@ -404,7 +405,14 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
 
         {recording && (
           <>
-            <div className={styles.recordTime}>{formatDuration(seconds)}</div>
+            <div className={styles.recordRow}>
+              <button ref={stopButtonRef} type="button" className={`${styles.recordBtn} ${styles.stop}`} onClick={stopRecording} aria-label="Stop recording">
+                ■
+              </button>
+              <span className={styles.recordDurationBadge} aria-live="polite">
+                {formatDurationHMS(seconds)}
+              </span>
+            </div>
             <div className={styles.recordLevelWrap} aria-live="polite" aria-label="Microphone level">
               <div className={styles.recordLevelBar} role="presentation">
                 <div className={styles.recordLevelFill} style={{ width: `${audioLevel}%` }} />
@@ -415,9 +423,6 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
                 </p>
               )}
             </div>
-            <button ref={stopButtonRef} type="button" className={`${styles.recordBtn} ${styles.stop}`} onClick={stopRecording} aria-label="Stop recording">
-              ■
-            </button>
           </>
         )}
 

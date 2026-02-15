@@ -195,8 +195,12 @@
 
 .error {
   margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
   font-size: 0.9375rem;
-  color: #e53e3e;
+  color: var(--text, #e5e5e5);
+  background: rgba(229, 62, 62, 0.12);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  border-radius: 6px;
 }
 
 .form {

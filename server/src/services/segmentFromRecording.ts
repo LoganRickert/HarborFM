@@ -34,6 +34,12 @@ export async function createSegmentFromPath(
   const stat = statSync(resolvedPath);
   const bytesWritten = stat.size;
 
+  if (bytesWritten === 0) {
+    throw new Error(
+      "Recording produced no audio. Ensure your microphone is unmuted and that you're connected to the call before recording.",
+    );
+  }
+
   const storageUserId = getPodcastOwnerId(podcastId);
   if (!storageUserId) {
     throw new Error("Podcast owner not found");
