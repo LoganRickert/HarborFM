@@ -15,7 +15,8 @@
   right: auto;
 }
 
-.chatPanelInWrapper {
+.chatPanelInWrapper,
+.soundboardPanelInWrapper {
   width: 320px;
   flex-shrink: 0;
 }

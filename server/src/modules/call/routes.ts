@@ -855,7 +855,14 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
 
         if (type === "heartbeat") {
           if (isHost && updateHostHeartbeat(sessionId)) {
-            socket.send(JSON.stringify({ type: "heartbeatAck" }));
+            const session = getSessionById(sessionId);
+            const payload: { type: string; participants?: typeof session.participants } = {
+              type: "heartbeatAck",
+            };
+            if (session) {
+              payload.participants = [...session.participants];
+            }
+            socket.send(JSON.stringify(payload));
           }
           return;
         }

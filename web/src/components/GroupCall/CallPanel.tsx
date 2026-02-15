@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, X } from 'lucide-react';
+import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, X } from 'lucide-react';
 import { callWebSocketUrl } from '../../api/call';
 import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
+import { useWakeLock } from '../../hooks/useWakeLock';
 import { RemoteAudio } from './RemoteAudio';
-import { CallSoundboard } from './CallSoundboard';
+import { CallSoundboardPanel } from './CallSoundboardPanel';
 import { CallChatPanel, type ChatMessage } from './CallChatPanel';
 import styles from './CallPanel.module.css';
 
@@ -40,6 +41,7 @@ export interface CallPanelProps {
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
+const SOUNDBOARD_VOLUME_KEY = 'harborfm_soundboard_volume';
 /** Pending endCall timeouts keyed by sessionId. Used to cancel cleanup on React Strict Mode remount. */
 const pendingEndCallTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 const END_CALL_DELAY_MS = 200;
@@ -64,18 +66,33 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatMinimized, setChatMinimized] = useState(false);
+  const [soundboardOpen, setSoundboardOpen] = useState(false);
+  const [soundboardMinimized, setSoundboardMinimized] = useState(false);
+  const [soundboardMuted, setSoundboardMutedState] = useState(false);
+  const [soundboardVolume, setSoundboardVolumeState] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const stored = localStorage.getItem(SOUNDBOARD_VOLUME_KEY);
+    if (stored == null) return 1;
+    const v = parseFloat(stored);
+    return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+  });
   const [isMobile, setIsMobile] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
-  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, connectSoundboard } = useMediasoupRoom(
+  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, connectSoundboard, setSoundboardMuted, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
   );
-  const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
-  const showChatView = isMobile && chatOpen;
+  useWakeLock(true);
+
+  useEffect(() => {
+    console.log('[CallPanel] soundboardOpen changed', soundboardOpen);
+    setSoundboardPanelOpen(soundboardOpen);
+    return () => setSoundboardPanelOpen(false);
+  }, [soundboardOpen, setSoundboardPanelOpen]);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -127,6 +144,8 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
             if (p && !prev.some((x) => x.id === p.id)) return [...prev, p];
             return prev;
           });
+        } else if (msg.type === 'heartbeatAck' && Array.isArray(msg.participants)) {
+          setParticipants(msg.participants);
         } else if (msg.type === 'callEnded') {
           onCallEnded();
         } else if (msg.type === 'error') {
@@ -204,6 +223,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     };
   }, [sessionId, onCallEnded, onSegmentRecorded, setMuted]);
 
+  const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
+  const showChatView = isMobile && chatOpen;
+  const showSoundboardView = isMobile && soundboardOpen;
+
   const handleDisplayNameSave = (name: string) => {
     const trimmed = name.trim();
     if (trimmed) {
@@ -271,6 +294,28 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     setChatOpen((prev) => !prev);
   };
 
+  const handleSoundboardOpen = () => {
+    setSoundboardOpen((prev) => {
+      if (!prev) {
+        resumeSoundboardContext();
+      }
+      return !prev;
+    });
+  };
+
+  const handleSoundboardMuteToggle = () => {
+    const next = !soundboardMuted;
+    setSoundboardMutedState(next);
+    setSoundboardMuted(next);
+  };
+
+  const handleSoundboardVolumeChange = (volume: number) => {
+    setSoundboardVolumeState(volume);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SOUNDBOARD_VOLUME_KEY, String(volume));
+    }
+  };
+
   const handleMigrate = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'migrateHost' }));
@@ -282,7 +327,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`} data-testid="already-in-call-panel">
         <div className={styles.header}>
           <Users size={18} strokeWidth={2} aria-hidden />
-          <span className={styles.title}>Group Call ({participants.length})</span>
+          <span className={styles.title}>Call ({participants.length})</span>
         </div>
         <p className={styles.alreadyInCallMessage}>
           This user is already in the call in another tab.
@@ -303,7 +348,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`} data-minimized={minimized || undefined}>
       <div className={styles.header}>
         <Users size={18} strokeWidth={2} aria-hidden />
-        <span className={styles.title}>Group Call ({participants.length})</span>
+        <span className={styles.title}>Call ({participants.length})</span>
         <span className={styles.headerSpacer} />
         <button
           type="button"
@@ -315,7 +360,17 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         >
           {showChatView ? <X size={16} strokeWidth={2} aria-hidden /> : <MessageCircle size={16} strokeWidth={2} aria-hidden />}
         </button>
-        {!showChatView && (
+        <button
+          type="button"
+          className={styles.iconBtn}
+          onClick={handleSoundboardOpen}
+          aria-label={soundboardOpen ? 'Close soundboard' : 'Open soundboard'}
+          title={soundboardOpen ? 'Close soundboard' : 'Open soundboard'}
+          data-testid="soundboard-open-btn"
+        >
+          {showSoundboardView ? <X size={16} strokeWidth={2} aria-hidden /> : <Music2 size={16} strokeWidth={2} aria-hidden />}
+        </button>
+        {!showChatView && !showSoundboardView && (
         <button
           type="button"
           className={styles.endBtnHeader}
@@ -341,7 +396,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           Audio is unavailable - WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
         </p>
       )}
-      {!minimized && !showChatView && (
+      {!minimized && !showChatView && !showSoundboardView && (
       <>
       <div className={styles.joinRow}>
         <input
@@ -369,10 +424,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         </div>
       )}
       <div className={styles.participants}>
-        <CallSoundboard
-          connectSoundboard={connectSoundboard}
-          disabled={!effectiveWebrtcUrl || !producerReady}
-        />
         <div
           className={styles.micLevel}
           role="img"
@@ -522,7 +573,21 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           embedded
         />
       )}
-      {!showChatView && (
+      {!minimized && showSoundboardView && (
+        <CallSoundboardPanel
+          connectSoundboard={connectSoundboard}
+          setSoundboardVolume={setSoundboardVolume}
+          disabled={!effectiveWebrtcUrl || !producerReady}
+          minimized={false}
+          onMinimizeToggle={() => {}}
+          volume={soundboardVolume}
+          onVolumeChange={handleSoundboardVolumeChange}
+          soundboardMuted={soundboardMuted}
+          onSoundboardMuteToggle={handleSoundboardMuteToggle}
+          muteDisabled={!effectiveWebrtcUrl || !producerReady}
+        />
+      )}
+      {!showChatView && !showSoundboardView && (
       <div className={styles.recordSection}>
         <div className={`${styles.recordRow} ${recording ? styles.recordRowRecording : styles.recordRowIdle}`}>
           {recording ? (
@@ -572,19 +637,38 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     </div>
   );
 
-  if (chatOpen && !isMobile) {
+  if (!isMobile) {
     return (
       <div className={styles.panelsWrapper}>
         {panelContent}
-        <div className={styles.chatPanelInWrapper}>
-        <CallChatPanel
-          messages={chatMessages}
-          onSend={handleChatSend}
-          minimized={chatMinimized}
-          onMinimizeToggle={() => setChatMinimized((m) => !m)}
-          onClose={() => setChatOpen(false)}
-        />
-        </div>
+        {chatOpen && (
+          <div className={styles.chatPanelInWrapper}>
+            <CallChatPanel
+              messages={chatMessages}
+              onSend={handleChatSend}
+              minimized={chatMinimized}
+              onMinimizeToggle={() => setChatMinimized((m) => !m)}
+              onClose={() => setChatOpen(false)}
+            />
+          </div>
+        )}
+        {soundboardOpen && (
+          <div className={styles.soundboardPanelInWrapper}>
+            <CallSoundboardPanel
+              connectSoundboard={connectSoundboard}
+              setSoundboardVolume={setSoundboardVolume}
+              disabled={!effectiveWebrtcUrl || !producerReady}
+              onClose={() => setSoundboardOpen(false)}
+              minimized={soundboardMinimized}
+              onMinimizeToggle={() => setSoundboardMinimized((m) => !m)}
+              volume={soundboardVolume}
+              onVolumeChange={handleSoundboardVolumeChange}
+              soundboardMuted={soundboardMuted}
+              onSoundboardMuteToggle={handleSoundboardMuteToggle}
+              muteDisabled={!effectiveWebrtcUrl || !producerReady}
+            />
+          </div>
+        )}
       </div>
     );
   }

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
 
+function soundboardNoopConnect(el: HTMLAudioElement | null) {
+  console.log('[useMediasoupRoom] connectSoundboard NOOP - soundboard not ready', { hasEl: !!el });
+}
+
 export function useMediasoupRoom(
   webrtcUrl: string | undefined,
   roomId: string | undefined,
@@ -19,7 +23,17 @@ export function useMediasoupRoom(
       else p.resume();
     }
   });
-  const connectSoundboardRef = useRef<(el: HTMLAudioElement | null) => void>(() => {});
+  const connectSoundboardRef = useRef<(el: HTMLAudioElement | null) => void | Promise<void>>(soundboardNoopConnect);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const soundboardProducerRef = useRef<mediasoupClient.types.Producer | null>(null);
+  const soundboardPanelOpenRef = useRef(false);
+  const setupSoundboardRef = useRef<() => void | Promise<void>>(() => {});
+  const teardownSoundboardRef = useRef<() => void>(() => {});
+  const soundboardGainNodeRef = useRef<GainNode | null>(null);
+  const soundboardMutedRef = useRef<boolean>(false);
+  const soundboardVolumeRef = useRef<number>(1);
+  const setSoundboardMutedRef = useRef<(muted: boolean) => void>(() => {});
+  const setSoundboardVolumeRef = useRef<(volume: number) => void>(() => {});
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
@@ -94,6 +108,7 @@ export function useMediasoupRoom(
 
         const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         const ctx = new AudioCtx();
+        ctxRef.current = ctx;
         const mixNode = ctx.createGain();
         mixNode.gain.value = 1;
 
@@ -121,25 +136,125 @@ export function useMediasoupRoom(
         }
         tickId = requestAnimationFrame(tick);
 
-        const soundboardSources: MediaElementAudioSourceNode[] = [];
-        function connectSoundboard(el: HTMLAudioElement | null) {
-          soundboardSources.forEach((src) => {
+        let soundboardProducer: mediasoupClient.types.Producer | null = null;
+        let soundboardSource: MediaElementAudioSourceNode | null = null;
+        let soundboardGainNode: GainNode | null = null;
+        let soundboardDest: MediaStreamAudioDestinationNode | null = null;
+
+        setSoundboardMutedRef.current = (muted: boolean) => {
+          soundboardMutedRef.current = muted;
+          const p = soundboardProducerRef.current;
+          if (p) {
+            if (muted) p.pause();
+            else p.resume();
+          }
+        };
+
+        setSoundboardVolumeRef.current = (volume: number) => {
+          const v = Math.max(0, Math.min(1, volume));
+          soundboardVolumeRef.current = v;
+          const gain = soundboardGainNodeRef.current;
+          if (gain) gain.gain.setValueAtTime(v, ctx.currentTime);
+        };
+
+        async function connectSoundboard(el: HTMLAudioElement | null) {
+          console.log('[useMediasoupRoom] connectSoundboard', { hasEl: !!el, src: el?.src, closed, hasSoundboardDest: !!soundboardDest });
+          if (soundboardSource) {
             try {
-              src.disconnect();
+              soundboardSource.disconnect();
             } catch {
               /* ignore */
             }
-          });
-          soundboardSources.length = 0;
-          if (el && el.src) {
-            ctx.resume().catch(() => {});
-            const src = ctx.createMediaElementSource(el);
-            src.connect(mixNode);
-            src.connect(ctx.destination);
-            soundboardSources.push(src);
+            soundboardSource = null;
+          }
+          if (soundboardGainNode) {
+            try {
+              soundboardGainNode.disconnect();
+            } catch {
+              /* ignore */
+            }
+          }
+          soundboardGainNode = null;
+          soundboardGainNodeRef.current = null;
+          if (el && el.src && !closed && soundboardDest) {
+            try {
+              await Promise.race([
+                ctx.resume(),
+                new Promise((resolve) => setTimeout(resolve, 2000)),
+              ]);
+            } catch {
+              /* ignore */
+            }
+            if (!el || !el.src || closed || !soundboardDest) {
+              console.log('[useMediasoupRoom] connectSoundboard early return');
+              return;
+            }
+            console.log('[useMediasoupRoom] connectSoundboard connecting audio to graph');
+            soundboardSource = ctx.createMediaElementSource(el);
+            soundboardGainNode = ctx.createGain();
+            soundboardGainNode.gain.value = soundboardVolumeRef.current;
+            soundboardGainNodeRef.current = soundboardGainNode;
+            soundboardSource.connect(soundboardGainNode);
+            soundboardGainNode.connect(soundboardDest);
+            soundboardGainNode.connect(ctx.destination);
           }
         }
-        connectSoundboardRef.current = connectSoundboard;
+
+        async function setupSoundboard() {
+          console.log('[useMediasoupRoom] setupSoundboard', { hasSendTransport: !!sendTransport, hasSoundboardDest: !!soundboardDest, closed });
+          if (!sendTransport || soundboardDest || closed) return;
+          try {
+            await Promise.race([
+              ctx.resume(),
+              new Promise((resolve) => setTimeout(resolve, 2000)),
+            ]);
+          } catch {
+            /* ignore */
+          }
+          if (closed || !sendTransport) return;
+          console.log('[useMediasoupRoom] setupSoundboard creating dest and producer');
+          soundboardDest = ctx.createMediaStreamDestination();
+          const sbTrack = soundboardDest.stream.getAudioTracks()[0];
+          if (!sbTrack) {
+            console.warn('[useMediasoupRoom] setupSoundboard no track from dest');
+          }
+          if (sbTrack) {
+            try {
+              const p = await sendTransport.produce({ track: sbTrack });
+              if (!closed && soundboardDest) {
+                soundboardProducer = p;
+                soundboardProducerRef.current = p;
+                if (soundboardMutedRef.current) p.pause();
+                connectSoundboardRef.current = connectSoundboard;
+                console.log('[useMediasoupRoom] setupSoundboard completed');
+              } else {
+                try { p.close(); } catch { /* ignore */ }
+              }
+            } catch (err) {
+              console.error('[useMediasoupRoom] setupSoundboard produce failed', err);
+            }
+          }
+        }
+
+        function teardownSoundboard() {
+          console.log('[useMediasoupRoom] teardownSoundboard');
+          if (soundboardSource) {
+            try { soundboardSource.disconnect(); } catch { /* ignore */ }
+            soundboardSource = null;
+          }
+          soundboardGainNode = null;
+          soundboardGainNodeRef.current = null;
+          if (soundboardProducer) {
+            try { soundboardProducer.close(); } catch { /* ignore */ }
+            soundboardProducer = null;
+            soundboardProducerRef.current = null;
+          }
+          soundboardDest = null;
+          connectSoundboardRef.current = soundboardNoopConnect;
+        }
+
+        setupSoundboardRef.current = setupSoundboard;
+        teardownSoundboardRef.current = teardownSoundboard;
 
         localStream = dest.stream;
         const track = localStream.getAudioTracks()[0];
@@ -147,6 +262,8 @@ export function useMediasoupRoom(
 
         cleanupRef.current = () => {
           if (tickId != null) cancelAnimationFrame(tickId);
+          teardownSoundboardRef.current();
+          ctxRef.current = null;
           ctx.close();
         };
 
@@ -193,6 +310,11 @@ export function useMediasoupRoom(
         producerRef.current = producer;
         setReady(true);
         const myProducerId = producer.id;
+
+        if (soundboardPanelOpenRef.current) {
+          console.log('[useMediasoupRoom] Panel was open, running setupSoundboard');
+          setupSoundboard();
+        }
 
         webrtcWs.send(JSON.stringify({ type: 'createWebRtcTransport' }));
         const recvTransportMsg = (await waitFor('webRtcTransportCreated')) as {
@@ -290,12 +412,47 @@ export function useMediasoupRoom(
     setMutedRef.current(muted);
   }, []);
 
+  const setSoundboardMuted = useCallback((muted: boolean) => {
+    soundboardMutedRef.current = muted;
+    setSoundboardMutedRef.current(muted);
+  }, []);
+
+  const setSoundboardVolume = useCallback((volume: number) => {
+    setSoundboardVolumeRef.current(volume);
+  }, []);
+
+  const resumeSoundboardContext = useCallback(() => {
+    const ctx = ctxRef.current;
+    if (ctx && ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+    }
+  }, []);
+
+  const setSoundboardPanelOpen = useCallback((open: boolean) => {
+    console.log('[useMediasoupRoom] setSoundboardPanelOpen', open);
+    soundboardPanelOpenRef.current = open;
+    if (open) {
+      setupSoundboardRef.current();
+    } else {
+      teardownSoundboardRef.current();
+    }
+  }, []);
+
+  const connectSoundboard = useCallback((el: HTMLAudioElement | null) => {
+    console.log('[useMediasoupRoom] connectSoundboard INVOKED (calling ref)', { hasEl: !!el, elSrc: el?.src?.slice?.(0, 80) });
+    return connectSoundboardRef.current(el);
+  }, []);
+
   return {
     remoteTracks,
     error,
     ready,
     micLevel,
     setMuted,
-    connectSoundboard: (el: HTMLAudioElement | null) => connectSoundboardRef.current(el),
+    connectSoundboard,
+    setSoundboardMuted,
+    setSoundboardVolume,
+    resumeSoundboardContext,
+    setSoundboardPanelOpen,
   };
 }

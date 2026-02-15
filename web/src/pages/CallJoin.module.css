@@ -7,10 +7,16 @@
 
 .page {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 1.5rem;
+  /* Match header's negative margin (2rem + safe-area) so the home button stays in the safe area on notched phones */
+  padding-top: calc(2rem + env(safe-area-inset-top, 0px));
+  padding-left: max(1.5rem, calc(1rem + env(safe-area-inset-left, 0px)));
+  padding-right: max(1.5rem, calc(1rem + env(safe-area-inset-right, 0px)));
+  padding-bottom: max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)));
   background: var(--bg, #0d0d0d);
 }
 
@@ -230,6 +236,15 @@
 .select:focus {
   outline: none;
   border-color: var(--accent, #00d4aa);
+}
+
+.input.inputRequired {
+  border-color: var(--error, #e53935);
+}
+
+.input.inputRequired:focus {
+  border-color: var(--error, #e53935);
+  box-shadow: 0 0 0 2px rgba(229, 57, 53, 0.25);
 }
 
 .joinBtn {

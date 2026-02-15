@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User } from 'lucide-react';
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
+import { useWakeLock } from '../hooks/useWakeLock';
 import { RemoteAudio } from '../components/GroupCall/RemoteAudio';
 import { CallChatPanel, type ChatMessage } from '../components/GroupCall/CallChatPanel';
 import { CallJoinHeader } from '../components/CallJoinHeader';
@@ -10,12 +11,17 @@ import { LeaveCallConfirmDialog } from '../components/GroupCall/LeaveCallConfirm
 import type { CallJoinInfo } from '../api/call';
 import styles from './CallJoin.module.css';
 
+const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
+
 export function CallJoin() {
   const { token } = useParams<{ token: string }>();
   const [joinInfo, setJoinInfo] = useState<CallJoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
+  });
   const [password, setPassword] = useState('');
   const [deviceId, setDeviceId] = useState<string>('');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -47,6 +53,8 @@ export function CallJoin() {
 
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
+
+  useWakeLock(joined);
 
   useEffect(() => {
     if (myParticipant?.muted && myParticipant?.mutedByHost) setMutedByHost(true);
@@ -218,6 +226,10 @@ export function CallJoin() {
           resolved = true;
           clearJoinTimeout();
           setJoined(true);
+          const trimmedName = name.trim();
+          if (trimmedName && typeof window !== 'undefined') {
+            localStorage.setItem(DISPLAY_NAME_KEY, trimmedName);
+          }
           setMyParticipantId(msg.participantId ?? null);
           setParticipants(msg.participants ?? []);
           if (msg.webrtcUrl) setWebrtcUrl(msg.webrtcUrl);
@@ -531,9 +543,15 @@ export function CallJoin() {
             <input
               id="call-join-name"
               type="text"
-              className={styles.input}
+              className={`${styles.input} ${!name.trim() ? styles.inputRequired : ''}`}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setName(v);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(DISPLAY_NAME_KEY, v);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !joining && name.trim()) {
                   handleJoin();
