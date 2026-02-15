@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
 
 export function useMediasoupRoom(
@@ -286,12 +286,16 @@ export function useMediasoupRoom(
     };
   }, [webrtcUrl, roomId, deviceId]);
 
+  const setMuted = useCallback((muted: boolean) => {
+    setMutedRef.current(muted);
+  }, []);
+
   return {
     remoteTracks,
     error,
     ready,
     micLevel,
-    setMuted: (muted: boolean) => setMutedRef.current(muted),
+    setMuted,
     connectSoundboard: (el: HTMLAudioElement | null) => connectSoundboardRef.current(el),
   };
 }
