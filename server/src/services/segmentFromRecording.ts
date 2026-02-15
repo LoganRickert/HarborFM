@@ -1,7 +1,8 @@
 import { statSync } from "fs";
+import { resolve } from "path";
 import { db } from "../db/index.js";
 import { getPodcastOwnerId } from "./access.js";
-import { uploadsDir, assertPathUnder } from "./paths.js";
+import { uploadsDir, assertResolvedPathUnder } from "./paths.js";
 import * as audioService from "./audio.js";
 import { wouldExceedStorageLimit } from "./storageLimit.js";
 
@@ -29,9 +30,18 @@ export async function createSegmentFromPath(
   }
 
   const segmentBase = uploadsDir(podcastId, episodeId);
-  const resolvedPath = assertPathUnder(filePath, segmentBase);
-
-  const stat = statSync(resolvedPath);
+  assertResolvedPathUnder(filePath, segmentBase);
+  const resolvedPath = resolve(filePath);
+  let stat;
+  try {
+    stat = statSync(resolvedPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") {
+      throw new Error("Recording file was not found. The recording may have been stopped before it could be saved.");
+    }
+    throw err;
+  }
   const bytesWritten = stat.size;
 
   if (bytesWritten === 0) {

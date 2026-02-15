@@ -438,10 +438,11 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
     }
   }
   state.ffmpeg.kill("SIGINT");
+  const sigkillDelayMs = 15000;
   const exitTimeout = setTimeout(() => {
-    console.log("[webrtc] stop-recording roomId=%s FFmpeg did not exit in 5s, sending SIGKILL", roomId);
+    console.log("[webrtc] stop-recording roomId=%s FFmpeg did not exit in %ds, sending SIGKILL", roomId, sigkillDelayMs / 1000);
     state.ffmpeg.kill("SIGKILL");
-  }, 5000);
+  }, sigkillDelayMs);
   state.ffmpeg.once("close", () => {
     clearTimeout(exitTimeout);
     const filePath = join(RECORDING_DATA_DIR, state.filePathRelative);

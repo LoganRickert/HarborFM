@@ -521,6 +521,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           "wav",
         );
         copyFileSync(sourcePath, destPath);
+        if (!existsSync(destPath)) {
+          return reply.status(400).send({
+            error: "Recording copy failed: destination file was not created",
+          });
+        }
         unlinkSync(sourcePath);
         const row = await createSegmentFromPath(
           destPath,
