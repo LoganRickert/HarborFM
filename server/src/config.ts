@@ -101,6 +101,22 @@ export const WEBRTC_PUBLIC_WS_URL = process.env.WEBRTC_PUBLIC_WS_URL?.trim() || 
 export const RECORDING_CALLBACK_SECRET =
   process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
 
+/** Host-away grace period (ms) when no guests. Env: HOST_AWAY_GRACE_NO_GUESTS_MS. Default 60000 (1 min). */
+export const HOST_AWAY_GRACE_NO_GUESTS_MS =
+  Number(process.env.HOST_AWAY_GRACE_NO_GUESTS_MS) || 60_000;
+
+/** Host-away grace period (ms) when recording in progress, no guests. Env: HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS. Default 120000 (2 min). */
+export const HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS =
+  Number(process.env.HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS) || 120_000;
+
+/** Host-away grace period (ms) when guests are present. Env: HOST_AWAY_GRACE_WITH_GUESTS_MS. Default 300000 (5 min). */
+export const HOST_AWAY_GRACE_WITH_GUESTS_MS =
+  Number(process.env.HOST_AWAY_GRACE_WITH_GUESTS_MS) || 300_000;
+
+/** Host-away checker interval (ms). Env: HOST_AWAY_CHECK_INTERVAL_MS. Default 30000. */
+export const HOST_AWAY_CHECK_INTERVAL_MS =
+  Number(process.env.HOST_AWAY_CHECK_INTERVAL_MS) || 30_000;
+
 /** Path to geoipupdate binary. Env: GEOIPUPDATE_PATH. Default "geoipupdate". */
 export const GEOIPUPDATE_PATH = process.env.GEOIPUPDATE_PATH ?? "geoipupdate";
 
@@ -166,6 +182,10 @@ export const FORGOT_PASSWORD_RATE_MINUTES =
 /** Login failure threshold: ban after this many failures in the window. Env: LOGIN_FAILURE_THRESHOLD. Default 3. */
 export const LOGIN_FAILURE_THRESHOLD =
   Number(process.env.LOGIN_FAILURE_THRESHOLD) || 3;
+
+/** Call-join failure threshold: ban after this many failures. Higher than login because invalid links can trigger multiple requests per page load (e.g. getJoinInfo + WebSocket guest). Env: CALL_JOIN_FAILURE_THRESHOLD. Default 6 (allows ~3 real attempts). */
+export const CALL_JOIN_FAILURE_THRESHOLD =
+  Number(process.env.CALL_JOIN_FAILURE_THRESHOLD) || 6;
 
 /** Login ban duration (minutes). Env: LOGIN_BAN_MINUTES. Default 10. */
 export const LOGIN_BAN_MINUTES = Number(process.env.LOGIN_BAN_MINUTES) || 10;

@@ -31,6 +31,7 @@ import { FeedPodcast } from './pages/FeedPodcast';
 import { FeedEpisode } from './pages/FeedEpisode';
 import { EmbedEpisode } from './pages/EmbedEpisode';
 import { CallJoin } from './pages/CallJoin';
+import { CallJoinIndex } from './pages/CallJoinIndex';
 import { Library } from './pages/Library';
 import { SubscriberAuthProvider } from './hooks/useSubscriberAuth';
 import { ConsentBanner } from './components/ConsentBanner/ConsentBanner';
@@ -307,6 +308,7 @@ export default function App() {
           <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><FeedEpisode /></PublicFeedsGuard>} />
           <Route path="/embed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
           <Route path="/embed/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
+          <Route path="/call/join" element={<CallJoinIndex />} />
           <Route path="/call/join/:token" element={<CallJoin />} />
         <Route path="/" element={<RootRoute />}>
           <Route index element={<Dashboard />} />

@@ -176,14 +176,28 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         origin,
         body.password ?? null,
         async (endedSession) => {
+          console.log(
+            "[hostAway] onSessionEnd sessionId=%s roomId=%s recordingInProgress=%s",
+            endedSession.sessionId,
+            endedSession.roomId,
+            endedSession.recordingInProgress
+          );
           if (
             endedSession.roomId &&
             endedSession.recordingInProgress === true
           ) {
             const webrtcCfg = getWebRtcConfig();
+            const url = webrtcCfg?.serviceUrl
+              ? `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`
+              : null;
+            console.log(
+              "[hostAway] Stop-recording roomId=%s webrtcUrl=%s",
+              endedSession.roomId,
+              url ?? "(no serviceUrl)"
+            );
             if (webrtcCfg?.serviceUrl) {
               try {
-                await fetch(
+                const res = await fetch(
                   `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`,
                   {
                     method: "POST",
@@ -191,11 +205,17 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     body: JSON.stringify({ roomId: endedSession.roomId }),
                   },
                 );
+                console.log(
+                  "[hostAway] Stop-recording response roomId=%s status=%d",
+                  endedSession.roomId,
+                  res.status
+                );
               } catch (err) {
                 request.log.warn(
                   { err, roomId: endedSession.roomId },
                   "WebRTC stop-recording failed on host-away call end",
                 );
+                console.warn("[hostAway] Stop-recording fetch failed", err);
               }
             }
           }
@@ -850,6 +870,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   hostSocketAddedAt.set(socket as unknown as WebSocket, Date.now());
                 }
                 clearHostDisconnected(sessionId);
+                broadcastToSession(sessionId, {
+                  type: "participants",
+                  participants: [...session.participants],
+                });
                 const hostJoinedPayload: Record<string, unknown> = {
                     type: "joined",
                     sessionId,
@@ -921,6 +945,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               participantId: pid,
             });
             clearHostDisconnected(sid);
+            broadcastToSession(sid, {
+              type: "participants",
+              participants: [...sess.participants],
+            });
             const hostJoinedPayload: Record<string, unknown> = {
               type: "joined",
               sessionId: sid,
@@ -1015,6 +1043,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               participantId,
               isHost: false,
               participants: session.participants,
+              recordingInProgress: session.recordingInProgress === true,
             };
             if (session.hostDisconnectedAt != null && session.hostDisconnectGraceMs != null) {
               webrtcJoinedPayload.hostDisconnected = true;
@@ -1162,6 +1191,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               clientEpochMs: typeof clientEpochMs === "number" ? clientEpochMs : undefined,
               recordingCallbackSecret: webrtcCfg.recordingCallbackSecret || undefined,
             };
+            // Set optimistically so host-away path sees it before fetch resolves (race fix)
+            session.recordingEvents = [];
+            session.recordingInProgress = true;
+            session.recordingStartedAtEpochMs = Date.now();
             fetch(startRecordingUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1172,8 +1205,6 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   const data = (await res.json()) as { recordingEpochMs?: number };
                   const sessionForRecording = getSessionById(sid);
                   if (sessionForRecording) {
-                    sessionForRecording.recordingEvents = [];
-                    sessionForRecording.recordingInProgress = true;
                     sessionForRecording.recordingStartedAtEpochMs =
                       typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : Date.now();
                   }
@@ -1200,6 +1231,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     },
                     "WebRTC start-recording failed",
                   );
+                  const sessionOnFail = getSessionById(sid);
+                  if (sessionOnFail) {
+                    sessionOnFail.recordingInProgress = false;
+                    sessionOnFail.recordingStartedAtEpochMs = undefined;
+                  }
                   broadcastToSession(sid, {
                     type: "recordingError",
                     error: errorMsg,
@@ -1208,6 +1244,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               })
               .catch((err) => {
                 req.log.warn({ err, url: startRecordingUrl }, "WebRTC start-recording fetch failed");
+                const sessionOnFail = getSessionById(sid);
+                if (sessionOnFail) {
+                  sessionOnFail.recordingInProgress = false;
+                  sessionOnFail.recordingStartedAtEpochMs = undefined;
+                }
                 broadcastToSession(sid, {
                   type: "recordingError",
                   error: "Failed to start recording",
@@ -1385,10 +1426,21 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             });
         }
         if (sessionId && isHost) {
-          const result = setHostDisconnected(sessionId);
-          if (result) {
-            const session = getSessionByIdRaw(sessionId);
-            if (session) {
+          const session = getSessionByIdRaw(sessionId);
+          const hostP = session?.participants.find((p) => p.isHost);
+          const hostParticipantId = hostP?.id;
+          const sockets = sessionSockets.get(sessionId);
+          const anotherHostSocket =
+            sockets &&
+            hostParticipantId &&
+            Array.from(sockets).some(
+              (s) =>
+                s !== socket &&
+                socketToParticipant.get(s)?.participantId === hostParticipantId,
+            );
+          if (!anotherHostSocket) {
+            const result = setHostDisconnected(sessionId);
+            if (result && session) {
               broadcastToSession(sessionId, {
                 type: "hostDisconnected",
                 gracePeriodMs: result.gracePeriodMs,

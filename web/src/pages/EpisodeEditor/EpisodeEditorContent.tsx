@@ -435,6 +435,19 @@ export function EpisodeEditorContent({
         }
       />
 
+      {startCallError && (
+        <div className={styles.callErrorBanner} role="alert">
+          {startCallError}
+          <button
+            type="button"
+            className={styles.callErrorBannerDismiss}
+            onClick={() => setStartCallError(null)}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className={styles.card}>
         <EpisodeSectionsPanel
               episodeId={id}
@@ -598,19 +611,6 @@ export function EpisodeEditorContent({
         </Dialog.Portal>
       </Dialog.Root>
 
-      {startCallError && (
-        <div className={styles.callErrorBanner} role="alert">
-          {startCallError}
-          <button
-            type="button"
-            className={styles.callErrorBannerDismiss}
-            onClick={() => setStartCallError(null)}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
       <EndCallConfirmDialog
         open={endCallConfirmOpen}
         onOpenChange={setEndCallConfirmOpen}

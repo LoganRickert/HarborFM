@@ -98,6 +98,7 @@ export class SegmentRecorder {
         resolve({ success: false, filePath: null });
         return;
       }
+      console.log("[SegmentRecorder] stop segmentId=%s graceMs=%d sending q to ffmpeg", this.options.segmentId, graceMs);
 
       const cleanupSdp = () => {
         try {
@@ -118,6 +119,7 @@ export class SegmentRecorder {
       }, graceMs);
 
       ff.once("close", (code) => {
+        console.log("[SegmentRecorder] stop segmentId=%s ffmpeg close code=%d", this.options.segmentId, code);
         clearTimeout(timeout);
         cleanupSdp();
         if (code === 0 && existsSync(this.partPath) && statSync(this.partPath).size > 0) {

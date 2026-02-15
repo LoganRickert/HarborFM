@@ -1,4 +1,10 @@
 import { nanoid } from "nanoid";
+import {
+  HOST_AWAY_CHECK_INTERVAL_MS,
+  HOST_AWAY_GRACE_NO_GUESTS_MS,
+  HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS,
+  HOST_AWAY_GRACE_WITH_GUESTS_MS,
+} from "../config.js";
 
 export interface CallParticipant {
   id: string;
@@ -46,10 +52,6 @@ export interface CallSession {
   hostDisconnectGraceMs?: number;
 }
 
-const GRACE_NO_GUESTS_MS = 1 * 60 * 1000; // 1 minute
-const GRACE_NO_GUESTS_RECORDING_MS = 2 * 60 * 1000; // 2 minutes
-const GRACE_WITH_GUESTS_MS = 5 * 60 * 1000; // 5 minutes
-
 const sessionsByToken = new Map<string, CallSession>();
 const sessionsById = new Map<string, CallSession>();
 const sessionsByCode = new Map<string, CallSession>();
@@ -57,15 +59,17 @@ let hostAwayCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 function getHostDisconnectGraceMs(session: CallSession): number {
   const guestCount = session.participants.filter((p) => !p.isHost).length;
-  if (guestCount > 0) return GRACE_WITH_GUESTS_MS;
-  if (session.recordingInProgress === true) return GRACE_NO_GUESTS_RECORDING_MS;
-  return GRACE_NO_GUESTS_MS;
+  if (guestCount > 0) return HOST_AWAY_GRACE_WITH_GUESTS_MS;
+  if (session.recordingInProgress === true)
+    return HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS;
+  return HOST_AWAY_GRACE_NO_GUESTS_MS;
 }
 
 function ensureHostAwayChecker(
   onSessionEnd: (session: CallSession) => void | Promise<void>,
 ): void {
   if (hostAwayCheckInterval != null) return;
+  console.log("[hostAway] Starting checker intervalMs=%d", HOST_AWAY_CHECK_INTERVAL_MS);
   hostAwayCheckInterval = setInterval(() => {
     const now = Date.now();
     for (const session of sessionsById.values()) {
@@ -79,6 +83,12 @@ function ensureHostAwayChecker(
         shouldEnd = now - session.lastHostHeartbeatAt >= grace;
       }
       if (shouldEnd) {
+        console.log(
+          "[hostAway] Ending session sessionId=%s roomId=%s recordingInProgress=%s",
+          session.sessionId,
+          session.roomId,
+          session.recordingInProgress
+        );
         session.ended = true;
         const result = onSessionEnd(session);
         if (result && typeof (result as Promise<unknown>).catch === "function") {
@@ -88,7 +98,7 @@ function ensureHostAwayChecker(
         }
       }
     }
-  }, 30_000); // check every 30s
+  }, HOST_AWAY_CHECK_INTERVAL_MS);
 }
 
 /** Mark host as disconnected (socket closed). Returns grace period for broadcasting. */
@@ -100,6 +110,12 @@ export function setHostDisconnected(sessionId: string): { gracePeriodMs: number 
   hostP.disconnected = true;
   session.hostDisconnectedAt = Date.now();
   session.hostDisconnectGraceMs = getHostDisconnectGraceMs(session);
+  console.log(
+    "[hostAway] setHostDisconnected sessionId=%s graceMs=%d recordingInProgress=%s",
+    sessionId,
+    session.hostDisconnectGraceMs,
+    session.recordingInProgress
+  );
   return { gracePeriodMs: session.hostDisconnectGraceMs };
 }
 

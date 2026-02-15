@@ -446,7 +446,7 @@ From the repo root:
 | `pnpm run db:migrate` | Run database migrations |
 | `pnpm run deploy:pm2` | Deploy to PM2 (install, build, start/reload); see [Deploy with PM2](#deploy-with-pm2) |
 | `pnpm run reset-password` | Reset the first user’s password (server) |
-| `pnpm run db:clear-ip-bans` | Clear the IP ban table (server) |
+| `pnpm run db:clear-ip-bans` | Clear the IP ban and login-attempt tables (server) |
 | `pnpm run lint` | Lint all packages |
 | `pnpm run typecheck` | Type-check all packages |
 | `pnpm run test` | Run tests in all packages |

@@ -25,9 +25,7 @@ export function useMediasoupRoom(
   });
   const ctxRef = useRef<AudioContext | null>(null);
   const webrtcWsRef = useRef<WebSocket | null>(null);
-  const soundboardMutedRef = useRef<boolean>(false);
   const soundboardVolumeRef = useRef<number>(1);
-  const setSoundboardMutedRef = useRef<(muted: boolean) => void>(() => {});
   const setSoundboardVolumeRef = useRef<(volume: number) => void>(() => {});
   const onSoundboardStoppedRef = useRef<(() => void) | null>(null);
 
@@ -148,10 +146,6 @@ export function useMediasoupRoom(
           tickId = requestAnimationFrame(tick);
         }
         tickId = requestAnimationFrame(tick);
-
-        setSoundboardMutedRef.current = (_muted: boolean) => {
-          // Server-side soundboard: mute would require server support; no-op for now
-        };
 
         setSoundboardVolumeRef.current = (volume: number) => {
           soundboardVolumeRef.current = Math.max(0, Math.min(1, volume));
@@ -330,11 +324,6 @@ export function useMediasoupRoom(
     setMutedRef.current(muted);
   }, []);
 
-  const setSoundboardMuted = useCallback((muted: boolean) => {
-    soundboardMutedRef.current = muted;
-    setSoundboardMutedRef.current(muted);
-  }, []);
-
   const sendIfOpen = useCallback((msg: object) => {
     const ws = webrtcWsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
@@ -375,7 +364,6 @@ export function useMediasoupRoom(
     setMuted,
     playSoundboard,
     stopSoundboard,
-    setSoundboardMuted,
     setSoundboardVolume,
     resumeSoundboardContext,
     setSoundboardPanelOpen,

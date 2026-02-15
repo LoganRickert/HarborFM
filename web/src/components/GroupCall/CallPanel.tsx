@@ -68,7 +68,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const [chatMinimized, setChatMinimized] = useState(false);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
   const [soundboardMinimized, setSoundboardMinimized] = useState(false);
-  const [soundboardMuted, setSoundboardMutedState] = useState(false);
   const [soundboardVolume, setSoundboardVolumeState] = useState(() => {
     if (typeof window === 'undefined') return 1;
     const stored = localStorage.getItem(SOUNDBOARD_VOLUME_KEY);
@@ -83,7 +82,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
   const myParticipant = participants.find((p) => p.isHost);
-  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardMuted, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef } = useMediasoupRoom(
+  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     undefined,
@@ -323,12 +322,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       }
       return !prev;
     });
-  };
-
-  const handleSoundboardMuteToggle = () => {
-    const next = !soundboardMuted;
-    setSoundboardMutedState(next);
-    setSoundboardMuted(next);
   };
 
   const handleSoundboardVolumeChange = (volume: number) => {
@@ -618,9 +611,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           onMinimizeToggle={() => {}}
           volume={soundboardVolume}
           onVolumeChange={handleSoundboardVolumeChange}
-          soundboardMuted={soundboardMuted}
-          onSoundboardMuteToggle={handleSoundboardMuteToggle}
-          muteDisabled={!effectiveWebrtcUrl || !producerReady}
           recording={recording}
           onRecordingEvent={handleRecordingEvent}
         />
@@ -703,9 +693,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
               onMinimizeToggle={() => setSoundboardMinimized((m) => !m)}
               volume={soundboardVolume}
               onVolumeChange={handleSoundboardVolumeChange}
-              soundboardMuted={soundboardMuted}
-              onSoundboardMuteToggle={handleSoundboardMuteToggle}
-              muteDisabled={!effectiveWebrtcUrl || !producerReady}
               recording={recording}
               onRecordingEvent={handleRecordingEvent}
             />

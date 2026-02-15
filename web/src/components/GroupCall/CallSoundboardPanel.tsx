@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
 import { useQuery } from '@tanstack/react-query';
-import { Disc, ChevronDown, Minimize2, Maximize2, Play, Pause, Search, Volume2, VolumeX, X } from 'lucide-react';
+import { Disc, ChevronDown, Minimize2, Maximize2, Play, Pause, Search, X } from 'lucide-react';
 import { listLibrary, libraryWaveformUrl, type LibraryAsset } from '../../api/library';
 import { WaveformCanvas, type WaveformData } from '../../pages/EpisodeEditor/WaveformCanvas';
 import styles from './CallSoundboardPanel.module.css';
@@ -17,9 +17,6 @@ export interface CallSoundboardPanelProps {
   onMinimizeToggle: () => void;
   volume: number;
   onVolumeChange: (volume: number) => void;
-  soundboardMuted: boolean;
-  onSoundboardMuteToggle: () => void;
-  muteDisabled?: boolean;
   /** When true and onRecordingEvent provided, soundboard play/stop emits recording events for sync. */
   recording?: boolean;
   onRecordingEvent?: (ev: { event: string; assetId?: string; clientTimestampMs?: number; durationSec?: number }) => void;
@@ -132,9 +129,6 @@ export function CallSoundboardPanel({
   onMinimizeToggle,
   volume,
   onVolumeChange,
-  soundboardMuted,
-  onSoundboardMuteToggle,
-  muteDisabled,
   recording,
   onRecordingEvent,
 }: CallSoundboardPanelProps) {
@@ -391,16 +385,6 @@ export function CallSoundboardPanel({
         <Disc size={18} strokeWidth={2} aria-hidden />
         <span className={styles.title}>Soundboard</span>
         <span className={styles.headerSpacer} />
-        <button
-          type="button"
-          className={styles.iconBtn}
-          onClick={onSoundboardMuteToggle}
-          disabled={muteDisabled}
-          aria-label={soundboardMuted ? 'Unmute soundboard (guests will hear)' : 'Mute soundboard (guests won\'t hear)'}
-          title={soundboardMuted ? 'Unmute soundboard (guests will hear)' : 'Mute soundboard (guests won\'t hear)'}
-        >
-          {soundboardMuted ? <VolumeX size={16} strokeWidth={2} aria-hidden /> : <Volume2 size={16} strokeWidth={2} aria-hidden />}
-        </button>
         <button
           type="button"
           className={styles.iconBtn}

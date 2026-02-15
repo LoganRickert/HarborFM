@@ -80,6 +80,8 @@ export function useBatchedSegmentWaveforms(
     return () => {
       abortRef.current?.abort();
     };
+  // fetchKey encodes segment identity; toFetch is derived and would cause re-runs every render (new array ref)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId, fetchKey]);
 
   return waveforms;

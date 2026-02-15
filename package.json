@@ -24,6 +24,8 @@
     "docker:webrtc": "docker compose down webrtc && docker compose build webrtc && docker compose up -d webrtc",
     "e2e": "cd e2e && pnpm run e2e",
     "e2e:webrtc": "cd e2e && pnpm run e2e:webrtc",
+    "e2e:webrtc:slow": "cd e2e && pnpm run e2e:webrtc:slow",
+    "e2e:webrtc:full": "cd e2e && pnpm run e2e:webrtc:full",
     "test": "pnpm run lint && pnpm run build && pnpm run e2e && pnpm run db:migrate:test"
   },
   "engines": {

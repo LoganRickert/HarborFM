@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User } from 'lucide-react';
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
@@ -15,6 +15,7 @@ const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
 
 export function CallJoin() {
   const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
   const [joinInfo, setJoinInfo] = useState<CallJoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +43,7 @@ export function CallJoin() {
   const [streamReady, setStreamReady] = useState(false);
   const [chatMinimized, setChatMinimized] = useState(true);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [recordingInProgress, setRecordingInProgress] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const selfListenGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -84,15 +86,19 @@ export function CallJoin() {
 
   useEffect(() => {
     if (!token) {
-      setError('Invalid link');
-      setLoading(false);
+      navigate('/call/join?error=' + encodeURIComponent('Invalid link'), { replace: true });
       return;
     }
     getJoinInfo(token)
-      .then(setJoinInfo)
-      .catch(() => setError('Invalid or expired link'))
-      .finally(() => setLoading(false));
-  }, [token]);
+      .then((info) => {
+        setJoinInfo(info);
+        setLoading(false);
+      })
+      .catch((err: Error & { status?: number }) => {
+        const msg = err?.message ?? 'Invalid or expired link';
+        navigate(`/call/join?error=${encodeURIComponent(msg)}`, { replace: true });
+      });
+  }, [token, navigate]);
 
   useEffect(() => {
     navigator.mediaDevices
@@ -253,6 +259,7 @@ export function CallJoin() {
           }
           setMyParticipantId(msg.participantId ?? null);
           setParticipants(msg.participants ?? []);
+          setRecordingInProgress(msg.recordingInProgress === true);
           if (msg.hostDisconnected === true && typeof msg.gracePeriodMs === 'number' && typeof msg.endsAt === 'number') {
             setHostDisconnected({ gracePeriodMs: msg.gracePeriodMs, endsAt: msg.endsAt });
           } else {
@@ -269,6 +276,10 @@ export function CallJoin() {
           if (typeof msg.gracePeriodMs === 'number' && typeof msg.endsAt === 'number') {
             setHostDisconnected({ gracePeriodMs: msg.gracePeriodMs, endsAt: msg.endsAt });
           }
+        } else if (msg.type === 'recordingStarted') {
+          setRecordingInProgress(true);
+        } else if (msg.type === 'recordingStopped') {
+          setRecordingInProgress(false);
         } else if (msg.type === 'participantJoined') {
           setParticipants((prev) => {
             const p = msg.participant;
@@ -387,7 +398,7 @@ export function CallJoin() {
     const audioUnavailable = !webrtcUrl || !webrtcRoomId;
     return pageLayout(
       <>
-        <div className={styles.card}>
+        <div className={`${styles.card} ${recordingInProgress ? styles.cardRecording : ''}`}>
           {joinInfo?.artworkUrl && (
             <img src={joinInfo.artworkUrl} alt="" className={styles.artwork} />
           )}

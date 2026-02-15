@@ -17,6 +17,13 @@ export WEBRTC_PUBLIC_WS_URL="ws://localhost:$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="e2e-secret"
 export MAIN_APP_BASE_URL="http://127.0.0.1:$PORT"
 
+# Short timeouts for e2e (host-leave test ~10-15s total instead of minutes)
+export HOST_AWAY_GRACE_NO_GUESTS_MS="${HOST_AWAY_GRACE_NO_GUESTS_MS:-2000}"
+export HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS="${HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS:-2000}"
+export HOST_AWAY_GRACE_WITH_GUESTS_MS="${HOST_AWAY_GRACE_WITH_GUESTS_MS:-5000}"
+export HOST_AWAY_CHECK_INTERVAL_MS="${HOST_AWAY_CHECK_INTERVAL_MS:-500}"
+export FINALIZE_RTP_FLUSH_MS="${FINALIZE_RTP_FLUSH_MS:-200}"
+
 # Clean and create data/secrets
 rm -rf "$E2E_DIR/data" "$E2E_DIR/secrets" "$E2E_DIR/webrtc-recordings" "$E2E_DIR/reports"
 mkdir -p "$E2E_DIR/data" "$E2E_DIR/secrets" "$E2E_DIR/webrtc-recordings" "$E2E_DIR/reports" "$E2E_DIR/assets"
@@ -45,14 +52,31 @@ bash "$SCRIPT_DIR/start-server.sh"
 # Start webrtc
 bash "$SCRIPT_DIR/start-webrtc.sh"
 
+# Optionally stream server/webrtc logs to terminal (E2E_STREAM_LOGS=1)
+TAIL_PIDS=()
+if [ -n "${E2E_STREAM_LOGS:-}" ]; then
+  (tail -f "$E2E_DIR/server.log" 2>/dev/null | sed 's/^/[server] /') &
+  TAIL_PIDS+=($!)
+  (tail -f "$E2E_DIR/webrtc.log" 2>/dev/null | sed 's/^/[webrtc] /') &
+  TAIL_PIDS+=($!)
+  echo "Streaming server + webrtc logs (E2E_STREAM_LOGS=1)"
+fi
+
 # Ensure Playwright browsers are installed, then run tests
 cd "$E2E_DIR"
 pnpm exec playwright install chromium
 EXIT_CODE=0
 # WebRTC test runs headed (for reliable fake device). Use xvfb when no display (SSH, CI).
+# E2E_WEBRTC_MODE: "fast" (default) = exclude @slow tests, "slow" = run only @slow, "full" = run all
+PLAYWRIGHT_ARGS=""
+case "${E2E_WEBRTC_MODE:-fast}" in
+  slow)  PLAYWRIGHT_ARGS="--grep @slow" ;;
+  full)  PLAYWRIGHT_ARGS="" ;;
+  fast|*) PLAYWRIGHT_ARGS="--grep-invert @slow" ;;
+esac
 if [ -z "${DISPLAY:-}" ]; then
   if command -v xvfb-run &>/dev/null; then
-    xvfb-run pnpm exec playwright test || EXIT_CODE=$?
+    xvfb-run pnpm exec playwright test $PLAYWRIGHT_ARGS || EXIT_CODE=$?
   else
     echo "Error: Headed browser requires a display. Install xvfb and rerun, or run with DISPLAY set:" >&2
     echo "  apt install xvfb   # Debian/Ubuntu" >&2
@@ -60,11 +84,14 @@ if [ -z "${DISPLAY:-}" ]; then
     exit 1
   fi
 else
-  pnpm exec playwright test || EXIT_CODE=$?
+  pnpm exec playwright test $PLAYWRIGHT_ARGS || EXIT_CODE=$?
 fi
 
 # Stop webrtc and server
 bash "$SCRIPT_DIR/stop-webrtc.sh"
 bash "$SCRIPT_DIR/stop-server.sh"
+
+# Stop log streaming
+[ ${#TAIL_PIDS[@]} -gt 0 ] && kill "${TAIL_PIDS[@]}" 2>/dev/null || true
 
 exit $EXIT_CODE
