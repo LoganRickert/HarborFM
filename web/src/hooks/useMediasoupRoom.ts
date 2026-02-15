@@ -85,7 +85,7 @@ export function useMediasoupRoom(
         await device.load({ routerRtpCapabilities: capsMsg.rtpCapabilities });
         if (closed) return;
 
-        const audioConstraints: MediaTrackConstraints = deviceId
+        const audioConstraints: boolean | MediaTrackConstraints = deviceId
           ? { deviceId: { exact: deviceId } }
           : true;
         micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
