@@ -415,20 +415,17 @@
 
 .recordRow {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
   align-self: stretch;
 }
 
-.recordRowLeft {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+.recordRowIdle {
+  justify-content: center;
 }
 
-.recordRowRecording .recordRowLeft {
-  flex: 1;
+.recordRowRecording {
+  justify-content: space-between;
 }
 
 .recordRowMuteBtn {
@@ -454,10 +451,6 @@
 .recordRowMuteBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.recordRowRecording {
-  /* space-between from .recordRow keeps layout */
 }
 
 .recordDurationBadge {

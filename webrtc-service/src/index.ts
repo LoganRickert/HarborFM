@@ -42,6 +42,9 @@ type ActiveRecording = RecordingMeta & {
 
 const RECORDING_DATA_DIR = process.env.RECORDING_DATA_DIR?.trim() || process.env.DATA_DIR?.trim() || "/data";
 const RECORD_PORT_BASE = 50000;
+/** Stride to avoid port conflict when starting a new recording before the previous FFmpeg has released ports. */
+const RECORD_PORT_STRIDE = 64;
+let recordPortOffsetCounter = 0;
 
 const rooms = new Map<string, RoomState>();
 let worker: mediasoup.types.Worker | null = null;
@@ -237,10 +240,12 @@ app.post<{
     const consumers: Consumer[] = [];
     const sdpSpecs: StreamSpec[] = [];
 
-    console.log("[webrtc] start-recording roomId=%s creating %d consumers for FFmpeg", roomId, audioProducers.length);
+    const portOffset = (recordPortOffsetCounter++ * RECORD_PORT_STRIDE) % 10000;
+    const portBase = RECORD_PORT_BASE + portOffset;
+    console.log("[webrtc] start-recording roomId=%s creating %d consumers for FFmpeg portBase=%d", roomId, audioProducers.length, portBase);
     for (let i = 0; i < audioProducers.length; i++) {
-      const rtpPort = RECORD_PORT_BASE + i * 4;
-      const rtcpPort = RECORD_PORT_BASE + i * 4 + 1;
+      const rtpPort = portBase + i * 4;
+      const rtcpPort = portBase + i * 4 + 1;
 
       const plainTransport = await room.router.createPlainTransport({
         listenIp: { ip: "127.0.0.1" },

@@ -53,6 +53,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [copied, setCopied] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [recordingConfirmed, setRecordingConfirmed] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingProcessing, setRecordingProcessing] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
@@ -132,22 +133,27 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           onCallEnded();
         } else if (msg.type === 'recordingStarted') {
           setRecording(true);
+          setRecordingConfirmed(true);
           setRecordingSeconds(0);
           setRecordingProcessing(false);
         } else if (msg.type === 'recordingStopped') {
           setRecording(false);
+          setRecordingConfirmed(false);
           setRecordingError(null);
           setRecordingProcessing(true);
         } else if (msg.type === 'recordingError') {
           setRecording(false);
+          setRecordingConfirmed(false);
           setRecordingProcessing(false);
           setRecordingError(msg.error ?? 'Recording failed');
         } else if (msg.type === 'recordingStopFailed') {
           setRecording(false);
+          setRecordingConfirmed(false);
           setRecordingProcessing(false);
           setRecordingError(msg.error ?? 'Failed to stop recording');
         } else if (msg.type === 'segmentRecorded') {
           setRecording(false);
+          setRecordingConfirmed(false);
           setRecordingError(null);
           setRecordingProcessing(false);
           onSegmentRecorded?.();
@@ -232,6 +238,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       wsRef.current.send(JSON.stringify({ type: 'startRecording' }));
       setRecordingSeconds(0);
       setRecording(true);
+      setRecordingConfirmed(false);
     }
   };
 
@@ -517,42 +524,40 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       )}
       {!showChatView && (
       <div className={styles.recordSection}>
-        <div className={`${styles.recordRow} ${recording ? styles.recordRowRecording : ''}`}>
-          <span className={styles.recordRowLeft}>
-            {recording ? (
-              <>
-                <button
-                  type="button"
-                  className={styles.stopRecordBtn}
-                  onClick={handleStopRecording}
-                  aria-label="Stop recording"
-                >
-                  <Square size={16} strokeWidth={2} aria-hidden />
-                  Stop recording
-                </button>
-                <span className={styles.recordDurationBadge} aria-live="polite">
-                  {formatDurationHMS(recordingSeconds)}
-                </span>
-              </>
-            ) : (
+        <div className={`${styles.recordRow} ${recording ? styles.recordRowRecording : styles.recordRowIdle}`}>
+          {recording ? (
+            <>
               <button
                 type="button"
-                className={styles.recordSegmentBtn}
-                onClick={handleStartRecording}
-                disabled={recordDisabled}
-                title={recordDisabled ? recordDisabledMessage : undefined}
-                aria-label={
-                  recordDisabled
-                    ? (recordDisabledMessage ? `Record segment: ${recordDisabledMessage}` : 'Record segment from call (disabled)')
-                    : 'Record segment from call'
-                }
-                data-producer-ready={effectiveWebrtcUrl && producerReady ? 'true' : undefined}
+                className={styles.stopRecordBtn}
+                onClick={handleStopRecording}
+                aria-label="Stop recording"
               >
-                <Mic size={16} strokeWidth={2} aria-hidden />
-                Record segment
+                <Square size={16} strokeWidth={2} aria-hidden />
+                Stop recording
               </button>
-            )}
-          </span>
+              <span className={styles.recordDurationBadge} aria-live="polite">
+                {recordingConfirmed ? formatDurationHMS(recordingSeconds) : 'Starting...'}
+              </span>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={styles.recordSegmentBtn}
+              onClick={handleStartRecording}
+              disabled={recordDisabled}
+              title={recordDisabled ? recordDisabledMessage : undefined}
+              aria-label={
+                recordDisabled
+                  ? (recordDisabledMessage ? `Record segment: ${recordDisabledMessage}` : 'Record segment from call (disabled)')
+                  : 'Record segment from call'
+              }
+              data-producer-ready={effectiveWebrtcUrl && producerReady ? 'true' : undefined}
+            >
+              <Mic size={16} strokeWidth={2} aria-hidden />
+              Record Segment
+            </button>
+          )}
         </div>
         {!minimized && recordingProcessing && (
           <p className={styles.recordingProcessing} role="status">
