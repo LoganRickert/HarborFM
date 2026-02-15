@@ -140,6 +140,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           setParticipants(msg.participants);
           if (msg.webrtcUrl) setWebrtcUrlFromWs(msg.webrtcUrl);
           if (msg.roomId) setRoomIdFromWs(msg.roomId);
+          if (msg.recordingInProgress === true) {
+            setRecording(true);
+            setRecordingConfirmed(true);
+            setRecordingProcessing(false);
+            const epoch = typeof msg.recordingStartedAtEpochMs === 'number' ? msg.recordingStartedAtEpochMs : Date.now();
+            setRecordingSeconds(Math.max(0, Math.floor((Date.now() - epoch) / 1000)));
+          }
         } else if (msg.type === 'participants') {
           setParticipants(msg.participants ?? []);
         } else if (msg.type === 'participantJoined') {

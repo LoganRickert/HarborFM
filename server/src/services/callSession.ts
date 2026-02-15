@@ -34,6 +34,10 @@ export interface CallSession {
   roomId?: string;
   /** Events during recording (soundboard plays, etc.). Cleared on start, sent to webrtc on stop. */
   recordingEvents?: RecordingEvent[];
+  /** True when a recording has been started and not yet stopped (for reconnecting host). */
+  recordingInProgress?: boolean;
+  /** Client epoch ms when recording started (for reconnecting host to show elapsed time). */
+  recordingStartedAtEpochMs?: number;
 }
 
 const HOST_AWAY_MS = 5 * 60 * 1000; // 5 minutes
@@ -263,6 +267,11 @@ export function getSessionByCode(code: string): CallSession | undefined {
   return s && !s.ended ? s : undefined;
 }
 
+/** For debugging: count of active (non-ended) sessions. */
+export function getActiveSessionCount(): number {
+  return Array.from(sessionsById.values()).filter((s) => !s.ended).length;
+}
+
 export function getActiveSessionForEpisode(
   episodeId: string,
   hostUserId: string,
@@ -273,6 +282,18 @@ export function getActiveSessionForEpisode(
       session.episodeId === episodeId &&
       session.hostUserId === hostUserId
     ) {
+      return session;
+    }
+  }
+  return undefined;
+}
+
+/** Returns any active (non-ended) session for this episode, for limiting one call per episode. */
+export function getAnyActiveSessionForEpisode(
+  episodeId: string,
+): CallSession | undefined {
+  for (const session of sessionsById.values()) {
+    if (!session.ended && session.episodeId === episodeId) {
       return session;
     }
   }

@@ -18,16 +18,16 @@ type Producer = mediasoup.types.Producer;
 
 const PORT = Number(process.env.PORT) || 3002;
 
-/** Format current local time as YYYY-MM-DD_HH-mm-ss for recording folder names. */
+/** Format current local time as YYYYMMDD_HHMMSS for recording folder names (matches segments format). */
 function formatDateTimeForFolder(): string {
   const d = new Date();
-  const y = d.getFullYear();
+  const y = String(d.getFullYear());
   const mo = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   const h = String(d.getHours()).padStart(2, "0");
   const min = String(d.getMinutes()).padStart(2, "0");
   const s = String(d.getSeconds()).padStart(2, "0");
-  return `${y}-${mo}-${day}_${h}-${min}-${s}`;
+  return `${y}${mo}${day}_${h}${min}${s}`;
 }
 const RTC_MIN_PORT = Number(process.env.RTC_MIN_PORT) || 40000;
 const RTC_MAX_PORT = Number(process.env.RTC_MAX_PORT) || 40200;
@@ -247,6 +247,12 @@ app.post<{
   }
   const room = getRoom(roomId);
   if (!room) return reply.status(404).send({ error: "Room not found" });
+
+  const existingForEpisode = Array.from(recordingByRoom.values()).find((s) => s.episodeId === episodeId);
+  if (existingForEpisode) {
+    console.log("[webrtc] POST /start-recording roomId=%s episodeId=%s rejected: recording already in progress", roomId, episodeId);
+    return reply.status(409).send({ error: "A recording is already in progress for this episode." });
+  }
 
   const audioProducers = Array.from(room.producers.values()).filter((p) => p.kind === "audio");
   const unpausedAudioProducers = audioProducers.filter((p) => !p.paused);

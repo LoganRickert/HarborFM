@@ -22,6 +22,8 @@ import {
   endSession,
   verifyPassword,
   getActiveSessionForEpisode,
+  getAnyActiveSessionForEpisode,
+  getActiveSessionCount,
   setSessionRoomId,
   setParticipantMutedBySelf,
   setParticipantMutedByHost,
@@ -34,6 +36,7 @@ import { segmentPath, getWebrtcRecordingsDir, multitrackRecordingsDir, libraryDi
 import { assertPathUnder, assertResolvedPathUnder } from "../../services/paths.js";
 import { contentTypeFromAudioPath } from "../../utils/audio.js";
 import { createSegmentFromPath } from "../../services/segmentFromRecording.js";
+import * as audioService from "../../services/audio.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { RECORD_MIN_FREE_BYTES } from "../../config.js";
 import {
@@ -125,6 +128,12 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: "You do not have permission to edit segments." });
 
       const existing = getActiveSessionForEpisode(episodeId, request.userId);
+      const anyExisting = getAnyActiveSessionForEpisode(episodeId);
+      if (anyExisting && anyExisting.hostUserId !== request.userId) {
+        return reply.status(409).send({
+          error: "A call is already in progress for this episode.",
+        });
+      }
       if (existing) {
         ensureSessionJoinCode(existing);
         const origin =
@@ -223,9 +232,13 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         },
         response: {
           200: {
-            description: "Token for joining",
+            description: "Token for joining, or alreadyConnected if requester is the host",
             type: "object",
-            properties: { token: { type: "string" } },
+            properties: {
+              token: { type: "string" },
+              alreadyConnected: { type: "boolean", description: "True when requester is the host and already in the call" },
+              episodeId: { type: "string", description: "Episode ID when alreadyConnected, for redirect" },
+            },
             required: ["token"],
           },
           404: { description: "No call found for this code" },
@@ -244,12 +257,38 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       }
       const session = getSessionByCode(code);
       if (!session) {
+        const normalized = String(code ?? "").trim();
+        request.log.info(
+          {
+            code: normalized,
+            formatOk: normalized.length === 4 && /^\d{4}$/.test(normalized),
+            activeSessionCount: getActiveSessionCount(),
+          },
+          "call by-code: no session found",
+        );
         recordFailureAndMaybeBan(ip, CALL_JOIN_CONTEXT, {
           userAgent: request.headers["user-agent"],
         });
         return reply.status(404).send({ error: "No call found for this code" });
       }
-      return reply.send({ token: session.token });
+      let alreadyConnected = false;
+      try {
+        await request.jwtVerify();
+        const payload = request.user as { sub?: string };
+        if (payload?.sub && session.hostUserId === payload.sub) {
+          alreadyConnected = true;
+        }
+      } catch {
+        /* not authenticated - guest flow */
+      }
+      const body: { token: string; alreadyConnected?: boolean; episodeId?: string } = {
+        token: session.token,
+      };
+      if (alreadyConnected) {
+        body.alreadyConnected = true;
+        body.episodeId = session.episodeId;
+      }
+      return reply.send(body);
     },
   );
 
@@ -628,12 +667,14 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             const mtDir = multitrackRecordingsDir(body.podcastId, body.episodeId, body.segmentId, recordingEpochMs);
             writeFileSync(join(mtDir, "tracks_manifest.json"), JSON.stringify(body.tracksManifest, null, 2));
             const webrtcDir = getWebrtcRecordingsDir();
+            const copiedBases: string[] = [];
             for (const relPath of body.perTrackFilePaths) {
               const src = resolve(join(webrtcDir, relPath));
               assertResolvedPathUnder(src, webrtcDir);
               if (existsSync(src)) {
                 const base = relPath.split("/").pop() ?? relPath;
                 copyFileSync(src, join(mtDir, base));
+                copiedBases.push(base);
                 try {
                   unlinkSync(src);
                 } catch {
@@ -641,6 +682,16 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 }
               }
             }
+            setImmediate(() => {
+              for (const base of copiedBases) {
+                const audioPath = join(mtDir, base);
+                if (existsSync(audioPath)) {
+                  audioService.generateWaveformFile(audioPath, mtDir).catch((err) => {
+                    request.log.warn({ err, segmentId: body.segmentId, file: base }, "Per-track waveform failed");
+                  });
+                }
+              }
+            });
           } catch (mtErr) {
             request.log.warn({ err: mtErr }, "Failed to save multitrack files (segment created successfully)");
           }
@@ -779,6 +830,8 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     participantId,
                     isHost: true,
                     participants: [...session.participants],
+                    recordingInProgress: session.recordingInProgress === true,
+                    recordingStartedAtEpochMs: session.recordingStartedAtEpochMs,
                   };
                   const webrtcCfg = getWebRtcConfig();
                   if (session.roomId && webrtcCfg.publicWsUrl) {
@@ -847,6 +900,8 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               participantId: pid,
               isHost: true,
               participants: [...sess.participants],
+              recordingInProgress: sess.recordingInProgress === true,
+              recordingStartedAtEpochMs: sess.recordingStartedAtEpochMs,
             };
             const webrtcCfg = getWebRtcConfig();
             if (sess.roomId && webrtcCfg.publicWsUrl) {
@@ -1030,6 +1085,13 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         if (type === "startRecording" && isHost) {
           const sid = sessionId;
           const session = getSessionById(sid);
+          if (session?.recordingInProgress) {
+            broadcastToSession(sid, {
+              type: "recordingError",
+              error: "A recording is already in progress.",
+            });
+            return;
+          }
           const name = (msg as { name?: string }).name?.trim() || null;
           const clientEpochMs = (msg as { clientEpochMs?: number }).clientEpochMs;
           const webrtcCfg = getWebRtcConfig();
@@ -1077,7 +1139,12 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 if (res.ok) {
                   const data = (await res.json()) as { recordingEpochMs?: number };
                   const sessionForRecording = getSessionById(sid);
-                  if (sessionForRecording) sessionForRecording.recordingEvents = [];
+                  if (sessionForRecording) {
+                    sessionForRecording.recordingEvents = [];
+                    sessionForRecording.recordingInProgress = true;
+                    sessionForRecording.recordingStartedAtEpochMs =
+                      typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : Date.now();
+                  }
                   broadcastToSession(sid, {
                     type: "recordingStarted",
                     recordingEpochMs: typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : undefined,
@@ -1143,6 +1210,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         if (type === "stopRecording" && isHost) {
           const sid = sessionId;
           const session = getSessionById(sid);
+          if (session) {
+            session.recordingInProgress = false;
+            session.recordingStartedAtEpochMs = undefined;
+          }
           const webrtcCfg = getWebRtcConfig();
           if (session?.roomId && webrtcCfg.serviceUrl) {
             const events = session.recordingEvents ?? [];

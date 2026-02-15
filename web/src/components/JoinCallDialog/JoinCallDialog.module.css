@@ -116,6 +116,26 @@
   border-color: #e53e3e;
 }
 
+.infoCard {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: rgba(72, 187, 120, 0.15);
+  border: 1px solid rgba(72, 187, 120, 0.4);
+  border-radius: var(--radius);
+}
+
+.infoLink {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.infoLink:hover {
+  text-decoration: underline;
+}
+
 .errorCard {
   margin: 0;
   padding: 0.75rem 1rem;

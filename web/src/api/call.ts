@@ -43,6 +43,10 @@ export function getActiveSession(episodeId: string): Promise<CallSessionResponse
 
 export interface CallByCodeResponse {
   token: string;
+  /** True when the requester is the host and already in the call. */
+  alreadyConnected?: boolean;
+  /** Episode ID when alreadyConnected, for redirect. */
+  episodeId?: string;
 }
 
 export function getCallByCode(code: string): Promise<CallByCodeResponse> {

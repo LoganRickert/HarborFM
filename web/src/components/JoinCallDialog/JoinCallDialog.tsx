@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { X, Phone } from 'lucide-react';
-import { getCallByCode } from '../../api/call';
+import { getCallByCode, getJoinInfo, getActiveSession } from '../../api/call';
+import type { ApiError } from '../../api/client';
 import styles from './JoinCallDialog.module.css';
 
 export interface JoinCallDialogProps {
@@ -12,6 +13,8 @@ export interface JoinCallDialogProps {
 export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [alreadyConnected, setAlreadyConnected] = useState(false);
+  const [alreadyConnectedEpisodeId, setAlreadyConnectedEpisodeId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -20,6 +23,8 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
     if (open) {
       setCode('');
       setError(null);
+      setAlreadyConnected(false);
+      setAlreadyConnectedEpisodeId(null);
       setSubmitting(false);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
@@ -33,13 +38,40 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
       return;
     }
     setError(null);
+    setAlreadyConnected(false);
+    setAlreadyConnectedEpisodeId(null);
     setSubmitting(true);
     try {
-      const { token } = await getCallByCode(trimmed);
+      const res = await getCallByCode(trimmed);
+      let episodeId = res.episodeId;
+      let isHost = !!res.alreadyConnected;
+      if (!isHost && res.token) {
+        try {
+          const joinInfo = await getJoinInfo(res.token);
+          episodeId = joinInfo.episode.id;
+          const session = await getActiveSession(joinInfo.episode.id);
+          isHost = !!session;
+        } catch {
+          /* auth or network; fall through to navigate */
+        }
+      }
+      if (isHost) {
+        setAlreadyConnected(true);
+        setAlreadyConnectedEpisodeId(episodeId ?? null);
+        setSubmitting(false);
+        return;
+      }
       onOpenChange(false);
-      navigate(`/call/join/${token}`);
-    } catch {
-      setError('No call found for this code');
+      navigate(`/call/join/${res.token}`);
+    } catch (err) {
+      const status = (err as ApiError)?.status;
+      if (status === 404) {
+        setError('No call found for this code');
+      } else if (status === 0 || (status && status >= 500)) {
+        setError('Connection failed. Try again.');
+      } else {
+        setError('No call found for this code');
+      }
       setSubmitting(false);
     }
   };
@@ -48,6 +80,8 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
     const val = e.target.value.replace(/\D/g, '').slice(0, 4);
     setCode(val);
     setError(null);
+    setAlreadyConnected(false);
+    setAlreadyConnectedEpisodeId(null);
   };
 
   if (!open) return null;
@@ -97,6 +131,23 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
             aria-describedby={error ? 'join-call-error' : undefined}
             disabled={submitting}
           />
+          {alreadyConnected && (
+            <div className={styles.infoCard} role="status">
+              You&apos;re already connected.
+              {alreadyConnectedEpisodeId && (
+                <>
+                  {' '}
+                  <Link
+                    to={`/episodes/${alreadyConnectedEpisodeId}`}
+                    className={styles.infoLink}
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Go to call
+                  </Link>
+                </>
+              )}
+            </div>
+          )}
           {error && (
             <div id="join-call-error" className={styles.errorCard} role="alert">
               {error}

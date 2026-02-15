@@ -23,7 +23,7 @@ export type SegmentRecorderOptions = {
   segmentId: string;
   producerId: string;
   recordingDataDir: string;
-  /** Folder name under recordings/ (e.g. 2025-02-15_14-30-00_episodeId) */
+  /** Folder name under recordings/ (e.g. 20260215_163652_episodeId) */
   recordingDirName: string;
 };
 
