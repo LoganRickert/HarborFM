@@ -346,13 +346,13 @@ export function CallJoin() {
           )}
           {joinInfo && (
             <p className={`${styles.sub} ${styles.podcastEpisode}`}>
-              {joinInfo.podcast.title} — {joinInfo.episode.title}
+              {joinInfo.podcast.title} - {joinInfo.episode.title}
             </p>
           )}
           <h1 className={styles.cardTitle}>You're In The Call</h1>
           {audioUnavailable && (
             <p className={styles.audioUnavailable} role="status">
-              Audio is unavailable — the host&apos;s WebRTC service is not running. You can stay in the call but won&apos;t hear or be heard until it&apos;s started.
+              Audio is unavailable - the host&apos;s WebRTC service is not running. You can stay in the call but won&apos;t hear or be heard until it&apos;s started.
             </p>
           )}
           {mutedByHost && (
@@ -398,7 +398,7 @@ export function CallJoin() {
             onClick={resumeAudioContext}
             onKeyDown={(e) => e.key === 'Enter' && resumeAudioContext()}
             title="Click if the bar doesn't move"
-            aria-label="Microphone level — click to enable if needed"
+            aria-label="Microphone level - click to enable if needed"
           >
             <div className={styles.micLevelBar} style={{ width: `${micLevel}%` }} />
           </div>
@@ -518,7 +518,7 @@ export function CallJoin() {
         {joinInfo && (
         <>
           <p className={`${styles.sub} ${styles.podcastEpisode}`}>
-            {joinInfo.podcast.title} — {joinInfo.episode.title}
+            {joinInfo.podcast.title} - {joinInfo.episode.title}
           </p>
           <h1 className={styles.cardTitle}>Join Group Call</h1>
           {joinInfo.hostName && (
@@ -544,10 +544,11 @@ export function CallJoin() {
             />
             {devices.length > 0 && (
               <>
-                <label className={styles.label} htmlFor="call-join-mic">
-                  Microphone
-                </label>
-                <select
+                <div className={styles.micSelector}>
+                  <label className={styles.label} htmlFor="call-join-mic">
+                    Microphone
+                  </label>
+                  <select
                   id="call-join-mic"
                   className={styles.select}
                   value={deviceId}
@@ -559,6 +560,7 @@ export function CallJoin() {
                     </option>
                   ))}
                 </select>
+                </div>
                 <div
                   className={styles.micLevel}
                   role="button"
@@ -566,7 +568,7 @@ export function CallJoin() {
                   onClick={resumeAudioContext}
                   onKeyDown={(e) => e.key === 'Enter' && resumeAudioContext()}
                   title="Click if the bar doesn't move"
-                  aria-label="Microphone level — click to enable if needed"
+                  aria-label="Microphone level - click to enable if needed"
                 >
                   <div className={styles.micLevelBar} style={{ width: `${micLevel}%` }} />
                 </div>

@@ -308,7 +308,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       </div>
       {!minimized && showMediaUnavailable && (
         <p className={styles.mediaUnavailableBanner} role="status">
-          Audio is unavailable — WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
+          Audio is unavailable - WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
         </p>
       )}
       {!minimized && !showChatView && (

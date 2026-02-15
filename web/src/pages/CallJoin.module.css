@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   padding-top: 0.5rem;
   min-height: 0;
   overflow: hidden;
@@ -32,7 +32,7 @@
   width: 100%;
   max-width: 420px;
   min-height: 150px;
-  max-height: 100%;
+  max-height: 750px;
   margin-bottom: 1.5rem;
   padding: 2rem;
   overflow: hidden;
@@ -42,7 +42,7 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
-@media (max-height: 500px), (max-width: 379px) {
+@media (max-height: 830px) {
   .podcastEpisode {
     display: none;
   }
@@ -57,7 +57,7 @@
   display: block;
 }
 
-@media (max-height: 639px) {
+@media (max-height: 780px) {
   .artwork {
     display: none;
   }
@@ -76,6 +76,13 @@
   color: var(--text-muted, #888);
 }
 
+.podcastEpisode {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 .callActionLabel {
   display: inline;
 }
@@ -90,6 +97,24 @@
   margin: 0 0 1rem;
   font-size: 0.875rem;
   color: var(--text-muted, #888);
+}
+
+.micSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (max-height: 650px) {
+  .micSelector {
+    display: none;
+  }
+}
+
+@media (max-height: 460px) {
+  .hostName {
+    display: none;
+  }
 }
 
 .audioUnavailable {
@@ -258,6 +283,13 @@
   color: var(--text-muted, #888);
 }
 
+@media (max-height: 550px) {
+  .listenRow,
+  .micTestHint {
+    display: none;
+  }
+}
+
 .micLevel {
   height: 6px;
   background: var(--bg-muted, #252525);
@@ -272,6 +304,12 @@
   background: var(--accent, #00d4aa);
   border-radius: 3px;
   transition: width 0.1s ease;
+}
+
+@media (max-height: 420px) {
+  .micLevel {
+    display: none;
+  }
 }
 
 .participantsLabel {
