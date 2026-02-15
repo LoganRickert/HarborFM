@@ -102,7 +102,7 @@ export function CallJoin() {
     selfListenGainRef.current = null;
     setStreamReady(false);
     setListeningToSelf(false);
-  }, [deviceId, joined]);
+  }, [deviceId, joined, streamReady]);
 
   const setupMicrophone = async (): Promise<boolean> => {
     if (streamRef.current) return true;

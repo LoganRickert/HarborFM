@@ -183,7 +183,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         ws.close();
       }
     };
-  }, [sessionId, onCallEnded]);
+  }, [sessionId, onCallEnded, onSegmentRecorded, setMuted]);
 
   const handleDisplayNameSave = (name: string) => {
     const trimmed = name.trim();

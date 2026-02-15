@@ -526,7 +526,6 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             error: "Recording copy failed: destination file was not created",
           });
         }
-        unlinkSync(sourcePath);
         const row = await createSegmentFromPath(
           destPath,
           body.segmentId,
@@ -539,6 +538,14 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             type: "segmentRecorded",
             segment: row,
           });
+        }
+        try {
+          unlinkSync(sourcePath);
+        } catch (unlinkErr) {
+          request.log.warn(
+            { err: unlinkErr, sourcePath },
+            "Could not remove source recording file (permission denied); segment created successfully",
+          );
         }
         return reply.status(201).send(row);
       } catch (err) {

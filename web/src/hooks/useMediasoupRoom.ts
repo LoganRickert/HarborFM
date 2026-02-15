@@ -10,7 +10,10 @@ export function useMediasoupRoom(webrtcUrl: string | undefined, roomId: string |
   const producerRef = useRef<mediasoupClient.types.Producer | null>(null);
   const setMutedRef = useRef<(muted: boolean) => void>((muted) => {
     const p = producerRef.current;
-    if (p) (muted ? p.pause() : p.resume());
+    if (p) {
+      if (muted) p.pause();
+      else p.resume();
+    }
   });
   const connectSoundboardRef = useRef<(el: HTMLAudioElement | null) => void>(() => {});
 
