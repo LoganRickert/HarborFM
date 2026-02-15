@@ -47,12 +47,17 @@ export function CallJoin() {
   const animationRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
-  const { remoteTracks, setMuted } = useMediasoupRoom(webrtcUrl, webrtcRoomId, deviceId || undefined);
-  const setMutedRef = useRef(setMuted);
-  setMutedRef.current = setMuted;
-
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
+  const { remoteTracks, setMuted } = useMediasoupRoom(
+    webrtcUrl,
+    webrtcRoomId,
+    deviceId || undefined,
+    myParticipantId ?? undefined,
+    myParticipant?.name ?? name,
+  );
+  const setMutedRef = useRef(setMuted);
+  setMutedRef.current = setMuted;
 
   useWakeLock(joined);
 
@@ -500,8 +505,8 @@ export function CallJoin() {
               </li>
             ))}
           </ul>
-          {Array.from(remoteTracks.entries()).map(([id, track]) => (
-            <RemoteAudio key={id} track={track} />
+          {Array.from(remoteTracks.entries()).map(([id, info]) => (
+            <RemoteAudio key={id} track={info.track} />
           ))}
         </div>
         <div className={styles.chatPanelWrapper}>

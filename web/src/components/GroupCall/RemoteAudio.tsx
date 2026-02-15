@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import styles from './RemoteAudio.module.css';
 
 /** Renders an audio element for a remote MediaStreamTrack with fallback for autoplay policy. */
-export function RemoteAudio({ track }: { track: MediaStreamTrack }) {
+export function RemoteAudio({ track, volume = 1 }: { track: MediaStreamTrack; volume?: number }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [needsClick, setNeedsClick] = useState(false);
 
@@ -10,11 +10,16 @@ export function RemoteAudio({ track }: { track: MediaStreamTrack }) {
     const el = audioRef.current;
     if (!el || !track) return;
     el.srcObject = new MediaStream([track]);
-    el.volume = 1;
     el.play()
       .then(() => setNeedsClick(false))
       .catch(() => setNeedsClick(true));
   }, [track]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.volume = Math.max(0, Math.min(1, volume));
+  }, [volume]);
 
   const handleClick = () => {
     audioRef.current?.play()

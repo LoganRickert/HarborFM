@@ -2,17 +2,33 @@ import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import * as mediasoup from "mediasoup";
 import { nanoid } from "nanoid";
-import { existsSync, mkdirSync, statSync } from "fs";
+import { existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { dirname, join } from "path";
+import { RecordingManager } from "./recording/RecordingManager.js";
+import {
+  recoverPartFiles,
+  markInterruptedSegments,
+  appendSegmentLog,
+} from "./recording/segmentMetadata.js";
 
 type Router = mediasoup.types.Router;
 type WebRtcTransport = mediasoup.types.WebRtcTransport;
-type PlainTransport = mediasoup.types.PlainTransport;
 type Producer = mediasoup.types.Producer;
-type Consumer = mediasoup.types.Consumer;
 
 const PORT = Number(process.env.PORT) || 3002;
+
+/** Format current local time as YYYY-MM-DD_HH-mm-ss for recording folder names. */
+function formatDateTimeForFolder(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${mo}-${day}_${h}-${min}-${s}`;
+}
 const RTC_MIN_PORT = Number(process.env.RTC_MIN_PORT) || 40000;
 const RTC_MAX_PORT = Number(process.env.RTC_MAX_PORT) || 40200;
 const ANNOUNCED_IP = process.env.MEDIASOUP_ANNOUNCED_IP?.trim() || undefined;
@@ -33,43 +49,66 @@ type RecordingMeta = {
   recordingCallbackSecret: string | null;
 };
 
-type ActiveRecording = RecordingMeta & {
-  ffmpeg: ChildProcess;
-  plainTransports: PlainTransport[];
-  consumers: Consumer[];
+type RecordingState = RecordingMeta & {
+  activeSegmentsByProducerId: Map<string, import("./recording/RecordingManager.js").ActiveSegment>;
+  finalizedSegments: import("./recording/RecordingManager.js").FinalizedSegmentInfo[];
+  finalizedProducerIds: Set<string>;
+  recordingStartedAt: number;
+  recordingEpochMs: number;
+  portBase: number;
+  nextPortIndex: number;
+  sessionSegmentId: string;
+  episodeDir: string;
+  jsonlPath: string;
   checkStorageInterval?: ReturnType<typeof setInterval>;
+  producerCheckInterval?: ReturnType<typeof setInterval>;
+  heartbeatInterval?: ReturnType<typeof setInterval>;
 };
 
 const RECORDING_DATA_DIR = process.env.RECORDING_DATA_DIR?.trim() || process.env.DATA_DIR?.trim() || "/data";
 const RECORD_PORT_BASE = 50000;
 /** Stride to avoid port conflict when starting a new recording before the previous FFmpeg has released ports. */
-const RECORD_PORT_STRIDE = 64;
+const RECORD_PORT_STRIDE = 128;
 let recordPortOffsetCounter = 0;
 
 const rooms = new Map<string, RoomState>();
+const producerSourceMap = new Map<string, string>(); // producerId -> "soundboard" | etc
+const producerParticipantMap = new Map<string, { participantId: string; participantName: string }>();
+const producerSoundboardAssetMap = new Map<string, string>(); // producerId -> assetId
+const soundboardVolumeByRoom = new Map<string, number>(); // roomId -> 0..1, default 1
+/** Volume when user stopped this soundboard producer (captured at stopSoundboard, not at recording stop) */
+const soundboardVolumeAtStop = new Map<string, number>(); // producerId -> volume
+type SoundboardState = {
+  producer: mediasoup.types.Producer;
+  transport: mediasoup.types.PlainTransport;
+  ffmpeg: ChildProcess;
+  tempPath: string;
+};
+const soundboardByRoom = new Map<string, SoundboardState>();
 let worker: mediasoup.types.Worker | null = null;
-const recordingByRoom = new Map<string, ActiveRecording>();
+const recordingByRoom = new Map<string, RecordingState>();
 
 const MAIN_APP_URL = process.env.MAIN_APP_URL?.trim() || "";
 
-type StreamSpec = { rtpPort: number; rtcpPort: number; payloadType: number };
-
-function createMultiAudioSdp(specs: StreamSpec[]): string {
-  const parts = [
-    "v=0",
-    "o=- 0 0 IN IP4 127.0.0.1",
-    "s=-",
-    "c=IN IP4 127.0.0.1",
-    "t=0 0",
-  ];
-  for (const s of specs) {
-    parts.push(`m=audio ${s.rtpPort} RTP/AVP ${s.payloadType}`);
-    parts.push(`a=rtcp:${s.rtcpPort}`);
-    parts.push(`a=rtpmap:${s.payloadType} opus/48000/2`);
-    parts.push("a=sendonly");
-  }
-  return parts.join("\n") + "\n";
-}
+const recordingManager = new RecordingManager({
+  recordingDataDir: RECORDING_DATA_DIR,
+  recordPortBase: RECORD_PORT_BASE,
+  recordPortStride: RECORD_PORT_STRIDE,
+  getRoom,
+  recordingByRoom,
+  mainAppUrl: MAIN_APP_URL,
+  getProducerSource: (producerId) => producerSourceMap.get(producerId),
+  getProducerParticipant: (producerId) => producerParticipantMap.get(producerId),
+  getProducerSoundboardAsset: (producerId) => producerSoundboardAssetMap.get(producerId),
+  getSoundboardVolumeForSegment: (roomId, producerId) => {
+    const atStop = soundboardVolumeAtStop.get(producerId);
+    if (atStop != null) {
+      soundboardVolumeAtStop.delete(producerId);
+      return atStop;
+    }
+    return soundboardVolumeByRoom.get(roomId) ?? 1;
+  },
+});
 
 async function getWorker(): Promise<mediasoup.types.Worker> {
   if (worker) return worker;
@@ -89,6 +128,45 @@ async function getWorker(): Promise<mediasoup.types.Worker> {
 
 function getRoom(roomId: string): RoomState | undefined {
   return rooms.get(roomId);
+}
+
+/** Producer IDs whose WebRtcTransport is connected (iceState=completed, dtlsState=connected).
+ * Also includes server-side producers (e.g. soundboard on PlainTransport) - they are always "connected". */
+async function getProducerIdsOnConnectedTransports(room: RoomState): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const transport of room.transports.values()) {
+    if (transport.iceState === "completed" && transport.dtlsState === "connected") {
+      try {
+        const dump = await transport.dump();
+        for (const pid of dump.producerIds ?? []) ids.add(pid);
+      } catch { /* ignore */ }
+    }
+  }
+  for (const pid of producerSourceMap.keys()) {
+    if (room.producers.has(pid)) ids.add(pid);
+  }
+  return ids;
+}
+
+/** Find the WebRtcTransport that has the given producer. */
+async function getTransportForProducer(room: RoomState, producerId: string): Promise<WebRtcTransport | null> {
+  for (const transport of room.transports.values()) {
+    try {
+      const dump = await transport.dump();
+      if ((dump.producerIds ?? []).includes(producerId)) return transport;
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+function finalizeProducerStream(
+  roomId: string,
+  state: RecordingState,
+  producerId: string,
+  reason: string,
+): void {
+  console.log("[webrtc] finalizeStream roomId=%s producerId=%s reason=%s", roomId, producerId, reason);
+  recordingManager.finalizeProducerStream(roomId, state, producerId, reason);
 }
 
 const app = Fastify({ logger: true });
@@ -136,16 +214,18 @@ app.post<{
 });
 
 app.post<{
-  Body: RecordingMeta & { roomId: string; filePathRelative?: string; filePath?: string };
+  Body: RecordingMeta & { roomId: string; filePathRelative?: string; filePath?: string; clientEpochMs?: number };
 }>("/start-recording", async (request, reply) => {
   const body = (request.body ?? {}) as RecordingMeta & {
     roomId: string;
     filePathRelative?: string;
     filePath?: string;
+    clientEpochMs?: number;
     recordingCallbackSecret?: string;
   };
   const filePathRelative = body.filePathRelative ?? body.filePath;
   const { roomId, segmentId, episodeId, podcastId, name, sessionId, recordingCallbackSecret } = body;
+  const clientEpochMs = (body as { clientEpochMs?: number }).clientEpochMs;
 
   const missing: string[] = [];
   if (!roomId) missing.push("roomId");
@@ -169,16 +249,22 @@ app.post<{
   if (!room) return reply.status(404).send({ error: "Room not found" });
 
   const audioProducers = Array.from(room.producers.values()).filter((p) => p.kind === "audio");
-  const allProducerIds = Array.from(room.producers.values()).map((p) => ({ id: p.id, kind: p.kind }));
-  console.log("[webrtc] POST /start-recording roomId=%s segmentId=%s totalProducers=%d audioProducers=%d producers=%j",
-    roomId, segmentId, room.producers.size, audioProducers.length, allProducerIds);
+  const unpausedAudioProducers = audioProducers.filter((p) => !p.paused);
+  const allProducerIds = Array.from(room.producers.values()).map((p) => ({ id: p.id, kind: p.kind, paused: p.paused }));
+  console.log("[webrtc] POST /start-recording roomId=%s segmentId=%s totalProducers=%d audioProducers=%d unpaused=%d producers=%j",
+    roomId, segmentId, room.producers.size, audioProducers.length, unpausedAudioProducers.length, allProducerIds);
   if (audioProducers.length === 0) {
     console.log("[webrtc] POST /start-recording roomId=%s rejected: no audio producer", roomId);
     return reply.status(400).send({ error: "No audio producer in room" });
   }
+  if (unpausedAudioProducers.length === 0) {
+    console.log("[webrtc] POST /start-recording roomId=%s rejected: all audio producers paused", roomId);
+    return reply.status(400).send({ error: "All audio producers are paused" });
+  }
 
   let allProducersNoPackets = true;
   let anyProducerPaused = false;
+  const producerIdsWithPackets = new Set<string>();
   for (let i = 0; i < audioProducers.length; i++) {
     const producer = audioProducers[i]!;
     try {
@@ -189,7 +275,10 @@ app.post<{
       const paused = producer.paused;
       console.log("[webrtc] start-recording roomId=%s producer %d id=%s paused=%s byteCount=%d packetCount=%d statsLength=%d rawStats=%j",
         roomId, i, producer.id, paused, bytesReceived, packetsReceived, stats.length, stats);
-      if (bytesReceived > 0 || packetsReceived > 0) allProducersNoPackets = false;
+      if (bytesReceived > 0 || packetsReceived > 0) {
+        allProducersNoPackets = false;
+        producerIdsWithPackets.add(producer.id);
+      }
       if (paused) anyProducerPaused = true;
       if (bytesReceived === 0 && packetsReceived === 0) {
         console.log("[webrtc] start-recording roomId=%s WARNING producer %s has received no packets (check MEDIASOUP_ANNOUNCED_IP=%s UDP %d-%d)",
@@ -226,131 +315,104 @@ app.post<{
     return reply.status(400).send({ error: "Unmute your microphone before recording." });
   }
 
+  const producerIdsOnConnectedTransports = await getProducerIdsOnConnectedTransports(room);
+  const recordableProducers = unpausedAudioProducers.filter(
+    (p) => producerIdsWithPackets.has(p.id) && producerIdsOnConnectedTransports.has(p.id)
+  );
+  if (recordableProducers.length === 0) {
+    console.log("[webrtc] start-recording roomId=%s rejected: no unpaused producer has received RTP on connected transport producerIdsWithPackets=%j onConnected=%j unpausedIds=%j",
+      roomId, Array.from(producerIdsWithPackets), Array.from(producerIdsOnConnectedTransports), unpausedAudioProducers.map((p) => p.id));
+    return reply.status(400).send({ error: "No audio received from unmuted participants. Wait for the call to connect before recording." });
+  }
+  const skippedNoPackets = unpausedAudioProducers.filter((p) => !producerIdsWithPackets.has(p.id));
+  const skippedNotConnected = unpausedAudioProducers.filter((p) => producerIdsWithPackets.has(p.id) && !producerIdsOnConnectedTransports.has(p.id));
+  for (const p of skippedNoPackets) {
+    console.log("[webrtc] start-recording roomId=%s skipping producer %s (0 packets)", roomId, p.id);
+  }
+  for (const p of skippedNotConnected) {
+    console.log("[webrtc] start-recording roomId=%s skipping producer %s (transport not connected: iceState/dtlsState)", roomId, p.id);
+  }
+
   const secret = recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
   const meta: RecordingMeta = { filePathRelative, segmentId, episodeId, podcastId, name: name ?? null, sessionId: sessionId ?? null, recordingCallbackSecret: secret };
 
   try {
-    const routerCodec = room.router.rtpCapabilities.codecs?.find((c) => c.kind === "audio");
-    const rtpCapabilities = {
-      codecs: routerCodec ? [routerCodec] : [],
-      headerExtensions: room.router.rtpCapabilities.headerExtensions ?? [],
-    };
-
-    const plainTransports: PlainTransport[] = [];
-    const consumers: Consumer[] = [];
-    const sdpSpecs: StreamSpec[] = [];
-
     const portOffset = (recordPortOffsetCounter++ * RECORD_PORT_STRIDE) % 10000;
     const portBase = RECORD_PORT_BASE + portOffset;
-    console.log("[webrtc] start-recording roomId=%s creating %d consumers for FFmpeg portBase=%d", roomId, audioProducers.length, portBase);
-    for (let i = 0; i < audioProducers.length; i++) {
-      const rtpPort = portBase + i * 4;
-      const rtcpPort = portBase + i * 4 + 1;
+    const recordingStartedAt = Date.now();
+    const recordingEpochMs = typeof clientEpochMs === "number" ? clientEpochMs : recordingStartedAt;
+    const recordingDirName = `${formatDateTimeForFolder()}_${episodeId}`;
+    const episodeDir = join(RECORDING_DATA_DIR, "recordings", recordingDirName);
+    const jsonlPath = join(episodeDir, "segments.jsonl");
+    mkdirSync(episodeDir, { recursive: true });
 
-      const plainTransport = await room.router.createPlainTransport({
-        listenIp: { ip: "127.0.0.1" },
-        rtcpMux: false,
-        comedia: false,
-      });
-      const consumer = await plainTransport.consume({
-        producerId: audioProducers[i]!.id,
-        rtpCapabilities,
-        paused: true,
-      });
-      const payloadType = consumer.rtpParameters.codecs?.[0]?.payloadType ?? 111;
+    const activeSegmentsByProducerId = new Map<string, import("./recording/RecordingManager.js").ActiveSegment>();
+    const finalizedSegments: import("./recording/RecordingManager.js").FinalizedSegmentInfo[] = [];
+    const finalizedProducerIds = new Set<string>();
 
-      plainTransports.push(plainTransport);
-      consumers.push(consumer);
-      sdpSpecs.push({ rtpPort, rtcpPort, payloadType });
-      console.log("[webrtc] start-recording roomId=%s consumer %d producerId=%s rtpPort=%d", roomId, i, audioProducers[i]!.id, rtpPort);
-    }
+    const state: RecordingState = {
+      ...meta,
+      activeSegmentsByProducerId,
+      finalizedSegments,
+      finalizedProducerIds,
+      recordingStartedAt,
+      recordingEpochMs,
+      portBase,
+      nextPortIndex: 0,
+      sessionSegmentId: segmentId,
+      episodeDir,
+      jsonlPath,
+    };
+    recordingByRoom.set(roomId, state);
 
-    const filePath = join(RECORDING_DATA_DIR, filePathRelative);
-    console.log("[webrtc] start-recording roomId=%s output filePath=%s", roomId, filePath);
-    mkdirSync(dirname(filePath), { recursive: true });
-
-    const sdp = createMultiAudioSdp(sdpSpecs);
-    const numInputs = consumers.length;
-
-    const ffmpegArgs: string[] = [
-      "-loglevel", "warning",
-      "-protocol_whitelist", "pipe,udp,rtp",
-      "-reorder_queue_size", "500",
-      "-f", "sdp", "-i", "pipe:0",
-    ];
-    if (numInputs === 1) {
-      ffmpegArgs.push("-map", "0:a:0", "-acodec", "pcm_s16le", "-ar", "48000", "-ac", "1");
-    } else {
-      const filterInputs = Array.from({ length: numInputs }, (_, i) => `[0:a:${i}]`).join("");
-      ffmpegArgs.push(
-        "-filter_complex",
-        `${filterInputs}amix=inputs=${numInputs}:duration=longest[aout]`,
-        "-map", "[aout]",
-        "-acodec", "pcm_s16le", "-ar", "48000", "-ac", "1",
-      );
-    }
-    ffmpegArgs.push("-y", filePath);
-    console.log("[webrtc] start-recording roomId=%s spawning FFmpeg numInputs=%d", roomId, numInputs);
-    const ffmpeg = spawn("ffmpeg", ffmpegArgs, { stdio: ["pipe", "pipe", "pipe"] });
-    ffmpeg.stdin?.write(sdp);
-    ffmpeg.stdin?.end();
-    console.log("[webrtc] start-recording roomId=%s FFmpeg SDP:\n%s", roomId, sdp);
-    ffmpeg.on("error", (err) => request.log.error({ err }, "FFmpeg error"));
-    ffmpeg.on("close", (code, signal) => {
-      request.log.info({ code, signal }, "FFmpeg exited");
-      console.log("[webrtc] FFmpeg exited roomId=%s code=%s signal=%s", roomId, code, signal);
-    });
-    ffmpeg.stderr?.on("data", (chunk: Buffer) => {
-      const line = chunk.toString().trim();
-      if (line) {
-        request.log.info({ ffmpeg: line }, "FFmpeg stderr");
-        console.log("[webrtc] FFmpeg roomId=%s: %s", roomId, line);
+    console.log("[webrtc] start-recording roomId=%s creating per-producer streams portBase=%d recordable=%d", roomId, portBase, recordableProducers.length);
+    for (const producer of recordableProducers) {
+      const seg = await recordingManager.addProducerToRecording(roomId, room, state, producer);
+      if (seg) {
+        activeSegmentsByProducerId.set(producer.id, seg);
+        ffmpegStderrLogger(seg.ffmpeg, roomId, producer.id, request.log);
+        console.log("[webrtc] start-recording roomId=%s added producer %s", roomId, producer.id);
       }
-    });
-
-    await new Promise((r) => setTimeout(r, 1000));
-    console.log("[webrtc] start-recording roomId=%s connecting PlainTransports to FFmpeg", roomId);
-    for (let i = 0; i < plainTransports.length; i++) {
-      const t = plainTransports[i]!;
-      const spec = sdpSpecs[i]!;
-      await t.connect({
-        ip: "127.0.0.1",
-        port: spec.rtpPort,
-        rtcpPort: spec.rtcpPort,
-      });
     }
-    await new Promise((r) => setTimeout(r, 200));
-    console.log("[webrtc] start-recording roomId=%s resuming %d consumers", roomId, consumers.length);
-    for (const c of consumers) await c.resume();
 
-    const secret = meta.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
+    const secretStr = meta.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
     let checkStorageInterval: ReturnType<typeof setInterval> | undefined;
-    if (MAIN_APP_URL && secret && meta.sessionId) {
+    if (MAIN_APP_URL && secretStr && meta.sessionId) {
       checkStorageInterval = setInterval(async () => {
-        const state = recordingByRoom.get(roomId);
-        if (!state) return;
+        const rec = recordingByRoom.get(roomId);
+        if (!rec || rec !== state) return;
         try {
-          const size = existsSync(filePath) ? statSync(filePath).size : 0;
+          let size = 0;
+          for (const seg of rec.activeSegmentsByProducerId.values()) {
+            const p = seg.recorder.getPartPath();
+            if (existsSync(p)) size += statSync(p).size;
+          }
+          for (const fs of rec.finalizedSegments) {
+            const p = join(RECORDING_DATA_DIR, fs.filePathRelative);
+            if (existsSync(p)) size += statSync(p).size;
+          }
           const res = await fetch(`${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-check-storage`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
+            headers: { "Content-Type": "application/json", "X-Recording-Secret": secretStr },
             body: JSON.stringify({ sessionId: meta.sessionId, bytesRecordedSoFar: size }),
           });
           if (!res.ok) return;
           const data = (await res.json()) as { stop?: boolean; error?: string };
           if (data.stop && data.error) {
             console.log("[webrtc] Storage limit reached roomId=%s bytesRecorded=%d stopping", roomId, size);
-            if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
             recordingByRoom.delete(roomId);
-            for (const c of state.consumers) try { c.close(); } catch { /* ignore */ }
-            for (const t of state.plainTransports) try { t.close(); } catch { /* ignore */ }
-            state.ffmpeg.kill("SIGINT");
+            if (rec.checkStorageInterval) clearInterval(rec.checkStorageInterval);
+            if (rec.producerCheckInterval) clearInterval(rec.producerCheckInterval);
+            for (const seg of rec.activeSegmentsByProducerId.values()) {
+              try { seg.consumer.close(); } catch { /* ignore */ }
+              try { seg.plainTransport.close(); } catch { /* ignore */ }
+              seg.ffmpeg.kill("SIGINT");
+            }
             await fetch(`${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-error`, {
               method: "POST",
-              headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
+              headers: { "Content-Type": "application/json", "X-Recording-Secret": secretStr },
               body: JSON.stringify({ sessionId: meta.sessionId, error: data.error }),
             });
-            console.log("[webrtc] Recording roomId=%s stopped: storage limit", roomId);
           }
         } catch (e) {
           request.log.warn({ err: e }, "recording-check-storage failed");
@@ -358,31 +420,180 @@ app.post<{
       }, 20000);
     }
 
-    const activeRecording: ActiveRecording = { ...meta, ffmpeg, plainTransports, consumers, checkStorageInterval };
-    recordingByRoom.set(roomId, activeRecording);
-    console.log("[webrtc] POST /start-recording roomId=%s started ok", roomId);
-    return reply.send({ ok: true });
+    const STALL_THRESHOLD_MS = 15000;
+    const finalizedThisTick = new Set<string>();
+    const producerCheckInterval = setInterval(async () => {
+      const rec = recordingByRoom.get(roomId);
+      if (!rec || rec !== state) return;
+      const roomState = getRoom(roomId);
+      if (!roomState) return;
+      finalizedThisTick.clear();
+
+      // Segment watchdog: detect stalls (no packets for STALL_THRESHOLD_MS)
+      const now = Date.now();
+      for (const [producerId, seg] of rec.activeSegmentsByProducerId) {
+        try {
+          const stats = await seg.consumer.getStats();
+          const packetCount = (stats as Array<{ packetCount?: number }>).reduce((sum, s) => sum + (s.packetCount ?? 0), 0);
+          if (packetCount > seg.lastPacketCount) {
+            seg.lastPacketCount = packetCount;
+            seg.lastPacketAtMs = now;
+          }
+          if (now - seg.lastPacketAtMs >= STALL_THRESHOLD_MS && now - seg.startedAt > 5000) {
+            const producerStillInRoom = roomState.producers.has(producerId);
+            const roomProducerIds = Array.from(roomState.producers.keys());
+            console.log("[webrtc] segment watchdog STALL_CANDIDATE producerId=%s segmentId=%s producerStillInRoom=%s roomProducers=%j noPacketsMs=%d",
+              producerId, seg.segmentId, producerStillInRoom, roomProducerIds, now - seg.lastPacketAtMs);
+            // Finalize without sending recording-error. A stall (one producer stopped) is not fatal:
+            // recording continues with remaining producers. Sending recording-error makes the client
+            // set recording=false, so the user can't click Stop → we never get stop-recording →
+            // no segments are ever written.
+            if (!producerStillInRoom) {
+              console.log("[webrtc] segment watchdog roomId=%s producerId=%s segmentId=%s producer closed, finalizing", roomId, producerId, seg.segmentId);
+            } else {
+              request.log.warn({ roomId, episodeId: rec.episodeId, producerId, segmentId: seg.segmentId }, "Recording segment stall detected");
+              console.log("[webrtc] segment watchdog roomId=%s producerId=%s segmentId=%s STALL (no packets for %dms) - finalizing, recording continues", roomId, producerId, seg.segmentId, STALL_THRESHOLD_MS);
+              appendSegmentLog(rec.jsonlPath, { segmentId: seg.segmentId, producerId, status: "DEGRADED" });
+            }
+            finalizedThisTick.add(producerId);
+            finalizeProducerStream(roomId, rec, producerId, producerStillInRoom ? "stall" : "producer closed");
+          }
+        } catch (e) {
+          request.log.warn({ err: e, producerId }, "segment watchdog getStats failed");
+        }
+      }
+
+      // Health check: finalize streams whose transport has gone disconnected (ICE/DTLS)
+      const toFinalize: string[] = [];
+      for (const [producerId] of rec.activeSegmentsByProducerId) {
+        const transport = await getTransportForProducer(roomState, producerId);
+        if (!transport) continue; // producer may have been removed
+        if (transport.iceState !== "completed" || transport.dtlsState !== "connected") {
+          console.log("[webrtc] producerCheckInterval roomId=%s finalize producerId=%s (transport disconnected iceState=%s dtlsState=%s)",
+            roomId, producerId, transport.iceState, transport.dtlsState);
+          toFinalize.push(producerId);
+        }
+      }
+      for (const producerId of toFinalize) {
+        finalizedThisTick.add(producerId);
+        finalizeProducerStream(roomId, rec, producerId, "transport disconnected");
+      }
+
+      const currentIds = new Set(rec.activeSegmentsByProducerId.keys());
+      for (const fs of rec.finalizedSegments) currentIds.add(fs.producerId);
+      for (const id of finalizedThisTick) currentIds.add(id);
+      for (const id of rec.finalizedProducerIds) currentIds.add(id); // never re-add finalized producers
+      if (finalizedThisTick.size > 0) {
+        console.log("[webrtc] producerCheckInterval roomId=%s finalizedThisTick=%j finalizedProducerIds=%d (blocking re-add)",
+          roomId, Array.from(finalizedThisTick), rec.finalizedProducerIds.size);
+      }
+      const allAudio = Array.from(roomState.producers.values()).filter((p) => p.kind === "audio");
+      const newUnpaused = allAudio.filter((p) => !p.paused && !currentIds.has(p.id));
+      const onConnectedTransports = await getProducerIdsOnConnectedTransports(roomState);
+      const withPackets: Producer[] = [];
+      for (const producer of newUnpaused) {
+        if (!onConnectedTransports.has(producer.id)) {
+          console.log("[webrtc] producerCheckInterval roomId=%s skip producerId=%s (transport not connected)", roomId, producer.id);
+          continue;
+        }
+        try {
+          const stats = await producer.getStats();
+          const bytesReceived = (stats as Array<{ byteCount?: number }>).reduce((sum, s) => sum + (s.byteCount ?? 0), 0);
+          const packetsReceived = (stats as Array<{ packetCount?: number }>).reduce((sum, s) => sum + (s.packetCount ?? 0), 0);
+          if (bytesReceived > 0 || packetsReceived > 0) withPackets.push(producer);
+          else console.log("[webrtc] producerCheckInterval roomId=%s skip producerId=%s (0 packets)", roomId, producer.id);
+        } catch (e) {
+          console.log("[webrtc] producerCheckInterval roomId=%s producerId=%s getStats failed: %s", roomId, producer.id, e);
+        }
+      }
+      if (newUnpaused.length > 0 || withPackets.length > 0 || finalizedThisTick.size > 0) {
+        const excludedByFinalized = allAudio.filter((p) => !p.paused && rec.finalizedProducerIds.has(p.id));
+        console.log("[webrtc] producerCheckInterval roomId=%s active=%d finalized=%d finalizedIds=%d roomAudio=%d newUnpaused=%d withPackets=%d excludedByFinalized=%j currentIds=%j",
+          roomId, rec.activeSegmentsByProducerId.size, rec.finalizedSegments.length, rec.finalizedProducerIds.size,
+          allAudio.length, newUnpaused.length, withPackets.length,
+          excludedByFinalized.map((p) => p.id), Array.from(currentIds));
+      }
+      for (const producer of withPackets) {
+        console.log("[webrtc] producerCheckInterval roomId=%s adding late-joiner producerId=%s (not in finalizedProducerIds)",
+          roomId, producer.id);
+        recordingManager.addProducerToRecording(roomId, roomState, rec, producer)
+          .then((seg) => {
+            if (seg && recordingByRoom.get(roomId) === state) {
+              rec.activeSegmentsByProducerId.set(producer.id, seg);
+              ffmpegStderrLogger(seg.ffmpeg, roomId, producer.id, request.log);
+              console.log("[webrtc] recording roomId=%s added late-joiner producer %s", roomId, producer.id);
+            } else {
+              console.log("[webrtc] producerCheckInterval roomId=%s late-joiner producerId=%s seg=%s stateMatch=%s", roomId, producer.id, !!seg, recordingByRoom.get(roomId) === state);
+            }
+          })
+          .catch((err) => {
+            console.log("[webrtc] producerCheckInterval roomId=%s addProducerToRecording FAILED producerId=%s: %s", roomId, producer.id, err);
+            request.log.warn({ err, producerId: producer.id }, "addProducerToRecording failed");
+          });
+      }
+    }, 2500);
+
+    const heartbeatInterval = setInterval(() => {
+      const rec = recordingByRoom.get(roomId);
+      if (!rec || rec !== state) return;
+      const now = Date.now();
+      for (const seg of rec.activeSegmentsByProducerId.values()) {
+        appendSegmentLog(rec.jsonlPath, {
+          segmentId: seg.segmentId,
+          producerId: seg.producerId,
+          lastSeenMs: now - rec.recordingStartedAt,
+          status: "RECORDING",
+        });
+      }
+    }, 10000);
+    state.heartbeatInterval = heartbeatInterval;
+    state.checkStorageInterval = checkStorageInterval;
+    state.producerCheckInterval = producerCheckInterval;
+
+    console.log("[webrtc] POST /start-recording roomId=%s started ok streams=%d", roomId, activeSegmentsByProducerId.size);
+    return reply.send({ ok: true, recordingEpochMs });
   } catch (err) {
     request.log.error({ err }, "Failed to start recording");
     return reply.status(500).send({ error: "Failed to start recording" });
   }
 });
 
-app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply) => {
-  const body = request.body as { roomId: string };
-  const { roomId } = body;
+function ffmpegStderrLogger(
+  ffmpeg: ChildProcess,
+  roomId: string,
+  producerId: string,
+  log: { info: (o: object, msg: string) => void },
+): void {
+  ffmpeg.stderr?.on("data", (chunk: Buffer) => {
+    const line = chunk.toString().trim();
+    if (line) {
+      log.info({ ffmpeg: line, producerId }, "FFmpeg stderr");
+      console.log("[webrtc] FFmpeg roomId=%s producerId=%s: %s", roomId, producerId, line);
+    }
+  });
+}
+
+app.post<{ Body: { roomId: string; events?: Array<{ event: string; assetId?: string; clientTimestampMs?: number; durationSec?: number }>; recordingEndedAtMs?: number } }>("/stop-recording", async (request, reply) => {
+  const body = request.body as { roomId: string; events?: Array<{ event: string; assetId?: string; clientTimestampMs?: number; durationSec?: number }>; recordingEndedAtMs?: number };
+  const { roomId, events, recordingEndedAtMs } = body;
   if (!roomId) return reply.status(400).send({ error: "roomId required" });
   const state = recordingByRoom.get(roomId);
-  recordingByRoom.delete(roomId);
-  console.log("[webrtc] POST /stop-recording roomId=%s hadState=%s filePath=%s", roomId, !!state, state?.filePathRelative ?? "n/a");
+  // Don't delete yet - finalizeProducerStreamAsync needs state in map to push to finalizedSegments
+  console.log("[webrtc] POST /stop-recording roomId=%s hadState=%s filePath=%s activeSegments=%d finalizedSegments=%d",
+    roomId, !!state, state?.filePathRelative ?? "n/a", state?.activeSegmentsByProducerId.size ?? 0, state?.finalizedSegments.length ?? 0);
   if (!state) return reply.send({ ok: true });
   if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
+  if (state.producerCheckInterval) clearInterval(state.producerCheckInterval);
+  if (state.heartbeatInterval) clearInterval(state.heartbeatInterval);
+  for (const [pid, seg] of state.activeSegmentsByProducerId) {
+    console.log("[webrtc] stop-recording roomId=%s activeSegment %s file=%s startedAt=%d", roomId, pid, seg.filePathRelative, seg.startedAt);
+  }
+  for (const fs of state.finalizedSegments) {
+    console.log("[webrtc] stop-recording roomId=%s finalizedSegment %s file=%s startedAt=%d", roomId, fs.producerId, fs.filePathRelative, fs.startedAt);
+  }
 
-  let callbackFired = false;
-  const doCallback = (fileOk: boolean) => {
-    if (callbackFired) return;
-    callbackFired = true;
-    const secret = state.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
+  const secret = state.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
+  const doCallback = (fileOk: boolean, tracksManifest?: object, perTrackFilePaths?: string[]) => {
     if (!MAIN_APP_URL || !secret) return;
 
     if (!fileOk) {
@@ -399,17 +610,20 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
     const callbackUrl = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-segment`;
     request.log.info({ callbackUrl, filePath: state.filePathRelative }, "Firing recording callback");
     console.log("[webrtc] Firing recording callback roomId=%s segmentId=%s filePath=%s", roomId, state.segmentId, state.filePathRelative);
+    const bodyPayload: Record<string, unknown> = {
+      filePath: state.filePathRelative,
+      segmentId: state.segmentId,
+      episodeId: state.episodeId,
+      podcastId: state.podcastId,
+      name: state.name,
+      sessionId: state.sessionId,
+    };
+    if (tracksManifest) bodyPayload.tracksManifest = tracksManifest;
+    if (perTrackFilePaths) bodyPayload.perTrackFilePaths = perTrackFilePaths;
     fetch(callbackUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
-      body: JSON.stringify({
-        filePath: state.filePathRelative,
-        segmentId: state.segmentId,
-        episodeId: state.episodeId,
-        podcastId: state.podcastId,
-        name: state.name,
-        sessionId: state.sessionId,
-      }),
+      body: JSON.stringify(bodyPayload),
     })
       .then(async (res) => {
         if (res.ok) {
@@ -427,39 +641,27 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
       });
   };
 
-  console.log("[webrtc] stop-recording roomId=%s sending SIGINT to FFmpeg (will close %d consumers, %d transports after exit)", roomId, state.consumers.length, state.plainTransports.length);
-  // SIGINT first so FFmpeg can flush its output buffers and finalize the WAV file.
-  // Closing consumers/transports first can leave FFmpeg stuck waiting for RTP.
-  state.ffmpeg.kill("SIGINT");
-  const sigkillDelayMs = 15000;
-  const exitTimeout = setTimeout(() => {
-    console.log("[webrtc] stop-recording roomId=%s FFmpeg did not exit in %ds, sending SIGKILL", roomId, sigkillDelayMs / 1000);
-    state.ffmpeg.kill("SIGKILL");
-  }, sigkillDelayMs);
-  state.ffmpeg.once("close", () => {
-    clearTimeout(exitTimeout);
-    for (const c of state.consumers) {
-      try {
-        c.close();
-      } catch (e) {
-        request.log.warn({ err: e }, "Error closing consumer");
-      }
-    }
-    for (const t of state.plainTransports) {
-      try {
-        t.close();
-      } catch (e) {
-        request.log.warn({ err: e }, "Error closing plain transport");
-      }
-    }
-    const filePath = join(RECORDING_DATA_DIR, state.filePathRelative);
-    const exists = existsSync(filePath);
-    const size = exists ? statSync(filePath).size : 0;
-    const fileOk = exists && size > 0;
-    if (!fileOk) {
-      console.log("[webrtc] stop-recording roomId=%s FFmpeg exited but file missing or empty path=%s exists=%s size=%d", roomId, filePath, exists, size);
-    }
-    doCallback(fileOk);
+  const activeProducerIds = Array.from(state.activeSegmentsByProducerId.keys());
+  console.log("[webrtc] stop-recording roomId=%s finalizing %d active segments, already finalized=%d",
+    roomId, activeProducerIds.length, state.finalizedSegments.length);
+
+  Promise.all(
+    activeProducerIds.map((producerId) =>
+      recordingManager.finalizeProducerStreamAsync(roomId, state, producerId),
+    ),
+  ).then(() => {
+    recordingByRoom.delete(roomId);
+    const allSegments = [...state.finalizedSegments];
+    console.log("[webrtc] stop-recording roomId=%s all segments finalized count=%d streams=%j",
+      roomId, allSegments.length, allSegments.map((s) => ({ id: s.producerId, file: s.filePathRelative, size: existsSync(join(RECORDING_DATA_DIR, s.filePathRelative)) ? statSync(join(RECORDING_DATA_DIR, s.filePathRelative)).size : -1 })));
+    const finalPath = join(RECORDING_DATA_DIR, state.filePathRelative);
+    recordingManager.runAmixAndDeliver(
+      state,
+      finalPath,
+      doCallback,
+      Array.isArray(events) ? events : undefined,
+      typeof recordingEndedAtMs === "number" ? recordingEndedAtMs : undefined,
+    );
   });
 
   return reply.send({ ok: true });
@@ -469,7 +671,7 @@ const socketRooms = new Map<unknown, string>();
 const socketTransports = new Map<unknown, WebRtcTransport>();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const wsHandler = (socket: any, req: any) => {
+const wsHandler = async (socket: any, req: any) => {
   const url = new URL(req.url ?? "", `http://${req.headers?.host ?? "localhost"}`);
   const roomId = url.searchParams.get("roomId");
   const wsUrl = req.url ?? "?";
@@ -478,11 +680,28 @@ const wsHandler = (socket: any, req: any) => {
     socket.close();
     return;
   }
-  const room = getRoom(roomId);
+  let room = getRoom(roomId);
   if (!room) {
-    console.log("[webrtc] WS rejected: room not found roomId=%s url=%s", roomId, wsUrl);
-    socket.close();
-    return;
+    console.log("[webrtc] WS roomId=%s not found, creating on-demand (webrtc may have restarted)", roomId);
+    try {
+      const w = await getWorker();
+      const router = await w.createRouter({
+        mediaCodecs: [
+          { kind: "audio", mimeType: "audio/opus", clockRate: 48000, channels: 2 },
+        ],
+      });
+      router.on("workerclose", () => {
+        console.log("[webrtc] roomId=%s router closed (worker died)", roomId);
+        rooms.delete(roomId);
+      });
+      room = { router, transports: new Map(), producers: new Map() };
+      rooms.set(roomId, room);
+      console.log("[webrtc] WS roomId=%s created on-demand routerId=%s", roomId, router.id);
+    } catch (err) {
+      console.log("[webrtc] WS failed to create room roomId=%s: %s", roomId, err);
+      socket.close();
+      return;
+    }
   }
   socketRooms.set(socket, roomId);
   const producerIds = Array.from(room.producers.keys());
@@ -552,7 +771,7 @@ const wsHandler = (socket: any, req: any) => {
         return;
       }
       if (type === "produce") {
-        const { transportId, kind, rtpParameters } = msg as unknown as { transportId: string; kind: mediasoup.types.MediaKind; rtpParameters: mediasoup.types.RtpParameters };
+        const { transportId, kind, rtpParameters, source } = msg as unknown as { transportId: string; kind: mediasoup.types.MediaKind; rtpParameters: mediasoup.types.RtpParameters; source?: string };
         const transport = roomState.transports.get(transportId);
         if (!transport) {
           console.log("[webrtc] WS roomId=%s produce FAILED transportId=%s not found (transports=%j)", roomId, transportId, Array.from(roomState.transports.keys()));
@@ -561,13 +780,17 @@ const wsHandler = (socket: any, req: any) => {
         }
         const producer = await transport.produce({ kind, rtpParameters });
         roomState.producers.set(producer.id, producer);
+        if (source) producerSourceMap.set(producer.id, source);
         producer.on("@close", () => {
           roomState.producers.delete(producer.id);
-          console.log("[webrtc] WS roomId=%s producer closed id=%s producersRemaining=%d", roomId, producer.id, roomState.producers.size);
+          producerSourceMap.delete(producer.id);
+          producerParticipantMap.delete(producer.id);
+          console.log("[webrtc] producer @close roomId=%s producerId=%s producersRemaining=%d remaining=%j",
+            roomId, producer.id, roomState.producers.size, Array.from(roomState.producers.keys()));
         });
         const codec = rtpParameters.codecs?.[0]?.mimeType ?? "?";
-        console.log("[webrtc] WS roomId=%s produce kind=%s id=%s transportId=%s codec=%s totalProducers=%d",
-          roomId, kind, producer.id, transportId, codec, roomState.producers.size);
+        console.log("[webrtc] WS roomId=%s produce kind=%s id=%s transportId=%s codec=%s totalProducers=%d source=%s",
+          roomId, kind, producer.id, transportId, codec, roomState.producers.size, source ?? "(none)");
         socket.send(JSON.stringify({ type: "produced", id: producer.id, kind: producer.kind }));
         for (const [s, r] of socketRooms.entries()) {
           if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
@@ -592,6 +815,7 @@ const wsHandler = (socket: any, req: any) => {
           return;
         }
         const consumer = await transport.consume({ producerId, rtpCapabilities });
+        const producerSource = producerSourceMap.get(producerId);
         console.log("[webrtc] WS roomId=%s consume producerId=%s consumerId=%s", roomId, producerId, consumer.id);
         socket.send(JSON.stringify({
           type: "consumed",
@@ -599,7 +823,156 @@ const wsHandler = (socket: any, req: any) => {
           producerId: consumer.producerId,
           kind: consumer.kind,
           rtpParameters: consumer.rtpParameters,
+          ...(producerSource ? { source: producerSource } : {}),
         }));
+        return;
+      }
+      if (type === "soundboardVolume") {
+        const { volume } = msg as { volume?: number };
+        if (typeof volume === "number") {
+          const v = Math.max(0, Math.min(1, volume));
+          soundboardVolumeByRoom.set(roomId, v);
+        }
+        return;
+      }
+      if (type === "associateProducer") {
+        const { producerId, participantId, participantName } = msg as { producerId?: string; participantId?: string; participantName?: string };
+        if (!producerId || !participantId || typeof participantName !== "string") return;
+        const producer = roomState.producers.get(producerId);
+        if (!producer) return;
+        producerParticipantMap.set(producerId, { participantId, participantName });
+        return;
+      }
+      if (type === "playSoundboard") {
+        const { assetId, startTimeSec } = msg as { assetId?: string; startTimeSec?: number };
+        if (!assetId) {
+          socket.send(JSON.stringify({ type: "error", error: "assetId required" }));
+          return;
+        }
+        const secret = process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
+        if (!MAIN_APP_URL || !secret) {
+          socket.send(JSON.stringify({ type: "error", error: "Soundboard not configured" }));
+          return;
+        }
+        (async () => {
+          try {
+            const existing = soundboardByRoom.get(roomId);
+            if (existing) {
+              soundboardVolumeAtStop.set(existing.producer.id, soundboardVolumeByRoom.get(roomId) ?? 1);
+              try { existing.ffmpeg.kill("SIGINT"); } catch { /* ignore */ }
+              try { existing.producer.close(); } catch { /* ignore */ }
+              try { existing.transport.close(); } catch { /* ignore */ }
+              try { if (existsSync(existing.tempPath)) unlinkSync(existing.tempPath); } catch { /* ignore */ }
+              soundboardByRoom.delete(roomId);
+            }
+            const url = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/library-stream?assetId=${encodeURIComponent(assetId)}&sessionId=${encodeURIComponent(roomId)}`;
+            const res = await fetch(url, { headers: { "X-Recording-Secret": secret } });
+            if (!res.ok) {
+              const err = await res.text();
+              socket.send(JSON.stringify({ type: "error", error: err || `Fetch failed ${res.status}` }));
+              return;
+            }
+            const buf = await res.arrayBuffer();
+            const tempDir = join(RECORDING_DATA_DIR, "soundboard-temp");
+            mkdirSync(tempDir, { recursive: true });
+            const tempPath = join(tempDir, `sb_${nanoid(12)}.tmp`);
+            writeFileSync(tempPath, Buffer.from(buf));
+            const plainTransport = await roomState.router.createPlainTransport({
+              listenIp: { ip: "127.0.0.1" },
+              rtcpMux: true,
+              comedia: true,
+            });
+            const ssrc = 11111111;
+            const payloadType = 111;
+            const producer = await plainTransport.produce({
+              kind: "audio",
+              rtpParameters: {
+                codecs: [
+                  {
+                    mimeType: "audio/opus",
+                    clockRate: 48000,
+                    channels: 2,
+                    payloadType,
+                    parameters: { "sprop-stereo": 1 },
+                    rtcpFeedback: [{ type: "transport-cc" }],
+                  },
+                ],
+                encodings: [{ ssrc }],
+              },
+            });
+            producerSourceMap.set(producer.id, "soundboard");
+            producerSoundboardAssetMap.set(producer.id, assetId);
+            producer.on("@close", () => {
+              producerSourceMap.delete(producer.id);
+              producerSoundboardAssetMap.delete(producer.id);
+            });
+            const port = plainTransport.tuple.localPort;
+            if (!port) {
+              try { producer.close(); } catch { /* ignore */ }
+              try { plainTransport.close(); } catch { /* ignore */ }
+              try { unlinkSync(tempPath); } catch { /* ignore */ }
+              socket.send(JSON.stringify({ type: "error", error: "PlainTransport port not available" }));
+              return;
+            }
+            const ffmpegArgs = [
+              "-loglevel", "warning",
+              ...(typeof startTimeSec === "number" && startTimeSec > 0 ? ["-ss", String(startTimeSec)] : []),
+              "-re", "-i", tempPath,
+              "-map", "0:a:0",
+              "-acodec", "libopus", "-ab", "128k", "-ac", "2", "-ar", "48000",
+              "-f", "tee",
+              `[select=a:f=rtp:ssrc=${ssrc}:payload_type=${payloadType}]rtp://127.0.0.1:${port}`,
+            ];
+            const ffmpeg = spawn("ffmpeg", ffmpegArgs, { stdio: ["pipe", "pipe", "pipe"] });
+            ffmpeg.on("close", () => {
+              const entry = soundboardByRoom.get(roomId);
+              if (entry && entry.producer.id === producer.id) {
+                try { entry.producer.close(); } catch { /* ignore */ }
+                try { entry.transport.close(); } catch { /* ignore */ }
+                try { if (existsSync(entry.tempPath)) unlinkSync(entry.tempPath); } catch { /* ignore */ }
+                soundboardByRoom.delete(roomId);
+                for (const [s, r] of socketRooms.entries()) {
+                  if (r === roomId && (s as { readyState?: number }).readyState === 1) {
+                    (s as { send: (d: string) => void }).send(JSON.stringify({ type: "soundboardStopped" }));
+                  }
+                }
+              } else {
+                try { if (existsSync(tempPath)) unlinkSync(tempPath); } catch { /* ignore */ }
+              }
+            });
+            soundboardByRoom.set(roomId, { producer, transport: plainTransport, ffmpeg, tempPath });
+            roomState.producers.set(producer.id, producer);
+            plainTransport.on("@close", () => {
+              roomState.producers.delete(producer.id);
+              soundboardByRoom.delete(roomId);
+            });
+            console.log("[webrtc] WS roomId=%s playSoundboard assetId=%s producerId=%s", roomId, assetId, producer.id);
+            socket.send(JSON.stringify({ type: "soundboardPlaying", producerId: producer.id }));
+            for (const [s, r] of socketRooms.entries()) {
+              if (r === roomId && (s as { readyState?: number }).readyState === 1) {
+                (s as { send: (d: string) => void }).send(JSON.stringify({ type: "newProducer", producerId: producer.id }));
+              }
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.log("[webrtc] playSoundboard roomId=%s error: %s", roomId, msg);
+            socket.send(JSON.stringify({ type: "error", error: msg }));
+          }
+        })();
+        return;
+      }
+      if (type === "stopSoundboard") {
+        const existing = soundboardByRoom.get(roomId);
+        if (existing) {
+          soundboardVolumeAtStop.set(existing.producer.id, soundboardVolumeByRoom.get(roomId) ?? 1);
+          try { existing.ffmpeg.kill("SIGINT"); } catch { /* ignore */ }
+          try { existing.producer.close(); } catch { /* ignore */ }
+          try { existing.transport.close(); } catch { /* ignore */ }
+          try { if (existsSync(existing.tempPath)) unlinkSync(existing.tempPath); } catch { /* ignore */ }
+          soundboardByRoom.delete(roomId);
+          console.log("[webrtc] WS roomId=%s stopSoundboard producerId=%s", roomId, existing.producer.id);
+        }
+        socket.send(JSON.stringify({ type: "soundboardStopped" }));
         return;
       }
       if (type === "getProducers") {
@@ -637,6 +1010,13 @@ const wsHandler = (socket: any, req: any) => {
 
 app.get("/ws", { websocket: true }, wsHandler);
 app.get("/webrtc-ws/ws", { websocket: true }, wsHandler);
+
+// Crash recovery: recover .mp3.part files, mark INTERRUPTED segments
+const recovered = recoverPartFiles(RECORDING_DATA_DIR);
+if (recovered.length > 0) {
+  console.log("[webrtc] Recovered %d part files on startup: %j", recovered.length, recovered);
+}
+markInterruptedSegments(RECORDING_DATA_DIR);
 
 await app.listen({ port: PORT, host: "0.0.0.0" });
 console.log("[webrtc] Service listening on port %d", PORT);

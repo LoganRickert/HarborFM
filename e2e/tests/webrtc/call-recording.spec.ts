@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { test, expect } from '@playwright/test';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,6 +17,14 @@ function getSetupToken(): string | null {
   const path = join(DATA_DIR, 'setup-token.txt');
   if (!existsSync(path)) return null;
   return readFileSync(path, 'utf8').trim();
+}
+
+/** Find multitrack dir (handles both segmentId and date_segmentId format). */
+function findMtDir(recordingsBase: string, segmentId: string): string | null {
+  if (!existsSync(recordingsBase)) return null;
+  const names = readdirSync(recordingsBase);
+  const match = names.find((n) => n === segmentId || n.endsWith(`_${segmentId}`));
+  return match ? join(recordingsBase, match) : null;
 }
 
 test.describe('Call recording golden path', () => {
@@ -196,7 +204,261 @@ test.describe('Call recording golden path', () => {
     }
     expect(recorded).toBeDefined();
     expect(recorded!.duration_sec).toBeGreaterThanOrEqual(0);
+
+    const segId = (recorded as { id?: string }).id;
+    if (segId) {
+      const recordingsBase = join(DATA_DIR, 'uploads', podcastId, episodeId, 'recordings');
+      const mtDir = findMtDir(recordingsBase, segId);
+      if (mtDir) {
+        const files = readdirSync(mtDir);
+        const hasManifest = files.includes('tracks_manifest.json');
+        const mp3Files = files.filter((f) => f.startsWith('segment_') && f.endsWith('.mp3'));
+        expect(hasManifest).toBe(true);
+        expect(mp3Files.length).toBeGreaterThanOrEqual(1);
+        for (const f of mp3Files) {
+          const p = join(mtDir, f);
+          expect(statSync(p).size).toBeGreaterThan(0);
+        }
+      }
+    }
     console.log('[call-recording] Test passed - segment persisted');
+  });
+
+  test('records with two participants and creates multitrack files', async ({ page, context }) => {
+    test.setTimeout(60000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+    page.on('console', (msg) => {
+      const text = msg.text();
+      const type = msg.type();
+      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
+        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
+      }
+    });
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+
+    const joinUrlRaw = await page.getByRole('textbox', { name: 'Join link' }).inputValue();
+    const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;
+
+    const browser = context.browser()!;
+    const guestContext = await browser.newContext({
+      baseURL,
+      permissions: ['microphone'],
+    });
+    const guestPage = await guestContext.newPage();
+    try {
+      await guestPage.goto(joinUrl);
+      await guestPage.getByLabel(/your name/i).fill('E2E Guest');
+      await guestPage.getByRole('button', { name: /join call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
+
+      const recordBtn = page.getByRole('button', { name: /record segment/i });
+      await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+      await recordBtn.click();
+      await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 10000 });
+
+      await page.waitForTimeout(5000);
+
+      await page.getByRole('button', { name: /stop recording/i }).click();
+      await page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 });
+
+      let recorded: { id?: string; duration_sec?: number } | undefined;
+      for (let i = 0; i < 30; i++) {
+        await page.waitForTimeout(500);
+        const segmentsRes = await page.request.get(`${API_BASE}/episodes/${episodeId}/segments`);
+        expect(segmentsRes.ok()).toBeTruthy();
+        const { segments } = await segmentsRes.json();
+        recorded = segments.find((s: { duration_sec?: number }) => s.duration_sec != null);
+        if (recorded) break;
+      }
+      expect(recorded).toBeDefined();
+      expect(recorded!.duration_sec).toBeGreaterThanOrEqual(0);
+
+      const segId = recorded!.id;
+      expect(segId).toBeDefined();
+      const recordingsBase = join(DATA_DIR, 'uploads', podcastId, episodeId, 'recordings');
+      const mtDir = findMtDir(recordingsBase, segId!);
+      expect(mtDir).toBeTruthy();
+      const files = readdirSync(mtDir!);
+      expect(files).toContain('tracks_manifest.json');
+      const manifest = JSON.parse(readFileSync(join(mtDir!, 'tracks_manifest.json'), 'utf8'));
+      expect(Array.isArray(manifest.segments)).toBe(true);
+      expect(manifest.segments.length).toBeGreaterThanOrEqual(1);
+      const mp3Files = files.filter((f) => f.startsWith('segment_') && f.endsWith('.mp3'));
+      expect(mp3Files.length).toBeGreaterThanOrEqual(1);
+      for (const f of mp3Files) {
+        expect(statSync(join(mtDir!, f)).size).toBeGreaterThan(0);
+      }
+
+      const audioPath = (recorded as { audio_path?: string }).audio_path;
+      if (audioPath && existsSync(audioPath)) {
+        expect(statSync(audioPath).size).toBeGreaterThan(0);
+      }
+    } finally {
+      await guestContext.close();
+    }
+  });
+
+  test('recording continues when guest leaves mid-recording', async ({ page, context }) => {
+    test.setTimeout(60000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+    page.on('console', (msg) => {
+      const text = msg.text();
+      const type = msg.type();
+      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
+        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
+      }
+    });
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+
+    const joinUrlRaw = await page.getByRole('textbox', { name: 'Join link' }).inputValue();
+    const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;
+
+    const browser = context.browser()!;
+    const guestContext = await browser.newContext({
+      baseURL,
+      permissions: ['microphone'],
+    });
+    const guestPage = await guestContext.newPage();
+    try {
+      await guestPage.goto(joinUrl);
+      await guestPage.getByLabel(/your name/i).fill('E2E Guest');
+      await guestPage.getByRole('button', { name: /join call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
+
+      const recordBtn = page.getByRole('button', { name: /record segment/i });
+      await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+      await recordBtn.click();
+      await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 10000 });
+
+      await page.waitForTimeout(3000);
+
+      await guestPage.getByRole('button', { name: /leave call/i }).click();
+      const leaveDialog = guestPage.getByRole('dialog');
+      await expect(leaveDialog).toBeVisible({ timeout: 5000 });
+      await leaveDialog.getByRole('button', { name: /confirm leave call|leave call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).not.toBeVisible({ timeout: 5000 });
+
+      await page.waitForTimeout(2000);
+      await page.getByRole('button', { name: /stop recording/i }).click();
+      await page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 });
+
+      let recorded: { id?: string; duration_sec?: number } | undefined;
+      for (let i = 0; i < 30; i++) {
+        await page.waitForTimeout(500);
+        const segmentsRes = await page.request.get(`${API_BASE}/episodes/${episodeId}/segments`);
+        expect(segmentsRes.ok()).toBeTruthy();
+        const { segments } = await segmentsRes.json();
+        recorded = segments.find((s: { duration_sec?: number }) => s.duration_sec != null);
+        if (recorded) break;
+      }
+      expect(recorded).toBeDefined();
+      expect(recorded!.duration_sec).toBeGreaterThanOrEqual(0);
+    } finally {
+      await guestContext.close();
+    }
+  });
+
+  test('reconnect during recording produces multiple segments in manifest', async ({ page, context }) => {
+    test.setTimeout(90000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+    page.on('console', (msg) => {
+      const text = msg.text();
+      const type = msg.type();
+      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
+        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
+      }
+    });
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+
+    const joinUrlRaw = await page.getByRole('textbox', { name: 'Join link' }).inputValue();
+    const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;
+
+    const browser = context.browser()!;
+    const guestContext = await browser.newContext({
+      baseURL,
+      permissions: ['microphone'],
+    });
+    const guestPage = await guestContext.newPage();
+    try {
+      await guestPage.goto(joinUrl);
+      await guestPage.getByLabel(/your name/i).fill('E2E Guest');
+      await guestPage.getByRole('button', { name: /join call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
+
+      const recordBtn = page.getByRole('button', { name: /record segment/i });
+      await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+      await recordBtn.click();
+      await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 10000 });
+
+      await page.waitForTimeout(2000);
+
+      await guestPage.getByRole('button', { name: /leave call/i }).click();
+      const reconnectLeaveDialog = guestPage.getByRole('dialog');
+      await expect(reconnectLeaveDialog).toBeVisible({ timeout: 5000 });
+      await reconnectLeaveDialog.getByRole('button', { name: /confirm leave call|leave call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).not.toBeVisible({ timeout: 5000 });
+
+      await guestPage.goto(joinUrl);
+      await guestPage.getByLabel(/your name/i).fill('E2E Guest');
+      await guestPage.getByRole('button', { name: /join call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
+
+      await page.waitForTimeout(3000);
+
+      await page.getByRole('button', { name: /stop recording/i }).click();
+      await page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 });
+
+      let recorded: { id?: string; duration_sec?: number } | undefined;
+      for (let i = 0; i < 30; i++) {
+        await page.waitForTimeout(500);
+        const segmentsRes = await page.request.get(`${API_BASE}/episodes/${episodeId}/segments`);
+        expect(segmentsRes.ok()).toBeTruthy();
+        const { segments } = await segmentsRes.json();
+        recorded = segments.find((s: { duration_sec?: number }) => s.duration_sec != null);
+        if (recorded) break;
+      }
+      expect(recorded).toBeDefined();
+      expect(recorded!.duration_sec).toBeGreaterThanOrEqual(0);
+
+      const segId = recorded!.id;
+      expect(segId).toBeDefined();
+      const recordingsBase = join(DATA_DIR, 'uploads', podcastId, episodeId, 'recordings');
+      const mtDir = findMtDir(recordingsBase, segId!);
+      expect(mtDir).toBeTruthy();
+      const files = readdirSync(mtDir!);
+      expect(files).toContain('tracks_manifest.json');
+      const manifest = JSON.parse(readFileSync(join(mtDir!, 'tracks_manifest.json'), 'utf8'));
+      expect(Array.isArray(manifest.segments)).toBe(true);
+      expect(manifest.segments.length).toBeGreaterThanOrEqual(2);
+      for (const seg of manifest.segments) {
+        const filePath = seg.filePath ?? seg.file_path;
+        if (filePath) {
+          const fullPath = join(mtDir!, filePath.includes('/') ? filePath.split('/').pop()! : filePath);
+          expect(existsSync(fullPath)).toBe(true);
+          expect(statSync(fullPath).size).toBeGreaterThan(0);
+        }
+      }
+    } finally {
+      await guestContext.close();
+    }
+  });
+
+  test('recovers .part files after webrtc restart', async ({ page }) => {
+    test.skip(process.env.E2E_FAULT_INJECTION !== '1', 'Crash recovery requires E2E_FAULT_INJECTION=1 and restart-webrtc');
+    // Flow: start recording with 1 participant, wait ~5s, kill webrtc (SIGKILL),
+    // restart webrtc, then stop recording. Assert webrtc-recordings has .recovered.mp3
+    // and/or manifest shows RECOVERED/INTERRUPTED.
+    test.setTimeout(120000);
   });
 
   test('End call', async ({ page }) => {

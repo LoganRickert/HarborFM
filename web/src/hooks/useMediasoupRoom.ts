@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
 
-function soundboardNoopConnect(el: HTMLAudioElement | null) {
-  console.log('[useMediasoupRoom] connectSoundboard NOOP - soundboard not ready', { hasEl: !!el });
-}
+export type RemoteTrackInfo = { track: MediaStreamTrack; source?: string };
 
 export function useMediasoupRoom(
   webrtcUrl: string | undefined,
   roomId: string | undefined,
   deviceId?: string,
+  participantId?: string | null,
+  participantName?: string | null,
 ) {
-  const [remoteTracks, setRemoteTracks] = useState<Map<string, MediaStreamTrack>>(new Map());
+  const [remoteTracks, setRemoteTracks] = useState<Map<string, RemoteTrackInfo>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
@@ -23,17 +23,13 @@ export function useMediasoupRoom(
       else p.resume();
     }
   });
-  const connectSoundboardRef = useRef<(el: HTMLAudioElement | null) => void | Promise<void>>(soundboardNoopConnect);
   const ctxRef = useRef<AudioContext | null>(null);
-  const soundboardProducerRef = useRef<mediasoupClient.types.Producer | null>(null);
-  const soundboardPanelOpenRef = useRef(false);
-  const setupSoundboardRef = useRef<() => void | Promise<void>>(() => {});
-  const teardownSoundboardRef = useRef<() => void>(() => {});
-  const soundboardGainNodeRef = useRef<GainNode | null>(null);
+  const webrtcWsRef = useRef<WebSocket | null>(null);
   const soundboardMutedRef = useRef<boolean>(false);
   const soundboardVolumeRef = useRef<number>(1);
   const setSoundboardMutedRef = useRef<(muted: boolean) => void>(() => {});
   const setSoundboardVolumeRef = useRef<(volume: number) => void>(() => {});
+  const onSoundboardStoppedRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
@@ -68,18 +64,35 @@ export function useMediasoupRoom(
       try {
         const baseUrl = wsUrl.startsWith('ws') ? wsUrl : wsUrl.replace(/^http/, 'ws');
         webrtcWs = new WebSocket(`${baseUrl}?roomId=${encodeURIComponent(roomIdParam)}`);
+        webrtcWsRef.current = webrtcWs;
         await new Promise<void>((resolve, reject) => {
           webrtcWs!.onopen = () => resolve();
           webrtcWs!.onerror = () => reject(new Error('WebSocket failed'));
         });
         if (closed) return;
 
+        webrtcWs.onclose = () => {
+          if (!closed) {
+            setError('Audio connection lost - WebRTC service may have stopped. Please refresh or try again.');
+          }
+        };
+        webrtcWs.onerror = () => {
+          if (!closed) {
+            setError('Audio connection failed - WebRTC service may be unavailable.');
+          }
+        };
+
         let handleNewProducer: (producerId: string) => void = () => {};
+        const handleSoundboardStopped = () => { onSoundboardStoppedRef.current?.(); };
         webrtcWs.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data as string) as { type: string; [k: string]: unknown };
             if (msg.type === 'newProducer' && typeof msg.producerId === 'string') {
               handleNewProducer(msg.producerId);
+              return;
+            }
+            if (msg.type === 'soundboardStopped') {
+              handleSoundboardStopped();
               return;
             }
             const queue = pendingResolvers.get(msg.type);
@@ -136,125 +149,13 @@ export function useMediasoupRoom(
         }
         tickId = requestAnimationFrame(tick);
 
-        let soundboardProducer: mediasoupClient.types.Producer | null = null;
-        let soundboardSource: MediaElementAudioSourceNode | null = null;
-        let soundboardGainNode: GainNode | null = null;
-        let soundboardDest: MediaStreamAudioDestinationNode | null = null;
-
-        setSoundboardMutedRef.current = (muted: boolean) => {
-          soundboardMutedRef.current = muted;
-          const p = soundboardProducerRef.current;
-          if (p) {
-            if (muted) p.pause();
-            else p.resume();
-          }
+        setSoundboardMutedRef.current = (_muted: boolean) => {
+          // Server-side soundboard: mute would require server support; no-op for now
         };
 
         setSoundboardVolumeRef.current = (volume: number) => {
-          const v = Math.max(0, Math.min(1, volume));
-          soundboardVolumeRef.current = v;
-          const gain = soundboardGainNodeRef.current;
-          if (gain) gain.gain.setValueAtTime(v, ctx.currentTime);
+          soundboardVolumeRef.current = Math.max(0, Math.min(1, volume));
         };
-
-        async function connectSoundboard(el: HTMLAudioElement | null) {
-          console.log('[useMediasoupRoom] connectSoundboard', { hasEl: !!el, src: el?.src, closed, hasSoundboardDest: !!soundboardDest });
-          if (soundboardSource) {
-            try {
-              soundboardSource.disconnect();
-            } catch {
-              /* ignore */
-            }
-            soundboardSource = null;
-          }
-          if (soundboardGainNode) {
-            try {
-              soundboardGainNode.disconnect();
-            } catch {
-              /* ignore */
-            }
-          }
-          soundboardGainNode = null;
-          soundboardGainNodeRef.current = null;
-          if (el && el.src && !closed && soundboardDest) {
-            try {
-              await Promise.race([
-                ctx.resume(),
-                new Promise((resolve) => setTimeout(resolve, 2000)),
-              ]);
-            } catch {
-              /* ignore */
-            }
-            if (!el || !el.src || closed || !soundboardDest) {
-              console.log('[useMediasoupRoom] connectSoundboard early return');
-              return;
-            }
-            console.log('[useMediasoupRoom] connectSoundboard connecting audio to graph');
-            soundboardSource = ctx.createMediaElementSource(el);
-            soundboardGainNode = ctx.createGain();
-            soundboardGainNode.gain.value = soundboardVolumeRef.current;
-            soundboardGainNodeRef.current = soundboardGainNode;
-            soundboardSource.connect(soundboardGainNode);
-            soundboardGainNode.connect(soundboardDest);
-            soundboardGainNode.connect(ctx.destination);
-          }
-        }
-
-        async function setupSoundboard() {
-          console.log('[useMediasoupRoom] setupSoundboard', { hasSendTransport: !!sendTransport, hasSoundboardDest: !!soundboardDest, closed });
-          if (!sendTransport || soundboardDest || closed) return;
-          try {
-            await Promise.race([
-              ctx.resume(),
-              new Promise((resolve) => setTimeout(resolve, 2000)),
-            ]);
-          } catch {
-            /* ignore */
-          }
-          if (closed || !sendTransport) return;
-          console.log('[useMediasoupRoom] setupSoundboard creating dest and producer');
-          soundboardDest = ctx.createMediaStreamDestination();
-          const sbTrack = soundboardDest.stream.getAudioTracks()[0];
-          if (!sbTrack) {
-            console.warn('[useMediasoupRoom] setupSoundboard no track from dest');
-          }
-          if (sbTrack) {
-            try {
-              const p = await sendTransport.produce({ track: sbTrack });
-              if (!closed && soundboardDest) {
-                soundboardProducer = p;
-                soundboardProducerRef.current = p;
-                if (soundboardMutedRef.current) p.pause();
-                connectSoundboardRef.current = connectSoundboard;
-                console.log('[useMediasoupRoom] setupSoundboard completed');
-              } else {
-                try { p.close(); } catch { /* ignore */ }
-              }
-            } catch (err) {
-              console.error('[useMediasoupRoom] setupSoundboard produce failed', err);
-            }
-          }
-        }
-
-        function teardownSoundboard() {
-          console.log('[useMediasoupRoom] teardownSoundboard');
-          if (soundboardSource) {
-            try { soundboardSource.disconnect(); } catch { /* ignore */ }
-            soundboardSource = null;
-          }
-          soundboardGainNode = null;
-          soundboardGainNodeRef.current = null;
-          if (soundboardProducer) {
-            try { soundboardProducer.close(); } catch { /* ignore */ }
-            soundboardProducer = null;
-            soundboardProducerRef.current = null;
-          }
-          soundboardDest = null;
-          connectSoundboardRef.current = soundboardNoopConnect;
-        }
-
-        setupSoundboardRef.current = setupSoundboard;
-        teardownSoundboardRef.current = teardownSoundboard;
 
         localStream = dest.stream;
         const track = localStream.getAudioTracks()[0];
@@ -262,7 +163,10 @@ export function useMediasoupRoom(
 
         cleanupRef.current = () => {
           if (tickId != null) cancelAnimationFrame(tickId);
-          teardownSoundboardRef.current();
+          const ws = webrtcWsRef.current;
+          if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'stopSoundboard' }));
+          }
           ctxRef.current = null;
           ctx.close();
         };
@@ -290,16 +194,30 @@ export function useMediasoupRoom(
           await waitFor('webRtcTransportConnected');
           callback();
         });
+        let nextProduceSource: string | undefined;
         sendTransport.on('produce', async ({ kind, rtpParameters }, callback, errback) => {
           try {
-            webrtcWs?.send(JSON.stringify({
+            const payload: { type: string; transportId: string; kind: string; rtpParameters: unknown; source?: string } = {
               type: 'produce',
               transportId: sendTransportMsg.id,
               kind,
               rtpParameters,
-            }));
+            };
+            if (nextProduceSource) {
+              payload.source = nextProduceSource;
+              nextProduceSource = undefined;
+            }
+            webrtcWs?.send(JSON.stringify(payload));
             const producedMsg = (await waitFor('produced')) as { id: string };
             if (closed) return;
+            if (participantId && participantName) {
+              webrtcWs?.send(JSON.stringify({
+                type: 'associateProducer',
+                producerId: producedMsg.id,
+                participantId,
+                participantName,
+              }));
+            }
             callback({ id: producedMsg.id });
           } catch (e) {
             errback(e as Error);
@@ -311,10 +229,8 @@ export function useMediasoupRoom(
         setReady(true);
         const myProducerId = producer.id;
 
-        if (soundboardPanelOpenRef.current) {
-          console.log('[useMediasoupRoom] Panel was open, running setupSoundboard');
-          setupSoundboard();
-        }
+        // Soundboard producer is created when panel opens (setSoundboardPanelOpen(true)),
+        // and torn down when panel closes (setSoundboardPanelOpen(false)).
 
         webrtcWs.send(JSON.stringify({ type: 'createWebRtcTransport' }));
         const recvTransportMsg = (await waitFor('webRtcTransportCreated')) as {
@@ -352,6 +268,7 @@ export function useMediasoupRoom(
             producerId: string;
             kind: string;
             rtpParameters: mediasoupClient.types.RtpParameters;
+            source?: string;
           };
           const consumer = await recvTransport!.consume({
             id: consumedMsg.id,
@@ -359,7 +276,7 @@ export function useMediasoupRoom(
             kind: consumedMsg.kind as mediasoupClient.types.MediaKind,
             rtpParameters: consumedMsg.rtpParameters,
           });
-          return consumer;
+          return { consumer, source: consumedMsg.source };
         }
 
         webrtcWs.send(JSON.stringify({ type: 'getProducers' }));
@@ -369,10 +286,10 @@ export function useMediasoupRoom(
         for (const producerId of producersMsg.producerIds || []) {
           if (producerId === myProducerId) continue;
           try {
-            const consumer = await consumeProducer(producerId);
+            const { consumer, source } = await consumeProducer(producerId);
             if (closed) return;
             consumedProducerIds.add(producerId);
-            setRemoteTracks((prev) => new Map(prev).set(consumer.id, consumer.track));
+            setRemoteTracks((prev) => new Map(prev).set(consumer.id, { track: consumer.track, ...(source ? { source } : {}) }));
           } catch {
             // skip
           }
@@ -381,10 +298,10 @@ export function useMediasoupRoom(
         handleNewProducer = async (producerId: string) => {
           if (producerId === myProducerId || consumedProducerIds.has(producerId) || closed) return;
           try {
-            const consumer = await consumeProducer(producerId);
+            const { consumer, source } = await consumeProducer(producerId);
             if (closed) return;
             consumedProducerIds.add(producerId);
-            setRemoteTracks((prev) => new Map(prev).set(consumer.id, consumer.track));
+            setRemoteTracks((prev) => new Map(prev).set(consumer.id, { track: consumer.track, ...(source ? { source } : {}) }));
           } catch {
             // skip
           }
@@ -398,6 +315,7 @@ export function useMediasoupRoom(
     run(url, rid);
     return () => {
       closed = true;
+      webrtcWsRef.current = null;
       cleanupRef.current?.();
       pendingResolvers.forEach((queue) => queue.forEach((r) => r(null)));
       webrtcWs?.close();
@@ -406,7 +324,7 @@ export function useMediasoupRoom(
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId, deviceId]);
+  }, [webrtcUrl, roomId, deviceId, participantId, participantName]);
 
   const setMuted = useCallback((muted: boolean) => {
     setMutedRef.current(muted);
@@ -417,9 +335,18 @@ export function useMediasoupRoom(
     setSoundboardMutedRef.current(muted);
   }, []);
 
-  const setSoundboardVolume = useCallback((volume: number) => {
-    setSoundboardVolumeRef.current(volume);
+  const sendIfOpen = useCallback((msg: object) => {
+    const ws = webrtcWsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
   }, []);
+
+  const setSoundboardVolume = useCallback((volume: number) => {
+    const v = Math.max(0, Math.min(1, volume));
+    setSoundboardVolumeRef.current(v);
+    sendIfOpen({ type: 'soundboardVolume', volume: v });
+  }, [sendIfOpen]);
 
   const resumeSoundboardContext = useCallback(() => {
     const ctx = ctxRef.current;
@@ -429,19 +356,16 @@ export function useMediasoupRoom(
   }, []);
 
   const setSoundboardPanelOpen = useCallback((open: boolean) => {
-    console.log('[useMediasoupRoom] setSoundboardPanelOpen', open);
-    soundboardPanelOpenRef.current = open;
-    if (open) {
-      setupSoundboardRef.current();
-    } else {
-      teardownSoundboardRef.current();
-    }
-  }, []);
+    if (!open) sendIfOpen({ type: 'stopSoundboard' });
+  }, [sendIfOpen]);
 
-  const connectSoundboard = useCallback((el: HTMLAudioElement | null) => {
-    console.log('[useMediasoupRoom] connectSoundboard INVOKED (calling ref)', { hasEl: !!el, elSrc: el?.src?.slice?.(0, 80) });
-    return connectSoundboardRef.current(el);
-  }, []);
+  const playSoundboard = useCallback((assetId: string, startTimeSec?: number) => {
+    sendIfOpen({ type: 'playSoundboard', assetId, ...(typeof startTimeSec === 'number' && startTimeSec > 0 ? { startTimeSec } : {}) });
+  }, [sendIfOpen]);
+
+  const stopSoundboard = useCallback(() => {
+    sendIfOpen({ type: 'stopSoundboard' });
+  }, [sendIfOpen]);
 
   return {
     remoteTracks,
@@ -449,10 +373,12 @@ export function useMediasoupRoom(
     ready,
     micLevel,
     setMuted,
-    connectSoundboard,
+    playSoundboard,
+    stopSoundboard,
     setSoundboardMuted,
     setSoundboardVolume,
     resumeSoundboardContext,
     setSoundboardPanelOpen,
+    onSoundboardStoppedRef,
   };
 }

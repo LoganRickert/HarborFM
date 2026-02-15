@@ -10,6 +10,13 @@ export interface CallParticipant {
   mutedByHost?: boolean;
 }
 
+export interface RecordingEvent {
+  event: string;
+  assetId?: string;
+  clientTimestampMs?: number;
+  durationSec?: number;
+}
+
 export interface CallSession {
   sessionId: string;
   episodeId: string;
@@ -25,6 +32,8 @@ export interface CallSession {
   ended: boolean;
   /** Set when WEBRTC_SERVICE_URL is configured and a mediasoup room was created. */
   roomId?: string;
+  /** Events during recording (soundboard plays, etc.). Cleared on start, sent to webrtc on stop. */
+  recordingEvents?: RecordingEvent[];
 }
 
 const HOST_AWAY_MS = 5 * 60 * 1000; // 5 minutes

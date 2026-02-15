@@ -82,9 +82,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
-  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, connectSoundboard, setSoundboardMuted, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen } = useMediasoupRoom(
+  const myParticipant = participants.find((p) => p.isHost);
+  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardMuted, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
+    undefined,
+    myParticipant?.id ?? null,
+    myParticipant?.name ?? null,
   );
   useWakeLock(true);
 
@@ -151,26 +155,31 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         } else if (msg.type === 'error') {
           onCallEnded();
         } else if (msg.type === 'recordingStarted') {
+          console.log('[CallPanel] recordingStarted');
           setRecording(true);
           setRecordingConfirmed(true);
           setRecordingSeconds(0);
           setRecordingProcessing(false);
         } else if (msg.type === 'recordingStopped') {
+          console.log('[CallPanel] recordingStopped (processing…)');
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingError(null);
           setRecordingProcessing(true);
         } else if (msg.type === 'recordingError') {
+          console.log('[CallPanel] recordingError', msg.error);
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingProcessing(false);
           setRecordingError(msg.error ?? 'Recording failed');
         } else if (msg.type === 'recordingStopFailed') {
+          console.log('[CallPanel] recordingStopFailed', msg.error);
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingProcessing(false);
           setRecordingError(msg.error ?? 'Failed to stop recording');
         } else if (msg.type === 'segmentRecorded') {
+          console.log('[CallPanel] segmentRecorded');
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingError(null);
@@ -258,17 +267,23 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
 
   const handleStartRecording = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'startRecording' }));
+      console.log('[CallPanel] handleStartRecording → startRecording');
+      wsRef.current.send(JSON.stringify({ type: 'startRecording', clientEpochMs: Date.now() }));
       setRecordingSeconds(0);
       setRecording(true);
       setRecordingConfirmed(false);
+    } else {
+      console.log('[CallPanel] handleStartRecording skipped (ws not open)');
     }
   };
 
   const handleStopRecording = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('[CallPanel] handleStopRecording → stopRecording');
       wsRef.current.send(JSON.stringify({ type: 'stopRecording' }));
       setRecording(false);
+    } else {
+      console.log('[CallPanel] handleStopRecording skipped (ws not open)');
     }
   };
 
@@ -319,6 +334,12 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const handleMigrate = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'migrateHost' }));
+    }
+  };
+
+  const handleRecordingEvent = (ev: { event: string; assetId?: string; clientTimestampMs?: number; durationSec?: number }) => {
+    if (recording && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'recordingEvent', ...ev }));
     }
   };
 
@@ -394,6 +415,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       {!minimized && showMediaUnavailable && (
         <p className={styles.mediaUnavailableBanner} role="status">
           Audio is unavailable - WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
+        </p>
+      )}
+      {!minimized && mediaError && (
+        <p className={styles.mediaErrorBanner} role="alert">
+          {mediaError}
         </p>
       )}
       {!minimized && !showChatView && !showSoundboardView && (
@@ -555,11 +581,12 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           ))}
         </ul>
         )}
-        {mediaError && (
-          <p className={styles.mediaError}>{mediaError}</p>
-        )}
-        {Array.from(remoteTracks.entries()).map(([id, track]) => (
-          <RemoteAudio key={id} track={track} />
+        {Array.from(remoteTracks.entries()).map(([id, info]) => (
+          <RemoteAudio
+            key={id}
+            track={info.track}
+            volume={info.source === 'soundboard' ? soundboardVolume : 1}
+          />
         ))}
       </div>
       </>
@@ -575,8 +602,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
       )}
       {!minimized && showSoundboardView && (
         <CallSoundboardPanel
-          connectSoundboard={connectSoundboard}
+          playSoundboard={playSoundboard}
+          stopSoundboard={stopSoundboard}
           setSoundboardVolume={setSoundboardVolume}
+          onSoundboardStoppedRef={onSoundboardStoppedRef}
           disabled={!effectiveWebrtcUrl || !producerReady}
           minimized={false}
           onMinimizeToggle={() => {}}
@@ -585,6 +614,8 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           soundboardMuted={soundboardMuted}
           onSoundboardMuteToggle={handleSoundboardMuteToggle}
           muteDisabled={!effectiveWebrtcUrl || !producerReady}
+          recording={recording}
+          onRecordingEvent={handleRecordingEvent}
         />
       )}
       {!showChatView && !showSoundboardView && (
@@ -655,8 +686,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         {soundboardOpen && (
           <div className={styles.soundboardPanelInWrapper}>
             <CallSoundboardPanel
-              connectSoundboard={connectSoundboard}
+              playSoundboard={playSoundboard}
+              stopSoundboard={stopSoundboard}
               setSoundboardVolume={setSoundboardVolume}
+              onSoundboardStoppedRef={onSoundboardStoppedRef}
               disabled={!effectiveWebrtcUrl || !producerReady}
               onClose={() => setSoundboardOpen(false)}
               minimized={soundboardMinimized}
@@ -666,6 +699,8 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
               soundboardMuted={soundboardMuted}
               onSoundboardMuteToggle={handleSoundboardMuteToggle}
               muteDisabled={!effectiveWebrtcUrl || !producerReady}
+              recording={recording}
+              onRecordingEvent={handleRecordingEvent}
             />
           </div>
         )}

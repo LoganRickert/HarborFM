@@ -181,6 +181,37 @@ export function libraryAssetPath(
   return join(libraryDir(userId), filename);
 }
 
+/** Format epoch ms as YYYY-MM-DD_HH-mm-ss for folder names. */
+function formatEpochForFolder(epochMs: number): string {
+  const d = new Date(epochMs);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${y}-${mo}-${day}_${h}-${min}-${s}`;
+}
+
+/** Directory for multitrack recording files (per-producer MP3s + manifest) for a segment. */
+export function multitrackRecordingsDir(
+  podcastId: string,
+  episodeId: string,
+  segmentId: string,
+  recordingEpochMs?: number,
+): string {
+  assertSafeId(segmentId, "segmentId");
+  const folderName =
+    typeof recordingEpochMs === "number"
+      ? `${formatEpochForFolder(recordingEpochMs)}_${segmentId}`
+      : segmentId;
+  const dir = join(uploadsDir(podcastId, episodeId), "recordings", folderName);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
 /** Recorded segment stored under episode uploads. */
 export function segmentPath(
   podcastId: string,

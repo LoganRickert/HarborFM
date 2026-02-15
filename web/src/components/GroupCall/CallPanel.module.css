@@ -108,6 +108,16 @@
   border-radius: 6px;
 }
 
+.mediaErrorBanner {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 6px;
+}
+
 .joinRow {
   display: flex;
   gap: 0.5rem;

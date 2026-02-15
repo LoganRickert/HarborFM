@@ -1,11 +1,14 @@
 # For local dev: server runs with pnpm dev, webrtc runs in Docker.
-# Copy to docker-compose.override.yml so webrtc writes to your server/data:
+# Copy to docker-compose.override.yml so webrtc writes to your server data dir:
 #
 #   cp docker-compose.override.example.yml docker-compose.override.yml
 #
-# This overrides webrtc's /data to use your host server/data.
+# This overrides webrtc's /webrtc (RECORDING_DATA_DIR) to use your host
+# server/data/webrtc-recordings so the host server can read recordings.
+
+# sudo chown -R 10001:10001 ./server/data/webrtc-recordings
 
 services:
   webrtc:
     volumes:
-      - ./server/data:/data
+      - ./server/data/webrtc-recordings:/webrtc

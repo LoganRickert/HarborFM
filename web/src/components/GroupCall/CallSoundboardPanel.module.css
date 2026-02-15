@@ -214,6 +214,11 @@
   border-color: var(--accent, #00d4aa);
 }
 
+.playPauseBtn[data-playing] {
+  color: var(--accent, #00d4aa);
+  border-color: var(--accent, #00d4aa);
+}
+
 .playPauseBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;

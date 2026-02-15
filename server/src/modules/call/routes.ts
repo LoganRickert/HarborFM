@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { WebSocket } from "ws";
+import send from "@fastify/send";
+import { basename, dirname } from "path";
 import { db } from "../../db/index.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import type { JWTPayload } from "../../plugins/auth.js";
-import { canAccessEpisode, canEditSegments, getPodcastOwnerId } from "../../services/access.js";
+import { canAccessEpisode, canEditSegments, getPodcastOwnerId, canReadLibraryAsset } from "../../services/access.js";
 import { nanoid } from "nanoid";
 import type { CallParticipant } from "../../services/callSession.js";
 import {
@@ -27,9 +29,10 @@ import {
 } from "../../services/callSession.js";
 import { getWebRtcConfig } from "../../services/webrtcConfig.js";
 import { join, resolve } from "path";
-import { copyFileSync, unlinkSync, existsSync } from "fs";
-import { segmentPath, getWebrtcRecordingsDir } from "../../services/paths.js";
-import { assertResolvedPathUnder } from "../../services/paths.js";
+import { copyFileSync, unlinkSync, existsSync, writeFileSync } from "fs";
+import { segmentPath, getWebrtcRecordingsDir, multitrackRecordingsDir, libraryDir } from "../../services/paths.js";
+import { assertPathUnder, assertResolvedPathUnder } from "../../services/paths.js";
+import { contentTypeFromAudioPath } from "../../utils/audio.js";
 import { createSegmentFromPath } from "../../services/segmentFromRecording.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { RECORD_MIN_FREE_BYTES } from "../../config.js";
@@ -471,6 +474,73 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.get(
+    "/call/internal/library-stream",
+    {
+      schema: {
+        tags: ["Call"],
+        summary: "Stream library asset (internal)",
+        description:
+          "Stream audio file for soundboard playback. Requires X-Recording-Secret. Used by webrtc service.",
+        querystring: {
+          type: "object",
+          properties: {
+            assetId: { type: "string" },
+            sessionId: { type: "string" },
+          },
+          required: ["assetId", "sessionId"],
+        },
+        response: {
+          200: { description: "Audio stream" },
+          206: { description: "Partial content" },
+          401: { description: "Unauthorized" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const secret = request.headers["x-recording-secret"] as string | undefined;
+      const webrtcCfg = getWebRtcConfig();
+      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+      const { assetId, sessionId } = request.query as { assetId: string; sessionId: string };
+      const session = getSessionById(sessionId);
+      if (!session) return reply.status(404).send({ error: "Session not found" });
+      if (!canReadLibraryAsset(session.hostUserId, assetId)) {
+        return reply.status(403).send({ error: "Asset not found" });
+      }
+      const row = db
+        .prepare("SELECT * FROM reusable_assets WHERE id = ?")
+        .get(assetId) as Record<string, unknown> | undefined;
+      if (!row) return reply.status(404).send({ error: "Asset not found" });
+      const path = row.audio_path as string;
+      const ownerUserId = row.owner_user_id as string;
+      if (!path || !existsSync(path)) return reply.status(404).send({ error: "File not found" });
+      const base = libraryDir(ownerUserId);
+      const safePath = assertPathUnder(path, base);
+      const contentType = contentTypeFromAudioPath(path);
+      const result = await send(request.raw, basename(safePath), {
+        root: dirname(safePath),
+        contentType: false,
+        acceptRanges: true,
+        cacheControl: false,
+      });
+      if (result.type === "error") {
+        const err = result.metadata.error as Error & { status?: number };
+        return reply.status((err.status ?? 500) as 404 | 500).send({ error: err.message ?? "Internal Server Error" });
+      }
+      reply.code(result.statusCode as 200 | 206 | 404 | 500);
+      const headers = result.headers as Record<string, string>;
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== undefined) reply.header(key, value);
+      }
+      reply.header("Content-Type", contentType);
+      return reply.send(result.stream);
+    },
+  );
+
   app.post(
     "/call/internal/recording-segment",
     {
@@ -488,6 +558,8 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             podcastId: { type: "string" },
             name: { type: "string", nullable: true },
             sessionId: { type: "string", nullable: true },
+            tracksManifest: { type: "object", nullable: true },
+            perTrackFilePaths: { type: "array", items: { type: "string" }, nullable: true },
           },
           required: ["filePath", "segmentId", "episodeId", "podcastId"],
         },
@@ -506,6 +578,8 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         podcastId: string;
         name?: string | null;
         sessionId?: string | null;
+        tracksManifest?: unknown;
+        perTrackFilePaths?: string[];
       };
       try {
         const webrtcDir = getWebrtcRecordingsDir();
@@ -546,6 +620,30 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             { err: unlinkErr, sourcePath },
             "Could not remove source recording file (permission denied); segment created successfully",
           );
+        }
+        if (body.tracksManifest && Array.isArray(body.perTrackFilePaths) && body.perTrackFilePaths.length > 0) {
+          try {
+            const manifest = body.tracksManifest as { recordingEpochMs?: number } | undefined;
+            const recordingEpochMs = typeof manifest?.recordingEpochMs === "number" ? manifest.recordingEpochMs : undefined;
+            const mtDir = multitrackRecordingsDir(body.podcastId, body.episodeId, body.segmentId, recordingEpochMs);
+            writeFileSync(join(mtDir, "tracks_manifest.json"), JSON.stringify(body.tracksManifest, null, 2));
+            const webrtcDir = getWebrtcRecordingsDir();
+            for (const relPath of body.perTrackFilePaths) {
+              const src = resolve(join(webrtcDir, relPath));
+              assertResolvedPathUnder(src, webrtcDir);
+              if (existsSync(src)) {
+                const base = relPath.split("/").pop() ?? relPath;
+                copyFileSync(src, join(mtDir, base));
+                try {
+                  unlinkSync(src);
+                } catch {
+                  /* ignore */
+                }
+              }
+            }
+          } catch (mtErr) {
+            request.log.warn({ err: mtErr }, "Failed to save multitrack files (segment created successfully)");
+          }
         }
         return reply.status(201).send(row);
       } catch (err) {
@@ -933,6 +1031,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           const sid = sessionId;
           const session = getSessionById(sid);
           const name = (msg as { name?: string }).name?.trim() || null;
+          const clientEpochMs = (msg as { clientEpochMs?: number }).clientEpochMs;
           const webrtcCfg = getWebRtcConfig();
 
           const ownerId = session?.podcastId
@@ -966,6 +1065,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               episodeId: session.episodeId,
               podcastId: session.podcastId,
               name,
+              clientEpochMs: typeof clientEpochMs === "number" ? clientEpochMs : undefined,
               recordingCallbackSecret: webrtcCfg.recordingCallbackSecret || undefined,
             };
             fetch(startRecordingUrl, {
@@ -975,7 +1075,13 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             })
               .then(async (res) => {
                 if (res.ok) {
-                  broadcastToSession(sid, { type: "recordingStarted" });
+                  const data = (await res.json()) as { recordingEpochMs?: number };
+                  const sessionForRecording = getSessionById(sid);
+                  if (sessionForRecording) sessionForRecording.recordingEvents = [];
+                  broadcastToSession(sid, {
+                    type: "recordingStarted",
+                    recordingEpochMs: typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : undefined,
+                  });
                 } else {
                   const text = await res.text();
                   let errorMsg = "Failed to start recording";
@@ -1017,15 +1123,35 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           return;
         }
 
+        if (type === "recordingEvent" && isHost) {
+          const sid = sessionId;
+          const session = getSessionById(sid);
+          if (session?.recordingEvents) {
+            const ev = msg as { event?: string; assetId?: string; clientTimestampMs?: number; durationSec?: number };
+            if (typeof ev.event === "string") {
+              session.recordingEvents.push({
+                event: ev.event,
+                assetId: ev.assetId,
+                clientTimestampMs: ev.clientTimestampMs,
+                durationSec: ev.durationSec,
+              });
+            }
+          }
+          return;
+        }
+
         if (type === "stopRecording" && isHost) {
           const sid = sessionId;
           const session = getSessionById(sid);
           const webrtcCfg = getWebRtcConfig();
           if (session?.roomId && webrtcCfg.serviceUrl) {
+            const events = session.recordingEvents ?? [];
+            session.recordingEvents = undefined;
+            const recordingEndedAtMs = Date.now();
             fetch(`${webrtcCfg.serviceUrl}/stop-recording`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ roomId: session.roomId }),
+              body: JSON.stringify({ roomId: session.roomId, events, recordingEndedAtMs }),
             })
               .then(() => {
                 broadcastToSession(sid, { type: "recordingStopped" });

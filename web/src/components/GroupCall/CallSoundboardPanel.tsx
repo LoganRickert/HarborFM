@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
 import { useQuery } from '@tanstack/react-query';
 import { Disc, ChevronDown, Minimize2, Maximize2, Play, Pause, Search, Volume2, VolumeX, X } from 'lucide-react';
-import { listLibrary, libraryStreamUrl, libraryWaveformUrl, type LibraryAsset } from '../../api/library';
+import { listLibrary, libraryWaveformUrl, type LibraryAsset } from '../../api/library';
 import { WaveformCanvas, type WaveformData } from '../../pages/EpisodeEditor/WaveformCanvas';
 import styles from './CallSoundboardPanel.module.css';
 
 export interface CallSoundboardPanelProps {
-  connectSoundboard: (el: HTMLAudioElement | null) => void;
+  playSoundboard: (assetId: string, startTimeSec?: number) => void;
+  stopSoundboard: () => void;
   setSoundboardVolume: (volume: number) => void;
+  onSoundboardStoppedRef?: React.MutableRefObject<(() => void) | null>;
   disabled?: boolean;
   onClose?: () => void;
   minimized: boolean;
@@ -17,6 +20,9 @@ export interface CallSoundboardPanelProps {
   soundboardMuted: boolean;
   onSoundboardMuteToggle: () => void;
   muteDisabled?: boolean;
+  /** When true and onRecordingEvent provided, soundboard play/stop emits recording events for sync. */
+  recording?: boolean;
+  onRecordingEvent?: (ev: { event: string; assetId?: string; clientTimestampMs?: number; durationSec?: number }) => void;
 }
 
 function SoundboardItem({
@@ -29,7 +35,7 @@ function SoundboardItem({
   asset: LibraryAsset;
   isPlaying: boolean;
   currentTime: number;
-  onPlayPause: () => void;
+  onPlayPause: (e?: React.MouseEvent) => void;
   onSeek: (time: number) => void;
 }) {
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
@@ -68,7 +74,12 @@ function SoundboardItem({
         <button
           type="button"
           className={styles.playPauseBtn}
-          onClick={onPlayPause}
+          data-playing={isPlaying || undefined}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onPlayPause(e);
+          }}
           title={isPlaying ? 'Pause' : 'Play'}
           aria-label={isPlaying ? `Pause ${asset.name}` : `Play ${asset.name}`}
         >
@@ -91,7 +102,14 @@ function SoundboardItem({
             aria-valuemin={0}
             aria-valuemax={durationSec}
             aria-label="Playback position"
-            onClick={onPlayPause}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const target = e.currentTarget;
+              const rect = target.getBoundingClientRect();
+              const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+              onSeek(frac * durationSec);
+            }}
           >
             <div
               className={styles.waveformPlaceholderFill}
@@ -105,8 +123,10 @@ function SoundboardItem({
 }
 
 export function CallSoundboardPanel({
-  connectSoundboard,
+  playSoundboard,
+  stopSoundboard,
   setSoundboardVolume,
+  onSoundboardStoppedRef,
   onClose,
   minimized,
   onMinimizeToggle,
@@ -115,12 +135,17 @@ export function CallSoundboardPanel({
   soundboardMuted,
   onSoundboardMuteToggle,
   muteDisabled,
+  recording,
+  onRecordingEvent,
 }: CallSoundboardPanelProps) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const justPausedRef = useRef<{ assetId: string; at: number } | null>(null);
+  const transitioningToAssetIdRef = useRef<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [visibleCount, setVisibleCount] = useState(10);
+  const [localVolume, setLocalVolume] = useState(volume);
 
   const SOUNDBOARD_PAGE_SIZE = 10;
 
@@ -165,91 +190,199 @@ export function CallSoundboardPanel({
   }, [searchQuery]);
 
   useEffect(() => {
+    setLocalVolume(volume);
+  }, [volume]);
+
+  useEffect(() => {
     setSoundboardVolume(volume);
   }, [volume, setSoundboardVolume]);
 
+  const debouncedVolumeUpdate = useDebouncedCallback((v: number) => {
+    onVolumeChange(v);
+    setSoundboardVolume(v);
+  }, 150);
+
+  useEffect(() => {
+    if (onSoundboardStoppedRef) {
+      onSoundboardStoppedRef.current = () => {
+        const transitioningTo = transitioningToAssetIdRef.current;
+        transitioningToAssetIdRef.current = null;
+        if (transitioningTo) {
+          setPlayingId(transitioningTo);
+          // Keep progress timer running - it was just started for the new asset
+        } else {
+          if (progressTimerRef.current) {
+            clearInterval(progressTimerRef.current);
+            progressTimerRef.current = null;
+          }
+          setPlayingId(null);
+          setCurrentTime(0);
+        }
+      };
+      return () => {
+        onSoundboardStoppedRef.current = null;
+      };
+    }
+  }, [onSoundboardStoppedRef]);
+
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        connectSoundboard(null);
-        audioRef.current = null;
+      stopSoundboard();
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
       }
       setPlayingId(null);
     };
-  }, [connectSoundboard]);
+  }, [stopSoundboard]);
 
-  async function handlePlay(asset: LibraryAsset) {
-    console.log('[Soundboard] handlePlay START', { assetId: asset.id, assetName: asset.name, playingId, connectSoundboardType: typeof connectSoundboard });
+  function handlePlay(asset: LibraryAsset) {
+    const now = Date.now();
+    const durationSec = asset.duration_sec ?? 0;
+
     if (playingId === asset.id) {
-      console.log('[Soundboard] Stopping current playback');
-      if (audioRef.current) {
-        audioRef.current.pause();
-        connectSoundboard(null);
-        audioRef.current = null;
+      transitioningToAssetIdRef.current = null;
+      justPausedRef.current = { assetId: asset.id, at: now };
+      if (recording && onRecordingEvent) {
+        onRecordingEvent({ event: 'soundboardPause', assetId: asset.id, clientTimestampMs: now });
       }
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+      stopSoundboard();
       setPlayingId(null);
       setCurrentTime(0);
       return;
     }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      connectSoundboard(null);
-      audioRef.current = null;
+
+    const justPaused = justPausedRef.current;
+    if (justPaused && now - justPaused.at < 200 && asset.id !== justPaused.assetId) {
+      justPausedRef.current = null;
+      return;
     }
-    const audio = new Audio(libraryStreamUrl(asset.id));
-    audioRef.current = audio;
+    justPausedRef.current = null;
+
+    if (playingId) {
+      if (recording && onRecordingEvent) {
+        onRecordingEvent({ event: 'soundboardPause', assetId: playingId, clientTimestampMs: now });
+      }
+      stopSoundboard();
+    }
+
+    transitioningToAssetIdRef.current = asset.id;
+
+    if (recording && onRecordingEvent) {
+      onRecordingEvent({
+        event: 'soundboardPlay',
+        assetId: asset.id,
+        clientTimestampMs: now,
+        durationSec: durationSec || undefined,
+      });
+    }
+
+    playSoundboard(asset.id);
     setPlayingId(asset.id);
     setCurrentTime(0);
-    audio.onended = () => {
-      console.log('[Soundboard] audio.onended');
-      connectSoundboard(null);
-      audioRef.current = null;
-      setPlayingId(null);
-      setCurrentTime(0);
-    };
-    audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
-    try {
-      console.log('[Soundboard] calling connectSoundboard(audio)...');
-      const connectResult = connectSoundboard(audio);
-      const didReturnPromise = typeof (connectResult as Promise<unknown> | undefined)?.then === 'function';
-      console.log('[Soundboard] connectSoundboard returned', { didReturnPromise });
-      await connectResult;
-      console.log('[Soundboard] connectSoundboard succeeded');
-    } catch (err) {
-      console.error('[Soundboard] connectSoundboard failed', err);
-      connectSoundboard(null);
-    }
-    if (audioRef.current === audio) {
-      console.log('[Soundboard] about to call audio.play()');
-      try {
-        await audio.play();
-        console.log('[Soundboard] audio.play succeeded');
-      } catch (err) {
-        const isAbort = err instanceof DOMException && err.name === 'AbortError';
-        if (isAbort) {
-          // play() interrupted by pause() — user likely switched sounds; only clean up if still current
-          if (audioRef.current === audio) {
-            connectSoundboard(null);
-            audioRef.current = null;
-            setPlayingId(null);
-          }
-        } else {
-          console.error('[Soundboard] audio.play failed', err);
-          connectSoundboard(null);
-          audioRef.current = null;
-          setPlayingId(null);
+
+    const startTime = Date.now();
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    progressTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      setCurrentTime(Math.min(elapsed, durationSec || elapsed));
+      if (durationSec > 0 && elapsed >= durationSec - 0.1) {
+        if (progressTimerRef.current) {
+          clearInterval(progressTimerRef.current);
+          progressTimerRef.current = null;
+        }
+        transitioningToAssetIdRef.current = null;
+        setPlayingId(null);
+        setCurrentTime(0);
+        if (recording && onRecordingEvent) {
+          onRecordingEvent({ event: 'soundboardEnd', assetId: asset.id, clientTimestampMs: Date.now() });
         }
       }
-    } else {
-      console.log('[Soundboard] Skipped audio.play - audioRef changed');
-    }
+    }, 100);
   }
 
   function handleSeek(asset: LibraryAsset, time: number) {
-    if (playingId !== asset.id || !audioRef.current) return;
-    audioRef.current.currentTime = time;
-    setCurrentTime(time);
+    const durationSec = asset.duration_sec ?? 0;
+    const seekTime = Math.max(0, Math.min(time, durationSec));
+
+    if (playingId === asset.id) {
+      transitioningToAssetIdRef.current = asset.id;
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+      stopSoundboard();
+      if (recording && onRecordingEvent) {
+        onRecordingEvent({ event: 'soundboardPause', assetId: asset.id, clientTimestampMs: Date.now() });
+        onRecordingEvent({
+          event: 'soundboardPlay',
+          assetId: asset.id,
+          clientTimestampMs: Date.now(),
+          durationSec: durationSec || undefined,
+        });
+      }
+      playSoundboard(asset.id, seekTime);
+      setPlayingId(asset.id);
+      setCurrentTime(seekTime);
+      const startTime = Date.now() - seekTime * 1000;
+      progressTimerRef.current = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        setCurrentTime(Math.min(elapsed, durationSec || elapsed));
+        if (durationSec > 0 && elapsed >= durationSec - 0.1) {
+          if (progressTimerRef.current) {
+            clearInterval(progressTimerRef.current);
+            progressTimerRef.current = null;
+          }
+          transitioningToAssetIdRef.current = null;
+          setPlayingId(null);
+          setCurrentTime(0);
+          if (recording && onRecordingEvent) {
+            onRecordingEvent({ event: 'soundboardEnd', assetId: asset.id, clientTimestampMs: Date.now() });
+          }
+        }
+      }, 100);
+    } else {
+      if (playingId) {
+        if (recording && onRecordingEvent) {
+          onRecordingEvent({ event: 'soundboardPause', assetId: playingId, clientTimestampMs: Date.now() });
+        }
+        stopSoundboard();
+      }
+      transitioningToAssetIdRef.current = asset.id;
+      playSoundboard(asset.id, seekTime);
+      setPlayingId(asset.id);
+      setCurrentTime(seekTime);
+      if (recording && onRecordingEvent) {
+        onRecordingEvent({
+          event: 'soundboardPlay',
+          assetId: asset.id,
+          clientTimestampMs: Date.now(),
+          durationSec: durationSec || undefined,
+        });
+      }
+      const startTime = Date.now() - seekTime * 1000;
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      progressTimerRef.current = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        setCurrentTime(Math.min(elapsed, durationSec || elapsed));
+        if (durationSec > 0 && elapsed >= durationSec - 0.1) {
+          if (progressTimerRef.current) {
+            clearInterval(progressTimerRef.current);
+            progressTimerRef.current = null;
+          }
+          transitioningToAssetIdRef.current = null;
+          setPlayingId(null);
+          setCurrentTime(0);
+          if (recording && onRecordingEvent) {
+            onRecordingEvent({ event: 'soundboardEnd', assetId: asset.id, clientTimestampMs: Date.now() });
+          }
+        }
+      }, 100);
+    }
   }
 
   return (
@@ -299,11 +432,11 @@ export function CallSoundboardPanel({
             className={styles.volumeSlider}
             min={0}
             max={100}
-            value={Math.round(volume * 100)}
+            value={Math.round(localVolume * 100)}
             onChange={(e) => {
               const v = parseInt(e.target.value, 10) / 100;
-              onVolumeChange(v);
-              setSoundboardVolume(v);
+              setLocalVolume(v);
+              debouncedVolumeUpdate(v);
             }}
             aria-label="Soundboard volume"
           />
@@ -336,7 +469,8 @@ export function CallSoundboardPanel({
                       asset={asset}
                       isPlaying={playingId === asset.id}
                       currentTime={playingId === asset.id ? currentTime : 0}
-                      onPlayPause={() => {
+                      onPlayPause={(e) => {
+                        e?.stopPropagation?.();
                         console.log('[Soundboard] play button clicked', { assetId: asset.id, assetName: asset.name });
                         handlePlay(asset);
                       }}
