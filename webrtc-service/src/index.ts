@@ -70,13 +70,17 @@ function createMultiAudioSdp(specs: StreamSpec[]): string {
 
 async function getWorker(): Promise<mediasoup.types.Worker> {
   if (worker) return worker;
-  console.log("[webrtc] Creating mediasoup worker RTC_MIN_PORT=%d RTC_MAX_PORT=%d", RTC_MIN_PORT, RTC_MAX_PORT);
+  console.log("[webrtc] Creating mediasoup worker RTC_MIN_PORT=%d RTC_MAX_PORT=%d ANNOUNCED_IP=%s", RTC_MIN_PORT, RTC_MAX_PORT, ANNOUNCED_IP ?? "(none)");
   worker = await mediasoup.createWorker({
     logLevel: "warn",
     rtcMinPort: RTC_MIN_PORT,
     rtcMaxPort: RTC_MAX_PORT,
   });
-  worker.on("died", () => { worker = null; });
+  worker.on("died", (err) => {
+    console.log("[webrtc] Worker died: %s", err);
+    worker = null;
+  });
+  console.log("[webrtc] Worker created pid=%d", worker.pid);
   return worker;
 }
 
@@ -107,7 +111,9 @@ app.post<{
   const roomId = body?.roomId ?? nanoid(10);
   if (rooms.has(roomId)) {
     const room = rooms.get(roomId)!;
-    console.log("[webrtc] POST /room roomId=%s (existing, producers=%d)", roomId, room.producers.size);
+    const producerIds = Array.from(room.producers.keys());
+    console.log("[webrtc] POST /room roomId=%s (existing) transports=%d producers=%d producerIds=%j",
+      roomId, room.transports.size, room.producers.size, producerIds);
     return reply.send({ roomId, rtpCapabilities: room.router.rtpCapabilities });
   }
   console.log("[webrtc] POST /room creating new roomId=%s", roomId);
@@ -122,7 +128,7 @@ app.post<{
     rooms.delete(roomId);
   });
   rooms.set(roomId, { router, transports: new Map(), producers: new Map() });
-  console.log("[webrtc] POST /room roomId=%s created", roomId);
+  console.log("[webrtc] POST /room roomId=%s created routerId=%s", roomId, router.id);
   return reply.send({ roomId, rtpCapabilities: router.rtpCapabilities });
 });
 
@@ -160,8 +166,9 @@ app.post<{
   if (!room) return reply.status(404).send({ error: "Room not found" });
 
   const audioProducers = Array.from(room.producers.values()).filter((p) => p.kind === "audio");
-  console.log("[webrtc] POST /start-recording roomId=%s segmentId=%s totalProducers=%d audioProducers=%d",
-    roomId, segmentId, room.producers.size, audioProducers.length);
+  const allProducerIds = Array.from(room.producers.values()).map((p) => ({ id: p.id, kind: p.kind }));
+  console.log("[webrtc] POST /start-recording roomId=%s segmentId=%s totalProducers=%d audioProducers=%d producers=%j",
+    roomId, segmentId, room.producers.size, audioProducers.length, allProducerIds);
   if (audioProducers.length === 0) {
     console.log("[webrtc] POST /start-recording roomId=%s rejected: no audio producer", roomId);
     return reply.status(400).send({ error: "No audio producer in room" });
@@ -170,29 +177,43 @@ app.post<{
   let allProducersNoPackets = true;
   let anyProducerPaused = false;
   for (let i = 0; i < audioProducers.length; i++) {
+    const producer = audioProducers[i]!;
     try {
-      const stats = await audioProducers[i]!.getStats();
+      const stats = await producer.getStats();
       // mediasoup Producer stats use byteCount/packetCount (RtpStreamRecvStats), not bytesReceived/packetsReceived
       const bytesReceived = (stats as Array<{ byteCount?: number }>).reduce((sum, s) => sum + (s.byteCount ?? 0), 0);
       const packetsReceived = (stats as Array<{ packetCount?: number }>).reduce((sum, s) => sum + (s.packetCount ?? 0), 0);
-      const paused = audioProducers[i]!.paused;
-      console.log("[webrtc] start-recording roomId=%s producer %d id=%s paused=%s byteCount=%d packetCount=%d",
-        roomId, i, audioProducers[i]!.id, paused, bytesReceived, packetsReceived);
+      const paused = producer.paused;
+      console.log("[webrtc] start-recording roomId=%s producer %d id=%s paused=%s byteCount=%d packetCount=%d statsLength=%d rawStats=%j",
+        roomId, i, producer.id, paused, bytesReceived, packetsReceived, stats.length, stats);
       if (bytesReceived > 0 || packetsReceived > 0) allProducersNoPackets = false;
       if (paused) anyProducerPaused = true;
       if (bytesReceived === 0 && packetsReceived === 0) {
-        console.log("[webrtc] start-recording roomId=%s WARNING producer %s has received no packets - ICE may have failed (check MEDIASOUP_ANNOUNCED_IP and UDP ports %d-%d)",
-          roomId, audioProducers[i]!.id, RTC_MIN_PORT, RTC_MAX_PORT);
+        console.log("[webrtc] start-recording roomId=%s WARNING producer %s has received no packets (check MEDIASOUP_ANNOUNCED_IP=%s UDP %d-%d)",
+          roomId, producer.id, ANNOUNCED_IP ?? "unset", RTC_MIN_PORT, RTC_MAX_PORT);
+        for (const wt of room.transports.values()) {
+          try {
+            const tStats = await wt.getStats();
+            const iceTuple = (tStats as Array<{ iceState?: string; iceSelectedTuple?: unknown }>)[0]?.iceSelectedTuple;
+            const iceState = (tStats as Array<{ iceState?: string }>)[0]?.iceState;
+            console.log("[webrtc] start-recording roomId=%s transport %s iceState=%s iceSelectedTuple=%j bytesReceived=%s stats=%j",
+              roomId, wt.id, iceState ?? "?", iceTuple ?? "?", (tStats as Array<{ bytesReceived?: number }>)[0]?.bytesReceived ?? "?", tStats);
+          } catch (te) {
+            console.log("[webrtc] start-recording roomId=%s transport %s getStats failed: %s", roomId, wt.id, te);
+          }
+        }
       }
       if (paused) {
-        console.log("[webrtc] start-recording roomId=%s WARNING producer %s is paused (muted) - no audio will be recorded", roomId, audioProducers[i]!.id);
+        console.log("[webrtc] start-recording roomId=%s WARNING producer %s is paused (muted) - no audio will be recorded", roomId, producer.id);
       }
     } catch (e) {
-      request.log.warn({ err: e, producerId: audioProducers[i]!.id }, "Could not get producer stats");
+      request.log.warn({ err: e, producerId: producer.id }, "Could not get producer stats");
+      console.log("[webrtc] start-recording roomId=%s producer %s getStats threw: %s", roomId, producer.id, e);
     }
   }
   if (allProducersNoPackets) {
-    console.log("[webrtc] start-recording roomId=%s rejected: no producer has received any RTP packets (ICE/connectivity issue)", roomId);
+    console.log("[webrtc] start-recording roomId=%s rejected: no producer has received any RTP packets (ICE/connectivity issue) ANNOUNCED_IP=%s RTC_PORTS=%d-%d",
+      roomId, ANNOUNCED_IP ?? "unset", RTC_MIN_PORT, RTC_MAX_PORT);
     return reply.status(400).send({
       error: "No audio received from any participant. Ensure UDP ports " + RTC_MIN_PORT + "-" + RTC_MAX_PORT + " are both open and reachable. If behind NAT, set MEDIASOUP_ANNOUNCED_IP to your server's public IP.",
     });
@@ -268,6 +289,7 @@ app.post<{
     const ffmpeg = spawn("ffmpeg", ffmpegArgs, { stdio: ["pipe", "pipe", "pipe"] });
     ffmpeg.stdin?.write(sdp);
     ffmpeg.stdin?.end();
+    console.log("[webrtc] start-recording roomId=%s FFmpeg SDP:\n%s", roomId, sdp);
     ffmpeg.on("error", (err) => request.log.error({ err }, "FFmpeg error"));
     ffmpeg.on("close", (code, signal) => {
       request.log.info({ code, signal }, "FFmpeg exited");
@@ -424,11 +446,23 @@ const socketTransports = new Map<unknown, WebRtcTransport>();
 const wsHandler = (socket: any, req: any) => {
   const url = new URL(req.url ?? "", `http://${req.headers?.host ?? "localhost"}`);
   const roomId = url.searchParams.get("roomId");
-  if (!roomId) { console.log("[webrtc] WS rejected: no roomId"); socket.close(); return; }
+  const wsUrl = req.url ?? "?";
+  if (!roomId) {
+    console.log("[webrtc] WS rejected: no roomId url=%s", wsUrl);
+    socket.close();
+    return;
+  }
   const room = getRoom(roomId);
-  if (!room) { console.log("[webrtc] WS rejected: room not found", roomId); socket.close(); return; }
+  if (!room) {
+    console.log("[webrtc] WS rejected: room not found roomId=%s url=%s", roomId, wsUrl);
+    socket.close();
+    return;
+  }
   socketRooms.set(socket, roomId);
-  console.log("[webrtc] WS connected roomId=%s producers=%d", roomId, room.producers.size);
+  const producerIds = Array.from(room.producers.keys());
+  const transportIds = Array.from(room.transports.keys());
+  console.log("[webrtc] WS connected roomId=%s transports=%d producers=%d transportIds=%j producerIds=%j",
+    roomId, room.transports.size, room.producers.size, transportIds, producerIds);
 
   socket.on("message", async (raw: Buffer | ArrayBuffer | Buffer[]) => {
     const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
@@ -438,6 +472,7 @@ const wsHandler = (socket: any, req: any) => {
     } catch { return; }
     if (!msg || typeof msg !== "object" || !("type" in msg)) return;
     const type = (msg as { type: string }).type;
+    console.log("[webrtc] WS message roomId=%s type=%s", roomId, type);
     const roomState = getRoom(roomId);
     if (!roomState) return;
     try {
@@ -459,7 +494,10 @@ const wsHandler = (socket: any, req: any) => {
           socketTransports.delete(socket);
           console.log("[webrtc] WS roomId=%s transport closed id=%s transportsRemaining=%d", roomId, transport.id, roomState.transports.size);
         });
-        console.log("[webrtc] WS roomId=%s createWebRtcTransport id=%s iceCandidateCount=%d", roomId, transport.id, transport.iceCandidates?.length ?? 0);
+        const iceCandidates = transport.iceCandidates ?? [];
+        const iceSummary = iceCandidates.map((c) => `${c.protocol}:${c.address ?? "?"}:${c.port ?? "?"}`).join(" ");
+        console.log("[webrtc] WS roomId=%s createWebRtcTransport id=%s announcedIp=%s iceCandidates=%d [%s]",
+          roomId, transport.id, ANNOUNCED_IP ?? "(none)", iceCandidates.length, iceSummary);
         socket.send(JSON.stringify({
           type: "webRtcTransportCreated",
           id: transport.id,
@@ -473,11 +511,17 @@ const wsHandler = (socket: any, req: any) => {
         const { transportId, dtlsParameters } = msg as unknown as { transportId: string; dtlsParameters: mediasoup.types.DtlsParameters };
         const transport = roomState.transports.get(transportId);
         if (!transport) {
+          console.log("[webrtc] WS roomId=%s connectWebRtcTransport FAILED transportId=%s not found (transports=%j)", roomId, transportId, Array.from(roomState.transports.keys()));
           socket.send(JSON.stringify({ type: "error", error: "Transport not found" }));
           return;
         }
         await transport.connect({ dtlsParameters });
-        console.log("[webrtc] WS roomId=%s connectWebRtcTransport transportId=%s", roomId, (msg as { transportId?: string }).transportId);
+        let dtlsState = "?";
+        try {
+          const st = await transport.getStats();
+          dtlsState = (st as Array<{ dtlsState?: string }>)[0]?.dtlsState ?? "?";
+        } catch { /* ignore */ }
+        console.log("[webrtc] WS roomId=%s connectWebRtcTransport transportId=%s dtlsState=%s", roomId, (msg as { transportId?: string }).transportId, dtlsState);
         socket.send(JSON.stringify({ type: "webRtcTransportConnected" }));
         return;
       }
@@ -485,6 +529,7 @@ const wsHandler = (socket: any, req: any) => {
         const { transportId, kind, rtpParameters } = msg as unknown as { transportId: string; kind: mediasoup.types.MediaKind; rtpParameters: mediasoup.types.RtpParameters };
         const transport = roomState.transports.get(transportId);
         if (!transport) {
+          console.log("[webrtc] WS roomId=%s produce FAILED transportId=%s not found (transports=%j)", roomId, transportId, Array.from(roomState.transports.keys()));
           socket.send(JSON.stringify({ type: "error", error: "Transport not found" }));
           return;
         }
@@ -494,7 +539,9 @@ const wsHandler = (socket: any, req: any) => {
           roomState.producers.delete(producer.id);
           console.log("[webrtc] WS roomId=%s producer closed id=%s producersRemaining=%d", roomId, producer.id, roomState.producers.size);
         });
-        console.log("[webrtc] WS roomId=%s produce kind=%s id=%s totalProducers=%d", roomId, kind, producer.id, roomState.producers.size);
+        const codec = rtpParameters.codecs?.[0]?.mimeType ?? "?";
+        console.log("[webrtc] WS roomId=%s produce kind=%s id=%s transportId=%s codec=%s totalProducers=%d",
+          roomId, kind, producer.id, transportId, codec, roomState.producers.size);
         socket.send(JSON.stringify({ type: "produced", id: producer.id, kind: producer.kind }));
         for (const [s, r] of socketRooms.entries()) {
           if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
@@ -508,10 +555,13 @@ const wsHandler = (socket: any, req: any) => {
         const transport = roomState.transports.get(transportId);
         const producer = roomState.producers.get(producerId);
         if (!transport || !producer) {
+          console.log("[webrtc] WS roomId=%s consume FAILED transportId=%s producerId=%s transportFound=%s producerFound=%s",
+            roomId, transportId, producerId, !!transport, !!producer);
           socket.send(JSON.stringify({ type: "error", error: "Transport or producer not found" }));
           return;
         }
         if (!roomState.router.canConsume({ producerId, rtpCapabilities })) {
+          console.log("[webrtc] WS roomId=%s consume FAILED canConsume=false producerId=%s", roomId, producerId);
           socket.send(JSON.stringify({ type: "error", error: "Cannot consume" }));
           return;
         }
@@ -542,8 +592,10 @@ const wsHandler = (socket: any, req: any) => {
   socket.on("close", () => {
     const roomState = getRoom(roomId);
     const transport = socketTransports.get(socket);
-    console.log("[webrtc] WS closed roomId=%s hadTransport=%s producersRemaining=%d",
-      roomId, !!transport, roomState?.producers.size ?? 0);
+    const transportId = transport?.id ?? "none";
+    const producerIdsRemaining = roomState ? Array.from(roomState.producers.keys()) : [];
+    console.log("[webrtc] WS closed roomId=%s hadTransport=%s transportId=%s producersRemaining=%d producerIds=%j",
+      roomId, !!transport, transportId, roomState?.producers.size ?? 0, producerIdsRemaining);
     if (transport) {
       try {
         transport.close();
@@ -562,5 +614,5 @@ app.get("/webrtc-ws/ws", { websocket: true }, wsHandler);
 
 await app.listen({ port: PORT, host: "0.0.0.0" });
 console.log("[webrtc] Service listening on port %d", PORT);
-console.log("[webrtc] Config: RTC_MIN_PORT=%d RTC_MAX_PORT=%d ANNOUNCED_IP=%s RECORDING_DATA_DIR=%s MAIN_APP_URL=%s",
-  RTC_MIN_PORT, RTC_MAX_PORT, ANNOUNCED_IP || "(none)", RECORDING_DATA_DIR, MAIN_APP_URL || "(none)");
+console.log("[webrtc] Config RTC_MIN_PORT=%d RTC_MAX_PORT=%d MEDIASOUP_ANNOUNCED_IP=%s RECORDING_DATA_DIR=%s MAIN_APP_URL=%s DATA_DIR=%s",
+  RTC_MIN_PORT, RTC_MAX_PORT, ANNOUNCED_IP ?? "(none)", RECORDING_DATA_DIR, MAIN_APP_URL || "(none)", process.env.DATA_DIR ?? "(none)");
