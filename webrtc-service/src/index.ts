@@ -374,41 +374,52 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
   if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
 
   let callbackFired = false;
-  const doCallback = () => {
+  const doCallback = (fileOk: boolean) => {
     if (callbackFired) return;
     callbackFired = true;
     const secret = state.recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
-    if (MAIN_APP_URL && secret) {
-      const callbackUrl = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-segment`;
-      request.log.info({ callbackUrl, filePath: state.filePathRelative }, "Firing recording callback");
-      console.log("[webrtc] Firing recording callback roomId=%s segmentId=%s filePath=%s", roomId, state.segmentId, state.filePathRelative);
-      fetch(callbackUrl, {
+    if (!MAIN_APP_URL || !secret) return;
+
+    if (!fileOk) {
+      const errorUrl = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-error`;
+      console.log("[webrtc] Recording file missing or empty roomId=%s segmentId=%s notifying recording-error", roomId, state.segmentId);
+      fetch(errorUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
-        body: JSON.stringify({
-          filePath: state.filePathRelative,
-          segmentId: state.segmentId,
-          episodeId: state.episodeId,
-          podcastId: state.podcastId,
-          name: state.name,
-          sessionId: state.sessionId,
-        }),
-      })
-        .then(async (res) => {
-          if (res.ok) {
-            request.log.info({ status: res.status }, "Recording callback succeeded");
-            console.log("[webrtc] Recording callback roomId=%s segmentId=%s OK", roomId, state.segmentId);
-          } else {
-            const body = await res.text();
-            request.log.warn({ status: res.status, body }, "Recording callback failed");
-            console.log("[webrtc] Recording callback roomId=%s segmentId=%s FAILED status=%d body=%s", roomId, state.segmentId, res.status, body);
-          }
-        })
-        .catch((err) => {
-          request.log.error({ err }, "Recording callback failed");
-          console.log("[webrtc] Recording callback roomId=%s segmentId=%s ERROR %s", roomId, state.segmentId, err);
-        });
+        body: JSON.stringify({ sessionId: state.sessionId, error: "Recording produced no audio. The recording may have been stopped before any audio was captured." }),
+      }).catch((err) => request.log.error({ err }, "recording-error callback failed"));
+      return;
     }
+
+    const callbackUrl = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-segment`;
+    request.log.info({ callbackUrl, filePath: state.filePathRelative }, "Firing recording callback");
+    console.log("[webrtc] Firing recording callback roomId=%s segmentId=%s filePath=%s", roomId, state.segmentId, state.filePathRelative);
+    fetch(callbackUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
+      body: JSON.stringify({
+        filePath: state.filePathRelative,
+        segmentId: state.segmentId,
+        episodeId: state.episodeId,
+        podcastId: state.podcastId,
+        name: state.name,
+        sessionId: state.sessionId,
+      }),
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          request.log.info({ status: res.status }, "Recording callback succeeded");
+          console.log("[webrtc] Recording callback roomId=%s segmentId=%s OK", roomId, state.segmentId);
+        } else {
+          const body = await res.text();
+          request.log.warn({ status: res.status, body }, "Recording callback failed");
+          console.log("[webrtc] Recording callback roomId=%s segmentId=%s FAILED status=%d body=%s", roomId, state.segmentId, res.status, body);
+        }
+      })
+      .catch((err) => {
+        request.log.error({ err }, "Recording callback failed");
+        console.log("[webrtc] Recording callback roomId=%s segmentId=%s ERROR %s", roomId, state.segmentId, err);
+      });
   };
 
   console.log("[webrtc] stop-recording roomId=%s closing %d consumers, %d transports, sending SIGINT to FFmpeg", roomId, state.consumers.length, state.plainTransports.length);
@@ -428,12 +439,19 @@ app.post<{ Body: { roomId: string } }>("/stop-recording", async (request, reply)
   }
   state.ffmpeg.kill("SIGINT");
   const exitTimeout = setTimeout(() => {
+    console.log("[webrtc] stop-recording roomId=%s FFmpeg did not exit in 5s, sending SIGKILL", roomId);
     state.ffmpeg.kill("SIGKILL");
-    doCallback();
   }, 5000);
   state.ffmpeg.once("close", () => {
     clearTimeout(exitTimeout);
-    doCallback();
+    const filePath = join(RECORDING_DATA_DIR, state.filePathRelative);
+    const exists = existsSync(filePath);
+    const size = exists ? statSync(filePath).size : 0;
+    const fileOk = exists && size > 0;
+    if (!fileOk) {
+      console.log("[webrtc] stop-recording roomId=%s FFmpeg exited but file missing or empty path=%s exists=%s size=%d", roomId, filePath, exists, size);
+    }
+    doCallback(fileOk);
   });
 
   return reply.send({ ok: true });
