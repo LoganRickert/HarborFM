@@ -131,8 +131,9 @@ export function CallSoundboardPanel({
   const allAssets = data?.assets ?? [];
 
   const filteredAndSorted = useMemo(() => {
+    const assets = data?.assets ?? [];
     const q = searchQuery.trim().toLowerCase();
-    let list = allAssets.filter((a) => {
+    let list = assets.filter((a) => {
       if ((a.duration_sec ?? 0) <= 0) return false;
       if (q && !a.name.toLowerCase().includes(q)) return false;
       return true;
@@ -143,7 +144,7 @@ export function CallSoundboardPanel({
       return tb - ta; // newest first
     });
     return list;
-  }, [allAssets, searchQuery]);
+  }, [data?.assets, searchQuery]);
 
   const displayedAssets = useMemo(
     () => filteredAndSorted.slice(0, visibleCount),
@@ -152,11 +153,12 @@ export function CallSoundboardPanel({
   const hasMore = visibleCount < filteredAndSorted.length;
 
   useEffect(() => {
-    const playable = allAssets.filter((a) => (a.duration_sec ?? 0) > 0);
-    if (allAssets.length > 0) {
-      console.log('[Soundboard] assets loaded', { total: allAssets.length, playable: playable.length, ids: playable.map((a) => a.id) });
+    const assets = data?.assets ?? [];
+    const playable = assets.filter((a) => (a.duration_sec ?? 0) > 0);
+    if (assets.length > 0) {
+      console.log('[Soundboard] assets loaded', { total: assets.length, playable: playable.length, ids: playable.map((a) => a.id) });
     }
-  }, [allAssets]);
+  }, [data?.assets]);
 
   useEffect(() => {
     setVisibleCount(SOUNDBOARD_PAGE_SIZE);
@@ -210,7 +212,7 @@ export function CallSoundboardPanel({
     try {
       console.log('[Soundboard] calling connectSoundboard(audio)...');
       const connectResult = connectSoundboard(audio);
-      const didReturnPromise = connectResult && typeof (connectResult as Promise<unknown>).then === 'function';
+      const didReturnPromise = typeof (connectResult as Promise<unknown> | undefined)?.then === 'function';
       console.log('[Soundboard] connectSoundboard returned', { didReturnPromise });
       await connectResult;
       console.log('[Soundboard] connectSoundboard succeeded');

@@ -5,6 +5,7 @@ import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import type { JWTPayload } from "../../plugins/auth.js";
 import { canAccessEpisode, canEditSegments, getPodcastOwnerId } from "../../services/access.js";
 import { nanoid } from "nanoid";
+import type { CallParticipant } from "../../services/callSession.js";
 import {
   createSession,
   getSessionByToken,
@@ -856,7 +857,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         if (type === "heartbeat") {
           if (isHost && updateHostHeartbeat(sessionId)) {
             const session = getSessionById(sessionId);
-            const payload: { type: string; participants?: typeof session.participants } = {
+            const payload: { type: string; participants?: CallParticipant[] } = {
               type: "heartbeatAck",
             };
             if (session) {

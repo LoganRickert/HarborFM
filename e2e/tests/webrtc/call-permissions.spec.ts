@@ -278,9 +278,17 @@ test.describe('Call permissions', () => {
 
   test('Owner can start and stop recording', async ({ page }) => {
     test.setTimeout(60000);
+    page.on('console', (msg) => {
+      const text = msg.text();
+      if (msg.type() === 'error' || /recording|Recording|No audio|failed|webrtc/i.test(text)) {
+        console.log(`[call-permissions] BROWSER ${msg.type()}:`, text.slice(0, 300));
+      }
+    });
+    console.log('[call-permissions] Logging in...');
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
+    console.log('[call-permissions] Creating podcast...');
 
     const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
       headers: { 'x-csrf-token': csrf },
@@ -288,6 +296,7 @@ test.describe('Call permissions', () => {
     });
     if (!podcastRes.ok()) throw new Error('Create podcast failed');
     const podcast = await podcastRes.json();
+    console.log('[call-permissions] Podcast id=', podcast.id);
 
     const episodeRes = await page.request.post(`${API_BASE}/podcasts/${podcast.id}/episodes`, {
       headers: { 'x-csrf-token': csrf },
@@ -295,21 +304,67 @@ test.describe('Call permissions', () => {
     });
     if (!episodeRes.ok()) throw new Error('Create episode failed');
     const episode = await episodeRes.json();
+    console.log('[call-permissions] Episode id=', episode.id);
 
     await page.addInitScript(() => {
       localStorage.setItem('harborfm_call_display_name', 'E2E Host');
     });
+    console.log('[call-permissions] Navigating to episode...');
     await page.goto(`/episodes/${episode.id}`);
+    console.log('[call-permissions] Page URL:', page.url());
+
+    console.log('[call-permissions] Clicking Start group call...');
     await page.getByRole('button', { name: /start group call/i }).click();
 
     const recordBtn = page.getByRole('button', { name: /record segment/i });
+    console.log('[call-permissions] Waiting for Record button (timeout 20s)...');
     await expect(recordBtn).toBeVisible({ timeout: 20000 });
-    await page.waitForTimeout(5000);
-    await recordBtn.click();
-    await page.waitForTimeout(3000);
-    await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 5000 });
+    console.log('[call-permissions] Record visible, waiting for producer-ready (timeout 25s)...');
+    await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+    console.log('[call-permissions] Producer ready');
+
+    const panel = page.getByRole('region', { name: /group call/i });
+    console.log('[call-permissions] Panel before Record:', (await panel.textContent())?.slice(0, 250));
+
+    let recordingStarted = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.waitForTimeout(attempt === 0 ? 2000 : 3000);
+      console.log(`[call-permissions] Attempt ${attempt + 1}/3: clicking Record...`);
+      await recordBtn.click();
+      await page.waitForTimeout(2000);
+
+      const stopVisible = await page.getByRole('button', { name: /stop recording/i }).isVisible();
+      const errorVisible = await page.getByText(/failed to start recording|no audio producer|no audio received/i).isVisible();
+      const errorText = errorVisible
+        ? await page.getByText(/failed to start recording|no audio producer|no audio received/i).first().textContent()
+        : null;
+      console.log(`[call-permissions] Attempt ${attempt + 1}: stopVisible=${stopVisible} errorVisible=${errorVisible} errorText=${errorText ?? 'none'}`);
+      console.log(`[call-permissions] Attempt ${attempt + 1}: panel=`, (await panel.textContent())?.slice(0, 350));
+
+      if (stopVisible && !errorVisible) {
+        recordingStarted = true;
+        console.log(`[call-permissions] Attempt ${attempt + 1}: SUCCESS`);
+        break;
+      }
+      if (errorVisible && errorText) console.log(`[call-permissions] Attempt ${attempt + 1}: error="${errorText.trim()}"`);
+    }
+    if (!recordingStarted) {
+      const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i).first();
+      const errorText = (await errorEl.isVisible()) ? await errorEl.textContent() : null;
+      const mediaBanner = page.getByText(/audio is unavailable|webrtc.*not.*running/i);
+      const mediaUnavail = (await mediaBanner.isVisible()) ? await mediaBanner.first().textContent() : null;
+      console.log('[call-permissions] FAILURE - full panel:', await panel.textContent());
+      throw new Error(
+        `Recording never started after 3 attempts. ` +
+        `Error on page: ${errorText ?? 'none'}. ` +
+        `Media unavailable: ${mediaUnavail ?? 'no'}.`
+      );
+    }
+    console.log('[call-permissions] Clicking Stop recording...');
     await page.getByRole('button', { name: /stop recording/i }).click();
+    console.log('[call-permissions] Waiting for "recording stopped successfully"...');
     await expect(page.getByText(/recording stopped successfully/i)).toBeVisible({ timeout: 15000 });
+    console.log('[call-permissions] Test passed');
   });
 
   test('Guest has no Record button', async ({ page, context }) => {

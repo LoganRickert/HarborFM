@@ -13,6 +13,8 @@ export RECORDING_CALLBACK_SECRET="${RECORDING_CALLBACK_SECRET:-e2e-secret}"
 # Use 41000-41200 (recording uses 50000+)
 export RTC_MIN_PORT="${RTC_MIN_PORT:-41000}"
 export RTC_MAX_PORT="${RTC_MAX_PORT:-41200}"
+# For local e2e, browser and webrtc run on same machine - announce 127.0.0.1 so RTP reaches mediasoup
+export MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}"
 
 # Stop any existing webrtc process so we start fresh with the new build
 bash "$SCRIPT_DIR/stop-webrtc.sh" 2>/dev/null || true

@@ -21,9 +21,10 @@ function getSetupToken(): string | null {
 
 test.describe('Call recording golden path', () => {
   test.beforeEach(async ({ page }) => {
+    console.log('[call-recording] beforeEach starting...');
     const token = getSetupToken();
     if (token) {
-      console.log('[call-recording] Completing setup...');
+      console.log('[call-recording] Completing setup with token...');
       await page.request.post(`${API_BASE}/setup/complete?id=${encodeURIComponent(token)}`, {
       data: {
         email: 'admin@e2e.test',
@@ -36,14 +37,16 @@ test.describe('Call recording golden path', () => {
     });
     }
 
-    console.log('[call-recording] Logging in...');
+    console.log('[call-recording] Logging in as admin@e2e.test...');
     const loginRes = await page.request.post(`${API_BASE}/auth/login`, {
       data: { email: 'admin@e2e.test', password: 'admin-password-123' },
     });
     if (!loginRes.ok()) {
       const text = await loginRes.text();
+      console.log('[call-recording] Login failed:', loginRes.status(), text);
       throw new Error(`Login failed: ${loginRes.status()} ${text}`);
     }
+    console.log('[call-recording] Login OK');
 
     const state = await page.context().storageState();
     const csrf = state.cookies.find((c) => c.name === 'harborfm_csrf')?.value;
@@ -79,37 +82,98 @@ test.describe('Call recording golden path', () => {
 
   test('records segment and persists via API', async ({ page }) => {
     test.setTimeout(60000);
+    page.on('console', (msg) => {
+      const text = msg.text();
+      const type = msg.type();
+      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
+        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
+      }
+    });
+    console.log('[call-recording] episodeId=', episodeId, 'podcastId=', podcastId);
     console.log('[call-recording] Navigating to episode editor...');
     await page.goto(`/episodes/${episodeId}`);
+    console.log('[call-recording] Page URL:', page.url());
 
-    console.log('[call-recording] Starting group call...');
-    await page.getByRole('button', { name: /start group call/i }).click();
+    const startBtn = page.getByRole('button', { name: /start group call/i });
+    console.log('[call-recording] Waiting for Start group call button...');
+    await startBtn.click();
+    console.log('[call-recording] Clicked Start group call');
 
     const recordBtn = page.getByRole('button', { name: /record segment/i });
+    console.log('[call-recording] Waiting for Record Segment button (timeout 10s)...');
     await expect(recordBtn).toBeVisible({ timeout: 10000 });
-    // Producer may need time to register. Click Record; retry if we get "No audio producer".
+    console.log('[call-recording] Record button visible');
+
+    console.log('[call-recording] Waiting for data-producer-ready=true (timeout 25s)...');
+    await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+    console.log('[call-recording] Producer ready');
+
+    const panel = page.getByRole('region', { name: /group call/i });
+    const panelText = await panel.textContent();
+    console.log('[call-recording] Call panel content (before Record):', panelText?.slice(0, 300));
+
     let recordingStarted = false;
     for (let attempt = 0; attempt < 3; attempt++) {
-      await page.waitForTimeout(attempt === 0 ? 8000 : 5000);
+      await page.waitForTimeout(attempt === 0 ? 2000 : 3000);
+      console.log(`[call-recording] Attempt ${attempt + 1}/3: clicking Record (waited ${attempt === 0 ? 2000 : 3000}ms)...`);
       await recordBtn.click();
-      await page.waitForTimeout(3000);
+      console.log(`[call-recording] Attempt ${attempt + 1}: clicked, waiting 2s for response...`);
+      await page.waitForTimeout(2000);
+
       const stopVisible = await page.getByRole('button', { name: /stop recording/i }).isVisible();
-      const errorVisible = await page.getByText(/failed to start recording|no audio producer/i).isVisible();
+      const errorVisible = await page.getByText(/failed to start recording|no audio producer|no audio received/i).isVisible();
+      const errorText = errorVisible
+        ? await page.getByText(/failed to start recording|no audio producer|no audio received/i).first().textContent()
+        : null;
+      const panelTextNow = await panel.textContent();
+      console.log(`[call-recording] Attempt ${attempt + 1}: stopVisible=${stopVisible} errorVisible=${errorVisible}`);
+      console.log(`[call-recording] Attempt ${attempt + 1}: errorText=`, errorText ?? 'none');
+      console.log(`[call-recording] Attempt ${attempt + 1}: panel excerpt=`, panelTextNow?.slice(0, 400));
+
       if (stopVisible && !errorVisible) {
         recordingStarted = true;
+        console.log(`[call-recording] Attempt ${attempt + 1}: SUCCESS - Stop recording visible`);
         break;
       }
-      if (errorVisible) console.log(`[call-recording] Attempt ${attempt + 1}: got error, retrying...`);
+      if (errorVisible && errorText) {
+        console.log(`[call-recording] Attempt ${attempt + 1}: FAILED - error="${errorText.trim()}"`);
+      }
     }
-    if (!recordingStarted) throw new Error('Recording never started after 3 attempts');
+    if (!recordingStarted) {
+      const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i).first();
+      const errorText = (await errorEl.isVisible()) ? await errorEl.textContent() : null;
+      const mediaBanner = page.getByText(/audio is unavailable|webrtc.*not.*running/i);
+      const mediaUnavail = (await mediaBanner.isVisible()) ? await mediaBanner.first().textContent() : null;
+      console.log('[call-recording] FAILURE - full panel text:', await panel.textContent());
+      throw new Error(
+        `Recording never started after 3 attempts. ` +
+        `Error on page: ${errorText ?? 'none'}. ` +
+        `Media unavailable: ${mediaUnavail ?? 'no'}.`
+      );
+    }
+    console.log('[call-recording] Verifying Stop recording visible...');
     await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(2500);
     console.log('[call-recording] Stopping recording...');
     await page.getByRole('button', { name: /stop recording/i }).click();
 
-    await expect(
-      page.getByText(/recording stopped successfully/i)
-    ).toBeVisible({ timeout: 15000 });
+    console.log('[call-recording] Waiting for "recording stopped successfully" or error (timeout 30s)...');
+    const successOrError = await Promise.race([
+      page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 }),
+      page.getByText(/failed to stop recording|recording produced no audio|recording failed/i).waitFor({ state: 'visible', timeout: 30000 }).then(() => 'error' as const),
+    ]).catch(async (e) => {
+      const panel = page.getByRole('region', { name: /group call/i });
+      const panelText = await panel.textContent().catch(() => '');
+      const errorEl = page.getByText(/failed|error|no audio/i).first();
+      const errorText = (await errorEl.isVisible().catch(() => false)) ? await errorEl.textContent() : null;
+      console.log('[call-recording] Timeout - panel excerpt:', panelText?.slice(0, 400));
+      console.log('[call-recording] Timeout - error element:', errorText);
+      throw e;
+    });
+    if (successOrError === 'error') {
+      const errText = await page.getByText(/failed to stop recording|recording produced no audio|recording failed/i).first().textContent();
+      throw new Error(`Recording stop failed: ${errText}`);
+    }
     console.log('[call-recording] Recording stopped, polling for segment...');
 
     // Poll for segment - callback from webrtc can take a few seconds
@@ -120,19 +184,19 @@ test.describe('Call recording golden path', () => {
       expect(segmentsRes.ok()).toBeTruthy();
       const { segments } = await segmentsRes.json();
       expect(Array.isArray(segments)).toBeTruthy();
-      if (i % 5 === 0 || segments.length > 0) {
-        console.log(`[call-recording] Poll ${i + 1}/30: segments count=${segments.length}`);
-      }
+      const segList = segments.length > 0 ? JSON.stringify(segments.map((s: { id?: string; duration_sec?: number }) => ({ id: s.id, duration_sec: s.duration_sec }))) : '[]';
+      console.log(`[call-recording] Poll ${i + 1}/30: segments=${segments.length} ${segList}`);
       recorded = segments.find(
         (s: { duration_sec?: number }) => s.duration_sec != null
       );
       if (recorded) {
-        console.log('[call-recording] Found segment with duration_sec=', recorded.duration_sec);
+        console.log('[call-recording] Found segment duration_sec=', (recorded as { duration_sec?: number }).duration_sec);
         break;
       }
     }
     expect(recorded).toBeDefined();
     expect(recorded!.duration_sec).toBeGreaterThanOrEqual(0);
+    console.log('[call-recording] Test passed - segment persisted');
   });
 
   test('End call', async ({ page }) => {
@@ -519,7 +583,11 @@ test.describe('Call recording golden path', () => {
       const joinUrlRaw = await page.getByRole('region', { name: /group call/i }).getByRole('textbox', { name: 'Join link' }).inputValue();
       const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;
 
-      const guestContext = await context.browser()!.newContext({ baseURL, permissions: ['microphone'] });
+      const guestContext = await context.browser()!.newContext({
+        baseURL,
+        permissions: ['microphone'],
+        viewport: { width: 1280, height: 900 },
+      });
       const guestPage = await guestContext.newPage();
       try {
         await guestPage.goto(joinUrl);
