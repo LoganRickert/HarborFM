@@ -106,6 +106,11 @@ export function getSessionById(sessionId: string): CallSession | undefined {
   return s && !s.ended ? s : undefined;
 }
 
+/** Returns session even if ended; for debug logging. */
+export function getSessionByIdRaw(sessionId: string): CallSession | undefined {
+  return sessionsById.get(sessionId);
+}
+
 export function getSessionForJoinInfo(token: string): CallSession | undefined {
   const s = sessionsByToken.get(token);
   return s && !s.ended ? s : undefined;

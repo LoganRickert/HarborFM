@@ -40,6 +40,9 @@ export interface CallPanelProps {
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
+/** Pending endCall timeouts keyed by sessionId. Used to cancel cleanup on React Strict Mode remount. */
+const pendingEndCallTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+const END_CALL_DELAY_MS = 200;
 
 export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onEndRequest, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
   const [displayName, setDisplayName] = useState(() => {
@@ -88,6 +91,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   }, [recording]);
 
   useEffect(() => {
+    const existing = pendingEndCallTimeouts.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      pendingEndCallTimeouts.delete(sessionId);
+    }
     setAlreadyInCall(false);
     setWebrtcUrlFromWs(undefined);
     setRoomIdFromWs(undefined);
@@ -178,10 +186,15 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       wsRef.current = null;
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'endCall' }));
-        ws.close();
-      }
+      const wsToClose = ws;
+      const timeoutId = setTimeout(() => {
+        pendingEndCallTimeouts.delete(sessionId);
+        if (wsToClose.readyState === WebSocket.OPEN) {
+          wsToClose.send(JSON.stringify({ type: 'endCall' }));
+          wsToClose.close();
+        }
+      }, END_CALL_DELAY_MS);
+      pendingEndCallTimeouts.set(sessionId, timeoutId);
     };
   }, [sessionId, onCallEnded, onSegmentRecorded, setMuted]);
 

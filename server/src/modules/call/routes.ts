@@ -9,6 +9,7 @@ import {
   createSession,
   getSessionByToken,
   getSessionById,
+  getSessionByIdRaw,
   getSessionByCode,
   getSessionForJoinInfo,
   ensureSessionJoinCode,
@@ -589,6 +590,17 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   session.ended ||
                   session.hostUserId !== userId
                 ) {
+                  const raw = getSessionByIdRaw(sessionIdParam);
+                  req.log.warn(
+                    {
+                      sessionId: sessionIdParam,
+                      jwtUserId: userId,
+                      sessionExists: !!raw,
+                      sessionEnded: raw?.ended,
+                      sessionHostUserId: raw?.hostUserId,
+                    },
+                    "Call host rejected: Invalid session",
+                  );
                   socket.send(
                     JSON.stringify({ type: "error", error: "Invalid session" }),
                   );
