@@ -41,7 +41,7 @@ export const wsHandler = async (socket: any, req: any) => {
       router.on("workerclose", () => deleteRoom(roomId));
       room = { router, transports: new Map(), producers: new Map() };
       setRoom(roomId, room);
-    } catch (err) {
+    } catch (_err) {
       socket.close();
       return;
     }

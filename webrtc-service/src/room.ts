@@ -1,5 +1,5 @@
 import * as mediasoup from "mediasoup";
-import { RTC_MIN_PORT, RTC_MAX_PORT, ANNOUNCED_IP } from "./config.js";
+import { RTC_MIN_PORT, RTC_MAX_PORT } from "./config.js";
 
 type Router = mediasoup.types.Router;
 type WebRtcTransport = mediasoup.types.WebRtcTransport;

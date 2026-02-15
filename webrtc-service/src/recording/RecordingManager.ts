@@ -14,23 +14,6 @@ export type RoomState = {
   producers: Map<string, Producer>;
 };
 
-type StreamSpec = { rtpPort: number; rtcpPort: number; payloadType: number };
-
-function createSingleStreamSdp(spec: StreamSpec): string {
-  const parts = [
-    "v=0",
-    "o=- 0 0 IN IP4 127.0.0.1",
-    "s=-",
-    "c=IN IP4 127.0.0.1",
-    "t=0 0",
-    `m=audio ${spec.rtpPort} RTP/AVP ${spec.payloadType}`,
-    `a=rtcp:${spec.rtcpPort}`,
-    `a=rtpmap:${spec.payloadType} opus/48000/2`,
-    "a=sendonly",
-  ];
-  return parts.join("\n") + "\n";
-}
-
 export type ActiveSegment = {
   segmentId: string;
   producerId: string;
@@ -126,7 +109,6 @@ export class RecordingManager {
       paused: true,
     });
     const payloadType = consumer.rtpParameters.codecs?.[0]?.payloadType ?? 111;
-    const sdpSpec: StreamSpec = { rtpPort, rtcpPort, payloadType };
 
     const recordingDirName = basename(state.episodeDir);
     const recorder = new SegmentRecorder({
