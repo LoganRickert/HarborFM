@@ -127,6 +127,10 @@ export function EpisodeEditorContent({
 
   const handleCallEnded = useCallback(() => setActiveCall(null), []);
 
+  const handleSegmentRecorded = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['segments', id] });
+  }, [queryClient, id]);
+
   const handleEndGroupCallConfirmed = useCallback(() => {
     setActiveCall(null);
     setEndCallConfirmOpen(false);
@@ -622,7 +626,7 @@ export function EpisodeEditorContent({
           mediaUnavailable={!activeCall.webrtcUrl || !activeCall.roomId || activeCall.webrtcUnavailable}
           onEnd={handleCallEnded}
           onCallEnded={handleCallEnded}
-          onSegmentRecorded={() => queryClient.invalidateQueries({ queryKey: ['segments', id] })}
+          onSegmentRecorded={handleSegmentRecorded}
           onEndRequest={() => setEndCallConfirmOpen(true)}
           recordDisabled={!canRecord}
           recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}

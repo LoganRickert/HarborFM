@@ -462,6 +462,17 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
                 )}
               </span>
               <span className={styles.participantActions}>
+                {!p.isHost && (
+                  <button
+                    type="button"
+                    className={styles.disconnectBtn}
+                    onClick={() => handleDisconnect(p.id)}
+                    aria-label="Disconnect"
+                    title="Disconnect"
+                  >
+                    <UserX size={14} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className={styles.muteBtn}
@@ -481,17 +492,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
                 >
                   {p.muted ? <MicOff size={14} /> : <Mic size={14} />}
                 </button>
-                {!p.isHost && (
-                  <button
-                    type="button"
-                    className={styles.disconnectBtn}
-                    onClick={() => handleDisconnect(p.id)}
-                    aria-label="Disconnect"
-                    title="Disconnect"
-                  >
-                    <UserX size={14} />
-                  </button>
-                )}
               </span>
             </li>
           ))}
@@ -553,27 +553,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
               </button>
             )}
           </span>
-          {(() => {
-            const host = participants.find((p) => p.isHost);
-            if (!host) return null;
-            return (
-              <button
-                type="button"
-                className={styles.recordRowMuteBtn}
-                onClick={() => handleSetMute(host.id, !host.muted)}
-                disabled={!effectiveWebrtcUrl || !producerReady}
-                aria-label={host.muted ? 'Unmute' : 'Mute'}
-                title={host.muted ? 'Unmute' : 'Mute'}
-              >
-                {host.muted ? (
-                  <MicOff size={16} strokeWidth={2} aria-hidden />
-                ) : (
-                  <Mic size={16} strokeWidth={2} aria-hidden />
-                )}
-                <span>{host.muted ? 'Unmute' : 'Mute'}</span>
-              </button>
-            );
-          })()}
         </div>
         {!minimized && recordingProcessing && (
           <p className={styles.recordingProcessing} role="status">
