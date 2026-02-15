@@ -8,6 +8,8 @@ export interface CallParticipant {
   muted?: boolean;
   /** When true, host muted this guest; host can unmute, guest cannot. When false, guest muted self; guest can unmute, host cannot. */
   mutedByHost?: boolean;
+  /** True when host's socket disconnected (e.g. tab closed). Call continues for grace period. */
+  disconnected?: boolean;
 }
 
 export interface RecordingEvent {
@@ -38,29 +40,77 @@ export interface CallSession {
   recordingInProgress?: boolean;
   /** Client epoch ms when recording started (for reconnecting host to show elapsed time). */
   recordingStartedAtEpochMs?: number;
+  /** When host's socket disconnected. Grace period ends at this + hostDisconnectGraceMs. */
+  hostDisconnectedAt?: number;
+  /** Grace period ms from hostDisconnectedAt before ending session. */
+  hostDisconnectGraceMs?: number;
 }
 
-const HOST_AWAY_MS = 5 * 60 * 1000; // 5 minutes
+const GRACE_NO_GUESTS_MS = 1 * 60 * 1000; // 1 minute
+const GRACE_NO_GUESTS_RECORDING_MS = 2 * 60 * 1000; // 2 minutes
+const GRACE_WITH_GUESTS_MS = 5 * 60 * 1000; // 5 minutes
 
 const sessionsByToken = new Map<string, CallSession>();
 const sessionsById = new Map<string, CallSession>();
 const sessionsByCode = new Map<string, CallSession>();
 let hostAwayCheckInterval: ReturnType<typeof setInterval> | null = null;
 
+function getHostDisconnectGraceMs(session: CallSession): number {
+  const guestCount = session.participants.filter((p) => !p.isHost).length;
+  if (guestCount > 0) return GRACE_WITH_GUESTS_MS;
+  if (session.recordingInProgress === true) return GRACE_NO_GUESTS_RECORDING_MS;
+  return GRACE_NO_GUESTS_MS;
+}
+
 function ensureHostAwayChecker(
-  onSessionEnd: (session: CallSession) => void,
+  onSessionEnd: (session: CallSession) => void | Promise<void>,
 ): void {
   if (hostAwayCheckInterval != null) return;
   hostAwayCheckInterval = setInterval(() => {
     const now = Date.now();
     for (const session of sessionsById.values()) {
       if (session.ended) continue;
-      if (now - session.lastHostHeartbeatAt >= HOST_AWAY_MS) {
+      let shouldEnd = false;
+      if (session.hostDisconnectedAt != null && session.hostDisconnectGraceMs != null) {
+        shouldEnd = now >= session.hostDisconnectedAt + session.hostDisconnectGraceMs;
+      } else {
+        // Missed socket close (e.g. server restart); use current state for grace
+        const grace = getHostDisconnectGraceMs(session);
+        shouldEnd = now - session.lastHostHeartbeatAt >= grace;
+      }
+      if (shouldEnd) {
         session.ended = true;
-        onSessionEnd(session);
+        const result = onSessionEnd(session);
+        if (result && typeof (result as Promise<unknown>).catch === "function") {
+          (result as Promise<void>).catch((err) =>
+            console.error("[hostAwayChecker] onSessionEnd failed:", err),
+          );
+        }
       }
     }
   }, 30_000); // check every 30s
+}
+
+/** Mark host as disconnected (socket closed). Returns grace period for broadcasting. */
+export function setHostDisconnected(sessionId: string): { gracePeriodMs: number } | null {
+  const session = sessionsById.get(sessionId);
+  if (!session || session.ended) return null;
+  const hostP = session.participants.find((p) => p.isHost);
+  if (!hostP) return null;
+  hostP.disconnected = true;
+  session.hostDisconnectedAt = Date.now();
+  session.hostDisconnectGraceMs = getHostDisconnectGraceMs(session);
+  return { gracePeriodMs: session.hostDisconnectGraceMs };
+}
+
+/** Clear host disconnected state when host reconnects. */
+export function clearHostDisconnected(sessionId: string): void {
+  const session = sessionsById.get(sessionId);
+  if (!session) return;
+  const hostP = session.participants.find((p) => p.isHost);
+  if (hostP) hostP.disconnected = false;
+  session.hostDisconnectedAt = undefined;
+  session.hostDisconnectGraceMs = undefined;
 }
 
 function generateJoinCode(): string {
@@ -77,7 +127,7 @@ export function createSession(
   hostUserId: string,
   origin: string,
   password: string | null,
-  onSessionEnd: (session: CallSession) => void,
+  onSessionEnd: (session: CallSession) => void | Promise<void>,
 ): CallSession {
   const sessionId = nanoid();
   const token = nanoid(16);

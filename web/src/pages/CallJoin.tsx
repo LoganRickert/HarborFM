@@ -33,7 +33,9 @@ export function CallJoin() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [webrtcUrl, setWebrtcUrl] = useState<string | undefined>(undefined);
   const [webrtcRoomId, setWebrtcRoomId] = useState<string | undefined>(undefined);
-  const [participants, setParticipants] = useState<Array<{ id: string; name: string; isHost: boolean; muted?: boolean; mutedByHost?: boolean }>>([]);
+  const [participants, setParticipants] = useState<Array<{ id: string; name: string; isHost: boolean; muted?: boolean; mutedByHost?: boolean; disconnected?: boolean }>>([]);
+  const [hostDisconnected, setHostDisconnected] = useState<{ gracePeriodMs: number; endsAt: number } | null>(null);
+  const [hostAwayCountdown, setHostAwayCountdown] = useState<number | null>(null);
   const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
   const [muted, setMutedState] = useState(false);
   const [mutedByHost, setMutedByHost] = useState(false);
@@ -60,6 +62,20 @@ export function CallJoin() {
   setMutedRef.current = setMuted;
 
   useWakeLock(joined);
+
+  useEffect(() => {
+    if (!hostDisconnected) {
+      setHostAwayCountdown(null);
+      return;
+    }
+    const tick = () => {
+      const remain = Math.max(0, Math.ceil((hostDisconnected.endsAt - Date.now()) / 1000));
+      setHostAwayCountdown(remain);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [hostDisconnected]);
 
   useEffect(() => {
     if (myParticipant?.muted && myParticipant?.mutedByHost) setMutedByHost(true);
@@ -237,10 +253,22 @@ export function CallJoin() {
           }
           setMyParticipantId(msg.participantId ?? null);
           setParticipants(msg.participants ?? []);
+          if (msg.hostDisconnected === true && typeof msg.gracePeriodMs === 'number' && typeof msg.endsAt === 'number') {
+            setHostDisconnected({ gracePeriodMs: msg.gracePeriodMs, endsAt: msg.endsAt });
+          } else {
+            setHostDisconnected(null);
+          }
           if (msg.webrtcUrl) setWebrtcUrl(msg.webrtcUrl);
           if (msg.roomId) setWebrtcRoomId(msg.roomId);
         } else if (msg.type === 'participants') {
-          setParticipants(msg.participants ?? []);
+          const list = msg.participants ?? [];
+          setParticipants(list);
+          const host = list.find((p: { isHost?: boolean }) => p.isHost);
+          if (!host?.disconnected) setHostDisconnected(null);
+        } else if (msg.type === 'hostDisconnected') {
+          if (typeof msg.gracePeriodMs === 'number' && typeof msg.endsAt === 'number') {
+            setHostDisconnected({ gracePeriodMs: msg.gracePeriodMs, endsAt: msg.endsAt });
+          }
         } else if (msg.type === 'participantJoined') {
           setParticipants((prev) => {
             const p = msg.participant;
@@ -249,6 +277,7 @@ export function CallJoin() {
           });
         } else if (msg.type === 'callEnded') {
           clearJoinTimeout();
+          setHostDisconnected(null);
           setJoined(false);
           setJoining(false);
           wsRef.current = null;
@@ -276,6 +305,7 @@ export function CallJoin() {
           ]);
         } else if (msg.type === 'disconnected') {
           clearJoinTimeout();
+          setHostDisconnected(null);
           setWebrtcUrl(undefined);
           setWebrtcRoomId(undefined);
           setJoined(false);
@@ -377,6 +407,11 @@ export function CallJoin() {
               You were muted by the host. Ask them to unmute you.
             </p>
           )}
+          {hostDisconnected && (
+            <p className={styles.hostAwayBanner} role="status">
+              Host has left. Call will end in {hostAwayCountdown != null ? `${Math.floor(hostAwayCountdown / 60)}:${String(hostAwayCountdown % 60).padStart(2, '0')}` : '—'} unless they return.
+            </p>
+          )}
           <div className={styles.callActions}>
             <button
               type="button"
@@ -430,6 +465,7 @@ export function CallJoin() {
                 key={p.id}
                 className={styles.participantCard}
                 data-host={p.isHost || undefined}
+                data-disconnected={p.disconnected || undefined}
                 data-my-participant={p.id === myParticipantId || undefined}
               >
                 <span className={styles.participantRoleIcon} aria-hidden>
@@ -498,6 +534,7 @@ export function CallJoin() {
                       )}
                       <span className={styles.participantName} title={p.name}>
                         {p.name}
+                        {p.disconnected && <span className={styles.disconnectedBadge}> (left)</span>}
                       </span>
                     </span>
                   )}

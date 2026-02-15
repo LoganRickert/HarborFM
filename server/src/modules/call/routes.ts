@@ -28,6 +28,8 @@ import {
   setParticipantMutedBySelf,
   setParticipantMutedByHost,
   setParticipantName,
+  setHostDisconnected,
+  clearHostDisconnected,
 } from "../../services/callSession.js";
 import { getWebRtcConfig } from "../../services/webrtcConfig.js";
 import { join, resolve } from "path";
@@ -173,7 +175,30 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         request.userId,
         origin,
         body.password ?? null,
-        (endedSession) => {
+        async (endedSession) => {
+          if (
+            endedSession.roomId &&
+            endedSession.recordingInProgress === true
+          ) {
+            const webrtcCfg = getWebRtcConfig();
+            if (webrtcCfg?.serviceUrl) {
+              try {
+                await fetch(
+                  `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ roomId: endedSession.roomId }),
+                  },
+                );
+              } catch (err) {
+                request.log.warn(
+                  { err, roomId: endedSession.roomId },
+                  "WebRTC stop-recording failed on host-away call end",
+                );
+              }
+            }
+          }
           broadcastToSession(endedSession.sessionId, { type: "callEnded" });
           sessionSockets.delete(endedSession.sessionId);
         },
@@ -824,6 +849,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   });
                   hostSocketAddedAt.set(socket as unknown as WebSocket, Date.now());
                 }
+                clearHostDisconnected(sessionId);
                 const hostJoinedPayload: Record<string, unknown> = {
                     type: "joined",
                     sessionId,
@@ -894,6 +920,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               sessionId: sid,
               participantId: pid,
             });
+            clearHostDisconnected(sid);
             const hostJoinedPayload: Record<string, unknown> = {
               type: "joined",
               sessionId: sid,
@@ -989,6 +1016,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               isHost: false,
               participants: session.participants,
             };
+            if (session.hostDisconnectedAt != null && session.hostDisconnectGraceMs != null) {
+              webrtcJoinedPayload.hostDisconnected = true;
+              webrtcJoinedPayload.gracePeriodMs = session.hostDisconnectGraceMs;
+              webrtcJoinedPayload.endsAt = session.hostDisconnectedAt + session.hostDisconnectGraceMs;
+            }
             const webrtcCfg = getWebRtcConfig();
             if (session.roomId && webrtcCfg.publicWsUrl) {
               webrtcJoinedPayload.webrtcUrl =
@@ -1351,6 +1383,23 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               type: "participants",
               participants: session.participants,
             });
+        }
+        if (sessionId && isHost) {
+          const result = setHostDisconnected(sessionId);
+          if (result) {
+            const session = getSessionByIdRaw(sessionId);
+            if (session) {
+              broadcastToSession(sessionId, {
+                type: "hostDisconnected",
+                gracePeriodMs: result.gracePeriodMs,
+                endsAt: session.hostDisconnectedAt! + result.gracePeriodMs,
+              });
+              broadcastToSession(sessionId, {
+                type: "participants",
+                participants: session.participants,
+              });
+            }
+          }
         }
         if (sessionId) removeSocketFromSession(sessionId, socket);
       });

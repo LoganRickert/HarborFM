@@ -1,5 +1,6 @@
 import { Mic, Library } from 'lucide-react';
 import { SegmentRow } from './SegmentRow';
+import { useBatchedSegmentWaveforms } from '../../hooks/useBatchedSegmentWaveforms';
 import type { EpisodeSegment } from '../../api/segments';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
@@ -48,6 +49,8 @@ export function EpisodeSectionsPanel({
   registerSegmentPause,
   unregisterSegmentPause,
 }: EpisodeSectionsPanelProps) {
+  const segmentWaveforms = useBatchedSegmentWaveforms(episodeId, segments);
+
   return (
     <div className={styles.sectionsPanel}>
       <header className={styles.sectionsPanelHeader}>
@@ -118,6 +121,7 @@ export function EpisodeSectionsPanel({
               registerPause={registerSegmentPause}
               unregisterPause={unregisterSegmentPause}
               readOnly={readOnly}
+              waveformData={segmentWaveforms.get(seg.id)}
             />
           ))}
         </ul>
