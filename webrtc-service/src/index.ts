@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import fastifyRateLimit from "@fastify/rate-limit";

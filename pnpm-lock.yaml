@@ -276,6 +276,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.0
         version: 11.2.0
+      dotenv:
+        specifier: ^17.2.4
+        version: 17.2.4
       fastify:
         specifier: ^5.7.4
         version: 5.7.4
