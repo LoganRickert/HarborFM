@@ -8,6 +8,7 @@ import {
 import { join } from "path";
 import { nanoid } from "nanoid";
 import { db } from "../db/index.js";
+import { SETUP_ID } from "../config.js";
 import { ensureDir, getDataDir } from "./paths.js";
 
 const SETUP_TOKEN_FILENAME = "setup-token.txt";
@@ -24,6 +25,8 @@ function getSetupTokenPath(): string {
 }
 
 export function readSetupToken(): string | null {
+  if (SETUP_ID) return SETUP_ID;
+
   const path = getSetupTokenPath();
   if (!existsSync(path)) return null;
   const token = readFileSync(path, "utf8").trim();
@@ -34,6 +37,9 @@ export function getOrCreateSetupToken(): string {
   if (isSetupComplete()) {
     throw new Error("Setup is already complete");
   }
+
+  if (SETUP_ID) return SETUP_ID;
+
   ensureDir(getDataDir());
 
   const existing = readSetupToken();

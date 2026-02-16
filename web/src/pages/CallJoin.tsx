@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User, Settings, X } from 'lucide-react';
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
+import { getAgcKey, getMicVolumeKey } from '../constants/micSettings';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { RemoteAudio, AudioUnlockBanner } from '../components/GroupCall/RemoteAudio';
@@ -29,6 +30,9 @@ export function CallJoin() {
   const [deviceId, setDeviceId] = useState<string>('');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [micLevel, setMicLevel] = useState(0);
+  const [showMicSettings, setShowMicSettings] = useState(false);
+  const [autoGainControl, setAutoGainControl] = useState(true);
+  const [micVolume, setMicVolume] = useState(1);
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [listeningToSelf, setListeningToSelf] = useState(false);
@@ -48,6 +52,7 @@ export function CallJoin() {
   const [recordingInProgress, setRecordingInProgress] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const selfListenGainRef = useRef<GainNode | null>(null);
+  const micVolumeGainRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -63,6 +68,9 @@ export function CallJoin() {
     deviceId || undefined,
     myParticipantId ?? undefined,
     myParticipant?.name ?? name,
+    undefined,
+    autoGainControl,
+    micVolume,
   );
   const setMutedRef = useRef(setMuted);
   setMutedRef.current = setMuted;
@@ -126,6 +134,20 @@ export function CallJoin() {
     return () => navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
   }, [refreshDevices]);
 
+  useEffect(() => {
+    const id = deviceId || 'default';
+    const agcStored = localStorage.getItem(getAgcKey(id));
+    setAutoGainControl(agcStored === 'false' ? false : true);
+    const volStored = localStorage.getItem(getMicVolumeKey(id)) ?? localStorage.getItem(getMicVolumeKey('default'));
+    const v = parseFloat(volStored ?? '1');
+    setMicVolume(Number.isFinite(v) ? Math.max(0, Math.min(8, v)) : 1);
+  }, [deviceId]);
+
+  useEffect(() => {
+    const g = micVolumeGainRef.current;
+    if (g) g.gain.value = autoGainControl ? 1 : Math.max(0, Math.min(8, micVolume));
+  }, [autoGainControl, micVolume]);
+
   // Request microphone permission when token is validated so device list shows proper labels
   useEffect(() => {
     if (!joinInfo || !navigator.mediaDevices?.getUserMedia) return;
@@ -148,22 +170,26 @@ export function CallJoin() {
       analyserRef.current = null;
       audioContextRef.current = null;
       selfListenGainRef.current = null;
+      micVolumeGainRef.current = null;
     };
   }, []);
 
   const prevJoinedRef = useRef(false);
   const prevDeviceIdRef = useRef<string | undefined>(undefined);
+  const prevAgcRef = useRef<boolean | undefined>(undefined);
   useEffect(() => {
     const wasInCall = prevJoinedRef.current;
     prevJoinedRef.current = joined;
 
-    // Only tear down when: (1) we just left the call, or (2) deviceId changed and we have a stream to re-acquire
     const deviceChanged = prevDeviceIdRef.current !== undefined && prevDeviceIdRef.current !== deviceId;
     prevDeviceIdRef.current = deviceId;
+    const agcChanged = prevAgcRef.current !== undefined && prevAgcRef.current !== autoGainControl;
+    prevAgcRef.current = autoGainControl;
 
     const shouldTearDown =
-      (wasInCall && !joined) || // Just left the call
-      (deviceChanged && !joined && streamRef.current !== null); // Device changed on pre-join form
+      (wasInCall && !joined) ||
+      (deviceChanged && !joined && streamRef.current !== null) ||
+      (agcChanged && !joined && streamRef.current !== null);
 
     if (!shouldTearDown || !streamRef.current) return;
 
@@ -175,16 +201,22 @@ export function CallJoin() {
     analyserRef.current = null;
     audioContextRef.current = null;
     selfListenGainRef.current = null;
+    micVolumeGainRef.current = null;
     setListeningToSelf(false);
   }, [deviceId, joined]);
 
-  const setupMicrophone = async (): Promise<boolean> => {
-    if (streamRef.current) return true;
+  const setupMicrophone = useCallback(async (): Promise<boolean> => {
+    if (streamRef.current) {
+      const g = micVolumeGainRef.current;
+      if (g) g.gain.value = autoGainControl ? 1 : Math.max(0, Math.min(8, micVolume));
+      return true;
+    }
     const constraints: MediaStreamConstraints = {
       audio: {
         ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        autoGainControl: false,
+        autoGainControl,
         noiseSuppression: false,
+        ...(!autoGainControl ? { echoCancellation: false } : {}),
       },
       video: false,
     };
@@ -195,14 +227,18 @@ export function CallJoin() {
       const ctx = new AudioCtx();
       audioContextRef.current = ctx;
       const src = ctx.createMediaStreamSource(stream);
+      const micVolumeGain = ctx.createGain();
+      micVolumeGain.gain.value = autoGainControl ? 1 : Math.max(0, Math.min(8, micVolume));
+      micVolumeGainRef.current = micVolumeGain;
+      src.connect(micVolumeGain);
       const analyser = ctx.createAnalyser();
-      src.connect(analyser);
+      micVolumeGain.connect(analyser);
       analyserRef.current = analyser;
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = 0;
-      src.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      selfListenGainRef.current = gainNode;
+      const selfListenGain = ctx.createGain();
+      selfListenGain.gain.value = 0;
+      micVolumeGain.connect(selfListenGain);
+      selfListenGain.connect(ctx.destination);
+      selfListenGainRef.current = selfListenGain;
       await ctx.resume();
       const computeLevel = createAudioLevelProcessor(analyser);
       function tick() {
@@ -216,13 +252,13 @@ export function CallJoin() {
         animationRef.current = requestAnimationFrame(tick);
       }
       tick();
-      refreshDevices(); // Re-enumerate so labels appear after permission granted
+      refreshDevices();
       return true;
     } catch {
       setMicLevel(0);
       return false;
     }
-  };
+  }, [deviceId, autoGainControl, micVolume]);
 
   const resumeAudioContext = () => {
     if (!streamRef.current) {
@@ -231,6 +267,10 @@ export function CallJoin() {
     }
     audioContextRef.current?.resume().catch(() => {});
   };
+
+  useEffect(() => {
+    if (showMicSettings && devices.length > 0) setupMicrophone();
+  }, [showMicSettings, devices.length, setupMicrophone]);
 
   const toggleListenToSelf = async () => {
     const ok = await setupMicrophone();
@@ -665,51 +705,16 @@ export function CallJoin() {
               maxLength={100}
             />
             {devices.length > 0 && (
-              <>
-                <div className={styles.micSelector}>
-                  <label className={styles.label} htmlFor="call-join-mic">
-                    Microphone
-                  </label>
-                  <select
-                  id="call-join-mic"
-                  className={styles.select}
-                  value={deviceId}
-                  onChange={(e) => setDeviceId(e.target.value)}
-                >
-                  {devices.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-                </div>
-                <div
-                  className={styles.micLevel}
-                  role="button"
-                  tabIndex={0}
-                  onClick={resumeAudioContext}
-                  onKeyDown={(e) => e.key === 'Enter' && resumeAudioContext()}
-                  title="Click if the bar doesn't move"
-                  aria-label="Microphone level - click to enable if needed"
-                >
-                  <div className={styles.micLevelBar} style={{ width: `${micLevel}%` }} />
-                </div>
-                <div className={styles.listenRow}>
-                  <button
-                    type="button"
-                    className={styles.listenBtn}
-                    onClick={toggleListenToSelf}
-                    aria-pressed={listeningToSelf}
-                    aria-label={listeningToSelf ? 'Stop listening to yourself' : 'Listen to yourself'}
-                  >
-                    {listeningToSelf ? <Volume2 size={16} /> : <Mic size={16} />}
-                    {listeningToSelf ? ' Stop listening' : ' Listen to yourself'}
-                  </button>
-                </div>
-                <p className={styles.micTestHint}>
-                  Speak to test your microphone. Level should move when you talk. Click the bar if it doesn&apos;t.
-                </p>
-              </>
+              <button
+                type="button"
+                className={styles.micSettingsToggle}
+                onClick={() => setShowMicSettings(true)}
+                aria-expanded={false}
+                aria-label="Review microphone settings"
+              >
+                <Settings size={16} strokeWidth={2} aria-hidden />
+                Microphone settings
+              </button>
             )}
             {joinInfo.passwordRequired && (
               <>
@@ -739,6 +744,124 @@ export function CallJoin() {
         </>
       )}
       </div>
+      {showMicSettings && devices.length > 0 && (
+        <div
+          className={styles.micSettingsOverlay}
+          onClick={() => setShowMicSettings(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="call-join-mic-settings-title"
+        >
+          <div
+            className={styles.micSettingsPopover}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.micSettingsPopoverHeader}>
+              <h3 id="call-join-mic-settings-title" className={styles.micSettingsPopoverTitle}>
+                Microphone settings
+              </h3>
+              <button
+                type="button"
+                className={styles.micSettingsPopoverClose}
+                onClick={() => setShowMicSettings(false)}
+                aria-label="Close"
+              >
+                <X size={20} strokeWidth={2} />
+              </button>
+            </div>
+            <div className={styles.micSettingsPopoverBody}>
+              <div className={styles.micSelector}>
+                <label className={styles.label} htmlFor="call-join-mic">
+                  Microphone
+                </label>
+                <select
+                  id="call-join-mic"
+                  className={styles.select}
+                  value={deviceId}
+                  onChange={(e) => setDeviceId(e.target.value)}
+                >
+                  {devices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.agcRow}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={autoGainControl}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setAutoGainControl(enabled);
+                      const id = deviceId || 'default';
+                      localStorage.setItem(getAgcKey(id), String(enabled));
+                    }}
+                    aria-label="Auto Gain Control"
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Auto Gain Control</span>
+                </label>
+              </div>
+              {!autoGainControl && (
+                <div className={styles.volumeRow}>
+                  <label className={styles.label}>Volume</label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={800}
+                    step={1}
+                    value={Math.round((micVolume ?? 1) * 100)}
+                    onChange={(e) => {
+                      const raw = parseInt(e.target.value, 10) / 100;
+                      const clamped = Math.max(0, Math.min(8, Number.isFinite(raw) ? raw : 1));
+                      setMicVolume(clamped);
+                      localStorage.setItem(getMicVolumeKey(deviceId || 'default'), String(clamped));
+                    }}
+                    className={styles.volumeSlider}
+                    aria-label="Microphone volume"
+                  />
+                  <span className={styles.volumeValue}>{Math.round((micVolume ?? 1) * 100)}%</span>
+                </div>
+              )}
+              <div
+                className={styles.micLevel}
+                role="button"
+                tabIndex={0}
+                onClick={resumeAudioContext}
+                onKeyDown={(e) => e.key === 'Enter' && resumeAudioContext()}
+                title="Click if the bar doesn't move"
+                aria-label="Microphone level - click to enable if needed"
+              >
+                <div className={styles.micLevelBar} style={{ width: `${micLevel}%` }} />
+              </div>
+              <div className={styles.listenRow}>
+                <button
+                  type="button"
+                  className={styles.listenBtn}
+                  onClick={toggleListenToSelf}
+                  aria-pressed={listeningToSelf}
+                  aria-label={listeningToSelf ? 'Stop listening to yourself' : 'Listen to yourself'}
+                >
+                  {listeningToSelf ? <Volume2 size={16} /> : <Mic size={16} />}
+                  {listeningToSelf ? ' Stop listening' : ' Listen to yourself'}
+                </button>
+              </div>
+              <p className={styles.micTestHint}>
+                Speak to test your microphone. Level should move when you talk. Click the bar if it doesn&apos;t.
+              </p>
+              <button
+                type="button"
+                className={styles.micSettingsDone}
+                onClick={() => setShowMicSettings(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

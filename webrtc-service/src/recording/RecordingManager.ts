@@ -143,7 +143,7 @@ export class RecordingManager {
     await new Promise((r) => setTimeout(r, postConnectMs));
     await consumer.resume();
 
-    const filePathRelative = join("recordings", recordingDirName, `segment_${segmentId}.wav`);
+    const filePathRelative = join("recordings", recordingDirName, `segment_${segmentId}.mp3`);
 
     const now = Date.now();
     const activeSegment: ActiveSegment = {
@@ -278,7 +278,7 @@ export class RecordingManager {
         startMs: s.startedAt - epochMs,
         endMs: epochMs ? endMs - epochMs : 0,
         filePath: s.filePathRelative,
-        codec: "pcm_s16le",
+        codec: "libmp3lame",
       };
       if (participant?.participantName) seg.participantName = participant.participantName;
       if (source === "soundboard") seg.source = "soundboard";

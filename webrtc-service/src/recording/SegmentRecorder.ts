@@ -28,8 +28,7 @@ export type SegmentRecorderOptions = {
 };
 
 /**
- * SegmentRecorder: RTP → WAV per producer. Writes to .wav.part, renames to .wav on clean stop.
- * Uses PCM (pcm_s16le) to avoid lossy MP3 decode when mixing multiple participants.
+ * SegmentRecorder: RTP → MP3 per producer. Writes to .mp3.part, renames to .mp3 on clean stop.
  * Uses SDP temp file so stdin stays available for graceful shutdown ('q' command).
  */
 export class SegmentRecorder {
@@ -44,13 +43,13 @@ export class SegmentRecorder {
     const dir = join(options.recordingDataDir, "recordings", options.recordingDirName);
     mkdirSync(dir, { recursive: true });
     const base = `segment_${options.segmentId}`;
-    this.partPath = join(dir, `${base}.wav.part`);
-    this.finalPath = join(dir, `${base}.wav`);
+    this.partPath = join(dir, `${base}.mp3.part`);
+    this.finalPath = join(dir, `${base}.mp3`);
     this.sdpPath = join(dir, `_sdp_${options.segmentId}.sdp`);
   }
 
   /**
-   * Start FFmpeg recording RTP to WAV (pcm_s16le). Returns the ChildProcess.
+   * Start FFmpeg recording RTP to MP3 (libmp3lame). Returns the ChildProcess.
    */
   start(rtpPort: number, rtcpPort: number, payloadType: number): ChildProcess {
     const sdp = createSingleStreamSdp({ rtpPort, rtcpPort, payloadType });
@@ -71,13 +70,15 @@ export class SegmentRecorder {
       "-map",
       "0:a:0",
       "-acodec",
-      "pcm_s16le",
+      "libmp3lame",
+      "-b:a",
+      "128k",
       "-ar",
       "48000",
       "-ac",
       "1",
       "-f",
-      "wav",
+      "mp3",
       "-y",
       this.partPath,
     ];
@@ -87,7 +88,7 @@ export class SegmentRecorder {
   }
 
   /**
-   * Stop recording: send 'q' to stdin for graceful flush, fallback to SIGINT. Rename .part → .wav on success.
+   * Stop recording: send 'q' to stdin for graceful flush, fallback to SIGINT. Rename .part → .mp3 on success.
    */
   stop(graceMs: number): Promise<{ success: boolean; filePath: string | null }> {
     return new Promise((resolve) => {
@@ -122,7 +123,7 @@ export class SegmentRecorder {
         if (code === 0 && existsSync(this.partPath) && statSync(this.partPath).size > 0) {
           try {
             renameSync(this.partPath, this.finalPath);
-            const rel = `recordings/${this.options.recordingDirName}/segment_${this.options.segmentId}.wav`;
+            const rel = `recordings/${this.options.recordingDirName}/segment_${this.options.segmentId}.mp3`;
             resolve({ success: true, filePath: rel });
           } catch {
             resolve({ success: false, filePath: null });
@@ -150,6 +151,6 @@ export class SegmentRecorder {
   }
 
   getRelativePath(): string {
-    return `recordings/${this.options.recordingDirName}/segment_${this.options.segmentId}.wav`;
+    return `recordings/${this.options.recordingDirName}/segment_${this.options.segmentId}.mp3`;
   }
 }

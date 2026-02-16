@@ -296,3 +296,7 @@ export const ROLE_MIN_MANAGE_COLLABORATORS = parseShareRole(
 /** AAD for DNS-related encrypted secrets (Cloudflare API token etc). Env: DNS_SECRETS_AAD. */
 export const DNS_SECRETS_AAD =
   process.env.DNS_SECRETS_AAD?.trim() || `${APP_NAME}-dns`;
+
+/** Initial setup token for /setup?id=... URL. Env: SETUP_ID or SETUP_TOKEN. When set, used instead of file. */
+export const SETUP_ID =
+  process.env.SETUP_ID?.trim() || process.env.SETUP_TOKEN?.trim() || null;
