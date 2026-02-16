@@ -14,6 +14,10 @@ async function main() {
     console.error(JSON.stringify({ hash: "", error: "Missing or invalid password" }));
     process.exit(1);
   }
+  if (password.length < 8) {
+    console.error(JSON.stringify({ hash: "", error: "Password must be at least 8 characters" }));
+    process.exit(1);
+  }
   const hash = await argon2.hash(password);
   console.log(JSON.stringify({ hash }));
 }

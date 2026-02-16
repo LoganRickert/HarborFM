@@ -91,6 +91,9 @@ export const FFPROBE_PATH = process.env.FFPROBE_PATH ?? "ffprobe";
 export const AUDIOWAVEFORM_PATH =
   process.env.AUDIOWAVEFORM_PATH ?? "audiowaveform";
 
+/** When false, WebRTC/group calls are disabled (e.g. Terraform webrtc_enabled=0). Env: WEBRTC_ENABLED. Default true when unset. */
+export const WEBRTC_ENABLED = process.env.WEBRTC_ENABLED?.trim() !== "0";
+
 /** WebRTC service base URL (e.g. http://webrtc:3002). When set, group call creates a mediasoup room. Env: WEBRTC_SERVICE_URL. */
 export const WEBRTC_SERVICE_URL = process.env.WEBRTC_SERVICE_URL?.trim() || null;
 

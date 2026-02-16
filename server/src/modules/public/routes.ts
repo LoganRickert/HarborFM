@@ -47,6 +47,7 @@ import {
   RSS_CACHE_MAX_AGE_MS,
   RSS_FEED_FILENAME,
   WAVEFORM_EXTENSION,
+  WEBRTC_ENABLED,
 } from "../../config.js";
 
 export async function publicRoutes(app: FastifyInstance) {
@@ -481,6 +482,7 @@ export async function publicRoutes(app: FastifyInstance) {
         "";
       const match = getPodcastByHost(host);
       const webrtcCfg = getWebRtcConfig();
+      const webrtcConfigured = Boolean(webrtcCfg.serviceUrl && webrtcCfg.publicWsUrl);
       const payload: {
         public_feeds_enabled: boolean;
         custom_feed_slug?: string;
@@ -489,7 +491,7 @@ export async function publicRoutes(app: FastifyInstance) {
       } = {
         public_feeds_enabled: Boolean(settings.public_feeds_enabled),
         gdpr_consent_banner_enabled: Boolean(settings.gdpr_consent_banner_enabled),
-        webrtc_enabled: Boolean(webrtcCfg.serviceUrl && webrtcCfg.publicWsUrl),
+        webrtc_enabled: webrtcConfigured && WEBRTC_ENABLED,
       };
       if (match) payload.custom_feed_slug = match.slug;
       return reply.send(payload);

@@ -37,6 +37,7 @@ import type { Episode, EpisodeUpdate } from '../../api/episodes';
 import type { Podcast } from '../../api/podcasts';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
+import { getPublicConfig } from '../../api/public';
 import { startCall, getActiveSession } from '../../api/call';
 import { CallPanel } from '../../components/GroupCall/CallPanel';
 import { EndCallConfirmDialog } from '../../components/GroupCall/EndCallConfirmDialog';
@@ -61,6 +62,12 @@ export function EpisodeEditorContent({
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
+  const host = typeof window !== 'undefined' ? window.location.host : '';
+  const { data: publicConfig } = useQuery({
+    queryKey: ['publicConfig', host],
+    queryFn: getPublicConfig,
+  });
+  const webrtcEnabled = publicConfig?.webrtc_enabled === true;
   const canRecord = (podcast?.can_record_new_section ?? canRecordNewSection(meData)) === true;
   const readOnly = isReadOnly(meData?.user ?? user);
   const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
@@ -424,17 +431,17 @@ export function EpisodeEditorContent({
             : undefined
         }
         onStartGroupCall={
-          !segmentReadOnly && canEditSegments && !activeCall && (canRecord || myRole !== 'owner')
+          webrtcEnabled && !segmentReadOnly && canEditSegments && !activeCall && (canRecord || myRole !== 'owner')
             ? handleStartGroupCall
             : undefined
         }
         startGroupCallDisabled={
-          !segmentReadOnly && canEditSegments && !canRecord && myRole === 'owner' && !activeCall
+          webrtcEnabled && !segmentReadOnly && canEditSegments && !canRecord && myRole === 'owner' && !activeCall
         }
         startGroupCallDisabledMessage={START_CALL_BLOCKED_STORAGE_MESSAGE}
-        isCallActive={!!activeCall}
+        isCallActive={webrtcEnabled && !!activeCall}
         onEndGroupCall={
-          !segmentReadOnly && canEditSegments && activeCall ? () => setEndCallConfirmOpen(true) : undefined
+          webrtcEnabled && !segmentReadOnly && canEditSegments && activeCall ? () => setEndCallConfirmOpen(true) : undefined
         }
       />
 
