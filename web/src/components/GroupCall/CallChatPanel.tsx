@@ -22,6 +22,10 @@ export interface CallChatPanelProps {
   embedded?: boolean;
   /** When true, input and send are disabled (e.g. pre-join when not connected). */
   disabled?: boolean;
+  /** Called when the user interacts with the panel (click, focus) to clear unread indicator. */
+  onInteract?: () => void;
+  /** When true, shows yellow styling on the header message icon (e.g. new messages when minimized). */
+  unread?: boolean;
 }
 
 export function CallChatPanel({
@@ -33,6 +37,8 @@ export function CallChatPanel({
   title = 'Chat',
   embedded = false,
   disabled = false,
+  onInteract,
+  unread = false,
 }: CallChatPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -54,9 +60,13 @@ export function CallChatPanel({
     }
   };
 
+  const interactProps = onInteract
+    ? { onClick: onInteract, onFocusCapture: onInteract }
+    : {};
+
   if (embedded) {
     return (
-      <div className={styles.body} data-testid="chat-panel">
+      <div className={styles.body} data-testid="chat-panel" {...interactProps}>
         <ul className={styles.messageList} ref={listRef} data-testid="chat-message-list">
           {messages.length === 0 ? (
             <li className={styles.emptyHint}>No messages yet</li>
@@ -97,9 +107,9 @@ export function CallChatPanel({
   }
 
   return (
-    <div className={styles.panel} role="region" aria-label={title} data-minimized={minimized || undefined} data-testid="chat-panel">
+    <div className={styles.panel} role="region" aria-label={title} data-minimized={minimized || undefined} data-testid="chat-panel" {...interactProps}>
       <div className={styles.header}>
-        <MessageCircle size={18} strokeWidth={2} aria-hidden />
+        <MessageCircle size={18} strokeWidth={2} aria-hidden className={unread ? styles.headerIconUnread : undefined} />
         <span className={styles.title}>{title}</span>
         <span className={styles.headerSpacer} />
         <button

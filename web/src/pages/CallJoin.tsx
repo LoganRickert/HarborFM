@@ -4,7 +4,8 @@ import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User } from 'luci
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
 import { useWakeLock } from '../hooks/useWakeLock';
-import { RemoteAudio } from '../components/GroupCall/RemoteAudio';
+import { RemoteAudio, AudioUnlockBanner } from '../components/GroupCall/RemoteAudio';
+import { AudioUnlockProvider } from '../components/GroupCall/AudioUnlockContext';
 import { CallChatPanel, type ChatMessage } from '../components/GroupCall/CallChatPanel';
 import { CallJoinHeader } from '../components/CallJoinHeader';
 import { LeaveCallConfirmDialog } from '../components/GroupCall/LeaveCallConfirmDialog';
@@ -42,6 +43,7 @@ export function CallJoin() {
   const [mutedByHost, setMutedByHost] = useState(false);
   const [streamReady, setStreamReady] = useState(false);
   const [chatMinimized, setChatMinimized] = useState(true);
+  const [chatUnread, setChatUnread] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [recordingInProgress, setRecordingInProgress] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
@@ -51,6 +53,8 @@ export function CallJoin() {
   const animationRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
+  const myParticipantIdRef = useRef<string | null>(null);
+  myParticipantIdRef.current = myParticipantId;
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
   const { remoteTracks, setMuted } = useMediasoupRoom(
@@ -96,6 +100,7 @@ export function CallJoin() {
       })
       .catch((err: Error & { status?: number }) => {
         const msg = err?.message ?? 'Invalid or expired link';
+        setLoading(false);
         navigate(`/call/join?error=${encodeURIComponent(msg)}`, { replace: true });
       });
   }, [token, navigate]);
@@ -320,6 +325,9 @@ export function CallJoin() {
               timestamp: Date.now(),
             },
           ]);
+          if (msg.participantId !== myParticipantIdRef.current) {
+            setChatUnread(true);
+          }
         } else if (msg.type === 'disconnected') {
           clearJoinTimeout();
           setHostDisconnected(null);
@@ -404,6 +412,7 @@ export function CallJoin() {
     const audioUnavailable = !webrtcUrl || !webrtcRoomId;
     console.log('[CallJoin] joined render: audioUnavailable=', audioUnavailable, 'webrtcUrl=', webrtcUrl, 'webrtcRoomId=', webrtcRoomId);
     return pageLayout(
+      <AudioUnlockProvider>
       <>
         <div className={`${styles.card} ${recordingInProgress ? styles.cardRecording : ''}`}>
           {joinInfo?.artworkUrl && (
@@ -563,6 +572,7 @@ export function CallJoin() {
           {Array.from(remoteTracks.entries()).map(([id, info]) => (
             <RemoteAudio key={id} track={info.track} />
           ))}
+          <AudioUnlockBanner />
         </div>
         <div className={styles.chatPanelWrapper}>
           <CallChatPanel
@@ -570,6 +580,8 @@ export function CallJoin() {
             onSend={handleChatSend}
             minimized={chatMinimized}
             onMinimizeToggle={() => setChatMinimized((m) => !m)}
+            unread={chatUnread}
+            onInteract={() => setChatUnread(false)}
           />
         </div>
         <LeaveCallConfirmDialog
@@ -578,6 +590,7 @@ export function CallJoin() {
           onConfirm={handleLeave}
         />
       </>
+      </AudioUnlockProvider>
     );
   }
 

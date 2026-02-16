@@ -73,14 +73,19 @@ export function CallJoinIndex() {
       navigate(`/call/join/${res.token}`);
     } catch (err) {
       const status = (err as ApiError)?.status;
-      if (status === 404) {
-        setError('No call found for this code');
-      } else if (status === 0 || (status && status >= 500)) {
-        setError('Connection failed. Try again.');
-      } else {
-        setError('No call found for this code');
-      }
+      const msg =
+        status === 404
+          ? 'No call found for this code'
+          : status === 0 || (status && status >= 500)
+            ? 'Connection failed. Try again.'
+            : 'No call found for this code';
       setSubmitting(false);
+      setError(msg);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('error', msg);
+        return next;
+      }, { replace: true });
     }
   };
 

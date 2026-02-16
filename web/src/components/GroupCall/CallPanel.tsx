@@ -4,7 +4,8 @@ import { callWebSocketUrl } from '../../api/call';
 import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
 import { useWakeLock } from '../../hooks/useWakeLock';
-import { RemoteAudio } from './RemoteAudio';
+import { RemoteAudio, AudioUnlockBanner } from './RemoteAudio';
+import { AudioUnlockProvider } from './AudioUnlockContext';
 import { CallSoundboardPanel } from './CallSoundboardPanel';
 import { CallChatPanel, type ChatMessage } from './CallChatPanel';
 import styles from './CallPanel.module.css';
@@ -69,6 +70,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const [hostTokenFromWs, setHostTokenFromWs] = useState<string | undefined>(undefined);
   const [alreadyInCall, setAlreadyInCall] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatMinimized, setChatMinimized] = useState(false);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
@@ -84,6 +86,12 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
+  const chatOpenRef = useRef(chatOpen);
+  const chatMinimizedRef = useRef(chatMinimized);
+  const myParticipantIdRef = useRef<string | undefined>(undefined);
+  chatOpenRef.current = chatOpen;
+  chatMinimizedRef.current = chatMinimized;
+  myParticipantIdRef.current = participants.find((p) => p.isHost)?.id;
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
   const effectiveHostToken = hostTokenFromWs ?? hostToken;
@@ -220,6 +228,9 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
               timestamp: Date.now(),
             },
           ]);
+          if (msg.participantId !== myParticipantIdRef.current && (!chatOpenRef.current || chatMinimizedRef.current)) {
+            setChatUnread(true);
+          }
         }
         } catch {
           // ignore
@@ -325,12 +336,30 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   };
 
   const handleChatOpen = () => {
-    setChatOpen((prev) => !prev);
+    setChatUnread(false);
+    if (isMobile && minimized) {
+      setMinimized(false);
+      setSoundboardOpen(false);
+      setChatOpen(true);
+      return;
+    }
+    setChatOpen((prev) => {
+      if (!prev && isMobile) setSoundboardOpen(false);
+      return !prev;
+    });
   };
 
   const handleSoundboardOpen = () => {
+    if (isMobile && minimized) {
+      setMinimized(false);
+      setChatOpen(false);
+      setSoundboardOpen(true);
+      resumeSoundboardContext();
+      return;
+    }
     setSoundboardOpen((prev) => {
       if (!prev) {
+        if (isMobile) setChatOpen(false);
         resumeSoundboardContext();
       }
       return !prev;
@@ -379,6 +408,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   }
 
   const panelContent = (
+    <AudioUnlockProvider>
     <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`} data-minimized={minimized || undefined}>
       <div className={styles.header}>
         <Users size={18} strokeWidth={2} aria-hidden />
@@ -386,17 +416,17 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
         <span className={styles.headerSpacer} />
         <button
           type="button"
-          className={styles.iconBtn}
+          className={`${styles.iconBtn} ${chatOpen ? styles.iconBtnActive : ''} ${chatUnread && !chatOpen ? styles.iconBtnUnread : ''}`}
           onClick={handleChatOpen}
           aria-label={chatOpen ? 'Close chat' : 'Open chat'}
-          title={chatOpen ? 'Close chat' : 'Open chat'}
+          title={chatOpen ? 'Close chat' : chatUnread ? 'New messages' : 'Open chat'}
           data-testid="chat-open-btn"
         >
           {showChatView ? <X size={16} strokeWidth={2} aria-hidden /> : <MessageCircle size={16} strokeWidth={2} aria-hidden />}
         </button>
         <button
           type="button"
-          className={styles.iconBtn}
+          className={`${styles.iconBtn} ${soundboardOpen ? styles.iconBtnActive : ''}`}
           onClick={handleSoundboardOpen}
           aria-label={soundboardOpen ? 'Close soundboard' : 'Open soundboard'}
           title={soundboardOpen ? 'Close soundboard' : 'Open soundboard'}
@@ -596,16 +626,18 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           ))}
         </ul>
         )}
-        {Array.from(remoteTracks.entries()).map(([id, info]) => (
+      </div>
+      </>
+      )}
+      {/* RemoteAudio must stay mounted when soundboard/chat is open on mobile so audio plays */}
+      {!minimized &&
+        Array.from(remoteTracks.entries()).map(([id, info]) => (
           <RemoteAudio
             key={id}
             track={info.track}
             volume={info.source === 'soundboard' ? soundboardVolume : 1}
           />
         ))}
-      </div>
-      </>
-      )}
       {!minimized && showChatView && (
         <CallChatPanel
           messages={chatMessages}
@@ -613,6 +645,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           minimized={false}
           onMinimizeToggle={() => {}}
           embedded
+          onInteract={() => setChatUnread(false)}
         />
       )}
       {!minimized && showSoundboardView && (
@@ -631,6 +664,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           onVolumeChange={handleSoundboardVolumeChange}
           recording={recording}
           onRecordingEvent={handleRecordingEvent}
+          embedded
         />
       )}
       {!showChatView && !showSoundboardView && (
@@ -680,7 +714,9 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
         )}
       </div>
       )}
+      {!minimized && <AudioUnlockBanner />}
     </div>
+    </AudioUnlockProvider>
   );
 
   if (!isMobile) {
@@ -695,6 +731,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
               minimized={chatMinimized}
               onMinimizeToggle={() => setChatMinimized((m) => !m)}
               onClose={() => setChatOpen(false)}
+              onInteract={() => setChatUnread(false)}
             />
           </div>
         )}

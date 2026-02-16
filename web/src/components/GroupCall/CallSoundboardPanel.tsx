@@ -23,6 +23,8 @@ export interface CallSoundboardPanelProps {
   /** When true and onRecordingEvent provided, soundboard play/stop emits recording events for sync. */
   recording?: boolean;
   onRecordingEvent?: (ev: { event: string; assetId?: string; clientTimestampMs?: number; durationSec?: number }) => void;
+  /** When true, only render body (volume + sound list) without header/panel chrome. */
+  embedded?: boolean;
 }
 
 function SoundboardItem({
@@ -137,6 +139,7 @@ export function CallSoundboardPanel({
   onVolumeChange,
   recording,
   onRecordingEvent,
+  embedded = false,
 }: CallSoundboardPanelProps) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -395,6 +398,79 @@ export function CallSoundboardPanel({
         }
       }, 100);
     }
+  }
+
+  if (embedded) {
+    return (
+      <div className={styles.body} data-testid="soundboard-panel">
+        <div className={styles.volumeSection}>
+          <span className={styles.volumeLabel} aria-hidden>
+            Volume
+          </span>
+          <input
+            type="range"
+            className={styles.volumeSlider}
+            min={0}
+            max={100}
+            value={Math.round(localVolume * 100)}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10) / 100;
+              setLocalVolume(v);
+              debouncedVolumeUpdate(v);
+            }}
+            aria-label="Soundboard volume"
+          />
+        </div>
+        {allAssets.length === 0 ? (
+          <p className={styles.emptyHint}>No library items. Add sounds in the Library.</p>
+        ) : (
+          <>
+            <div className={styles.searchRow}>
+              <Search size={16} strokeWidth={2} className={styles.searchIcon} aria-hidden />
+              <input
+                type="search"
+                className={styles.searchInput}
+                placeholder="Search sounds..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search soundboard"
+              />
+            </div>
+            {filteredAndSorted.length === 0 ? (
+              <p className={styles.emptyHint}>No sounds match your search.</p>
+            ) : (
+              <>
+                <ul className={styles.soundList}>
+                  {displayedAssets.map((asset) => (
+                    <SoundboardItem
+                      key={asset.id}
+                      asset={asset}
+                      isPlaying={playingId === asset.id}
+                      currentTime={playingId === asset.id ? currentTime : 0}
+                      onPlayPause={(e) => {
+                        e?.stopPropagation?.();
+                        handlePlay(asset);
+                      }}
+                      onSeek={(time) => handleSeek(asset, time)}
+                    />
+                  ))}
+                </ul>
+                {hasMore && (
+                  <button
+                    type="button"
+                    className={styles.loadMoreBtn}
+                    onClick={() => setVisibleCount((n) => n + SOUNDBOARD_PAGE_SIZE)}
+                  >
+                    <ChevronDown size={18} strokeWidth={2} aria-hidden />
+                    Load more
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    );
   }
 
   return (

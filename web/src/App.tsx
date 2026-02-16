@@ -295,6 +295,9 @@ export default function App() {
       <SubscriberAuthProvider>
         <ConsentBanner />
         <Routes>
+          {/* Call join first - public, no auth (guests join via link) */}
+          <Route path="/call/join" element={<CallJoinIndex />} />
+          <Route path="/call/join/:token" element={<CallJoin />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
           <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />
@@ -308,8 +311,6 @@ export default function App() {
           <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><FeedEpisode /></PublicFeedsGuard>} />
           <Route path="/embed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
           <Route path="/embed/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
-          <Route path="/call/join" element={<CallJoinIndex />} />
-          <Route path="/call/join/:token" element={<CallJoin />} />
         <Route path="/" element={<RootRoute />}>
           <Route index element={<Dashboard />} />
           <Route path="podcasts/new" element={<PodcastNew />} />

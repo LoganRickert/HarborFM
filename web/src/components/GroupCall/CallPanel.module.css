@@ -44,6 +44,7 @@
     right: 1rem;
     width: auto;
     bottom: 1rem;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-strong, #444);
   }
 }
 
@@ -74,6 +75,28 @@
 .iconBtn:hover {
   color: var(--text, #e5e5e5);
   border-color: var(--accent, #00d4aa);
+}
+
+.iconBtnActive {
+  background: var(--accent, #00d4aa) !important;
+  border-color: var(--accent, #00d4aa) !important;
+  color: var(--bg, #0c0e12) !important;
+}
+
+.iconBtnActive:hover {
+  background: var(--accent-dim, #00a884) !important;
+  border-color: var(--accent-dim, #00a884) !important;
+  color: var(--bg, #0c0e12) !important;
+}
+
+.iconBtnUnread {
+  color: #eab308 !important;
+  border-color: rgba(234, 179, 8, 0.5) !important;
+}
+
+.iconBtnUnread:hover {
+  color: #facc15 !important;
+  border-color: rgba(234, 179, 8, 0.7) !important;
 }
 
 .endBtnHeader {

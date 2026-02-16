@@ -159,18 +159,11 @@ export function Login() {
             {setup.welcomeBanner}
           </div>
         )}
-        <p className={styles.footerBelowCard}>
-          <Link to="/privacy">Privacy Policy</Link>
-          <span className={styles.footerBelowCardSep} aria-hidden />
-          <Link to="/terms">Terms of Service</Link>
-          <span className={styles.footerBelowCardSep} aria-hidden />
-          <Link to="/contact">Contact</Link>
-        </p>
         {webrtcEnabled && (
           <>
             <button
               type="button"
-              className={styles.joinCallFab}
+              className={styles.joinCallBtn}
               onClick={() => setJoinDialogOpen(true)}
               aria-label="Join call"
             >
@@ -180,6 +173,13 @@ export function Login() {
             <JoinCallDialog open={joinDialogOpen} onOpenChange={setJoinDialogOpen} />
           </>
         )}
+        <p className={styles.footerBelowCard}>
+          <Link to="/privacy">Privacy Policy</Link>
+          <span className={styles.footerBelowCardSep} aria-hidden />
+          <Link to="/terms">Terms of Service</Link>
+          <span className={styles.footerBelowCardSep} aria-hidden />
+          <Link to="/contact">Contact</Link>
+        </p>
       </div>
     </main>
   );

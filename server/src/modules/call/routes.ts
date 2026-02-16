@@ -82,6 +82,20 @@ function removeSocketFromSession(sessionId: string, ws: WebSocket): void {
   }
 }
 
+/** Extract base origin (scheme + host) from request headers. Origin header is preferred; referer is parsed to get origin (not just path-stripped). */
+function getRequestOrigin(
+  origin: string | undefined,
+  referer: string | undefined
+): string {
+  if (origin) return origin;
+  if (!referer) return "";
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return "";
+  }
+}
+
 export async function callRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/call/start",
@@ -140,10 +154,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       }
       if (existing) {
         ensureSessionJoinCode(existing);
-        const origin =
-          (request.headers["origin"] as string) ||
-          (request.headers["referer"] as string)?.replace(/\/[^/]*$/, "") ||
-          "";
+        const origin = getRequestOrigin(
+          request.headers["origin"] as string | undefined,
+          request.headers["referer"] as string | undefined
+        );
         const joinUrl = origin ? `${origin}/call/join/${existing.token}` : "";
         const payload: Record<string, unknown> = {
           token: existing.token,
@@ -168,10 +182,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: "Episode not found" });
       const podcastId = episodeRow.podcast_id;
 
-      const origin =
-        (request.headers["origin"] as string) ||
-        (request.headers["referer"] as string)?.replace(/\/[^/]*$/, "") ||
-        "";
+      const origin = getRequestOrigin(
+        request.headers["origin"] as string | undefined,
+        request.headers["referer"] as string | undefined
+      );
       const session = createSession(
         episodeId,
         podcastId,
@@ -475,10 +489,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       const session = getActiveSessionForEpisode(episodeId, request.userId);
       if (!session) return reply.send(null);
       ensureSessionJoinCode(session);
-      const origin =
-        (request.headers["origin"] as string) ||
-        (request.headers["referer"] as string)?.replace(/\/[^/]*$/, "") ||
-        "";
+      const origin = getRequestOrigin(
+        request.headers["origin"] as string | undefined,
+        request.headers["referer"] as string | undefined
+      );
       const joinUrl = origin ? `${origin}/call/join/${session.token}` : "";
       const payload: Record<string, unknown> = {
         sessionId: session.sessionId,
@@ -990,7 +1004,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     (webrtcCfg.publicWsUrl &&
                       webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/^https/, "wss").replace(/\/$/, "") + "/ws") ||
                     (() => {
-                      const o = (req.headers.origin as string) || (req.headers.referer as string)?.replace(/\/[^/]*$/, "");
+                      const o = getRequestOrigin(
+                        req.headers.origin as string | undefined,
+                        req.headers.referer as string | undefined
+                      );
                       if (o) {
                         try {
                           const base = new URL(o).origin.replace(/^http/, "ws").replace(/^https/, "wss");
@@ -1081,7 +1098,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               (webrtcCfg.publicWsUrl &&
                 webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/^https/, "wss").replace(/\/$/, "") + "/ws") ||
               (() => {
-                const o = (req.headers.origin as string) || (req.headers.referer as string)?.replace(/\/[^/]*$/, "");
+                const o = getRequestOrigin(
+                  req.headers.origin as string | undefined,
+                  req.headers.referer as string | undefined
+                );
                 if (o) {
                   try {
                     const base = new URL(o).origin.replace(/^http/, "ws").replace(/^https/, "wss");
