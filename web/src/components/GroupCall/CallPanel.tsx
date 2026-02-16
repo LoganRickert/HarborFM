@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, Settings, X } from 'lucide-react';
 import { callWebSocketUrl } from '../../api/call';
 import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
@@ -7,6 +7,7 @@ import { useWakeLock } from '../../hooks/useWakeLock';
 import { RemoteAudio, AudioUnlockBanner } from './RemoteAudio';
 import { AudioUnlockProvider } from './AudioUnlockContext';
 import { CallSoundboardPanel } from './CallSoundboardPanel';
+import { CallSettingsPanel } from './CallSettingsPanel';
 import { CallChatPanel, type ChatMessage } from './CallChatPanel';
 import styles from './CallPanel.module.css';
 
@@ -75,6 +76,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const [chatMinimized, setChatMinimized] = useState(false);
   const [soundboardOpen, setSoundboardOpen] = useState(false);
   const [soundboardMinimized, setSoundboardMinimized] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsMinimized, setSettingsMinimized] = useState(false);
+  const [deviceId, setDeviceId] = useState<string>('');
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [soundboardVolume, setSoundboardVolumeState] = useState(() => {
     if (typeof window === 'undefined') return 1;
     const stored = localStorage.getItem(SOUNDBOARD_VOLUME_KEY);
@@ -96,10 +101,42 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const effectiveRoomId = roomIdFromWs ?? roomId;
   const effectiveHostToken = hostTokenFromWs ?? hostToken;
   const myParticipant = participants.find((p) => p.isHost);
+  const refreshDevices = useCallback(() => {
+    navigator.mediaDevices
+      ?.enumerateDevices()
+      ?.then((all) => {
+        const audioInputs = all.filter((d) => d.kind === 'audioinput');
+        setDevices(audioInputs);
+        setDeviceId((prev) => {
+          const stillValid = prev && audioInputs.some((d) => d.deviceId === prev);
+          return stillValid ? prev : audioInputs[0]?.deviceId ?? '';
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshDevices();
+    const handleDeviceChange = () => refreshDevices();
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
+  }, [refreshDevices]);
+
+  useEffect(() => {
+    if (!effectiveWebrtcUrl || !effectiveRoomId || !navigator.mediaDevices?.getUserMedia) return;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        stream.getTracks().forEach((t) => t.stop());
+        refreshDevices();
+      })
+      .catch(() => {});
+  }, [effectiveWebrtcUrl, effectiveRoomId, refreshDevices]);
+
   const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
-    undefined,
+    deviceId || undefined,
     myParticipant?.id ?? null,
     myParticipant?.name ?? null,
     effectiveHostToken,
@@ -273,6 +310,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
   const showChatView = isMobile && chatOpen;
   const showSoundboardView = isMobile && soundboardOpen;
+  const showSettingsView = isMobile && settingsOpen;
 
   const handleDisplayNameSave = (name: string) => {
     const trimmed = name.trim();
@@ -341,11 +379,15 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
     if (isMobile && minimized) {
       setMinimized(false);
       setSoundboardOpen(false);
+      setSettingsOpen(false);
       setChatOpen(true);
       return;
     }
     setChatOpen((prev) => {
-      if (!prev && isMobile) setSoundboardOpen(false);
+      if (!prev && isMobile) {
+        setSoundboardOpen(false);
+        setSettingsOpen(false);
+      }
       return !prev;
     });
   };
@@ -354,14 +396,35 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
     if (isMobile && minimized) {
       setMinimized(false);
       setChatOpen(false);
+      setSettingsOpen(false);
       setSoundboardOpen(true);
       resumeSoundboardContext();
       return;
     }
     setSoundboardOpen((prev) => {
       if (!prev) {
-        if (isMobile) setChatOpen(false);
+        if (isMobile) {
+          setChatOpen(false);
+          setSettingsOpen(false);
+        }
         resumeSoundboardContext();
+      }
+      return !prev;
+    });
+  };
+
+  const handleSettingsOpen = () => {
+    if (isMobile && minimized) {
+      setMinimized(false);
+      setChatOpen(false);
+      setSoundboardOpen(false);
+      setSettingsOpen(true);
+      return;
+    }
+    setSettingsOpen((prev) => {
+      if (!prev && isMobile) {
+        setChatOpen(false);
+        setSoundboardOpen(false);
       }
       return !prev;
     });
@@ -435,7 +498,17 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
         >
           {showSoundboardView ? <X size={16} strokeWidth={2} aria-hidden /> : <Music2 size={16} strokeWidth={2} aria-hidden />}
         </button>
-        {!showChatView && !showSoundboardView && (
+        <button
+          type="button"
+          className={`${styles.iconBtn} ${settingsOpen ? styles.iconBtnActive : ''}`}
+          onClick={handleSettingsOpen}
+          aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
+          title={settingsOpen ? 'Close settings' : 'Open settings'}
+          data-testid="settings-open-btn"
+        >
+          {showSettingsView ? <X size={16} strokeWidth={2} aria-hidden /> : <Settings size={16} strokeWidth={2} aria-hidden />}
+        </button>
+        {!showChatView && !showSoundboardView && !showSettingsView && (
         <button
           type="button"
           className={styles.endBtnHeader}
@@ -468,7 +541,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           {soundboardError && <p className={styles.errorCardMessage}>{soundboardError}</p>}
         </div>
       )}
-      {!minimized && !showChatView && !showSoundboardView && (
+      {!minimized && !showChatView && !showSoundboardView && !showSettingsView && (
       <>
       <div className={styles.joinRow}>
         <input
@@ -663,7 +736,16 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           embedded
         />
       )}
-      {!showChatView && !showSoundboardView && (
+      {!minimized && showSettingsView && (
+        <CallSettingsPanel
+          devices={devices}
+          deviceId={deviceId}
+          onDeviceChange={setDeviceId}
+          minimized={false}
+          onMinimizeToggle={() => {}}
+        />
+      )}
+      {!showChatView && !showSoundboardView && !showSettingsView && (
       <div className={styles.recordSection}>
         <div className={`${styles.recordRow} ${recording ? styles.recordRowRecording : styles.recordRowIdle}`}>
           {recording ? (
@@ -750,6 +832,18 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
               onVolumeChange={handleSoundboardVolumeChange}
               recording={recording}
               onRecordingEvent={handleRecordingEvent}
+            />
+          </div>
+        )}
+        {settingsOpen && (
+          <div className={styles.settingsPanelInWrapper}>
+            <CallSettingsPanel
+              devices={devices}
+              deviceId={deviceId}
+              onDeviceChange={setDeviceId}
+              onClose={() => setSettingsOpen(false)}
+              minimized={settingsMinimized}
+              onMinimizeToggle={() => setSettingsMinimized((m) => !m)}
             />
           </div>
         )}
