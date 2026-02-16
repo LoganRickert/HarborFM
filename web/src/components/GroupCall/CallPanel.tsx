@@ -120,17 +120,20 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     setAlreadyInCall(false);
     setWebrtcUrlFromWs(undefined);
     setRoomIdFromWs(undefined);
-    const url = callWebSocketUrl();
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const url = callWebSocketUrl();
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
 
-    ws.onopen = () => {
-      const name = localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
-      ws.send(JSON.stringify({ type: 'host', sessionId, name: name || undefined }));
-    };
+      ws.onopen = () => {
+        const name = localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
+        ws.send(JSON.stringify({ type: 'host', sessionId, name: name || undefined }));
+      };
 
-    ws.onmessage = (event) => {
-      try {
+      ws.onmessage = (event) => {
+        try {
         const msg = JSON.parse(event.data as string);
         if (msg.type === 'alreadyInCall') {
           setAlreadyInCall(true);
@@ -170,7 +173,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           setRecordingConfirmed(false);
           setRecordingError(null);
           setRecordingProcessing(true);
-          setRecordingProgressMessage('Finalizing audio streams from participants');
+          setRecordingProgressMessage(null);
         } else if (msg.type === 'recordingProgress') {
           setRecordingProgressMessage(msg.message ?? msg.stage ?? 'Processing…');
         } else if (msg.type === 'recordingError') {
@@ -189,9 +192,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingError(null);
-          setRecordingProcessing(false);
-          setRecordingProgressMessage(null);
+          setRecordingProcessing(true);
+          setRecordingProgressMessage('Segment added successfully');
           onSegmentRecorded?.();
+          setTimeout(() => {
+            setRecordingProcessing(false);
+            setRecordingProgressMessage(null);
+          }, 2000);
         } else if (msg.type === 'setMute') {
           setMuted(msg.muted === true);
         } else if (msg.type === 'chat') {
@@ -205,32 +212,34 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
             },
           ]);
         }
-      } catch {
-        // ignore
-      }
-    };
+        } catch {
+          // ignore
+        }
+      };
 
-    ws.onclose = () => {
-      if (wsRef.current === ws) onCallEnded();
-    };
+      ws.onclose = () => {
+        if (wsRef.current === ws) onCallEnded();
+      };
 
-    ws.onerror = () => {
-      if (wsRef.current === ws) onCallEnded();
-    };
+      ws.onerror = () => {
+        if (wsRef.current === ws) onCallEnded();
+      };
 
-    heartbeatRef.current = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'heartbeat' }));
-      }
-    }, HEARTBEAT_INTERVAL_MS);
+      heartbeatRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'heartbeat' }));
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+    });
 
     return () => {
+      cancelled = true;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      const wsToClose = wsRef.current;
       wsRef.current = null;
-      const wsToClose = ws;
       const timeoutId = setTimeout(() => {
         pendingEndCallTimeouts.delete(sessionId);
-        if (wsToClose.readyState === WebSocket.OPEN) {
+        if (wsToClose?.readyState === WebSocket.OPEN) {
           wsToClose.send(JSON.stringify({ type: 'endCall' }));
           wsToClose.close();
         }

@@ -31,7 +31,7 @@ import {
   setHostDisconnected,
   clearHostDisconnected,
 } from "../../services/callSession.js";
-import { getWebRtcConfig } from "../../services/webrtcConfig.js";
+import { getWebRtcConfig, webrtcRequestHeaders } from "../../services/webrtcConfig.js";
 import { join, resolve } from "path";
 import { copyFileSync, unlinkSync, existsSync, writeFileSync } from "fs";
 import { segmentPath, getWebrtcRecordingsDir, multitrackRecordingsDir, libraryDir } from "../../services/paths.js";
@@ -187,7 +187,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`,
                   {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: webrtcRequestHeaders(webrtcCfg),
                     body: JSON.stringify({ roomId: endedSession.roomId }),
                   },
                 );
@@ -207,19 +207,33 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       let roomId: string | null = null;
       let webrtcUnavailable = false;
       const webrtcCfg = getWebRtcConfig();
-      if (webrtcCfg.serviceUrl && webrtcCfg.publicWsUrl) {
+      const publicWsBase = webrtcCfg.publicWsUrl
+        ? webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws"
+        : origin
+          ? (() => {
+              try {
+                return (
+                  new URL(origin).origin.replace(/^http/, "ws").replace(/^https/, "wss") +
+                  "/webrtc-ws/ws"
+                );
+              } catch {
+                return null;
+              }
+            })()
+          : null;
+      if (webrtcCfg.serviceUrl) {
         try {
           const roomRes = await fetch(`${webrtcCfg.serviceUrl.replace(/\/$/, "")}/room`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: webrtcRequestHeaders(webrtcCfg),
             body: JSON.stringify({ roomId: session.sessionId }),
           });
-          if (roomRes.ok) {
+          if (roomRes.ok && publicWsBase) {
             const roomData = (await roomRes.json()) as { roomId: string };
             roomId = roomData.roomId;
             setSessionRoomId(session.sessionId, roomId);
-            webrtcUrl = webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
-          } else {
+            webrtcUrl = publicWsBase;
+          } else if (!roomRes.ok) {
             webrtcUnavailable = true;
           }
         } catch {
@@ -455,9 +469,23 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         joinCode: session.joinCode,
       };
       const webrtcCfg = getWebRtcConfig();
-      if (session.roomId && webrtcCfg.publicWsUrl) {
-        payload.webrtcUrl =
-          webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
+      const publicWs =
+        (webrtcCfg.publicWsUrl &&
+          webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws") ||
+        (origin
+          ? (() => {
+              try {
+                return (
+                  new URL(origin).origin.replace(/^http/, "ws").replace(/^https/, "wss") +
+                  "/webrtc-ws/ws"
+                );
+              } catch {
+                return null;
+              }
+            })()
+          : null);
+      if (session.roomId && publicWs) {
+        payload.webrtcUrl = publicWs;
         payload.roomId = session.roomId;
       }
       return reply.send(payload);
@@ -909,9 +937,23 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     recordingStartedAtEpochMs: session.recordingStartedAtEpochMs,
                   };
                   const webrtcCfg = getWebRtcConfig();
-                  if (session.roomId && webrtcCfg.publicWsUrl) {
-                    hostJoinedPayload.webrtcUrl =
-                      webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
+                  const publicWs =
+                    (webrtcCfg.publicWsUrl &&
+                      webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/^https/, "wss").replace(/\/$/, "") + "/ws") ||
+                    (() => {
+                      const o = (req.headers.origin as string) || (req.headers.referer as string)?.replace(/\/[^/]*$/, "");
+                      if (o) {
+                        try {
+                          const base = new URL(o).origin.replace(/^http/, "ws").replace(/^https/, "wss");
+                          return `${base}/webrtc-ws/ws`;
+                        } catch {
+                          return null;
+                        }
+                      }
+                      return null;
+                    })();
+                  if (session.roomId && publicWs) {
+                    hostJoinedPayload.webrtcUrl = publicWs;
                     hostJoinedPayload.roomId = session.roomId;
                   }
                   socket.send(JSON.stringify(hostJoinedPayload));
@@ -985,9 +1027,23 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               recordingStartedAtEpochMs: sess.recordingStartedAtEpochMs,
             };
             const webrtcCfg = getWebRtcConfig();
-            if (sess.roomId && webrtcCfg.publicWsUrl) {
-              hostJoinedPayload.webrtcUrl =
-                webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
+            const publicWs =
+              (webrtcCfg.publicWsUrl &&
+                webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/^https/, "wss").replace(/\/$/, "") + "/ws") ||
+              (() => {
+                const o = (req.headers.origin as string) || (req.headers.referer as string)?.replace(/\/[^/]*$/, "");
+                if (o) {
+                  try {
+                    const base = new URL(o).origin.replace(/^http/, "ws").replace(/^https/, "wss");
+                    return `${base}/webrtc-ws/ws`;
+                  } catch {
+                    return null;
+                  }
+                }
+                return null;
+              })();
+            if (sess.roomId && publicWs) {
+              hostJoinedPayload.webrtcUrl = publicWs;
               hostJoinedPayload.roomId = sess.roomId;
             }
             socket.send(JSON.stringify(hostJoinedPayload));
@@ -1223,18 +1279,23 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             session.recordingEvents = [];
             session.recordingInProgress = true;
             session.recordingStartedAtEpochMs = Date.now();
+            console.log("[call] start-recording request", { startRecordingUrl, roomId: session.roomId });
             fetch(startRecordingUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: webrtcRequestHeaders(webrtcCfg),
               body: JSON.stringify(payload),
             })
               .then(async (res) => {
+                console.log("[call] start-recording response", { ok: res.ok, status: res.status });
                 if (res.ok) {
                   const data = (await res.json()) as { recordingEpochMs?: number };
                   const sessionForRecording = getSessionById(sid);
                   if (sessionForRecording) {
                     sessionForRecording.recordingStartedAtEpochMs =
                       typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : Date.now();
+                    if (!sessionForRecording.recordingInProgress) {
+                      return;
+                    }
                   }
                   req.log.info({ sid }, "[call] broadcasting recordingStarted");
                   broadcastToSession(sid, {
@@ -1243,6 +1304,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   });
                 } else {
                   const text = await res.text();
+                  console.log("[call] start-recording error", { status: res.status, body: text.slice(0, 200) });
                   let errorMsg = "Failed to start recording";
                   try {
                     const parsed = JSON.parse(text) as { error?: string };
@@ -1272,6 +1334,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 }
               })
               .catch((err) => {
+                console.log("[call] start-recording fetch failed", { err: String(err) });
                 req.log.warn({ err, url: startRecordingUrl }, "WebRTC start-recording fetch failed");
                 const sessionOnFail = getSessionById(sid);
                 if (sessionOnFail) {
@@ -1328,22 +1391,28 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             req.log.info({ stopUrl, roomId }, "[call] stopRecording POSTing to webrtc");
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 15000);
+            const stopHeaders = webrtcRequestHeaders(webrtcCfg);
+            console.log("[call] stop-recording request", { stopUrl, roomId, hasSecret: !!webrtcCfg.webrtcServiceSecret });
             fetch(stopUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: stopHeaders,
               body: JSON.stringify({ roomId, events, recordingEndedAtMs }),
               signal: controller.signal,
             })
               .then((res) => {
                 clearTimeout(timeout);
-                req.log.info({ status: res.status, sid }, "[call] stop-recording response");
+                const text = res.ok ? "" : ` status=${res.status}`;
+                console.log("[call] stop-recording response", { ok: res.ok, status: res.status, sid });
+                req.log.info({ status: res.status, sid }, `[call] stop-recording response${text}`);
                 if (!res.ok) throw new Error(`stop-recording returned ${res.status}`);
                 const sockets = sessionSockets.get(sid);
                 req.log.info({ sid, socketCount: sockets?.size ?? 0 }, "[call] broadcasting recordingStopped");
+                console.log("[call] broadcasting recordingStopped");
                 broadcastToSession(sid, { type: "recordingStopped" });
               })
               .catch((err) => {
                 clearTimeout(timeout);
+                console.log("[call] stop-recording fetch failed", { err: String(err), roomId, sid });
                 req.log.warn({ err, roomId, sid }, "[call] WebRTC stop-recording failed");
                 broadcastToSession(sid, {
                   type: "recordingStopFailed",
@@ -1438,7 +1507,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               try {
                 await fetch(`${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: webrtcRequestHeaders(webrtcCfg),
                   body: JSON.stringify({ roomId: session.roomId }),
                 });
               } catch (err) {

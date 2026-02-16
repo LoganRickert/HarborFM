@@ -1,6 +1,10 @@
 import { appendFileSync, existsSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from "fs";
-import { join } from "path";
+import { join, resolve, sep } from "path";
 import type { SegmentStatus } from "./recordingTypes.js";
+import { isSafeDirectoryName, isSafeFileName } from "../validation.js";
+
+/** Segment IDs must match nanoid-style pattern for safe log output. */
+const SAFE_ID = /^[a-zA-Z0-9_-]+$/;
 
 const RECOVERY_SIZE_THRESHOLD = 16384;
 
@@ -30,13 +34,14 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
   if (!existsSync(recordingsDir)) return recovered;
 
   const episodeDirs = readdirSync(recordingsDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && isSafeDirectoryName(d.name))
     .map((d) => d.name);
 
   for (const episodeId of episodeDirs) {
     const epDir = join(recordingsDir, episodeId);
     const files = readdirSync(epDir);
     for (const f of files) {
+      if (!isSafeFileName(f)) continue; /* defense in depth: skip path traversal filenames */
       if (f.startsWith("_sdp_") && f.endsWith(".sdp")) {
         try {
           unlinkSync(join(epDir, f));
@@ -55,7 +60,11 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
       }
       if (stat.size > RECOVERY_SIZE_THRESHOLD) {
         const recoveredName = f.replace(/\.mp3\.part$/, ".recovered.mp3");
+        if (!isSafeFileName(recoveredName)) continue; /* recovered name must stay safe */
         const recoveredPath = join(epDir, recoveredName);
+        const resolvedPath = resolve(recoveredPath);
+        const epDirResolved = resolve(epDir);
+        if (resolvedPath !== epDirResolved && !resolvedPath.startsWith(epDirResolved + sep)) continue; /* must stay under epDir */
         try {
           renameSync(fullPath, recoveredPath);
           const rel = join("recordings", episodeId, recoveredName);
@@ -63,7 +72,8 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
           const jsonlPath = join(epDir, "segments.jsonl");
           if (existsSync(jsonlPath)) {
             const match = f.match(/^segment_(.+)\.mp3\.part$/);
-            const segmentId = match?.[1] ?? "unknown";
+            const rawSegmentId = match?.[1] ?? "unknown";
+            const segmentId = typeof rawSegmentId === "string" && SAFE_ID.test(rawSegmentId) ? rawSegmentId : "unknown";
             appendSegmentLog(jsonlPath, {
               segmentId,
               status: "RECOVERED",
@@ -94,7 +104,7 @@ export function markInterruptedSegments(recordingDataDir: string): void {
   if (!existsSync(recordingsDir)) return;
 
   const episodeDirs = readdirSync(recordingsDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && isSafeDirectoryName(d.name))
     .map((d) => d.name);
 
   for (const episodeId of episodeDirs) {

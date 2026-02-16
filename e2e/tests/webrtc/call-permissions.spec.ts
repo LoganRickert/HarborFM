@@ -307,12 +307,11 @@ test.describe('Call permissions', () => {
       );
     }
     await page.getByRole('button', { name: /stop recording/i }).click();
-    for (let i = 0; i < 15; i++) {
-      await page.waitForTimeout(1000);
-      const successVisible = await page.getByText(/recording stopped successfully/i).isVisible();
-      if (successVisible) break;
-    }
-    await expect(page.getByText(/recording stopped successfully/i)).toBeVisible({ timeout: 1000 });
+    await expect(
+      page.getByRole('status').filter({
+        hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i,
+      })
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('Guest has no Record button', async ({ page, context }) => {

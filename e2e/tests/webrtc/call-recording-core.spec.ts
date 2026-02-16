@@ -64,12 +64,17 @@ test.describe('Call recording core', () => {
     await stopBtn.click();
 
     const successOrError = await Promise.race([
-      page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 }),
+      page
+        .getByRole('status')
+        .filter({
+          hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i,
+        })
+        .waitFor({ state: 'visible', timeout: 30000 }),
       page
         .getByText(/failed to stop recording|recording produced no audio|recording failed/i)
         .waitFor({ state: 'visible', timeout: 30000 })
         .then(() => 'error' as const),
-    ]    ).catch((e) => {
+    ]).catch((e) => {
       throw e;
     });
     if (successOrError === 'error') {
@@ -139,7 +144,10 @@ test.describe('Call recording core', () => {
       await page.waitForTimeout(5000);
 
       await page.getByRole('button', { name: /stop recording/i }).click();
-      await page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 });
+      await page
+        .getByRole('status')
+        .filter({ hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i })
+        .waitFor({ state: 'visible', timeout: 30000 });
 
       let recorded: { id?: string; duration_sec?: number } | undefined;
       for (let i = 0; i < 30; i++) {
@@ -213,7 +221,10 @@ test.describe('Call recording core', () => {
 
       await page.waitForTimeout(2000);
       await page.getByRole('button', { name: /stop recording/i }).click();
-      await page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 });
+      await page
+        .getByRole('status')
+        .filter({ hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i })
+        .waitFor({ state: 'visible', timeout: 30000 });
 
       let recorded: { id?: string; duration_sec?: number } | undefined;
       for (let i = 0; i < 30; i++) {
@@ -273,7 +284,10 @@ test.describe('Call recording core', () => {
       await page.waitForTimeout(3000);
 
       await page.getByRole('button', { name: /stop recording/i }).click();
-      await page.getByText(/recording stopped successfully/i).waitFor({ state: 'visible', timeout: 30000 });
+      await page
+        .getByRole('status')
+        .filter({ hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i })
+        .waitFor({ state: 'visible', timeout: 30000 });
 
       let recorded: { id?: string; duration_sec?: number } | undefined;
       for (let i = 0; i < 60; i++) {

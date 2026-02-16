@@ -38,8 +38,11 @@ export const soundboardVolumeByRoomRef = soundboardVolumeByRoom;
 export const soundboardVolumeAtStopRef = soundboardVolumeAtStop;
 export const recordingByRoom = new Map<string, RecordingState>();
 
+/** Max offset range; must keep RECORD_PORT_BASE + offset under 65535. ~117 distinct offsets with stride 128. */
+const RECORD_PORT_OFFSET_MOD = 15_000;
+
 export function getRecordPortOffsetAndIncrement(stride: number): number {
-  return (recordPortOffsetCounter++ * stride) % 10000;
+  return (recordPortOffsetCounter++ * stride) % RECORD_PORT_OFFSET_MOD;
 }
 
 export async function getWorker(): Promise<mediasoup.types.Worker> {

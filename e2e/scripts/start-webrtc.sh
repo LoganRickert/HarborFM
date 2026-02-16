@@ -9,6 +9,7 @@ export RECORDING_DATA_DIR="${E2E_DIR}/webrtc-recordings"
 export MAIN_APP_URL="${MAIN_APP_BASE_URL:-http://127.0.0.1:${E2E_PORT:-3099}}"
 export PORT="$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="${RECORDING_CALLBACK_SECRET:-e2e-secret}"
+export WEBRTC_SERVICE_SECRET="${WEBRTC_SERVICE_SECRET:-}"
 # Wider UDP port range to avoid "no more available ports" (default 40000-40100 exhausted)
 # Use 41000-41200 (recording uses 50000+)
 export RTC_MIN_PORT="${RTC_MIN_PORT:-41000}"

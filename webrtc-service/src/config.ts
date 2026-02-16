@@ -12,6 +12,9 @@ export const RECORD_PORT_STRIDE = 128;
 
 export const MAIN_APP_URL = process.env.MAIN_APP_URL?.trim() || "";
 
+/** Secret required in X-WebRTC-Service-Secret header for /room, /start-recording, /stop-recording. When set, requests without the header are rejected. Env: WEBRTC_SERVICE_SECRET. */
+export const WEBRTC_SERVICE_SECRET = process.env.WEBRTC_SERVICE_SECRET?.trim() || null;
+
 /** Delay (ms) to let in-flight RTP reach FFmpeg before closing consumer/transport. Env: FINALIZE_RTP_FLUSH_MS. Default 1200. Use lower (e.g. 300) for e2e tests. */
 export const FINALIZE_RTP_FLUSH_MS =
   Number(process.env.FINALIZE_RTP_FLUSH_MS) || 1200;

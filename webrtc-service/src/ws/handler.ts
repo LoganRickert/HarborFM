@@ -16,6 +16,7 @@ import {
   soundboardByRoom,
 } from "../room.js";
 import { ANNOUNCED_IP, MAIN_APP_URL, RECORDING_DATA_DIR } from "../config.js";
+import { sanitizeParticipantName } from "../validation.js";
 
 type WebRtcTransport = mediasoup.types.WebRtcTransport;
 
@@ -99,9 +100,10 @@ export const wsHandler = async (socket: any, req: any) => {
           transportId: string;
           dtlsParameters: mediasoup.types.DtlsParameters;
         };
+        const ownTransport = socketTransports.get(socket);
         const transport = roomState.transports.get(transportId);
-        if (!transport) {
-          socket.send(JSON.stringify({ type: "error", error: "Transport not found" }));
+        if (!ownTransport || ownTransport.id !== transportId || !transport) {
+          socket.send(JSON.stringify({ type: "error", error: "Transport not found or access denied" }));
           return;
         }
         await transport.connect({ dtlsParameters });
@@ -116,9 +118,10 @@ export const wsHandler = async (socket: any, req: any) => {
           rtpParameters: mediasoup.types.RtpParameters;
           source?: string;
         };
+        const ownTransport = socketTransports.get(socket);
         const transport = roomState.transports.get(transportId);
-        if (!transport) {
-          socket.send(JSON.stringify({ type: "error", error: "Transport not found" }));
+        if (!ownTransport || ownTransport.id !== transportId || !transport) {
+          socket.send(JSON.stringify({ type: "error", error: "Transport not found or access denied" }));
           return;
         }
         const producer = await transport.produce({ kind, rtpParameters });
@@ -144,9 +147,10 @@ export const wsHandler = async (socket: any, req: any) => {
           producerId: string;
           rtpCapabilities: mediasoup.types.RtpCapabilities;
         };
+        const ownTransport = socketTransports.get(socket);
         const transport = roomState.transports.get(transportId);
         const producer = roomState.producers.get(producerId);
-        if (!transport || !producer) {
+        if (!ownTransport || ownTransport.id !== transportId || !transport || !producer) {
           socket.send(JSON.stringify({ type: "error", error: "Transport or producer not found" }));
           return;
         }
@@ -187,7 +191,8 @@ export const wsHandler = async (socket: any, req: any) => {
         if (!producerId || !participantId || typeof participantName !== "string") return;
         const producer = roomState.producers.get(producerId);
         if (!producer) return;
-        producerParticipantMapRef.set(producerId, { participantId, participantName });
+        const safeName = sanitizeParticipantName(participantName);
+        producerParticipantMapRef.set(producerId, { participantId, participantName: safeName });
         return;
       }
 
@@ -225,7 +230,8 @@ export const wsHandler = async (socket: any, req: any) => {
             const res = await fetch(url, { headers: { "X-Recording-Secret": secret } });
             if (!res.ok) {
               const err = await res.text();
-              socket.send(JSON.stringify({ type: "error", error: err || `Fetch failed ${res.status}` }));
+              console.warn("[webrtc] library-stream fetch failed:", res.status, err);
+              socket.send(JSON.stringify({ type: "error", error: "Asset not available" }));
               return;
             }
             const buf = await res.arrayBuffer();
@@ -335,8 +341,8 @@ export const wsHandler = async (socket: any, req: any) => {
               }
             }
           } catch (err) {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            socket.send(JSON.stringify({ type: "error", error: errMsg }));
+            console.warn("[webrtc] playSoundboard failed:", err);
+            socket.send(JSON.stringify({ type: "error", error: "Soundboard playback failed" }));
           }
         })();
         return;
@@ -370,8 +376,8 @@ export const wsHandler = async (socket: any, req: any) => {
         return;
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      socket.send(JSON.stringify({ type: "error", error: message }));
+      console.warn("[webrtc] WebSocket message handler error:", err);
+      socket.send(JSON.stringify({ type: "error", error: "An error occurred" }));
     }
   });
 

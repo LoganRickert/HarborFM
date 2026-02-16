@@ -23,6 +23,7 @@ import {
   ANNOUNCED_IP,
   formatDateTimeForFolder,
 } from "../config.js";
+import { assertSafeId, assertSafeFilePathRelative } from "../validation.js";
 
 /** In-flight start-recording per room, so stop-recording waits for setup to finish (race fix). */
 const startRecordingByRoom = new Map<string, { resolve: () => void; promise: Promise<void> }>();
@@ -102,6 +103,18 @@ export function registerRecordingRoutes(
         "start-recording validation failed"
       );
       return reply.status(400).send({ error: "Missing required fields", missing });
+    }
+
+    try {
+      assertSafeId(roomId, "roomId");
+      assertSafeId(episodeId, "episodeId");
+      assertSafeId(segmentId, "segmentId");
+      assertSafeId(podcastId, "podcastId");
+      assertSafeFilePathRelative(filePathRelative, RECORDING_DATA_DIR);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Invalid id format";
+      console.log("[webrtc] start-recording validation failed", { err: msg, roomId, episodeId });
+      return reply.status(400).send({ error: msg });
     }
 
     const room = getRoom(roomId);
@@ -465,7 +478,14 @@ export function registerRecordingRoutes(
       recordingEndedAtMs?: number;
     };
     const { roomId, events, recordingEndedAtMs } = body;
+    console.log("[webrtc] stop-recording received", { roomId });
     if (!roomId) return reply.status(400).send({ error: "roomId required" });
+    try {
+      assertSafeId(roomId, "roomId");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Invalid roomId";
+      return reply.status(400).send({ error: msg });
+    }
 
     const inFlight = startRecordingByRoom.get(roomId);
     if (inFlight) {
@@ -474,7 +494,11 @@ export function registerRecordingRoutes(
     }
 
     const state = recordingByRoom.get(roomId);
-    if (!state) return reply.send({ ok: true });
+    console.log("[webrtc] stop-recording state", { roomId, hasState: !!state });
+    if (!state) {
+      console.log("[webrtc] stop-recording no state, returning ok");
+      return reply.send({ ok: true });
+    }
 
     if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
     if (state.producerCheckInterval) clearInterval(state.producerCheckInterval);
@@ -542,6 +566,7 @@ export function registerRecordingRoutes(
     };
 
     const activeProducerIds = Array.from(state.activeSegmentsByProducerId.keys());
+    console.log("[webrtc] stop-recording finalizing", { roomId, activeCount: activeProducerIds.length });
     sendProgress(request, state, secret, "finalizing", "Finalizing audio streams from participants");
     Promise.all(
       activeProducerIds.map((producerId) =>
@@ -560,6 +585,7 @@ export function registerRecordingRoutes(
       );
     });
 
+    console.log("[webrtc] stop-recording returning ok (async finalization in progress)");
     return reply.send({ ok: true });
   });
 }

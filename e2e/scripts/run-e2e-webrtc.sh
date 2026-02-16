@@ -2,6 +2,11 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 E2E_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Kill any orphaned tail processes from previous runs that stream server/webrtc logs
+pkill -f "tail -f.*server\.log" 2>/dev/null || true
+pkill -f "tail -f.*webrtc\.log" 2>/dev/null || true
+
 PORT="${E2E_PORT:-3099}"
 WEBRTC_PORT="${WEBRTC_PORT:-3098}"
 
@@ -15,6 +20,7 @@ export WEBRTC_PORT="$WEBRTC_PORT"
 export WEBRTC_SERVICE_URL="http://127.0.0.1:$WEBRTC_PORT"
 export WEBRTC_PUBLIC_WS_URL="ws://localhost:$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="e2e-secret"
+# WEBRTC_SERVICE_SECRET left unset for e2e so webrtc HTTP endpoints work without auth (service is localhost-only)
 export MAIN_APP_BASE_URL="http://127.0.0.1:$PORT"
 
 # Short timeouts for e2e (host-leave test) - must be long enough for host to connect and send first message (~5s)
@@ -52,16 +58,7 @@ bash "$SCRIPT_DIR/start-server.sh"
 # Start webrtc
 bash "$SCRIPT_DIR/start-webrtc.sh"
 
-# Optionally stream server/webrtc logs to terminal (E2E_STREAM_LOGS=1)
-TAIL_PIDS=()
-if [ -n "${E2E_STREAM_LOGS:-}" ]; then
-  (tail -f "$E2E_DIR/server.log" 2>/dev/null | sed 's/^/[server] /') &
-  TAIL_PIDS+=($!)
-  (tail -f "$E2E_DIR/webrtc.log" 2>/dev/null | sed 's/^/[webrtc] /') &
-  TAIL_PIDS+=($!)
-  echo "Streaming server + webrtc logs (E2E_STREAM_LOGS=1)"
-fi
-
+# Server/webrtc output goes to e2e/server.log and e2e/webrtc.log only (no streaming)
 # Ensure Playwright browsers are installed, then run tests
 cd "$E2E_DIR"
 pnpm exec playwright install chromium
@@ -74,24 +71,29 @@ case "${E2E_WEBRTC_MODE:-fast}" in
   full)  PLAYWRIGHT_ARGS="" ;;
   fast|*) PLAYWRIGHT_ARGS="--grep-invert @slow" ;;
 esac
-if [ -z "${DISPLAY:-}" ]; then
-  if command -v xvfb-run &>/dev/null; then
-    xvfb-run pnpm exec playwright test $PLAYWRIGHT_ARGS || EXIT_CODE=$?
+# Pass extra args to run a single test, e.g.:
+#   pnpm run e2e:webrtc -- call-recording-core.spec.ts
+#   pnpm run e2e:webrtc -- -g "records segment"
+# Filter out server/webrtc log lines (in case of stray output)
+run_playwright() {
+  if [ -z "${DISPLAY:-}" ]; then
+    if command -v xvfb-run &>/dev/null; then
+      xvfb-run pnpm exec playwright test $PLAYWRIGHT_ARGS "$@"
+    else
+      echo "Error: Headed browser requires a display. Install xvfb and rerun, or run with DISPLAY set:" >&2
+      echo "  apt install xvfb   # Debian/Ubuntu" >&2
+      echo "  xvfb-run pnpm run e2e:webrtc" >&2
+      exit 1
+    fi
   else
-    echo "Error: Headed browser requires a display. Install xvfb and rerun, or run with DISPLAY set:" >&2
-    echo "  apt install xvfb   # Debian/Ubuntu" >&2
-    echo "  xvfb-run pnpm run e2e:webrtc" >&2
-    exit 1
+    pnpm exec playwright test $PLAYWRIGHT_ARGS "$@"
   fi
-else
-  pnpm exec playwright test $PLAYWRIGHT_ARGS || EXIT_CODE=$?
-fi
+}
+run_playwright "$@" 2>&1 | grep --line-buffered -v -E '^\[(server|webrtc)\] '
+EXIT_CODE=${PIPESTATUS[0]}
 
 # Stop webrtc and server
 bash "$SCRIPT_DIR/stop-webrtc.sh"
 bash "$SCRIPT_DIR/stop-server.sh"
-
-# Stop log streaming
-[ ${#TAIL_PIDS[@]} -gt 0 ] && kill "${TAIL_PIDS[@]}" 2>/dev/null || true
 
 exit $EXIT_CODE
