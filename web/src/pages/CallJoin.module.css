@@ -369,13 +369,29 @@
 }
 
 .participantCard {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.5rem 0.65rem;
+  padding: 0.5rem 0.65rem 0.65rem;
   background: var(--bg, #0c0e12);
   border: 1px solid var(--border, #333);
   border-radius: 8px;
+}
+
+.participantMicLevel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--bg-muted, #252525);
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+.participantMicLevelInteractive {
+  cursor: pointer;
 }
 
 .participantCard[data-host] {

@@ -214,6 +214,7 @@ export const wsHandler = async (socket: any, req: any) => {
         }
         const consumer = await transport.consume({ producerId, rtpCapabilities });
         const producerSource = producerSourceMapRef.get(producerId);
+        const producerParticipant = producerParticipantMapRef.get(producerId);
         socket.send(
           JSON.stringify({
             type: "consumed",
@@ -222,6 +223,7 @@ export const wsHandler = async (socket: any, req: any) => {
             kind: consumer.kind,
             rtpParameters: consumer.rtpParameters,
             ...(producerSource ? { source: producerSource } : {}),
+            ...(producerParticipant ? { participantId: producerParticipant.participantId } : {}),
           })
         );
         return;

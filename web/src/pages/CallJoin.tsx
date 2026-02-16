@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User } from 'lucide-react';
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
@@ -10,6 +10,7 @@ import { CallChatPanel, type ChatMessage } from '../components/GroupCall/CallCha
 import { CallJoinHeader } from '../components/CallJoinHeader';
 import { LeaveCallConfirmDialog } from '../components/GroupCall/LeaveCallConfirmDialog';
 import type { CallJoinInfo } from '../api/call';
+import { createAudioLevelProcessor } from '../utils/audioLevel';
 import styles from './CallJoin.module.css';
 
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
@@ -41,7 +42,6 @@ export function CallJoin() {
   const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
   const [muted, setMutedState] = useState(false);
   const [mutedByHost, setMutedByHost] = useState(false);
-  const [streamReady, setStreamReady] = useState(false);
   const [chatMinimized, setChatMinimized] = useState(true);
   const [chatUnread, setChatUnread] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -57,7 +57,7 @@ export function CallJoin() {
   myParticipantIdRef.current = myParticipantId;
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
-  const { remoteTracks, setMuted } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, setMuted } = useMediasoupRoom(
     webrtcUrl,
     webrtcRoomId,
     deviceId || undefined,
@@ -105,17 +105,38 @@ export function CallJoin() {
       });
   }, [token, navigate]);
 
-  useEffect(() => {
+  const refreshDevices = useCallback(() => {
     navigator.mediaDevices
       .enumerateDevices()
       .then((all) => {
         const audioInputs = all.filter((d) => d.kind === 'audioinput');
         setDevices(audioInputs);
-        if (audioInputs.length > 0 && !deviceId)
-          setDeviceId(audioInputs[0].deviceId);
+        setDeviceId((prev) => {
+          const stillValid = prev && audioInputs.some((d) => d.deviceId === prev);
+          return stillValid ? prev : audioInputs[0]?.deviceId ?? '';
+        });
       })
       .catch(() => {});
-  }, [deviceId]);
+  }, []);
+
+  useEffect(() => {
+    refreshDevices();
+    const handleDeviceChange = () => refreshDevices();
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
+  }, [refreshDevices]);
+
+  // Request microphone permission when token is validated so device list shows proper labels
+  useEffect(() => {
+    if (!joinInfo || !navigator.mediaDevices?.getUserMedia) return;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        stream.getTracks().forEach((t) => t.stop());
+        refreshDevices();
+      })
+      .catch(() => {});
+  }, [joinInfo, refreshDevices]);
 
   useEffect(() => {
     return () => {
@@ -130,19 +151,32 @@ export function CallJoin() {
     };
   }, []);
 
+  const prevJoinedRef = useRef(false);
+  const prevDeviceIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!streamReady || joined) return;
+    const wasInCall = prevJoinedRef.current;
+    prevJoinedRef.current = joined;
+
+    // Only tear down when: (1) we just left the call, or (2) deviceId changed and we have a stream to re-acquire
+    const deviceChanged = prevDeviceIdRef.current !== undefined && prevDeviceIdRef.current !== deviceId;
+    prevDeviceIdRef.current = deviceId;
+
+    const shouldTearDown =
+      (wasInCall && !joined) || // Just left the call
+      (deviceChanged && !joined && streamRef.current !== null); // Device changed on pre-join form
+
+    if (!shouldTearDown || !streamRef.current) return;
+
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     const s = streamRef.current;
-    if (s) s.getTracks().forEach((t) => t.stop());
+    s.getTracks().forEach((t) => t.stop());
     audioContextRef.current?.close();
     streamRef.current = null;
     analyserRef.current = null;
     audioContextRef.current = null;
     selfListenGainRef.current = null;
-    setStreamReady(false);
     setListeningToSelf(false);
-  }, [deviceId, joined, streamReady]);
+  }, [deviceId, joined]);
 
   const setupMicrophone = async (): Promise<boolean> => {
     if (streamRef.current) return true;
@@ -158,10 +192,6 @@ export function CallJoin() {
       audioContextRef.current = ctx;
       const src = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.7;
-      analyser.minDecibels = -60;
-      analyser.maxDecibels = -10;
       src.connect(analyser);
       analyserRef.current = analyser;
       const gainNode = ctx.createGain();
@@ -170,7 +200,7 @@ export function CallJoin() {
       gainNode.connect(ctx.destination);
       selfListenGainRef.current = gainNode;
       await ctx.resume();
-      const data = new Uint8Array(analyser.frequencyBinCount);
+      const computeLevel = createAudioLevelProcessor(analyser);
       function tick() {
         const an = analyserRef.current;
         if (!an || !audioContextRef.current) return;
@@ -178,14 +208,11 @@ export function CallJoin() {
           animationRef.current = requestAnimationFrame(tick);
           return;
         }
-        an.getByteFrequencyData(data);
-        let max = 0;
-        for (let i = 0; i < data.length; i++) if (data[i] > max) max = data[i];
-        setMicLevel(Math.min(100, Math.round((max / 255) * 100)));
+        setMicLevel(computeLevel());
         animationRef.current = requestAnimationFrame(tick);
       }
       tick();
-      setStreamReady(true);
+      refreshDevices(); // Re-enumerate so labels appear after permission granted
       return true;
     } catch {
       setMicLevel(0);
@@ -470,17 +497,6 @@ export function CallJoin() {
               <span className={styles.callActionLabel}>Leave Call</span>
             </button>
           </div>
-          <div
-            className={styles.micLevel}
-            role="button"
-            tabIndex={0}
-            onClick={resumeAudioContext}
-            onKeyDown={(e) => e.key === 'Enter' && resumeAudioContext()}
-            title="Click if the bar doesn't move"
-            aria-label="Microphone level - click to enable if needed"
-          >
-            <div className={styles.micLevelBar} style={{ width: `${micLevel}%` }} />
-          </div>
           <p className={styles.participantsLabel}>
             Participants ({participants.length})
           </p>
@@ -566,6 +582,17 @@ export function CallJoin() {
                     </span>
                   )}
                 </span>
+                <div
+                  className={`${styles.participantMicLevel} ${p.id === myParticipantId ? styles.participantMicLevelInteractive : ''}`}
+                  role={p.id === myParticipantId ? 'button' : 'img'}
+                  tabIndex={p.id === myParticipantId ? 0 : undefined}
+                  onClick={p.id === myParticipantId ? resumeAudioContext : undefined}
+                  onKeyDown={p.id === myParticipantId ? (e) => e.key === 'Enter' && resumeAudioContext() : undefined}
+                  aria-label="Microphone level"
+                  title={p.id === myParticipantId ? 'Click if the bar doesn\'t move' : undefined}
+                >
+                  <div className={styles.micLevelBar} style={{ width: `${p.id === myParticipantId ? micLevel : (remoteMicLevels.get(p.id) ?? 0)}%` }} />
+                </div>
               </li>
             ))}
           </ul>

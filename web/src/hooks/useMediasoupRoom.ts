@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
+import { createAudioLevelProcessor } from '../utils/audioLevel.js';
 
-export type RemoteTrackInfo = { track: MediaStreamTrack; source?: string };
+export type RemoteTrackInfo = { track: MediaStreamTrack; source?: string; participantId?: string };
 
 export function useMediasoupRoom(
   webrtcUrl: string | undefined,
@@ -13,6 +14,7 @@ export function useMediasoupRoom(
   hostToken?: string | null,
 ) {
   const [remoteTracks, setRemoteTracks] = useState<Map<string, RemoteTrackInfo>>(new Map());
+  const [remoteMicLevels, setRemoteMicLevels] = useState<Map<string, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
@@ -149,24 +151,17 @@ export function useMediasoupRoom(
 
         const micSource = ctx.createMediaStreamSource(micStream);
         const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.7;
-        analyser.minDecibels = -60;
-        analyser.maxDecibels = -10;
         micSource.connect(analyser);
         analyser.connect(mixNode);
 
         const dest = ctx.createMediaStreamDestination();
         mixNode.connect(dest);
 
-        const data = new Uint8Array(analyser.frequencyBinCount);
+        const computeLevel = createAudioLevelProcessor(analyser);
         let tickId: number | undefined;
         function tick() {
           if (closed) return;
-          analyser.getByteFrequencyData(data);
-          let max = 0;
-          for (let i = 0; i < data.length; i++) if (data[i] > max) max = data[i];
-          setMicLevel(Math.min(100, Math.round((max / 255) * 100)));
+          setMicLevel(computeLevel());
           tickId = requestAnimationFrame(tick);
         }
         tickId = requestAnimationFrame(tick);
@@ -285,6 +280,7 @@ export function useMediasoupRoom(
             kind: string;
             rtpParameters: mediasoupClient.types.RtpParameters;
             source?: string;
+            participantId?: string;
           };
           const consumer = await recvTransport!.consume({
             id: consumedMsg.id,
@@ -292,7 +288,7 @@ export function useMediasoupRoom(
             kind: consumedMsg.kind as mediasoupClient.types.MediaKind,
             rtpParameters: consumedMsg.rtpParameters,
           });
-          return { consumer, source: consumedMsg.source };
+          return { consumer, source: consumedMsg.source, participantId: consumedMsg.participantId };
         }
 
         safeSend(webrtcWs, { type: 'getProducers' });
@@ -302,10 +298,14 @@ export function useMediasoupRoom(
         for (const producerId of producersMsg.producerIds || []) {
           if (producerId === myProducerId) continue;
           try {
-            const { consumer, source } = await consumeProducer(producerId);
+            const { consumer, source, participantId } = await consumeProducer(producerId);
             if (closed) return;
             consumedProducerIds.add(producerId);
-            setRemoteTracks((prev) => new Map(prev).set(consumer.id, { track: consumer.track, ...(source ? { source } : {}) }));
+            setRemoteTracks((prev) => new Map(prev).set(consumer.id, {
+              track: consumer.track,
+              ...(source ? { source } : {}),
+              ...(participantId ? { participantId } : {}),
+            }));
           } catch {
             // skip
           }
@@ -314,10 +314,14 @@ export function useMediasoupRoom(
         handleNewProducer = async (producerId: string) => {
           if (producerId === myProducerId || consumedProducerIds.has(producerId) || closed) return;
           try {
-            const { consumer, source } = await consumeProducer(producerId);
+            const { consumer, source, participantId } = await consumeProducer(producerId);
             if (closed) return;
             consumedProducerIds.add(producerId);
-            setRemoteTracks((prev) => new Map(prev).set(consumer.id, { track: consumer.track, ...(source ? { source } : {}) }));
+            setRemoteTracks((prev) => new Map(prev).set(consumer.id, {
+              track: consumer.track,
+              ...(source ? { source } : {}),
+              ...(participantId ? { participantId } : {}),
+            }));
           } catch {
             // skip
           }
@@ -332,6 +336,7 @@ export function useMediasoupRoom(
     return () => {
       closed = true;
       webrtcWsRef.current = null;
+      setRemoteMicLevels(new Map());
       cleanupRef.current?.();
       pendingResolvers.forEach((queue) => queue.forEach((r) => r(null)));
       webrtcWs?.close();
@@ -341,6 +346,46 @@ export function useMediasoupRoom(
       recvTransport?.close();
     };
   }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken]);
+
+  useEffect(() => {
+    const entries = Array.from(remoteTracks.entries()).filter(
+      ([, info]) => info.participantId && info.source !== 'soundboard'
+    );
+    if (entries.length === 0) return;
+
+    const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioCtx();
+    const processors: { participantId: string; computeLevel: () => number }[] = [];
+
+    for (const [, info] of entries) {
+      if (!info.participantId) continue;
+      try {
+        const src = ctx.createMediaStreamSource(new MediaStream([info.track]));
+        const analyser = ctx.createAnalyser();
+        src.connect(analyser);
+        processors.push({ participantId: info.participantId, computeLevel: createAudioLevelProcessor(analyser) });
+      } catch {
+        // skip failed setup
+      }
+    }
+
+    let rafId: number | undefined;
+    function tick() {
+      if (processors.length === 0) return;
+      const next = new Map<string, number>();
+      for (const { participantId, computeLevel } of processors) {
+        next.set(participantId, computeLevel());
+      }
+      setRemoteMicLevels(next);
+      rafId = requestAnimationFrame(tick);
+    }
+    ctx.resume().then(() => { rafId = requestAnimationFrame(tick); }).catch(() => {});
+
+    return () => {
+      if (rafId != null) cancelAnimationFrame(rafId);
+      ctx.close();
+    };
+  }, [remoteTracks]);
 
   const setMuted = useCallback((muted: boolean) => {
     setMutedRef.current(muted);
@@ -380,6 +425,7 @@ export function useMediasoupRoom(
 
   return {
     remoteTracks,
+    remoteMicLevels,
     error,
     ready,
     micLevel,

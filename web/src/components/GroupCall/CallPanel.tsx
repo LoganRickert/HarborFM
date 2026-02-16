@@ -96,7 +96,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const effectiveRoomId = roomIdFromWs ?? roomId;
   const effectiveHostToken = hostTokenFromWs ?? hostToken;
   const myParticipant = participants.find((p) => p.isHost);
-  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     undefined,
@@ -228,8 +228,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
               timestamp: Date.now(),
             },
           ]);
-          if (msg.participantId !== myParticipantIdRef.current && (!chatOpenRef.current || chatMinimizedRef.current)) {
-            setChatUnread(true);
+          if (msg.participantId !== myParticipantIdRef.current) {
+            const chatVisible = chatOpenRef.current && !chatMinimizedRef.current;
+            const tabHasFocus = typeof document !== 'undefined' && document.hasFocus();
+            if (!chatVisible || !tabHasFocus) setChatUnread(true);
           }
         }
         } catch {
@@ -336,7 +338,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   };
 
   const handleChatOpen = () => {
-    setChatUnread(false);
     if (isMobile && minimized) {
       setMinimized(false);
       setSoundboardOpen(false);
@@ -495,14 +496,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
         </div>
       )}
       <div className={styles.participants}>
-        <div
-          className={styles.micLevel}
-          role="img"
-          aria-label="Microphone level"
-          title="Your microphone level"
-        >
-          <div className={styles.micLevelBar} style={{ width: `${micLevel}%` }} />
-        </div>
         <span className={styles.participantsLabel}>
           Participants ({participants.length})
         </span>
@@ -622,6 +615,9 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
                   {p.muted ? <MicOff size={14} /> : <Mic size={14} />}
                 </button>
               </span>
+              <div className={styles.participantMicLevel} role="img" aria-label="Microphone level">
+                <div className={styles.micLevelBar} style={{ width: `${p.isHost ? micLevel : (remoteMicLevels.get(p.id) ?? 0)}%` }} />
+              </div>
             </li>
           ))}
         </ul>
@@ -732,6 +728,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
               onMinimizeToggle={() => setChatMinimized((m) => !m)}
               onClose={() => setChatOpen(false)}
               onInteract={() => setChatUnread(false)}
+              unread={chatUnread}
             />
           </div>
         )}
