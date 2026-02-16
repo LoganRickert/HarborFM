@@ -1,15 +1,7 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { AudioUnlockContext } from './audioUnlockContext';
 
 type RetryFn = () => void;
-
-type AudioUnlockContextValue = {
-  register: (id: string, retryFn: RetryFn) => () => void;
-  setNeedsUnlock: (id: string, needs: boolean) => void;
-  hasAnyNeedingUnlock: boolean;
-  triggerUnlock: () => void;
-};
-
-const AudioUnlockContext = createContext<AudioUnlockContextValue | null>(null);
 
 export function AudioUnlockProvider({ children }: { children: React.ReactNode }) {
   const retryFnsRef = useRef<Map<string, RetryFn>>(new Map());
@@ -47,7 +39,7 @@ export function AudioUnlockProvider({ children }: { children: React.ReactNode })
     });
   }, []);
 
-  const value: AudioUnlockContextValue = {
+  const value = {
     register,
     setNeedsUnlock,
     hasAnyNeedingUnlock,
@@ -59,8 +51,4 @@ export function AudioUnlockProvider({ children }: { children: React.ReactNode })
       {children}
     </AudioUnlockContext.Provider>
   );
-}
-
-export function useAudioUnlock() {
-  return useContext(AudioUnlockContext);
 }

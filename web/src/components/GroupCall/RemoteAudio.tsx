@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useAudioUnlock } from './AudioUnlockContext';
+import { useAudioUnlock } from './audioUnlockContext';
 import styles from './RemoteAudio.module.css';
 
 export function AudioUnlockBanner() {
