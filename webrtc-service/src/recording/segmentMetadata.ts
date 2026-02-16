@@ -70,8 +70,8 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
               filePath: rel,
             });
           }
-        } catch (err) {
-          console.log("[segmentMetadata] recoverPartFiles rename failed:", err);
+        } catch {
+          /* rename failed */
         }
       } else {
         try {

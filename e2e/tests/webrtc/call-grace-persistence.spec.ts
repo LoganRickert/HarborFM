@@ -47,12 +47,6 @@ test.describe('Host leave grace period', () => {
   test('Recording stops safely when host leaves during recording @slow', async ({ page, context }) => {
     test.setTimeout(60000); // Shortened: e2e uses HOST_AWAY_GRACE_* and HOST_AWAY_CHECK_INTERVAL_MS
     const baseURL = `http://127.0.0.1:${PORT}`;
-    page.on('console', (msg) => {
-      const text = msg.text();
-      if (/recording|Recording|failed|webrtc/i.test(text)) {
-        console.log(`[host-leave-recording] BROWSER:`, text.slice(0, 200));
-      }
-    });
 
     await page.goto(`${baseURL}/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
@@ -92,10 +86,7 @@ test.describe('Host leave grace period', () => {
         const { segments } = await segmentsRes.json();
         if (!Array.isArray(segments)) continue;
         recorded = segments.find((s: { duration_sec?: number }) => s.duration_sec != null);
-        if (recorded) {
-          console.log('[host-leave-recording] Segment appeared after', i + 1, 's');
-          break;
-        }
+        if (recorded) break;
       }
       if (!recorded) {
         test.skip(

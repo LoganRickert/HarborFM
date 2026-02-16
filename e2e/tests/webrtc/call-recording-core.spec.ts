@@ -22,13 +22,6 @@ test.describe('Call recording core', () => {
 
   test('records segment and persists via API', async ({ page }) => {
     test.setTimeout(60000);
-    page.on('console', (msg) => {
-      const text = msg.text();
-      const type = msg.type();
-      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
-        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
-      }
-    });
     await page.goto(`/episodes/${episodeId}`);
 
     const startBtn = page.getByRole('button', { name: /start group call/i });
@@ -76,13 +69,7 @@ test.describe('Call recording core', () => {
         .getByText(/failed to stop recording|recording produced no audio|recording failed/i)
         .waitFor({ state: 'visible', timeout: 30000 })
         .then(() => 'error' as const),
-    ]).catch(async (e) => {
-      const panel = page.getByRole('region', { name: /group call/i });
-      const panelText = await panel.textContent().catch(() => '');
-      const errorEl = page.getByText(/failed|error|no audio/i).first();
-      const errorText = (await errorEl.isVisible().catch(() => false)) ? await errorEl.textContent() : null;
-      console.log('[call-recording] Timeout - panel excerpt:', panelText?.slice(0, 400));
-      console.log('[call-recording] Timeout - error element:', errorText);
+    ]    ).catch((e) => {
       throw e;
     });
     if (successOrError === 'error') {
@@ -127,13 +114,6 @@ test.describe('Call recording core', () => {
   test('records with two participants and creates multitrack files', async ({ page, context }) => {
     test.setTimeout(60000);
     const baseURL = `http://127.0.0.1:${PORT}`;
-    page.on('console', (msg) => {
-      const text = msg.text();
-      const type = msg.type();
-      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
-        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
-      }
-    });
     await page.goto(`/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
@@ -201,13 +181,6 @@ test.describe('Call recording core', () => {
   test('recording continues when guest leaves mid-recording', async ({ page, context }) => {
     test.setTimeout(60000);
     const baseURL = `http://127.0.0.1:${PORT}`;
-    page.on('console', (msg) => {
-      const text = msg.text();
-      const type = msg.type();
-      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
-        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
-      }
-    });
     await page.goto(`/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
@@ -261,13 +234,6 @@ test.describe('Call recording core', () => {
   test('reconnect during recording still produces a complete recording @slow', async ({ page, context }) => {
     test.setTimeout(90000);
     const baseURL = `http://127.0.0.1:${PORT}`;
-    page.on('console', (msg) => {
-      const text = msg.text();
-      const type = msg.type();
-      if (type === 'error' || /recording|Recording|No audio|failed|webrtc|mediasoup/i.test(text)) {
-        console.log(`[call-recording] BROWSER ${type}:`, text.slice(0, 300));
-      }
-    });
     await page.goto(`/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });

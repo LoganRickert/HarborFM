@@ -27,6 +27,22 @@ import {
 /** In-flight start-recording per room, so stop-recording waits for setup to finish (race fix). */
 const startRecordingByRoom = new Map<string, { resolve: () => void; promise: Promise<void> }>();
 
+function sendProgress(
+  request: { log: { error: (o: object, msg: string) => void } },
+  state: { sessionId?: string | null },
+  secret: string,
+  stage: string,
+  message?: string
+): void {
+  if (!MAIN_APP_URL || !secret || !state.sessionId) return;
+  const url = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-progress`;
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
+    body: JSON.stringify({ sessionId: state.sessionId, stage, message }),
+  }).catch((err) => request.log.error({ err, stage }, "recording-progress failed"));
+}
+
 function ffmpegStderrLogger(
   ffmpeg: ChildProcess,
   producerId: string,
@@ -458,12 +474,6 @@ export function registerRecordingRoutes(
     }
 
     const state = recordingByRoom.get(roomId);
-    console.log(
-      "[webrtc] POST /stop-recording roomId=%s hasState=%s activeSegments=%d",
-      roomId,
-      !!state,
-      state?.activeSegmentsByProducerId.size ?? 0
-    );
     if (!state) return reply.send({ ok: true });
 
     if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
@@ -532,21 +542,13 @@ export function registerRecordingRoutes(
     };
 
     const activeProducerIds = Array.from(state.activeSegmentsByProducerId.keys());
-    console.log(
-      "[webrtc] Stop-recording finalizing roomId=%s producerIds=%j",
-      roomId,
-      activeProducerIds
-    );
+    sendProgress(request, state, secret, "finalizing", "Finalizing audio streams from participants");
     Promise.all(
       activeProducerIds.map((producerId) =>
         recordingManager.finalizeProducerStreamAsync(roomId, state, producerId)
       )
     ).then(() => {
-      console.log(
-        "[webrtc] Stop-recording finalized, running amix roomId=%s filePath=%s",
-        roomId,
-        state.filePathRelative
-      );
+      sendProgress(request, state, secret, "mixing", "Mixing audio and preparing final file");
       recordingByRoom.delete(roomId);
       const finalPath = join(RECORDING_DATA_DIR, state.filePathRelative);
       recordingManager.runAmixAndDeliver(

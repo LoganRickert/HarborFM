@@ -98,7 +98,6 @@ export class SegmentRecorder {
         resolve({ success: false, filePath: null });
         return;
       }
-      console.log("[SegmentRecorder] stop segmentId=%s graceMs=%d sending q to ffmpeg", this.options.segmentId, graceMs);
 
       const cleanupSdp = () => {
         try {
@@ -119,7 +118,6 @@ export class SegmentRecorder {
       }, graceMs);
 
       ff.once("close", (code) => {
-        console.log("[SegmentRecorder] stop segmentId=%s ffmpeg close code=%d", this.options.segmentId, code);
         clearTimeout(timeout);
         cleanupSdp();
         if (code === 0 && existsSync(this.partPath) && statSync(this.partPath).size > 0) {
@@ -127,8 +125,7 @@ export class SegmentRecorder {
             renameSync(this.partPath, this.finalPath);
             const rel = `recordings/${this.options.recordingDirName}/segment_${this.options.segmentId}.mp3`;
             resolve({ success: true, filePath: rel });
-          } catch (err) {
-            console.log("[SegmentRecorder] rename failed:", err);
+          } catch {
             resolve({ success: false, filePath: null });
           }
         } else {

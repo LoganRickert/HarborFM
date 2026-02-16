@@ -159,21 +159,14 @@ export class RecordingManager {
     };
 
     const finalize = (reason: string) => this.finalizeProducerStream(roomId, state, producerId, reason);
-    consumer.on("producerclose", () => {
-      console.log("[RecordingManager] producerclose producerId=%s segmentId=%s", producerId, segmentId);
-      finalize("left");
-    });
-    consumer.on("producerpause", () => {
-      console.log("[RecordingManager] producerpause producerId=%s segmentId=%s", producerId, segmentId);
-      finalize("paused");
-    });
+    consumer.on("producerclose", () => finalize("left"));
+    consumer.on("producerpause", () => finalize("paused"));
     producer.on("transportclose", () => finalize("transport closed"));
 
     return activeSegment;
   }
 
-  finalizeProducerStream(roomId: string, state: RecordingState, producerId: string, reason: string): void {
-    console.log("[RecordingManager] finalizeProducerStream producerId=%s reason=%s", producerId, reason);
+  finalizeProducerStream(roomId: string, state: RecordingState, producerId: string, _reason: string): void {
     this.finalizeProducerStreamAsync(roomId, state, producerId).catch(() => {
       /* log handled inside */
     });
@@ -191,15 +184,11 @@ export class RecordingManager {
     if (!seg) return;
 
     state.finalizedProducerIds.add(producerId);
-    console.log("[RecordingManager] producerId=%s added to finalizedProducerIds (total=%d) - will not re-add as late-joiner",
-      producerId, state.finalizedProducerIds.size);
     state.activeSegmentsByProducerId.delete(producerId);
 
     // Delay to let in-flight RTP reach FFmpeg before we close (avoids losing last ~1s).
     const flushMs = Number(process.env.FINALIZE_RTP_FLUSH_MS) || 1200;
-    console.log("[RecordingManager] finalizeProducerStreamAsync producerId=%s flushing RTP %dms", producerId, flushMs);
     await new Promise((r) => setTimeout(r, flushMs));
-    console.log("[RecordingManager] finalizeProducerStreamAsync producerId=%s flush done, closing consumer/transport", producerId);
 
     try {
       seg.consumer.close();
@@ -219,10 +208,8 @@ export class RecordingManager {
         /* ignore */
       }
     }, 15000);
-    console.log("[RecordingManager] finalizeProducerStreamAsync producerId=%s calling recorder.stop(15000)", producerId);
     const result = await seg.recorder.stop(15000);
     clearTimeout(sigkill);
-    console.log("[RecordingManager] finalizeProducerStreamAsync producerId=%s recorder.stop done success=%s", producerId, result.success);
     if (this.deps.recordingByRoom.get(roomId) !== state) return;
     const endMs = Date.now() - state.recordingStartedAt;
     if (result.success && result.filePath) {
@@ -263,7 +250,6 @@ export class RecordingManager {
     recordingEndedAtMs?: number,
   ): Promise<void> {
     const allSegments = [...state.finalizedSegments];
-    console.log("[RecordingManager] runAmixAndDeliver segmentCount=%d", allSegments.length);
     if (allSegments.length === 0) {
       doCallback(false);
       return;
@@ -326,7 +312,6 @@ export class RecordingManager {
         ]);
         proc.on("close", (code) => {
           const fileOk = code === 0 && existsSync(finalPath) && statSync(finalPath).size > 0;
-          console.log("[RecordingManager] runAmixAndDeliver single-segment ffmpeg done code=%d fileOk=%s", code, fileOk);
           doCallback(fileOk, tracksManifest, perTrackFilePaths);
           // Per-track file left for server to copy
         });
@@ -386,7 +371,6 @@ export class RecordingManager {
     );
     mixFf.on("close", () => {
       const fileOk = existsSync(finalPath) && statSync(finalPath).size > 0;
-      console.log("[RecordingManager] runAmixAndDeliver amix ffmpeg done fileOk=%s", fileOk);
       doCallback(fileOk, tracksManifest, perTrackFilePaths);
       // Per-track files are left for server to copy; server deletes after copy
     });

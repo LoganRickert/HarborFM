@@ -66,6 +66,12 @@ export function useMediasoupRoom(
 
     async function run(wsUrl: string, roomIdParam: string) {
       try {
+        // Defer WebSocket creation past the first microtask so React Strict Mode's
+        // double-mount cleanup can run first. Otherwise we create a WebSocket,
+        // cleanup closes it while CONNECTING, and the browser logs a spurious error.
+        await new Promise<void>((r) => queueMicrotask(r));
+        if (closed) return;
+
         const baseUrl = wsUrl.startsWith('ws') ? wsUrl : wsUrl.replace(/^http/, 'ws');
         webrtcWs = new WebSocket(`${baseUrl}?roomId=${encodeURIComponent(roomIdParam)}`);
         webrtcWsRef.current = webrtcWs;

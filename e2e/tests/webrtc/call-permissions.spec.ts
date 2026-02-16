@@ -32,16 +32,12 @@ async function logout(page: import('@playwright/test').Page) {
 
 /** Login via UI to ensure session cookies are in page context (needed for GET /users admin access). Requires no existing session - call logout() first if switching users. */
 async function loginAsViaPage(page: import('@playwright/test').Page, email: string, password: string) {
-  console.log('[loginAsViaPage] Navigating to /login...');
   await page.goto('/login');
-  console.log('[loginAsViaPage] URL after goto:', page.url());
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
   await page.getByRole('button', { name: /sign in/i }).click();
-  console.log('[loginAsViaPage] Submitted, waiting for redirect...');
   await expect(page).toHaveURL(/\/(?!login)/, { timeout: 10000 });
   await page.waitForLoadState('networkidle');
-  console.log('[loginAsViaPage] Done. URL:', page.url());
 }
 
 async function getCsrf(page: import('@playwright/test').Page): Promise<string> {
@@ -49,12 +45,8 @@ async function getCsrf(page: import('@playwright/test').Page): Promise<string> {
     const state = await page.context().storageState();
     const csrf = state.cookies.find((c) => c.name === 'harborfm_csrf')?.value;
     if (csrf) return csrf;
-    const cookieNames = state.cookies.map((c) => c.name).join(', ');
-    console.log(`[getCsrf] attempt ${i + 1}: no harborfm_csrf. Cookies: [${cookieNames}]`);
     await page.waitForTimeout(200);
   }
-  const state = await page.context().storageState();
-  console.log('[getCsrf] FAILED. All cookies:', JSON.stringify(state.cookies, null, 2));
   throw new Error('No CSRF cookie - session may not have been established');
 }
 
@@ -77,19 +69,16 @@ test.describe('Call permissions', () => {
 
   test('Editor can start call and see Record segment', async ({ page }) => {
     test.setTimeout(45000);
-    console.log('[Editor test] Going to / and logging in as admin...');
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
 
-    console.log('[Editor test] Creating podcast...');
     const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
       headers: { 'x-csrf-token': csrf },
       data: { title: 'E2E Perm Show', slug: `e2e-perm-${Date.now()}`, description: '' },
     });
     if (!podcastRes.ok()) throw new Error('Create podcast failed');
     const podcast = await podcastRes.json();
-    console.log('[Editor test] Created podcast:', podcast.id);
 
     const episodeRes = await page.request.post(`${API_BASE}/podcasts/${podcast.id}/episodes`, {
       headers: { 'x-csrf-token': csrf },
@@ -97,19 +86,15 @@ test.describe('Call permissions', () => {
     });
     if (!episodeRes.ok()) throw new Error('Create episode failed');
     const episode = await episodeRes.json();
-    console.log('[Editor test] Created episode:', episode.id);
 
     const editorEmail = `editor-perm-${Date.now()}@e2e.test`;
     const editorPassword = 'editor-password-123';
-    console.log('[Editor test] Registering editor:', editorEmail);
     const regRes = await page.request.post(`${API_BASE}/auth/register`, {
       data: { email: editorEmail, password: editorPassword },
     });
     if (!regRes.ok()) throw new Error(`Register failed: ${regRes.status()} ${await regRes.text()}`);
-    console.log('[Editor test] Registered. Re-logging in as admin (register may have changed session)...');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrfAfterReg = await getCsrf(page);
-    console.log('[Editor test] Got CSRF, adding as collaborator...');
 
     const collabRes = await page.request.post(`${API_BASE}/podcasts/${podcast.id}/collaborators`, {
       headers: { 'x-csrf-token': csrfAfterReg },
@@ -117,21 +102,12 @@ test.describe('Call permissions', () => {
     });
     if (!collabRes.ok()) {
       const body = await collabRes.text();
-      console.log('[Editor test] Add collaborator FAILED:', collabRes.status(), body);
       throw new Error(`Add collaborator failed: ${collabRes.status()} ${body}`);
     }
-    console.log('[Editor test] Added editor collaborator, logging out...');
 
     await logout(page);
-    console.log('[Editor test] Logged out, logging in as editor via UI...');
     await loginAsViaPage(page, editorEmail, editorPassword);
     await page.goto(`/episodes/${episode.id}`);
-
-    console.log('[Editor test] Navigated to episode. URL:', page.url(), 'Title:', await page.title());
-    const allButtons = await page.getByRole('button').allTextContents();
-    console.log('[Editor test] Visible buttons:', allButtons);
-    const pageText = await page.locator('body').innerText();
-    console.log('[Editor test] Page text (first 500 chars):', pageText.slice(0, 500));
 
     await expect(page.getByRole('button', { name: /start group call/i })).toBeVisible({ timeout: 20000 });
     await page.getByRole('button', { name: /start group call/i }).click();
@@ -180,11 +156,9 @@ test.describe('Call permissions', () => {
   });
 
   test('Read-only user cannot start call', async ({ page }) => {
-    console.log('[Read-only] Establishing session via API login...');
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
-    console.log('[Read-only] Got CSRF, creating podcast...');
 
     const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
       headers: { 'x-csrf-token': csrf },
@@ -207,11 +181,9 @@ test.describe('Call permissions', () => {
     });
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
 
-    console.log('[Read-only] GET /users...');
     const usersRes = await page.request.get(`${API_BASE}/users?limit=100&search=${encodeURIComponent(roEmail)}`);
     if (!usersRes.ok()) {
       const body = await usersRes.text();
-      console.log('[Read-only] GET /users FAILED:', usersRes.status(), body);
       throw new Error(`Get users failed: ${usersRes.status()} ${body}`);
     }
     const usersData = await usersRes.json();
@@ -240,11 +212,9 @@ test.describe('Call permissions', () => {
   });
 
   test('Disabled user cannot log in', async ({ page }) => {
-    console.log('[Disabled] Establishing session via API login...');
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
-    console.log('[Disabled] Got CSRF, registering user...');
 
     const disEmail = `dis-perm-${Date.now()}@e2e.test`;
     const disPassword = 'dis-password-123';
@@ -253,11 +223,9 @@ test.describe('Call permissions', () => {
     });
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
 
-    console.log('[Disabled] GET /users...');
     const usersRes = await page.request.get(`${API_BASE}/users?limit=100&search=${encodeURIComponent(disEmail)}`);
     if (!usersRes.ok()) {
       const body = await usersRes.text();
-      console.log('[Disabled] GET /users FAILED:', usersRes.status(), body);
       throw new Error(`Get users failed: ${usersRes.status()} ${body}`);
     }
     const usersData = await usersRes.json();
@@ -278,15 +246,9 @@ test.describe('Call permissions', () => {
 
   test('Owner can start and stop recording', async ({ page }) => {
     test.setTimeout(60000);
-    page.on('console', (msg) => {
-      const text = msg.text();
-      console.log(`[call-permissions] BROWSER ${msg.type()}:`, text.slice(0, 400));
-    });
-    console.log('[call-permissions] Logging in...');
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
-    console.log('[call-permissions] Creating podcast...');
 
     const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
       headers: { 'x-csrf-token': csrf },
@@ -294,7 +256,6 @@ test.describe('Call permissions', () => {
     });
     if (!podcastRes.ok()) throw new Error('Create podcast failed');
     const podcast = await podcastRes.json();
-    console.log('[call-permissions] Podcast id=', podcast.id);
 
     const episodeRes = await page.request.post(`${API_BASE}/podcasts/${podcast.id}/episodes`, {
       headers: { 'x-csrf-token': csrf },
@@ -302,82 +263,56 @@ test.describe('Call permissions', () => {
     });
     if (!episodeRes.ok()) throw new Error('Create episode failed');
     const episode = await episodeRes.json();
-    console.log('[call-permissions] Episode id=', episode.id);
 
     await page.addInitScript(() => {
       localStorage.setItem('harborfm_call_display_name', 'E2E Host');
     });
-    console.log('[call-permissions] Navigating to episode...');
     await page.goto(`/episodes/${episode.id}`);
-    console.log('[call-permissions] Page URL:', page.url());
 
-    console.log('[call-permissions] Clicking Start group call...');
     await page.getByRole('button', { name: /start group call/i }).click();
 
     const recordBtn = page.getByRole('button', { name: /record segment/i });
-    console.log('[call-permissions] Waiting for Record button (timeout 20s)...');
     await expect(recordBtn).toBeVisible({ timeout: 20000 });
-    console.log('[call-permissions] Record visible, waiting for producer-ready (timeout 25s)...');
     await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
-    console.log('[call-permissions] Producer ready');
 
     const panel = page.getByRole('region', { name: /group call/i });
-    console.log('[call-permissions] Panel before Record:', (await panel.textContent())?.slice(0, 250));
 
     let recordingStarted = false;
     const stopBtn = page.getByRole('button', { name: /stop recording/i });
     const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i);
     for (let attempt = 0; attempt < 3; attempt++) {
       await page.waitForTimeout(attempt === 0 ? 2000 : 3000);
-      console.log(`[call-permissions] Attempt ${attempt + 1}/3: clicking Record...`);
-      console.log(`[call-permissions] Panel before click:`, (await panel.textContent())?.slice(0, 300));
       await recordBtn.click();
-      console.log(`[call-permissions] Record clicked, waiting 500ms...`);
       await page.waitForTimeout(500);
 
       try {
-        console.log(`[call-permissions] Waiting for Stop button (timeout 15s)...`);
         await expect(stopBtn).toBeVisible({ timeout: 15000 });
         const errorVisible = await errorEl.isVisible();
         if (!errorVisible) {
           recordingStarted = true;
-          console.log(`[call-permissions] Attempt ${attempt + 1}: SUCCESS - Stop visible, no error`);
           break;
         }
-        console.log(`[call-permissions] Stop visible but error also visible, retrying`);
-      } catch (e) {
-        console.log(`[call-permissions] Attempt ${attempt + 1}: Stop button NOT visible after 15s`, e);
+      } catch {
+        /* retry */
       }
-      const stopVisible = await stopBtn.isVisible();
-      const errorText = (await errorEl.isVisible()) ? await errorEl.first().textContent() : null;
-      console.log(`[call-permissions] Attempt ${attempt + 1}: stopVisible=${stopVisible} errorVisible=${!!errorText} errorText=${errorText ?? 'none'}`);
-      console.log(`[call-permissions] Attempt ${attempt + 1}: full panel=`, (await panel.textContent())?.slice(0, 500));
-      if (errorText) console.log(`[call-permissions] Attempt ${attempt + 1}: error="${errorText.trim()}"`);
     }
     if (!recordingStarted) {
       const errorText = (await errorEl.isVisible()) ? await errorEl.first().textContent() : null;
       const mediaBanner = page.getByText(/audio is unavailable|webrtc.*not.*running/i);
       const mediaUnavail = (await mediaBanner.isVisible()) ? await mediaBanner.first().textContent() : null;
-      console.log('[call-permissions] FAILURE - full panel:', await panel.textContent());
       throw new Error(
         `Recording never started after 3 attempts. ` +
         `Error on page: ${errorText ?? 'none'}. ` +
         `Media unavailable: ${mediaUnavail ?? 'no'}.`
       );
     }
-    console.log('[call-permissions] Clicking Stop recording...');
-    console.log('[call-permissions] Panel before Stop:', (await panel.textContent())?.slice(0, 350));
     await page.getByRole('button', { name: /stop recording/i }).click();
-    console.log('[call-permissions] Stop clicked, waiting for "recording stopped successfully" (15s)...');
     for (let i = 0; i < 15; i++) {
       await page.waitForTimeout(1000);
       const successVisible = await page.getByText(/recording stopped successfully/i).isVisible();
-      const processingVisible = await page.getByText(/processing the segment/i).isVisible();
-      console.log(`[call-permissions] t=${i + 1}s successVisible=${successVisible} processingVisible=${processingVisible} panel=`, (await panel.textContent())?.slice(0, 200));
       if (successVisible) break;
     }
     await expect(page.getByText(/recording stopped successfully/i)).toBeVisible({ timeout: 1000 });
-    console.log('[call-permissions] Test passed');
   });
 
   test('Guest has no Record button', async ({ page, context }) => {
@@ -447,11 +382,9 @@ test.describe('Call storage limits', () => {
     if (!existsSync(join(E2E_DIR, 'test-data', '20260212_133813_rXR9IQ1yujd-cq4JYRNCY.mp3'))) {
       test.skip(true, 'test-data mp3 not found');
     }
-    console.log('[Storage-1] Establishing session via API login...');
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
-    console.log('[Storage-1] Got CSRF, registering owner...');
 
     const ownerEmail = `storage-owner-${Date.now()}@e2e.test`;
     const ownerPassword = 'owner-password-123';
@@ -460,21 +393,17 @@ test.describe('Call storage limits', () => {
     });
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
 
-    console.log('[Storage-1] GET /users...');
     const usersRes = await page.request.get(`${API_BASE}/users?limit=100&search=${encodeURIComponent(ownerEmail)}`);
     if (!usersRes.ok()) {
       const body = await usersRes.text();
-      console.log('[Storage-1] GET /users FAILED:', usersRes.status(), body);
       throw new Error(`Get users failed: ${usersRes.status()} ${body}`);
     }
     const usersData = await usersRes.json();
     const ownerUser = usersData.users?.find((u: { email: string }) => u.email === ownerEmail);
     if (!ownerUser) throw new Error('User not found');
-    console.log('[Storage-1] Found owner, logging in as owner...');
 
     await loginAs(page, ownerEmail, ownerPassword);
     const ownerCsrf = await getCsrf(page);
-    console.log('[Storage-1] Creating podcast, uploading...');
 
     const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
       headers: { 'x-csrf-token': ownerCsrf },
@@ -527,11 +456,9 @@ test.describe('Call storage limits', () => {
     if (!existsSync(join(E2E_DIR, 'test-data', '20260212_133813_rXR9IQ1yujd-cq4JYRNCY.mp3'))) {
       test.skip(true, 'test-data mp3 not found');
     }
-    console.log('[Storage-2] Establishing session via API login...');
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
-    console.log('[Storage-2] Got CSRF...');
 
     const ownerEmail = `storage-owner2-${Date.now()}@e2e.test`;
     const ownerPassword = 'owner-password-123';
@@ -540,21 +467,17 @@ test.describe('Call storage limits', () => {
     });
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
 
-    console.log('[Storage-2] GET /users...');
     const usersRes = await page.request.get(`${API_BASE}/users?limit=100&search=${encodeURIComponent(ownerEmail)}`);
     if (!usersRes.ok()) {
       const body = await usersRes.text();
-      console.log('[Storage-2] GET /users FAILED:', usersRes.status(), body);
       throw new Error(`Get users failed: ${usersRes.status()} ${body}`);
     }
     const usersData = await usersRes.json();
     const ownerUser = usersData.users?.find((u: { email: string }) => u.email === ownerEmail);
     if (!ownerUser) throw new Error('User not found');
-    console.log('[Storage-2] Found owner, logging in...');
 
     await loginAs(page, ownerEmail, ownerPassword);
     const ownerCsrf = await getCsrf(page);
-    console.log('[Storage-2] Creating podcast, uploading 7 episodes...');
 
     const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
       headers: { 'x-csrf-token': ownerCsrf },

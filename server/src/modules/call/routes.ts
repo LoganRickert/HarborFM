@@ -176,28 +176,14 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         origin,
         body.password ?? null,
         async (endedSession) => {
-          console.log(
-            "[hostAway] onSessionEnd sessionId=%s roomId=%s recordingInProgress=%s",
-            endedSession.sessionId,
-            endedSession.roomId,
-            endedSession.recordingInProgress
-          );
           if (
             endedSession.roomId &&
             endedSession.recordingInProgress === true
           ) {
             const webrtcCfg = getWebRtcConfig();
-            const url = webrtcCfg?.serviceUrl
-              ? `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`
-              : null;
-            console.log(
-              "[hostAway] Stop-recording roomId=%s webrtcUrl=%s",
-              endedSession.roomId,
-              url ?? "(no serviceUrl)"
-            );
             if (webrtcCfg?.serviceUrl) {
               try {
-                const res = await fetch(
+                await fetch(
                   `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/stop-recording`,
                   {
                     method: "POST",
@@ -205,17 +191,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     body: JSON.stringify({ roomId: endedSession.roomId }),
                   },
                 );
-                console.log(
-                  "[hostAway] Stop-recording response roomId=%s status=%d",
-                  endedSession.roomId,
-                  res.status
-                );
               } catch (err) {
                 request.log.warn(
                   { err, roomId: endedSession.roomId },
                   "WebRTC stop-recording failed on host-away call end",
                 );
-                console.warn("[hostAway] Stop-recording fetch failed", err);
               }
             }
           }
@@ -558,6 +538,43 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  app.post(
+    "/call/internal/recording-progress",
+    {
+      schema: {
+        tags: ["Call"],
+        summary: "Notify recording processing progress (internal)",
+        description:
+          "Called by webrtc service to broadcast progress during post-stop processing. Requires X-Recording-Secret.",
+        body: {
+          type: "object",
+          properties: {
+            sessionId: { type: "string", nullable: true },
+            stage: { type: "string" },
+            message: { type: "string", nullable: true },
+          },
+          required: ["stage"],
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const secret = request.headers["x-recording-secret"] as string | undefined;
+      const webrtcCfg = getWebRtcConfig();
+      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+      const body = request.body as { sessionId?: string | null; stage: string; message?: string };
+      if (body.sessionId) {
+        broadcastToSession(body.sessionId, {
+          type: "recordingProgress",
+          stage: body.stage,
+          message: body.message,
+        });
+      }
+      return reply.send({ ok: true });
+    },
+  );
+
   app.get(
     "/call/internal/library-stream",
     {
@@ -666,6 +683,13 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         perTrackFilePaths?: string[];
       };
       try {
+        if (body.sessionId) {
+          broadcastToSession(body.sessionId, {
+            type: "recordingProgress",
+            stage: "adding",
+            message: "Adding segment to episode…",
+          });
+        }
         const webrtcDir = getWebrtcRecordingsDir();
         const sourcePath = resolve(join(webrtcDir, body.filePath));
         assertResolvedPathUnder(sourcePath, webrtcDir);

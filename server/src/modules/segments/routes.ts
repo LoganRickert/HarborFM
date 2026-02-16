@@ -443,7 +443,15 @@ export async function segmentRoutes(app: FastifyInstance) {
            WHERE s.episode_id = ? ORDER BY s.position ASC, s.created_at ASC`,
         )
         .all(episodeId) as Record<string, unknown>[];
-      return { segments: rows };
+      const segments = rows.map((row) => {
+        const audio = getSegmentAudioPath(row, access.podcastId, episodeId);
+        const waveformExists =
+          audio && existsSync(audio.path)
+            ? existsSync(waveformPath(audio.path))
+            : false;
+        return { ...row, waveform_exists: waveformExists };
+      });
+      return { segments };
     },
   );
 
@@ -714,10 +722,20 @@ export async function segmentRoutes(app: FastifyInstance) {
       }
       const rows = db
         .prepare(
-          "SELECT * FROM episode_segments WHERE episode_id = ? ORDER BY position ASC",
+          `SELECT s.*, a.name AS asset_name FROM episode_segments s
+           LEFT JOIN reusable_assets a ON a.id = s.reusable_asset_id
+           WHERE s.episode_id = ? ORDER BY s.position ASC`,
         )
         .all(episodeId) as Record<string, unknown>[];
-      return { segments: rows };
+      const segments = rows.map((row) => {
+        const audio = getSegmentAudioPath(row, access.podcastId, episodeId);
+        const waveformExists =
+          audio && existsSync(audio.path)
+            ? existsSync(waveformPath(audio.path))
+            : false;
+        return { ...row, waveform_exists: waveformExists };
+      });
+      return { segments };
     },
   );
 
@@ -863,6 +881,77 @@ export async function segmentRoutes(app: FastifyInstance) {
         .header("Content-Type", contentType)
         .header("Cache-Control", "private, no-transform");
       return reply.send(result.stream);
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/waveforms-bulk",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Segments"],
+        summary: "Get multiple segment waveforms",
+        description:
+          "Returns waveform JSON for up to 10 segments at once. All must belong to the episode. Requires auth.",
+        params: {
+          type: "object",
+          properties: { episodeId: { type: "string" } },
+          required: ["episodeId"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            segment_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 10 },
+          },
+          required: ["segment_ids"],
+        },
+        response: {
+          200: { description: "Waveforms map" },
+          400: { description: "Validation failed" },
+          404: { description: "Episode not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const paramsParsed = segmentEpisodeIdOnlyParamSchema.safeParse(request.params);
+      if (!paramsParsed.success) {
+        return reply
+          .status(400)
+          .send({ error: paramsParsed.error.issues[0]?.message ?? "Validation failed", details: paramsParsed.error.flatten() });
+      }
+      const body = request.body as { segment_ids?: unknown };
+      const segmentIds = Array.isArray(body?.segment_ids)
+        ? (body.segment_ids as string[]).filter((id): id is string => typeof id === "string")
+        : [];
+      if (segmentIds.length === 0 || segmentIds.length > 10) {
+        return reply
+          .status(400)
+          .send({ error: "segment_ids must be an array of 1-10 segment ID strings" });
+      }
+      const { episodeId } = paramsParsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      const waveforms: Record<string, unknown> = {};
+      for (const segmentId of segmentIds) {
+        const segment = db
+          .prepare("SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?")
+          .get(segmentId, episodeId) as Record<string, unknown> | undefined;
+        if (!segment) continue;
+        const audio = getSegmentAudioPath(segment, access.podcastId, episodeId);
+        if (!audio || !existsSync(audio.path)) continue;
+        const wavPath = waveformPath(audio.path);
+        if (!existsSync(wavPath)) continue;
+        try {
+          assertPathUnder(audio.path, audio.base);
+          assertPathUnder(wavPath, audio.base);
+          const json = readFileSync(wavPath, "utf-8");
+          waveforms[segmentId] = JSON.parse(json);
+        } catch {
+          /* skip on read/parse error */
+        }
+      }
+      reply.header("Cache-Control", "private, max-age=3600");
+      return reply.send({ waveforms });
     },
   );
 

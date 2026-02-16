@@ -77,6 +77,24 @@ export function segmentWaveformUrl(episodeId: string, segmentId: string): string
   return `${BASE}/episodes/${episodeId}/segments/${segmentId}/waveform`;
 }
 
+/** Fetch up to 10 waveforms at once. Returns { waveforms: { [segmentId]: WaveformData } }. */
+export function fetchSegmentWaveformsBulk(
+  episodeId: string,
+  segmentIds: string[],
+): Promise<{ waveforms: Record<string, { data?: number[] }> }> {
+  if (segmentIds.length === 0) return Promise.resolve({ waveforms: {} });
+  if (segmentIds.length > 10) throw new Error('max 10 segment_ids');
+  return fetch(`${BASE}/episodes/${episodeId}/segments/waveforms-bulk`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ segment_ids: segmentIds }),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json();
+  });
+}
+
 export function getSegmentTranscript(episodeId: string, segmentId: string): Promise<TranscriptTextResponse> {
   return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/transcript`, { credentials: 'include' }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });

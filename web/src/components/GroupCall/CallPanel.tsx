@@ -58,6 +58,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const [recordingConfirmed, setRecordingConfirmed] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingProcessing, setRecordingProcessing] = useState(false);
+  const [recordingProgressMessage, setRecordingProgressMessage] = useState<string | null>(null);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [webrtcUrlFromWs, setWebrtcUrlFromWs] = useState<string | undefined>(undefined);
@@ -92,7 +93,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   useWakeLock(true);
 
   useEffect(() => {
-    console.log('[CallPanel] soundboardOpen changed', soundboardOpen);
     setSoundboardPanelOpen(soundboardOpen);
     return () => setSoundboardPanelOpen(false);
   }, [soundboardOpen, setSoundboardPanelOpen]);
@@ -132,7 +132,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data as string);
-        console.log('[CallPanel] ws message type=', msg.type);
         if (msg.type === 'alreadyInCall') {
           setAlreadyInCall(true);
         } else if (msg.type === 'joined' && msg.participants) {
@@ -162,35 +161,36 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         } else if (msg.type === 'error') {
           onCallEnded();
         } else if (msg.type === 'recordingStarted') {
-          console.log('[CallPanel] recordingStarted');
           setRecording(true);
           setRecordingConfirmed(true);
           setRecordingSeconds(0);
           setRecordingProcessing(false);
         } else if (msg.type === 'recordingStopped') {
-          console.log('[CallPanel] recordingStopped (processing…)');
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingError(null);
           setRecordingProcessing(true);
+          setRecordingProgressMessage('Finalizing audio streams from participants');
+        } else if (msg.type === 'recordingProgress') {
+          setRecordingProgressMessage(msg.message ?? msg.stage ?? 'Processing…');
         } else if (msg.type === 'recordingError') {
-          console.log('[CallPanel] recordingError', msg.error);
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingProcessing(false);
+          setRecordingProgressMessage(null);
           setRecordingError(msg.error ?? 'Recording failed');
         } else if (msg.type === 'recordingStopFailed') {
-          console.log('[CallPanel] recordingStopFailed', msg.error);
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingProcessing(false);
+          setRecordingProgressMessage(null);
           setRecordingError(msg.error ?? 'Failed to stop recording');
         } else if (msg.type === 'segmentRecorded') {
-          console.log('[CallPanel] segmentRecorded');
           setRecording(false);
           setRecordingConfirmed(false);
           setRecordingError(null);
           setRecordingProcessing(false);
+          setRecordingProgressMessage(null);
           onSegmentRecorded?.();
         } else if (msg.type === 'setMute') {
           setMuted(msg.muted === true);
@@ -274,27 +274,19 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
 
   const handleStartRecording = () => {
     const ws = wsRef.current;
-    console.log('[CallPanel] handleStartRecording wsState=', ws?.readyState);
     if (ws?.readyState === WebSocket.OPEN) {
-      console.log('[CallPanel] handleStartRecording → startRecording');
       ws.send(JSON.stringify({ type: 'startRecording', clientEpochMs: Date.now() }));
       setRecordingSeconds(0);
       setRecording(true);
       setRecordingConfirmed(false);
-    } else {
-      console.log('[CallPanel] handleStartRecording skipped (ws not open)');
     }
   };
 
   const handleStopRecording = () => {
     const ws = wsRef.current;
-    console.log('[CallPanel] handleStopRecording wsState=', ws?.readyState);
     if (ws?.readyState === WebSocket.OPEN) {
-      console.log('[CallPanel] handleStopRecording → stopRecording');
       ws.send(JSON.stringify({ type: 'stopRecording' }));
       setRecording(false);
-    } else {
-      console.log('[CallPanel] handleStopRecording skipped (ws not open)');
     }
   };
 
@@ -659,7 +651,8 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
         </div>
         {!minimized && recordingProcessing && (
           <p className={styles.recordingProcessing} role="status">
-            Recording stopped successfully. We&apos;re now processing the segment. It should be added shortly.
+            {recordingProgressMessage ||
+              "Recording stopped successfully. We're now processing the segment. It should be added shortly."}
           </p>
         )}
         {!minimized && recordingError && (

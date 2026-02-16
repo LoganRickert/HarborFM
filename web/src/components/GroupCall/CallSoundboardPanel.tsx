@@ -171,13 +171,6 @@ export function CallSoundboardPanel({
   );
   const hasMore = visibleCount < filteredAndSorted.length;
 
-  useEffect(() => {
-    const assets = data?.assets ?? [];
-    const playable = assets.filter((a) => (a.duration_sec ?? 0) > 0);
-    if (assets.length > 0) {
-      console.log('[Soundboard] assets loaded', { total: assets.length, playable: playable.length, ids: playable.map((a) => a.id) });
-    }
-  }, [data?.assets]);
 
   useEffect(() => {
     setVisibleCount(SOUNDBOARD_PAGE_SIZE);
@@ -455,7 +448,6 @@ export function CallSoundboardPanel({
                       currentTime={playingId === asset.id ? currentTime : 0}
                       onPlayPause={(e) => {
                         e?.stopPropagation?.();
-                        console.log('[Soundboard] play button clicked', { assetId: asset.id, assetName: asset.name });
                         handlePlay(asset);
                       }}
                       onSeek={(time) => handleSeek(asset, time)}

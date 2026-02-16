@@ -6,9 +6,6 @@ import { registerRoutes } from "./routes/index.js";
 import { wsHandler } from "./ws/handler.js";
 import {
   PORT,
-  RTC_MIN_PORT,
-  RTC_MAX_PORT,
-  ANNOUNCED_IP,
   RECORDING_DATA_DIR,
   RECORD_PORT_BASE,
   RECORD_PORT_STRIDE,
@@ -80,12 +77,3 @@ markInterruptedSegments(RECORDING_DATA_DIR);
 
 await app.listen({ port: PORT, host: "0.0.0.0" });
 console.log("[webrtc] Service listening on port %d", PORT);
-console.log(
-  "[webrtc] Config RTC_MIN_PORT=%d RTC_MAX_PORT=%d MEDIASOUP_ANNOUNCED_IP=%s RECORDING_DATA_DIR=%s MAIN_APP_URL=%s DATA_DIR=%s",
-  RTC_MIN_PORT,
-  RTC_MAX_PORT,
-  ANNOUNCED_IP ?? "(none)",
-  RECORDING_DATA_DIR,
-  MAIN_APP_URL || "(none)",
-  process.env.DATA_DIR ?? "(none)"
-);

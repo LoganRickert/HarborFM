@@ -69,7 +69,6 @@ function ensureHostAwayChecker(
   onSessionEnd: (session: CallSession) => void | Promise<void>,
 ): void {
   if (hostAwayCheckInterval != null) return;
-  console.log("[hostAway] Starting checker intervalMs=%d", HOST_AWAY_CHECK_INTERVAL_MS);
   hostAwayCheckInterval = setInterval(() => {
     const now = Date.now();
     for (const session of sessionsById.values()) {
@@ -84,12 +83,6 @@ function ensureHostAwayChecker(
         shouldEnd = now - session.lastHostHeartbeatAt >= grace;
       }
       if (shouldEnd) {
-        console.log(
-          "[hostAway] Ending session sessionId=%s roomId=%s recordingInProgress=%s",
-          session.sessionId,
-          session.roomId,
-          session.recordingInProgress
-        );
         session.ended = true;
         const result = onSessionEnd(session);
         if (result && typeof (result as Promise<unknown>).catch === "function") {
@@ -111,12 +104,6 @@ export function setHostDisconnected(sessionId: string): { gracePeriodMs: number 
   hostP.disconnected = true;
   session.hostDisconnectedAt = Date.now();
   session.hostDisconnectGraceMs = getHostDisconnectGraceMs(session);
-  console.log(
-    "[hostAway] setHostDisconnected sessionId=%s graceMs=%d recordingInProgress=%s",
-    sessionId,
-    session.hostDisconnectGraceMs,
-    session.recordingInProgress
-  );
   return { gracePeriodMs: session.hostDisconnectGraceMs };
 }
 
