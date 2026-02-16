@@ -258,6 +258,13 @@ export const wsHandler = async (socket: any, req: any) => {
         if (!producer) return;
         const safeName = sanitizeParticipantName(participantName);
         producerParticipantMapRef.set(producerId, { participantId, participantName: safeName });
+        for (const [s, r] of socketRooms.entries()) {
+          if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
+            (s as { send: (d: string) => void }).send(
+              JSON.stringify({ type: "producerParticipant", producerId, participantId })
+            );
+          }
+        }
         return;
       }
 

@@ -616,7 +616,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
                 </button>
               </span>
               <div className={styles.participantMicLevel} role="img" aria-label="Microphone level">
-                <div className={styles.micLevelBar} style={{ width: `${p.isHost ? micLevel : (remoteMicLevels.get(p.id) ?? 0)}%` }} />
+                <div className={styles.micLevelBar} style={{ width: `${p.muted ? 0 : (p.isHost ? micLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
               </div>
             </li>
           ))}

@@ -591,7 +591,7 @@ export function CallJoin() {
                   aria-label="Microphone level"
                   title={p.id === myParticipantId ? 'Click if the bar doesn\'t move' : undefined}
                 >
-                  <div className={styles.micLevelBar} style={{ width: `${p.id === myParticipantId ? micLevel : (remoteMicLevels.get(p.id) ?? 0)}%` }} />
+                  <div className={styles.micLevelBar} style={{ width: `${p.muted ? 0 : (p.id === myParticipantId ? micLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
                 </div>
               </li>
             ))}

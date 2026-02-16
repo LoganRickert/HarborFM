@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
 import { createAudioLevelProcessor } from '../utils/audioLevel.js';
 
-export type RemoteTrackInfo = { track: MediaStreamTrack; source?: string; participantId?: string };
+export type RemoteTrackInfo = { track: MediaStreamTrack; source?: string; participantId?: string; producerId: string };
 
 export function useMediasoupRoom(
   webrtcUrl: string | undefined,
@@ -109,6 +109,21 @@ export function useMediasoupRoom(
             const msg = JSON.parse(event.data as string) as { type: string; [k: string]: unknown };
             if (msg.type === 'newProducer' && typeof msg.producerId === 'string') {
               handleNewProducer(msg.producerId);
+              return;
+            }
+            if (msg.type === 'producerParticipant' && typeof msg.producerId === 'string' && typeof msg.participantId === 'string') {
+              const producerId = msg.producerId as string;
+              const participantId = msg.participantId as string;
+              setRemoteTracks((prev) => {
+                const next = new Map(prev);
+                for (const [cid, info] of next) {
+                  if (info.producerId === producerId) {
+                    next.set(cid, { ...info, participantId });
+                    break;
+                  }
+                }
+                return next;
+              });
               return;
             }
             if (msg.type === 'soundboardStopped') {
@@ -303,6 +318,7 @@ export function useMediasoupRoom(
             consumedProducerIds.add(producerId);
             setRemoteTracks((prev) => new Map(prev).set(consumer.id, {
               track: consumer.track,
+              producerId,
               ...(source ? { source } : {}),
               ...(participantId ? { participantId } : {}),
             }));
@@ -319,6 +335,7 @@ export function useMediasoupRoom(
             consumedProducerIds.add(producerId);
             setRemoteTracks((prev) => new Map(prev).set(consumer.id, {
               track: consumer.track,
+              producerId,
               ...(source ? { source } : {}),
               ...(participantId ? { participantId } : {}),
             }));
@@ -349,32 +366,41 @@ export function useMediasoupRoom(
 
   useEffect(() => {
     const entries = Array.from(remoteTracks.entries()).filter(
-      ([, info]) => info.participantId && info.source !== 'soundboard'
+      ([, info]) => info.source !== 'soundboard'
     );
     if (entries.length === 0) return;
 
     const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     const ctx = new AudioCtx();
-    const processors: { participantId: string; computeLevel: () => number }[] = [];
+    const processors: { producerId: string; computeLevel: () => number }[] = [];
 
     for (const [, info] of entries) {
-      if (!info.participantId) continue;
       try {
         const src = ctx.createMediaStreamSource(new MediaStream([info.track]));
         const analyser = ctx.createAnalyser();
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0;
         src.connect(analyser);
-        processors.push({ participantId: info.participantId, computeLevel: createAudioLevelProcessor(analyser) });
+        analyser.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        processors.push({ producerId: info.producerId, computeLevel: createAudioLevelProcessor(analyser) });
       } catch {
         // skip failed setup
       }
+    }
+
+    const producerIdToParticipantId = new Map<string, string>();
+    for (const [, info] of remoteTracks) {
+      if (info.participantId) producerIdToParticipantId.set(info.producerId, info.participantId);
     }
 
     let rafId: number | undefined;
     function tick() {
       if (processors.length === 0) return;
       const next = new Map<string, number>();
-      for (const { participantId, computeLevel } of processors) {
-        next.set(participantId, computeLevel());
+      for (const { producerId, computeLevel } of processors) {
+        const participantId = producerIdToParticipantId.get(producerId);
+        if (participantId) next.set(participantId, computeLevel());
       }
       setRemoteMicLevels(next);
       rafId = requestAnimationFrame(tick);
