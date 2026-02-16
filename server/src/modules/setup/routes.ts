@@ -80,7 +80,8 @@ export async function setupRoutes(app: FastifyInstance) {
           captchaProvider !== "none" ? (settings.captcha_site_key ?? "") : "";
         const emailConfigured =
           settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid";
+          settings.email_provider === "sendgrid" ||
+          settings.email_provider === "webhook";
         return {
           setupRequired: false,
           registrationEnabled: Boolean(settings.registration_enabled),

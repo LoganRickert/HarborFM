@@ -1,14 +1,24 @@
-# For local dev: server runs with pnpm dev, webrtc runs in Docker.
-# Copy to docker-compose.override.yml so webrtc writes to your server data dir:
+# For local dev: build harborfm and webrtc from local source.
+# Copy to docker-compose.override.yml:
 #
 #   cp docker-compose.override.example.yml docker-compose.override.yml
 #
-# This overrides webrtc's /webrtc (RECORDING_DATA_DIR) to use your host
-# server/data/webrtc-recordings so the host server can read recordings.
-
-# sudo chown -R 10001:10001 ./server/data/webrtc-recordings
+# harborfm and webrtc will use local builds instead of GHCR images.
+# webrtc writes to server/data/webrtc-recordings so the host server can read recordings.
+#
+# If permissions errors: sudo chown -R 10001:10001 ./server/data/webrtc-recordings
 
 services:
+  harborfm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: harborfm:local
+
   webrtc:
+    build:
+      context: .
+      dockerfile: webrtc-service/Dockerfile
+    image: harborfm-webrtc:local
     volumes:
       - ./server/data/webrtc-recordings:/webrtc

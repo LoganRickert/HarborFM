@@ -27,6 +27,7 @@
     "e2e:webrtc:slow": "cd e2e && pnpm run e2e:webrtc:slow",
     "e2e:webrtc:full": "cd e2e && pnpm run e2e:webrtc:full",
     "e2e:webrtc:secret-mismatch": "cd e2e && pnpm run e2e:webrtc:secret-mismatch",
+    "e2e:seed": "cd e2e && pnpm run e2e:seed",
     "test": "pnpm run lint && pnpm run build && pnpm run e2e && pnpm run db:migrate:test"
   },
   "engines": {

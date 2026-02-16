@@ -300,3 +300,9 @@ export const DNS_SECRETS_AAD =
 /** Initial setup token for /setup?id=... URL. Env: SETUP_ID or SETUP_TOKEN. When set, used instead of file. */
 export const SETUP_ID =
   process.env.SETUP_ID?.trim() || process.env.SETUP_TOKEN?.trim() || null;
+
+/** Bootstrap admin email. With ADMIN_PASSWORD_HASH, creates admin on first boot. Env: ADMIN_EMAIL. */
+export const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || null;
+
+/** Bootstrap admin password (argon2 hash). Requires ADMIN_EMAIL. Env: ADMIN_PASSWORD_HASH. */
+export const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH?.trim() || null;

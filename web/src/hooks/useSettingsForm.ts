@@ -34,6 +34,8 @@ const DEFAULT_FORM_STATE: AppSettings = {
   captcha_site_key: '',
   captcha_secret_key: '',
   email_provider: 'none',
+  email_webhook_url: '',
+  email_webhook_field_key: 'content',
   smtp_host: '',
   smtp_port: 587,
   smtp_secure: true,

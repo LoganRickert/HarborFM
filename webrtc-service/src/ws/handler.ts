@@ -264,6 +264,7 @@ export const wsHandler = async (socket: any, req: any) => {
           participantName?: string;
         };
         if (!producerId || !participantId || typeof participantName !== "string") return;
+        if (producerToSocket.get(producerId) !== socket) return;
         try {
           assertSafeId(participantId, "participantId");
         } catch {

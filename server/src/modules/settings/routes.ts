@@ -115,7 +115,11 @@ export interface AppSettings {
   /** Secret key for the selected CAPTCHA provider. */
   captcha_secret_key: string;
   /** Email provider for sending mail (e.g. notifications). */
-  email_provider: "none" | "smtp" | "sendgrid";
+  email_provider: "none" | "smtp" | "sendgrid" | "webhook";
+  /** Webhook URL for email (when email_provider is webhook). POST body is { [email_webhook_field_key]: content }. */
+  email_webhook_url: string;
+  /** Key for the webhook JSON body (default "content"). Discord uses "content". */
+  email_webhook_field_key: string;
   /** SMTP host. */
   smtp_host: string;
   /** SMTP port (e.g. 587). */
@@ -218,6 +222,8 @@ const DEFAULTS: AppSettings = {
   captcha_site_key: "",
   captcha_secret_key: "",
   email_provider: "none",
+  email_webhook_url: "",
+  email_webhook_field_key: "content",
   smtp_host: "",
   smtp_port: 587,
   smtp_secure: true,
@@ -378,6 +384,14 @@ export function migrateSettingsFromFile(): void {
       "email_provider",
       (settings as Partial<AppSettings>).email_provider ?? "none",
     );
+    stmt.run(
+      "email_webhook_url",
+      (settings as Partial<AppSettings>).email_webhook_url ?? "",
+    );
+    stmt.run(
+      "email_webhook_field_key",
+      (settings as Partial<AppSettings>).email_webhook_field_key ?? "content",
+    );
     stmt.run("smtp_host", (settings as Partial<AppSettings>).smtp_host ?? "");
     stmt.run(
       "smtp_port",
@@ -447,6 +461,34 @@ export function migrateSettingsFromFile(): void {
       return;
     }
     console.error("Failed to migrate settings from file:", err);
+  }
+}
+
+/**
+ * Populate WebRTC settings in DB from env vars when WebRTC is enabled via env (Docker/PM2).
+ * Only writes when env has values and DB has empty webrtc settings, so the Settings page displays them.
+ */
+export function migrateWebRtcFromEnv(): void {
+  const envService = process.env.WEBRTC_SERVICE_URL?.trim();
+  const envPublic = process.env.WEBRTC_PUBLIC_WS_URL?.trim();
+  if (!envService || !envPublic) return;
+
+  try {
+    const rows = db.prepare("SELECT key, value FROM settings WHERE key IN ('webrtc_service_url', 'webrtc_public_ws_url')").all() as Array<{ key: string; value: string }>;
+    const current: Record<string, string> = {};
+    for (const row of rows) current[row.key] = row.value ?? "";
+
+    const needsService = !(current.webrtc_service_url ?? "").trim();
+    const needsPublic = !(current.webrtc_public_ws_url ?? "").trim();
+    if (!needsService && !needsPublic) return;
+
+    const stmt = db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))");
+    if (needsService) stmt.run("webrtc_service_url", envService);
+    if (needsPublic) stmt.run("webrtc_public_ws_url", envPublic);
+    console.log("Migrated WebRTC settings from environment to database");
+  } catch (err) {
+    if ((err as Error).message?.includes("no such table")) return;
+    console.warn("Could not migrate WebRTC settings from env:", err);
   }
 }
 
@@ -534,9 +576,13 @@ export function readSettings(): AppSettings {
       settings.captcha_secret_key = row.value;
     else if (row.key === "email_provider") {
       const v = row.value as AppSettings["email_provider"];
-      if (v === "smtp" || v === "sendgrid" || v === "none")
+      if (v === "smtp" || v === "sendgrid" || v === "webhook" || v === "none")
         settings.email_provider = v;
-    } else if (row.key === "smtp_host") settings.smtp_host = row.value;
+    } else if (row.key === "email_webhook_url")
+      settings.email_webhook_url = row.value;
+    else if (row.key === "email_webhook_field_key")
+      settings.email_webhook_field_key = row.value;
+    else if (row.key === "smtp_host") settings.smtp_host = row.value;
     else if (row.key === "smtp_port") {
       const v = Number(row.value);
       if (!Number.isNaN(v)) settings.smtp_port = v;
@@ -655,6 +701,9 @@ export function readSettings(): AppSettings {
     captcha_secret_key:
       settings.captcha_secret_key ?? DEFAULTS.captcha_secret_key,
     email_provider: settings.email_provider ?? DEFAULTS.email_provider,
+    email_webhook_url: settings.email_webhook_url ?? DEFAULTS.email_webhook_url,
+    email_webhook_field_key:
+      settings.email_webhook_field_key ?? DEFAULTS.email_webhook_field_key,
     smtp_host: settings.smtp_host ?? DEFAULTS.smtp_host,
     smtp_port: settings.smtp_port ?? DEFAULTS.smtp_port,
     smtp_secure: settings.smtp_secure ?? DEFAULTS.smtp_secure,
@@ -786,6 +835,11 @@ function writeSettings(settings: AppSettings): void {
   stmt.run("captcha_site_key", settings.captcha_site_key);
   stmt.run("captcha_secret_key", settings.captcha_secret_key);
   stmt.run("email_provider", settings.email_provider);
+  stmt.run("email_webhook_url", settings.email_webhook_url ?? "");
+  stmt.run(
+    "email_webhook_field_key",
+    settings.email_webhook_field_key ?? "content",
+  );
   stmt.run("smtp_host", settings.smtp_host);
   stmt.run("smtp_port", String(settings.smtp_port));
   stmt.run("smtp_secure", String(settings.smtp_secure));
@@ -1149,7 +1203,17 @@ export async function settingsRoutes(app: FastifyInstance) {
           ? "smtp"
           : body.email_provider === "sendgrid"
             ? "sendgrid"
-            : "none";
+            : body.email_provider === "webhook"
+              ? "webhook"
+              : "none";
+      const email_webhook_url =
+        body.email_webhook_url !== undefined
+          ? String(body.email_webhook_url).trim()
+          : current.email_webhook_url;
+      const email_webhook_field_key =
+        body.email_webhook_field_key !== undefined
+          ? String(body.email_webhook_field_key).trim() || "content"
+          : current.email_webhook_field_key;
       const smtp_host =
         body.smtp_host !== undefined
           ? String(body.smtp_host).trim()
@@ -1348,6 +1412,8 @@ export async function settingsRoutes(app: FastifyInstance) {
         captcha_site_key,
         captcha_secret_key,
         email_provider,
+        email_webhook_url,
+        email_webhook_field_key,
         smtp_host,
         smtp_port,
         smtp_secure,

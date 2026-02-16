@@ -26,6 +26,6 @@ e2e/reports/
 e2e/webrtc-recordings/
 e2e/server.log.pnpm-store
 .pnpm-store/
-Infrastructure/
+_infra/
 docker-compose.override.yml
 web/tsconfig.tsbuildinfo

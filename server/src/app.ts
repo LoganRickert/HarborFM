@@ -60,7 +60,11 @@ import {
   stopFlushInterval,
 } from "./services/podcastStats.js";
 import { ensureSecretsDir, getSecretsDir } from "./services/paths.js";
-import { getOrCreateSetupToken, isSetupComplete } from "./services/setup.js";
+import {
+  bootstrapIfNeeded,
+  getOrCreateSetupToken,
+  isSetupComplete,
+} from "./services/setup.js";
 import { getSecretsKey } from "./services/secrets.js";
 import { SWAGGER_TITLE, SWAGGER_THEME_CSS } from "./swagger-theme.js";
 
@@ -110,7 +114,22 @@ async function main() {
   // (Otherwise we'd only touch it when creating/testing/deploying exports.)
   getSecretsKey();
 
-  // One-time setup phase
+  // One-time setup phase (bootstrap from env when ADMIN_EMAIL + ADMIN_PASSWORD_HASH set)
+  const setupComplete = isSetupComplete();
+  const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  const adminHash = process.env.ADMIN_PASSWORD_HASH?.trim();
+  const hasEmail = Boolean(adminEmail);
+  const hasHash = Boolean(adminHash);
+  const hashValid = Boolean(adminHash?.startsWith("$argon2"));
+  console.info(
+    `[setup] Startup: isSetupComplete=${setupComplete} ADMIN_EMAIL=${hasEmail ? "set" : "unset"} ADMIN_PASSWORD_HASH=${hasHash ? "set" : "unset"} hashStartsWithArgon2=${hashValid}`,
+  );
+  try {
+    bootstrapIfNeeded();
+  } catch (err) {
+    console.error("[setup] Bootstrap failed:", err);
+    throw err;
+  }
   if (!isSetupComplete()) {
     const token = getOrCreateSetupToken();
     const path = `/setup?id=${token}`;

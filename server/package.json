@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "echo \"No tests yet\"",
     "db:migrate": "tsx src/db/migrate.ts",
+    "db:seedSetup": "tsx src/scripts/seed-setup.ts",
+    "send-seed-admin-welcome": "tsx src/scripts/send-seed-admin-welcome.ts",
     "db:clear-ip-bans": "tsx src/db/clear-ip-bans.ts",
     "db:seed-analytics": "tsx src/db/seed-analytics.ts",
     "db:seed-podcast-episodes": "tsx src/db/seed-podcast-with-episodes.ts",

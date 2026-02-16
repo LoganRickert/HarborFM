@@ -116,6 +116,8 @@ export function Settings() {
         captcha_secret_key:
           form.captcha_provider === 'none' ? '' : form.captcha_secret_key === '(set)' ? undefined : form.captcha_secret_key,
         email_provider: form.email_provider,
+        email_webhook_url: form.email_provider === 'webhook' ? form.email_webhook_url.trim() : '',
+        email_webhook_field_key: form.email_provider === 'webhook' ? (form.email_webhook_field_key.trim() || 'content') : 'content',
         smtp_host: form.email_provider === 'smtp' ? form.smtp_host.trim() : '',
         smtp_port: form.smtp_port,
         smtp_secure: form.smtp_secure,

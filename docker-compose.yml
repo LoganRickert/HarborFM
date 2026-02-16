@@ -23,6 +23,13 @@ services:
       WEBRTC_PUBLIC_WS_URL: "${WEBRTC_PUBLIC_WS_URL:-}"
       WEBRTC_SERVICE_SECRET: "${WEBRTC_SERVICE_SECRET:-}"
       RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
+      SETUP_ID: "${SETUP_ID:-}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH:-}"
+      ADMIN_REGISTRATION_ENABLED: "${ADMIN_REGISTRATION_ENABLED:-}"
+      ADMIN_PUBLIC_FEEDS_ENABLED: "${ADMIN_PUBLIC_FEEDS_ENABLED:-}"
+      ADMIN_HOSTNAME: "${ADMIN_HOSTNAME:-}"
     volumes:
       - harborfm_data:/data
       - harborfm_secrets:/secrets
@@ -139,9 +146,7 @@ services:
 
   webrtc:
     profiles: ["webrtc"]
-    build:
-      context: .
-      dockerfile: webrtc-service/Dockerfile
+    image: ghcr.io/loganrickert/harborfm-webrtc:latest
     container_name: harborfm-webrtc
     restart: unless-stopped
     environment:

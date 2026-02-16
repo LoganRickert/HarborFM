@@ -137,7 +137,8 @@ export async function contactRoutes(app: FastifyInstance) {
 
       if (
         (settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid") &&
+          settings.email_provider === "sendgrid" ||
+          settings.email_provider === "webhook") &&
         settings.email_enable_contact
       ) {
         const baseUrl =

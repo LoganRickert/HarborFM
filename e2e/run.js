@@ -177,7 +177,10 @@ async function main() {
   const startTime = now();
   const allResults = [];
 
-  const suites = [
+  const onlySeed = process.env.E2E_SUITE === 'Seed';
+  const suites = onlySeed
+    ? [join(E2E_DIR, 'tests', 'Seed', 'seed.js')]
+    : [
     join(E2E_DIR, 'tests', 'Health', 'health.js'),
     join(E2E_DIR, 'tests', 'Setup', 'setup.js'),
     join(E2E_DIR, 'tests', 'Auth', 'auth.js'),

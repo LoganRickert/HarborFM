@@ -188,7 +188,8 @@ export async function usersRoutes(app: FastifyInstance) {
 
       if (
         (settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid") &&
+          settings.email_provider === "sendgrid" ||
+          settings.email_provider === "webhook") &&
         settings.email_enable_admin_welcome
       ) {
         const token = randomBytes(32).toString("base64url");

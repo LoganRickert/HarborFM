@@ -22,7 +22,8 @@ export function afterCreatePodcast(
   const settings = readSettings();
   if (
     (settings.email_provider === "smtp" ||
-      settings.email_provider === "sendgrid") &&
+      settings.email_provider === "sendgrid" ||
+      settings.email_provider === "webhook") &&
     settings.email_enable_new_show
   ) {
     const owner = db
