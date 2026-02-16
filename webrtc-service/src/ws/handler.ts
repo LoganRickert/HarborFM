@@ -4,10 +4,7 @@ import { spawn } from "child_process";
 import { join } from "path";
 import { nanoid } from "nanoid";
 import {
-  getWorker,
   getRoom,
-  setRoom,
-  deleteRoom,
   producerSourceMapRef,
   producerParticipantMapRef,
   producerSoundboardAssetMapRef,
@@ -15,43 +12,79 @@ import {
   soundboardVolumeAtStopRef,
   soundboardByRoom,
 } from "../room.js";
-import { ANNOUNCED_IP, MAIN_APP_URL, RECORDING_DATA_DIR } from "../config.js";
-import { sanitizeParticipantName } from "../validation.js";
+import {
+  ANNOUNCED_IP,
+  MAIN_APP_URL,
+  RECORDING_DATA_DIR,
+  MAX_TRANSPORTS_PER_ROOM,
+  MAX_PRODUCERS_PER_ROOM,
+} from "../config.js";
+import { assertSafeId, sanitizeParticipantName } from "../validation.js";
+
+function getClientIpFromRequest(req: { socket?: { remoteAddress?: string }; headers?: Record<string, string | string[] | undefined> }): string {
+  const forwarded = req.headers?.["x-forwarded-for"];
+  if (typeof forwarded === "string") {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  if (Array.isArray(forwarded) && forwarded[0]) {
+    const first = String(forwarded[0]).trim();
+    if (first) return first;
+  }
+  return req.socket?.remoteAddress ?? "unknown";
+}
+
+function reportConnectionFailure(ip: string): void {
+  const url = MAIN_APP_URL?.replace(/\/$/, "");
+  const secret = process.env.RECORDING_CALLBACK_SECRET?.trim();
+  if (!url || !secret) return;
+  fetch(`${url}/api/call/internal/webrtc-connection-failed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
+    body: JSON.stringify({ ip }),
+  }).catch((err) => console.warn("[webrtc] Failed to report connection failure:", err));
+}
+
+/** Max WebSocket message size (bytes) to prevent DoS via oversized JSON. */
+const WS_MAX_MESSAGE_BYTES = 256 * 1024;
 
 type WebRtcTransport = mediasoup.types.WebRtcTransport;
 
 const socketRooms = new Map<unknown, string>();
 const socketTransports = new Map<unknown, WebRtcTransport>();
+const socketToIsHost = new Map<unknown, boolean>();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const wsHandler = async (socket: any, req: any) => {
   const url = new URL(req.url ?? "", `http://${req.headers?.host ?? "localhost"}`);
   const roomId = url.searchParams.get("roomId");
+  const clientIp = getClientIpFromRequest(req);
+
   if (!roomId) {
+    reportConnectionFailure(clientIp);
+    socket.close();
+    return;
+  }
+  try {
+    assertSafeId(roomId, "roomId");
+  } catch {
+    reportConnectionFailure(clientIp);
     socket.close();
     return;
   }
 
-  let room = getRoom(roomId);
+  const room = getRoom(roomId);
   if (!room) {
-    try {
-      const w = await getWorker();
-      const router = await w.createRouter({
-        mediaCodecs: [{ kind: "audio", mimeType: "audio/opus", clockRate: 48000, channels: 2 }],
-      });
-      router.on("workerclose", () => deleteRoom(roomId));
-      room = { router, transports: new Map(), producers: new Map() };
-      setRoom(roomId, room);
-    } catch (_err) {
-      socket.close();
-      return;
-    }
+    reportConnectionFailure(clientIp);
+    socket.close();
+    return;
   }
 
   socketRooms.set(socket, roomId);
 
   socket.on("message", async (raw: Buffer | ArrayBuffer | Buffer[]) => {
     const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
+    if (data.length > WS_MAX_MESSAGE_BYTES) return;
     let msg: unknown;
     try {
       msg = JSON.parse(data.toString());
@@ -64,6 +97,19 @@ export const wsHandler = async (socket: any, req: any) => {
     if (!roomState) return;
 
     try {
+      if (type === "setHostToken") {
+        const { hostToken: token } = msg as { hostToken?: string };
+        const roomHostToken = roomState.hostToken;
+        if (
+          typeof token === "string" &&
+          roomHostToken &&
+          token.trim() === roomHostToken
+        ) {
+          socketToIsHost.set(socket, true);
+        }
+        return;
+      }
+
       if (type === "getRouterRtpCapabilities") {
         socket.send(
           JSON.stringify({ type: "routerRtpCapabilities", rtpCapabilities: roomState.router.rtpCapabilities })
@@ -72,6 +118,10 @@ export const wsHandler = async (socket: any, req: any) => {
       }
 
       if (type === "createWebRtcTransport") {
+        if (roomState.transports.size >= MAX_TRANSPORTS_PER_ROOM) {
+          socket.send(JSON.stringify({ type: "error", error: "Too many transports in room" }));
+          return;
+        }
         const transport = await roomState.router.createWebRtcTransport({
           listenIps: [{ ip: "0.0.0.0", announcedIp: ANNOUNCED_IP }],
           enableUdp: true,
@@ -112,6 +162,10 @@ export const wsHandler = async (socket: any, req: any) => {
       }
 
       if (type === "produce") {
+        if (roomState.producers.size >= MAX_PRODUCERS_PER_ROOM) {
+          socket.send(JSON.stringify({ type: "error", error: "Too many producers in room" }));
+          return;
+        }
         const { transportId, kind, rtpParameters, source } = msg as unknown as {
           transportId: string;
           kind: mediasoup.types.MediaKind;
@@ -174,6 +228,10 @@ export const wsHandler = async (socket: any, req: any) => {
       }
 
       if (type === "soundboardVolume") {
+        if (!socketToIsHost.get(socket)) {
+          socket.send(JSON.stringify({ type: "error", error: "Host only" }));
+          return;
+        }
         const { volume } = msg as { volume?: number };
         if (typeof volume === "number") {
           const v = Math.max(0, Math.min(1, volume));
@@ -189,6 +247,11 @@ export const wsHandler = async (socket: any, req: any) => {
           participantName?: string;
         };
         if (!producerId || !participantId || typeof participantName !== "string") return;
+        try {
+          assertSafeId(participantId, "participantId");
+        } catch {
+          return;
+        }
         const producer = roomState.producers.get(producerId);
         if (!producer) return;
         const safeName = sanitizeParticipantName(participantName);
@@ -197,14 +260,28 @@ export const wsHandler = async (socket: any, req: any) => {
       }
 
       if (type === "playSoundboard") {
+        if (!socketToIsHost.get(socket)) {
+          socket.send(JSON.stringify({ type: "error", error: "Host only" }));
+          return;
+        }
+        if (roomState.producers.size >= MAX_PRODUCERS_PER_ROOM) {
+          socket.send(JSON.stringify({ type: "error", error: "Too many producers in room" }));
+          return;
+        }
         const { assetId, startTimeSec } = msg as { assetId?: string; startTimeSec?: number };
         if (!assetId) {
-          socket.send(JSON.stringify({ type: "error", error: "assetId required" }));
+          socket.send(JSON.stringify({ type: "soundboardError", error: "Asset ID required" }));
+          return;
+        }
+        try {
+          assertSafeId(assetId, "assetId");
+        } catch {
+          socket.send(JSON.stringify({ type: "soundboardError", error: "Invalid asset ID" }));
           return;
         }
         const secret = process.env.RECORDING_CALLBACK_SECRET?.trim() || "";
         if (!MAIN_APP_URL || !secret) {
-          socket.send(JSON.stringify({ type: "error", error: "Soundboard not configured" }));
+          socket.send(JSON.stringify({ type: "soundboardError", error: "Soundboard not configured" }));
           return;
         }
         (async () => {
@@ -229,9 +306,20 @@ export const wsHandler = async (socket: any, req: any) => {
             const url = `${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/library-stream?assetId=${encodeURIComponent(assetId)}&sessionId=${encodeURIComponent(roomId)}`;
             const res = await fetch(url, { headers: { "X-Recording-Secret": secret } });
             if (!res.ok) {
-              const err = await res.text();
-              console.warn("[webrtc] library-stream fetch failed:", res.status, err);
-              socket.send(JSON.stringify({ type: "error", error: "Asset not available" }));
+              const errText = await res.text();
+              console.warn("[webrtc] library-stream fetch failed:", res.status, errText);
+              let errMsg = "Asset not available";
+              if (res.status === 401) {
+                errMsg = "Soundboard access denied. Ensure RECORDING_CALLBACK_SECRET matches in both the main app and webrtc service.";
+              } else {
+                try {
+                  const parsed = JSON.parse(errText) as { error?: string };
+                  if (parsed?.error) errMsg = parsed.error;
+                } catch {
+                  /* use default */
+                }
+              }
+              socket.send(JSON.stringify({ type: "soundboardError", error: errMsg }));
               return;
             }
             const buf = await res.arrayBuffer();
@@ -279,7 +367,7 @@ export const wsHandler = async (socket: any, req: any) => {
               try {
                 unlinkSync(tempPath);
               } catch { /* ignore */ }
-              socket.send(JSON.stringify({ type: "error", error: "PlainTransport port not available" }));
+              socket.send(JSON.stringify({ type: "soundboardError", error: "PlainTransport port not available" }));
               return;
             }
             const ffmpegArgs = [
@@ -342,13 +430,17 @@ export const wsHandler = async (socket: any, req: any) => {
             }
           } catch (err) {
             console.warn("[webrtc] playSoundboard failed:", err);
-            socket.send(JSON.stringify({ type: "error", error: "Soundboard playback failed" }));
+            socket.send(JSON.stringify({ type: "soundboardError", error: "Soundboard playback failed" }));
           }
         })();
         return;
       }
 
       if (type === "stopSoundboard") {
+        if (!socketToIsHost.get(socket)) {
+          socket.send(JSON.stringify({ type: "error", error: "Host only" }));
+          return;
+        }
         const existing = soundboardByRoom.get(roomId);
         if (existing) {
           soundboardVolumeAtStopRef.set(existing.producer.id, soundboardVolumeByRoomRef.get(roomId) ?? 1);
@@ -394,5 +486,6 @@ export const wsHandler = async (socket: any, req: any) => {
     }
     socketTransports.delete(socket);
     socketRooms.delete(socket);
+    socketToIsHost.delete(socket);
   });
 };

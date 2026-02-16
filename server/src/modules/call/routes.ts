@@ -25,6 +25,7 @@ import {
   getAnyActiveSessionForEpisode,
   getActiveSessionCount,
   setSessionRoomId,
+  setSessionHostToken,
   setParticipantMutedBySelf,
   setParticipantMutedByHost,
   setParticipantName,
@@ -110,6 +111,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               joinCode: { type: "string", description: "4-digit code for quick join from Dashboard" },
               webrtcUrl: { type: "string", nullable: true },
               roomId: { type: "string", nullable: true },
+              hostToken: { type: "string", nullable: true },
               webrtcUnavailable: { type: "boolean", nullable: true },
             },
           },
@@ -154,6 +156,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           payload.webrtcUrl =
             webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
           payload.roomId = existing.roomId;
+          if (existing.hostToken) payload.hostToken = existing.hostToken;
         }
         return reply.send(payload);
       }
@@ -222,23 +225,36 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             })()
           : null;
       if (webrtcCfg.serviceUrl) {
-        try {
-          const roomRes = await fetch(`${webrtcCfg.serviceUrl.replace(/\/$/, "")}/room`, {
-            method: "POST",
-            headers: webrtcRequestHeaders(webrtcCfg),
-            body: JSON.stringify({ roomId: session.sessionId }),
-          });
-          if (roomRes.ok && publicWsBase) {
-            const roomData = (await roomRes.json()) as { roomId: string };
-            roomId = roomData.roomId;
-            setSessionRoomId(session.sessionId, roomId);
-            webrtcUrl = publicWsBase;
-          } else if (!roomRes.ok) {
-            webrtcUnavailable = true;
+        const hostToken = nanoid(24);
+        const roomUrl = `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/room`;
+        const roomBody = JSON.stringify({
+          roomId: session.sessionId,
+          hostToken,
+        });
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const roomRes = await fetch(roomUrl, {
+              method: "POST",
+              headers: webrtcRequestHeaders(webrtcCfg),
+              body: roomBody,
+            });
+            if (roomRes.ok && publicWsBase) {
+              const roomData = (await roomRes.json()) as { roomId: string };
+              roomId = roomData.roomId;
+              setSessionRoomId(session.sessionId, roomId);
+              setSessionHostToken(session.sessionId, hostToken);
+              webrtcUrl = publicWsBase;
+              console.log("[call] room created ok", { sessionId: session.sessionId, attempt });
+              break;
+            }
+            console.log("[call] room POST not ok", { sessionId: session.sessionId, attempt, status: roomRes.status });
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 300 * attempt));
+          } catch (err) {
+            console.log("[call] room POST failed", { sessionId: session.sessionId, attempt, err: String(err) });
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 300 * attempt));
           }
-        } catch {
-          webrtcUnavailable = true;
         }
+        if (!roomId) webrtcUnavailable = true;
       }
       const joinUrl = origin ? `${origin}/call/join/${session.token}` : "";
       const payload: Record<string, unknown> = {
@@ -250,6 +266,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       if (webrtcUrl && roomId) {
         payload.webrtcUrl = webrtcUrl;
         payload.roomId = roomId;
+        if (session.hostToken) payload.hostToken = session.hostToken;
       }
       if (webrtcUnavailable) payload.webrtcUnavailable = true;
       return reply.send(payload);
@@ -446,6 +463,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               joinCode: { type: "string", description: "4-digit code for quick join from Dashboard" },
               webrtcUrl: { type: "string", nullable: true },
               roomId: { type: "string", nullable: true },
+              hostToken: { type: "string", nullable: true },
               webrtcUnavailable: { type: "boolean", nullable: true },
             },
           },
@@ -487,6 +505,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       if (session.roomId && publicWs) {
         payload.webrtcUrl = publicWs;
         payload.roomId = session.roomId;
+        if (session.hostToken) payload.hostToken = session.hostToken;
       }
       return reply.send(payload);
     },
@@ -528,6 +547,36 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         stop,
         error: stop ? "Storage limit reached. Free up space to record." : undefined,
       });
+    },
+  );
+
+  app.post(
+    "/call/internal/webrtc-connection-failed",
+    {
+      schema: {
+        tags: ["Call"],
+        summary: "Record failed WebRTC connection (internal)",
+        description:
+          "Called by webrtc service when WS connection is rejected (no/invalid room). Counts toward call_join ban. Requires X-Recording-Secret.",
+        body: {
+          type: "object",
+          properties: {
+            ip: { type: "string" },
+          },
+          required: ["ip"],
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const secret = request.headers["x-recording-secret"] as string | undefined;
+      const webrtcCfg = getWebRtcConfig();
+      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+      const body = request.body as { ip: string };
+      const ip = typeof body?.ip === "string" ? body.ip.trim() || "unknown" : "unknown";
+      recordFailureAndMaybeBan(ip, CALL_JOIN_CONTEXT);
+      return reply.send({ ok: true });
     },
   );
 
@@ -955,6 +1004,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   if (session.roomId && publicWs) {
                     hostJoinedPayload.webrtcUrl = publicWs;
                     hostJoinedPayload.roomId = session.roomId;
+                    if (session.hostToken) hostJoinedPayload.hostToken = session.hostToken;
                   }
                   socket.send(JSON.stringify(hostJoinedPayload));
               })
@@ -1045,6 +1095,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             if (sess.roomId && publicWs) {
               hostJoinedPayload.webrtcUrl = publicWs;
               hostJoinedPayload.roomId = sess.roomId;
+              if (sess.hostToken) hostJoinedPayload.hostToken = sess.hostToken;
             }
             socket.send(JSON.stringify(hostJoinedPayload));
             return;
@@ -1133,9 +1184,27 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               webrtcJoinedPayload.endsAt = session.hostDisconnectedAt + session.hostDisconnectGraceMs;
             }
             const webrtcCfg = getWebRtcConfig();
-            if (session.roomId && webrtcCfg.publicWsUrl) {
+            const hasRoom = Boolean(session.roomId && webrtcCfg.publicWsUrl);
+            console.log("[call] guest join", {
+              sessionId,
+              roomId: session.roomId,
+              hasRoom,
+              hasServiceUrl: !!webrtcCfg.serviceUrl,
+              hasPublicWs: !!webrtcCfg.publicWsUrl,
+            });
+            if (!hasRoom && webrtcCfg.serviceUrl) {
+              socket.send(
+                JSON.stringify({
+                  type: "error",
+                  error: "Call is not ready. The host's connection failed. Please ask them to refresh and try again.",
+                }),
+              );
+              socket.close();
+              return;
+            }
+            if (hasRoom) {
               webrtcJoinedPayload.webrtcUrl =
-                webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
+                webrtcCfg.publicWsUrl!.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
               webrtcJoinedPayload.roomId = session.roomId;
             }
             socket.send(JSON.stringify(webrtcJoinedPayload));
@@ -1229,7 +1298,6 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           const sid = sessionId;
           if (sid) updateHostHeartbeat(sid);
           const session = getSessionById(sid);
-          req.log.info({ sid, hasSession: !!session, roomId: session?.roomId }, "[call] startRecording received");
           if (session?.recordingInProgress) {
             broadcastToSession(sid, {
               type: "recordingError",
@@ -1279,14 +1347,12 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             session.recordingEvents = [];
             session.recordingInProgress = true;
             session.recordingStartedAtEpochMs = Date.now();
-            console.log("[call] start-recording request", { startRecordingUrl, roomId: session.roomId });
             fetch(startRecordingUrl, {
               method: "POST",
               headers: webrtcRequestHeaders(webrtcCfg),
               body: JSON.stringify(payload),
             })
               .then(async (res) => {
-                console.log("[call] start-recording response", { ok: res.ok, status: res.status });
                 if (res.ok) {
                   const data = (await res.json()) as { recordingEpochMs?: number };
                   const sessionForRecording = getSessionById(sid);
@@ -1304,7 +1370,6 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                   });
                 } else {
                   const text = await res.text();
-                  console.log("[call] start-recording error", { status: res.status, body: text.slice(0, 200) });
                   let errorMsg = "Failed to start recording";
                   try {
                     const parsed = JSON.parse(text) as { error?: string };
@@ -1334,7 +1399,6 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 }
               })
               .catch((err) => {
-                console.log("[call] start-recording fetch failed", { err: String(err) });
                 req.log.warn({ err, url: startRecordingUrl }, "WebRTC start-recording fetch failed");
                 const sessionOnFail = getSessionById(sid);
                 if (sessionOnFail) {
@@ -1431,17 +1495,19 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           const targetParticipantId = (msg as { participantId?: string }).participantId;
           const muted = (msg as { muted?: boolean }).muted === true;
           if (!targetParticipantId) {
-            if (participantId) {
-              const ok = setParticipantMutedBySelf(sid, participantId, muted);
+            const pid = participantId ?? socketToParticipant.get(socket as unknown as WebSocket)?.participantId;
+            if (pid) {
+              const ok = setParticipantMutedBySelf(sid, pid, muted);
+              const session = getSessionById(sid);
               broadcastToSession(sid, {
                 type: "participants",
-                participants: getSessionById(sid)?.participants ?? [],
+                participants: session ? [...session.participants] : [],
               });
               if (!muted && !ok) {
                 const sockets = sessionSockets.get(sid);
                 if (sockets) {
                   for (const s of sockets) {
-                    if (socketToParticipant.get(s as unknown as WebSocket)?.participantId === participantId) {
+                    if (socketToParticipant.get(s as unknown as WebSocket)?.participantId === pid) {
                       s.send(JSON.stringify({ type: "setMute", muted: true, mutedByHost: true }));
                       break;
                     }

@@ -40,6 +40,8 @@ export interface CallSession {
   ended: boolean;
   /** Set when WEBRTC_SERVICE_URL is configured and a mediasoup room was created. */
   roomId?: string;
+  /** Host token for host-only WebRTC actions (soundboard). Set when room created. */
+  hostToken?: string;
   /** Events during recording (soundboard plays, etc.). Cleared on start, sent to webrtc on stop. */
   recordingEvents?: RecordingEvent[];
   /** True when a recording has been started and not yet stopped (for reconnecting host). */
@@ -304,6 +306,11 @@ export function verifyPassword(session: CallSession, password: string): boolean 
 export function setSessionRoomId(sessionId: string, roomId: string): void {
   const session = sessionsById.get(sessionId);
   if (session) session.roomId = roomId;
+}
+
+export function setSessionHostToken(sessionId: string, hostToken: string): void {
+  const session = sessionsById.get(sessionId);
+  if (session) session.hostToken = hostToken;
 }
 
 /** Ensure session has a joinCode (for legacy sessions created before joinCode was added). */

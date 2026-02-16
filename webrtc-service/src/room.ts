@@ -9,6 +9,8 @@ export type RoomState = {
   router: Router;
   transports: Map<string, WebRtcTransport>;
   producers: Map<string, Producer>;
+  /** Host token for host-only actions (playSoundboard, stopSoundboard, soundboardVolume). Set when room created. */
+  hostToken?: string;
 };
 
 export type RecordingState = import("./recording/RecordingManager.js").RecordingState;

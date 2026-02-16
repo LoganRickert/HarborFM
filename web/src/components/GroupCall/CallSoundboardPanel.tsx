@@ -11,6 +11,9 @@ export interface CallSoundboardPanelProps {
   stopSoundboard: () => void;
   setSoundboardVolume: (volume: number) => void;
   onSoundboardStoppedRef?: React.MutableRefObject<(() => void) | null>;
+  onSoundboardErrorRef?: React.MutableRefObject<((error: string) => void) | null>;
+  onSoundboardError?: (error: string) => void;
+  onPlayAttempt?: () => void;
   disabled?: boolean;
   onClose?: () => void;
   minimized: boolean;
@@ -124,6 +127,9 @@ export function CallSoundboardPanel({
   stopSoundboard,
   setSoundboardVolume,
   onSoundboardStoppedRef,
+  onSoundboardErrorRef,
+  onSoundboardError,
+  onPlayAttempt,
   onClose,
   minimized,
   onMinimizeToggle,
@@ -213,6 +219,24 @@ export function CallSoundboardPanel({
   }, [onSoundboardStoppedRef]);
 
   useEffect(() => {
+    if (onSoundboardErrorRef) {
+      onSoundboardErrorRef.current = (error: string) => {
+        transitioningToAssetIdRef.current = null;
+        if (progressTimerRef.current) {
+          clearInterval(progressTimerRef.current);
+          progressTimerRef.current = null;
+        }
+        setPlayingId(null);
+        setCurrentTime(0);
+        onSoundboardError?.(error);
+      };
+      return () => {
+        onSoundboardErrorRef.current = null;
+      };
+    }
+  }, [onSoundboardErrorRef, onSoundboardError]);
+
+  useEffect(() => {
     return () => {
       stopSoundboard();
       if (progressTimerRef.current) {
@@ -224,6 +248,7 @@ export function CallSoundboardPanel({
   }, [stopSoundboard]);
 
   function handlePlay(asset: LibraryAsset) {
+    onPlayAttempt?.();
     const now = Date.now();
     const durationSec = asset.duration_sec ?? 0;
 

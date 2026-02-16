@@ -265,8 +265,14 @@ export function CallJoin() {
           } else {
             setHostDisconnected(null);
           }
-          if (msg.webrtcUrl) setWebrtcUrl(msg.webrtcUrl);
-          if (msg.roomId) setWebrtcRoomId(msg.roomId);
+          if (msg.webrtcUrl) {
+            console.log('[CallJoin] joined: webrtcUrl=', msg.webrtcUrl);
+            setWebrtcUrl(msg.webrtcUrl);
+          }
+          if (msg.roomId) {
+            console.log('[CallJoin] joined: roomId=', msg.roomId);
+            setWebrtcRoomId(msg.roomId);
+          }
         } else if (msg.type === 'participants') {
           const list = msg.participants ?? [];
           setParticipants(list);
@@ -396,6 +402,7 @@ export function CallJoin() {
 
   if (joined) {
     const audioUnavailable = !webrtcUrl || !webrtcRoomId;
+    console.log('[CallJoin] joined render: audioUnavailable=', audioUnavailable, 'webrtcUrl=', webrtcUrl, 'webrtcRoomId=', webrtcRoomId);
     return pageLayout(
       <>
         <div className={`${styles.card} ${recordingInProgress ? styles.cardRecording : ''}`}>

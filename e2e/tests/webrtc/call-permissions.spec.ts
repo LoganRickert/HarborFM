@@ -68,7 +68,7 @@ test.describe('Call permissions', () => {
   });
 
   test('Editor can start call and see Record segment', async ({ page }) => {
-    test.setTimeout(45000);
+    test.setTimeout(30000);
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');
     const csrf = await getCsrf(page);
@@ -112,6 +112,74 @@ test.describe('Call permissions', () => {
     await expect(page.getByRole('button', { name: /start group call/i })).toBeVisible({ timeout: 20000 });
     await page.getByRole('button', { name: /start group call/i }).click();
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+  });
+
+  test('Owner can start and stop recording', async ({ page }) => {
+    test.setTimeout(10000);
+    await page.goto('/');
+    await loginAs(page, 'admin@e2e.test', 'admin-password-123');
+    const csrf = await getCsrf(page);
+
+    const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
+      headers: { 'x-csrf-token': csrf },
+      data: { title: 'E2E Record Show', slug: `e2e-record-${Date.now()}`, description: '' },
+    });
+    if (!podcastRes.ok()) throw new Error('Create podcast failed');
+    const podcast = await podcastRes.json();
+
+    const episodeRes = await page.request.post(`${API_BASE}/podcasts/${podcast.id}/episodes`, {
+      headers: { 'x-csrf-token': csrf },
+      data: { title: 'E2E Record Episode', description: '', status: 'draft' },
+    });
+    if (!episodeRes.ok()) throw new Error('Create episode failed');
+    const episode = await episodeRes.json();
+
+    await page.addInitScript(() => {
+      localStorage.setItem('harborfm_call_display_name', 'E2E Host');
+    });
+    await page.goto(`/episodes/${episode.id}`);
+
+    await page.getByRole('button', { name: /start group call/i }).click();
+
+    const recordBtn = page.getByRole('button', { name: /record segment/i });
+    await expect(recordBtn).toBeVisible({ timeout: 20000 });
+    await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+
+    let recordingStarted = false;
+    const stopBtn = page.getByRole('button', { name: /stop recording/i });
+    const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.waitForTimeout(attempt === 0 ? 2000 : 3000);
+      await recordBtn.click();
+      await page.waitForTimeout(500);
+
+      try {
+        await expect(stopBtn).toBeVisible({ timeout: 15000 });
+        const errorVisible = await errorEl.isVisible();
+        if (!errorVisible) {
+          recordingStarted = true;
+          break;
+        }
+      } catch {
+        /* retry */
+      }
+    }
+    if (!recordingStarted) {
+      const errorText = (await errorEl.isVisible()) ? await errorEl.first().textContent() : null;
+      const mediaBanner = page.getByText(/audio is unavailable|webrtc.*not.*running/i);
+      const mediaUnavail = (await mediaBanner.isVisible()) ? await mediaBanner.first().textContent() : null;
+      throw new Error(
+        `Recording never started after 3 attempts. ` +
+          `Error on page: ${errorText ?? 'none'}. ` +
+          `Media unavailable: ${mediaUnavail ?? 'no'}.`
+      );
+    }
+    await page.getByRole('button', { name: /stop recording/i }).click();
+    await expect(
+      page.getByRole('status').filter({
+        hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i,
+      })
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('View collaborator cannot start call', async ({ page }) => {
@@ -244,78 +312,8 @@ test.describe('Call permissions', () => {
     expect(loginRes.status()).toBe(403);
   });
 
-  test('Owner can start and stop recording', async ({ page }) => {
-    test.setTimeout(60000);
-    await page.goto('/');
-    await loginAs(page, 'admin@e2e.test', 'admin-password-123');
-    const csrf = await getCsrf(page);
-
-    const podcastRes = await page.request.post(`${API_BASE}/podcasts`, {
-      headers: { 'x-csrf-token': csrf },
-      data: { title: 'E2E Record Show', slug: `e2e-record-${Date.now()}`, description: '' },
-    });
-    if (!podcastRes.ok()) throw new Error('Create podcast failed');
-    const podcast = await podcastRes.json();
-
-    const episodeRes = await page.request.post(`${API_BASE}/podcasts/${podcast.id}/episodes`, {
-      headers: { 'x-csrf-token': csrf },
-      data: { title: 'E2E Record Episode', description: '', status: 'draft' },
-    });
-    if (!episodeRes.ok()) throw new Error('Create episode failed');
-    const episode = await episodeRes.json();
-
-    await page.addInitScript(() => {
-      localStorage.setItem('harborfm_call_display_name', 'E2E Host');
-    });
-    await page.goto(`/episodes/${episode.id}`);
-
-    await page.getByRole('button', { name: /start group call/i }).click();
-
-    const recordBtn = page.getByRole('button', { name: /record segment/i });
-    await expect(recordBtn).toBeVisible({ timeout: 20000 });
-    await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
-
-    const panel = page.getByRole('region', { name: /group call/i });
-
-    let recordingStarted = false;
-    const stopBtn = page.getByRole('button', { name: /stop recording/i });
-    const errorEl = page.getByText(/failed to start recording|no audio producer|no audio received/i);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await page.waitForTimeout(attempt === 0 ? 2000 : 3000);
-      await recordBtn.click();
-      await page.waitForTimeout(500);
-
-      try {
-        await expect(stopBtn).toBeVisible({ timeout: 15000 });
-        const errorVisible = await errorEl.isVisible();
-        if (!errorVisible) {
-          recordingStarted = true;
-          break;
-        }
-      } catch {
-        /* retry */
-      }
-    }
-    if (!recordingStarted) {
-      const errorText = (await errorEl.isVisible()) ? await errorEl.first().textContent() : null;
-      const mediaBanner = page.getByText(/audio is unavailable|webrtc.*not.*running/i);
-      const mediaUnavail = (await mediaBanner.isVisible()) ? await mediaBanner.first().textContent() : null;
-      throw new Error(
-        `Recording never started after 3 attempts. ` +
-        `Error on page: ${errorText ?? 'none'}. ` +
-        `Media unavailable: ${mediaUnavail ?? 'no'}.`
-      );
-    }
-    await page.getByRole('button', { name: /stop recording/i }).click();
-    await expect(
-      page.getByRole('status').filter({
-        hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i,
-      })
-    ).toBeVisible({ timeout: 5000 });
-  });
-
   test('Guest has no Record button', async ({ page, context }) => {
-    test.setTimeout(45000);
+    test.setTimeout(30000);
     const baseURL = `http://127.0.0.1:${PORT}`;
     await page.goto('/');
     await loginAs(page, 'admin@e2e.test', 'admin-password-123');

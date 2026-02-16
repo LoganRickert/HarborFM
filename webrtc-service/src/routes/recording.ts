@@ -28,6 +28,9 @@ import { assertSafeId, assertSafeFilePathRelative } from "../validation.js";
 /** In-flight start-recording per room, so stop-recording waits for setup to finish (race fix). */
 const startRecordingByRoom = new Map<string, { resolve: () => void; promise: Promise<void> }>();
 
+/** Per-room lock to prevent concurrent start-recording for the same room. */
+const startRecordingLockByRoom = new Map<string, Promise<void>>();
+
 function sendProgress(
   request: { log: { error: (o: object, msg: string) => void } },
   state: { sessionId?: string | null },
@@ -120,8 +123,28 @@ export function registerRecordingRoutes(
     const room = getRoom(roomId);
     if (!room) return reply.status(404).send({ error: "Room not found" });
 
+    let lockAcquired = false;
+    const existingLock = startRecordingLockByRoom.get(roomId);
+    if (existingLock) {
+      await existingLock;
+      const existingAfterWait = Array.from(recordingByRoom.values()).find((s) => s.episodeId === episodeId);
+      if (existingAfterWait) {
+        return reply.status(409).send({ error: "A recording is already in progress for this episode." });
+      }
+    }
+
+    let releaseLock: () => void;
+    const lockPromise = new Promise<void>((r) => {
+      releaseLock = r;
+    });
+    startRecordingLockByRoom.set(roomId, lockPromise);
+    lockAcquired = true;
+
     const existingForEpisode = Array.from(recordingByRoom.values()).find((s) => s.episodeId === episodeId);
     if (existingForEpisode) {
+      releaseLock!();
+      startRecordingLockByRoom.delete(roomId);
+      lockAcquired = false;
       request.log.warn({ roomId, episodeId }, "Recording already in progress for episode");
       return reply.status(409).send({ error: "A recording is already in progress for this episode." });
     }
@@ -130,9 +153,13 @@ export function registerRecordingRoutes(
     const unpausedAudioProducers = audioProducers.filter((p) => !p.paused);
 
     if (audioProducers.length === 0) {
+      releaseLock!();
+      startRecordingLockByRoom.delete(roomId);
       return reply.status(400).send({ error: "No audio producer in room" });
     }
     if (unpausedAudioProducers.length === 0) {
+      releaseLock!();
+      startRecordingLockByRoom.delete(roomId);
       return reply.status(400).send({ error: "All audio producers are paused" });
     }
 
@@ -170,6 +197,8 @@ export function registerRecordingRoutes(
     }
 
     if (allProducersNoPackets) {
+      releaseLock!();
+      startRecordingLockByRoom.delete(roomId);
       console.warn(
         "[webrtc] No producer has received RTP packets (ICE/connectivity) roomId=%s ANNOUNCED_IP=%s RTC_PORTS=%d-%d",
         roomId,
@@ -187,6 +216,8 @@ export function registerRecordingRoutes(
       });
     }
     if (anyProducerPaused && audioProducers.every((p) => p.paused)) {
+      releaseLock!();
+      startRecordingLockByRoom.delete(roomId);
       return reply.status(400).send({ error: "Unmute your microphone before recording." });
     }
 
@@ -195,6 +226,8 @@ export function registerRecordingRoutes(
       (p) => producerIdsWithPackets.has(p.id) && producerIdsOnConnectedTransports.has(p.id)
     );
     if (recordableProducers.length === 0) {
+      releaseLock!();
+      startRecordingLockByRoom.delete(roomId);
       request.log.warn(
         {
           roomId,
@@ -210,8 +243,18 @@ export function registerRecordingRoutes(
       });
     }
 
-    const secret =
-      recordingCallbackSecret?.trim() || process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
+    const envSecret = process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
+    const bodySecret = recordingCallbackSecret?.trim() || null;
+    if (bodySecret && envSecret && bodySecret !== envSecret) {
+      request.log.warn({ roomId }, "start-recording rejected: recordingCallbackSecret does not match webrtc RECORDING_CALLBACK_SECRET");
+      releaseLock!();
+      startRecordingLockByRoom.delete(roomId);
+      return reply.status(401).send({
+        error:
+          "Recording callback secret mismatch. Ensure RECORDING_CALLBACK_SECRET matches in both the main app and webrtc service.",
+      });
+    }
+    const secret = bodySecret || envSecret;
     const meta: RecordingMeta = {
       filePathRelative,
       segmentId,
@@ -447,6 +490,10 @@ export function registerRecordingRoutes(
       request.log.error({ err }, "Failed to start recording");
       return reply.status(500).send({ error: "Failed to start recording" });
     } finally {
+      if (lockAcquired && typeof releaseLock! === "function") {
+        releaseLock!();
+        startRecordingLockByRoom.delete(roomId);
+      }
       const entry = startRecordingByRoom.get(roomId);
       if (entry) {
         entry.resolve();

@@ -103,7 +103,7 @@ test.describe('Call host UI', () => {
   });
 
   test('Guest joins and host sees them', async ({ page, context }) => {
-    test.setTimeout(45000);
+    test.setTimeout(5000);
     const baseURL = `http://127.0.0.1:${PORT}`;
     await page.goto(`/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
@@ -141,7 +141,7 @@ test.describe('Call host UI', () => {
     });
 
     test('Host can mute guest', async ({ page, context }) => {
-      test.setTimeout(45000);
+      test.setTimeout(5000); 
       const baseURL = `http://127.0.0.1:${PORT}`;
       await page.goto(`/episodes/${episodeId}`);
       await page.getByRole('button', { name: /start group call/i }).click();
@@ -165,8 +165,8 @@ test.describe('Call host UI', () => {
       }
     });
 
-    test('Host cannot unmute self-muted guest', async ({ page, context }) => {
-      test.setTimeout(45000);
+    test('Host can unmute host-muted guest', async ({ page, context }) => {
+      test.setTimeout(5000); 
       const baseURL = `http://127.0.0.1:${PORT}`;
       await page.goto(`/episodes/${episodeId}`);
       await page.getByRole('button', { name: /start group call/i }).click();
@@ -182,20 +182,22 @@ test.describe('Call host UI', () => {
         await guestPage.getByRole('button', { name: /join call/i }).click();
         await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
 
-        await guestPage.getByRole('button', { name: /^mute$/i }).click();
         const panel = page.getByRole('region', { name: /group call/i });
-        await expect(panel.getByText(/muted/i)).toBeVisible({ timeout: 5000 });
+        await expect(panel.locator('li').filter({ hasText: 'E2E Guest' })).toBeVisible({ timeout: 10000 });
+        await panel.locator('li').filter({ hasText: 'E2E Guest' }).getByRole('button', { name: 'Mute', exact: true }).click();
+        await expect(panel.locator('li').filter({ hasText: 'E2E Guest' }).getByText(/muted/i)).toBeVisible({ timeout: 5000 });
 
         const guestUnmuteBtn = panel.locator('ul li').filter({ hasText: 'E2E Guest' }).getByRole('button', { name: 'Unmute', exact: true });
-        await expect(guestUnmuteBtn).toBeDisabled();
-        await expect(guestUnmuteBtn).toHaveAttribute('title', 'Guest muted themselves');
+        await expect(guestUnmuteBtn).toBeEnabled();
+        await guestUnmuteBtn.click();
+        await expect(panel.locator('li').filter({ hasText: 'E2E Guest' }).getByText(/muted/i)).not.toBeVisible({ timeout: 5000 });
       } finally {
         await guestContext.close();
       }
     });
 
     test('Host can disconnect guest', async ({ page, context }) => {
-      test.setTimeout(45000);
+      test.setTimeout(5000); 
       const baseURL = `http://127.0.0.1:${PORT}`;
       await page.goto(`/episodes/${episodeId}`);
       await page.getByRole('button', { name: /start group call/i }).click();
@@ -220,7 +222,7 @@ test.describe('Call host UI', () => {
     });
 
     test('Participant cards have correct structure', async ({ page, context }) => {
-      test.setTimeout(45000);
+      test.setTimeout(5000); 
       await page.addInitScript(() => {
         localStorage.setItem('harborfm_call_display_name', 'E2E Host');
       });

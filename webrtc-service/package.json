@@ -11,8 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "fastify": "^5.7.4",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/websocket": "^11.0.0",
+    "fastify": "^5.7.4",
     "mediasoup": "^3.19.16",
     "nanoid": "^5.1.6"
   },

@@ -97,6 +97,7 @@ export function EpisodeEditorContent({
     joinCode?: string;
     webrtcUrl?: string;
     roomId?: string;
+    hostToken?: string;
     webrtcUnavailable?: boolean;
   } | null>(null);
   const [startCallError, setStartCallError] = useState<string | null>(null);
@@ -120,6 +121,7 @@ export function EpisodeEditorContent({
           joinCode: session.joinCode,
           webrtcUrl: session.webrtcUrl,
           roomId: session.roomId,
+          hostToken: session.hostToken,
           webrtcUnavailable: session.webrtcUnavailable,
         });
     }).catch(() => {});
@@ -147,6 +149,7 @@ export function EpisodeEditorContent({
           joinCode: res.joinCode,
           webrtcUrl: res.webrtcUrl,
           roomId: res.roomId,
+          hostToken: res.hostToken,
           webrtcUnavailable: res.webrtcUnavailable,
         });
       })
@@ -623,6 +626,7 @@ export function EpisodeEditorContent({
           joinCode={activeCall.joinCode}
           webrtcUrl={activeCall.webrtcUrl}
           roomId={activeCall.roomId}
+          hostToken={activeCall.hostToken}
           mediaUnavailable={!activeCall.webrtcUrl || !activeCall.roomId || activeCall.webrtcUnavailable}
           onEnd={handleCallEnded}
           onCallEnded={handleCallEnded}

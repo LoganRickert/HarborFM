@@ -26,6 +26,8 @@ export interface CallPanelProps {
   joinCode?: string;
   webrtcUrl?: string;
   roomId?: string;
+  /** Host token for host-only WebRTC actions (soundboard). Only for host. */
+  hostToken?: string;
   /** True when WebRTC is not available (service down or not configured). */
   mediaUnavailable?: boolean;
   onEnd: () => void;
@@ -46,7 +48,7 @@ const SOUNDBOARD_VOLUME_KEY = 'harborfm_soundboard_volume';
 const pendingEndCallTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 const END_CALL_DELAY_MS = 200;
 
-export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onEndRequest, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
+export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hostToken, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onEndRequest, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
   const [displayName, setDisplayName] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
@@ -55,14 +57,16 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [copied, setCopied] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [recordingConfirmed, setRecordingConfirmed] = useState(false);
+  const [recordingPending, setRecordingPending] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingProcessing, setRecordingProcessing] = useState(false);
   const [recordingProgressMessage, setRecordingProgressMessage] = useState<string | null>(null);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [soundboardError, setSoundboardError] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [webrtcUrlFromWs, setWebrtcUrlFromWs] = useState<string | undefined>(undefined);
   const [roomIdFromWs, setRoomIdFromWs] = useState<string | undefined>(undefined);
+  const [hostTokenFromWs, setHostTokenFromWs] = useState<string | undefined>(undefined);
   const [alreadyInCall, setAlreadyInCall] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -82,13 +86,15 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
   const effectiveRoomId = roomIdFromWs ?? roomId;
+  const effectiveHostToken = hostTokenFromWs ?? hostToken;
   const myParticipant = participants.find((p) => p.isHost);
-  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef } = useMediasoupRoom(
+  const { remoteTracks, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     undefined,
     myParticipant?.id ?? null,
     myParticipant?.name ?? null,
+    effectiveHostToken,
   );
   useWakeLock(true);
 
@@ -120,6 +126,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
     setAlreadyInCall(false);
     setWebrtcUrlFromWs(undefined);
     setRoomIdFromWs(undefined);
+    setHostTokenFromWs(undefined);
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
@@ -142,9 +149,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           setParticipants(msg.participants);
           if (msg.webrtcUrl) setWebrtcUrlFromWs(msg.webrtcUrl);
           if (msg.roomId) setRoomIdFromWs(msg.roomId);
+          if (msg.hostToken) setHostTokenFromWs(msg.hostToken);
           if (msg.recordingInProgress === true) {
             setRecording(true);
-            setRecordingConfirmed(true);
+            setRecordingPending(false);
             setRecordingProcessing(false);
             const epoch = typeof msg.recordingStartedAtEpochMs === 'number' ? msg.recordingStartedAtEpochMs : Date.now();
             setRecordingSeconds(Math.max(0, Math.floor((Date.now() - epoch) / 1000)));
@@ -165,12 +173,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           onCallEnded();
         } else if (msg.type === 'recordingStarted') {
           setRecording(true);
-          setRecordingConfirmed(true);
+          setRecordingPending(false);
+          setRecordingError(null);
           setRecordingSeconds(0);
           setRecordingProcessing(false);
         } else if (msg.type === 'recordingStopped') {
           setRecording(false);
-          setRecordingConfirmed(false);
+          setRecordingPending(false);
           setRecordingError(null);
           setRecordingProcessing(true);
           setRecordingProgressMessage(null);
@@ -178,19 +187,19 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           setRecordingProgressMessage(msg.message ?? msg.stage ?? 'Processing…');
         } else if (msg.type === 'recordingError') {
           setRecording(false);
-          setRecordingConfirmed(false);
+          setRecordingPending(false);
           setRecordingProcessing(false);
           setRecordingProgressMessage(null);
           setRecordingError(msg.error ?? 'Recording failed');
         } else if (msg.type === 'recordingStopFailed') {
           setRecording(false);
-          setRecordingConfirmed(false);
+          setRecordingPending(false);
           setRecordingProcessing(false);
           setRecordingProgressMessage(null);
           setRecordingError(msg.error ?? 'Failed to stop recording');
         } else if (msg.type === 'segmentRecorded') {
           setRecording(false);
-          setRecordingConfirmed(false);
+          setRecordingPending(false);
           setRecordingError(null);
           setRecordingProcessing(true);
           setRecordingProgressMessage('Segment added successfully');
@@ -283,11 +292,9 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
 
   const handleStartRecording = () => {
     const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) {
+    if (ws?.readyState === WebSocket.OPEN && !recordingPending) {
+      setRecordingPending(true);
       ws.send(JSON.stringify({ type: 'startRecording', clientEpochMs: Date.now() }));
-      setRecordingSeconds(0);
-      setRecording(true);
-      setRecordingConfirmed(false);
     }
   };
 
@@ -418,15 +425,17 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           {minimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
         </button>
       </div>
-      {!minimized && showMediaUnavailable && (
-        <p className={styles.mediaUnavailableBanner} role="status">
-          Audio is unavailable - WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
-        </p>
-      )}
-      {!minimized && mediaError && (
-        <p className={styles.mediaErrorBanner} role="alert">
-          {mediaError}
-        </p>
+      {!minimized && (showMediaUnavailable || mediaError || recordingError || soundboardError) && (
+        <div className={styles.errorCard} role="alert">
+          {showMediaUnavailable && (
+            <p className={styles.errorCardMessage}>
+              Audio is unavailable - WebRTC service is not running or unreachable. Guests can join the call but won&apos;t have audio until the service is started.
+            </p>
+          )}
+          {mediaError && <p className={styles.errorCardMessage}>{mediaError}</p>}
+          {recordingError && <p className={styles.errorCardMessage}>{recordingError}</p>}
+          {soundboardError && <p className={styles.errorCardMessage}>{soundboardError}</p>}
+        </div>
       )}
       {!minimized && !showChatView && !showSoundboardView && (
       <>
@@ -612,6 +621,9 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
           stopSoundboard={stopSoundboard}
           setSoundboardVolume={setSoundboardVolume}
           onSoundboardStoppedRef={onSoundboardStoppedRef}
+          onSoundboardErrorRef={onSoundboardErrorRef}
+          onSoundboardError={setSoundboardError}
+          onPlayAttempt={() => setSoundboardError(null)}
           disabled={!effectiveWebrtcUrl || !producerReady}
           minimized={false}
           onMinimizeToggle={() => {}}
@@ -636,9 +648,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
                 Stop recording
               </button>
               <span className={styles.recordDurationBadge} aria-live="polite">
-                {recordingConfirmed ? formatDurationHMS(recordingSeconds) : 'Starting...'}
+                {formatDurationHMS(recordingSeconds)}
               </span>
             </>
+          ) : recordingPending ? (
+            <span className={styles.recordPending}>Starting…</span>
           ) : (
             <button
               type="button"
@@ -663,9 +677,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
             {recordingProgressMessage ||
               "Recording stopped successfully. We're now processing the segment. It should be added shortly."}
           </p>
-        )}
-        {!minimized && recordingError && (
-          <p className={styles.mediaError}>{recordingError}</p>
         )}
       </div>
       )}
@@ -694,6 +705,9 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, med
               stopSoundboard={stopSoundboard}
               setSoundboardVolume={setSoundboardVolume}
               onSoundboardStoppedRef={onSoundboardStoppedRef}
+              onSoundboardErrorRef={onSoundboardErrorRef}
+              onSoundboardError={setSoundboardError}
+              onPlayAttempt={() => setSoundboardError(null)}
               disabled={!effectiveWebrtcUrl || !producerReady}
               onClose={() => setSoundboardOpen(false)}
               minimized={soundboardMinimized}

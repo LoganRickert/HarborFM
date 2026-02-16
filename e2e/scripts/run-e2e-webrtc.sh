@@ -18,10 +18,17 @@ export E2E_SECRETS_DIR="$E2E_DIR/secrets"
 # WebRTC env for server and start-webrtc.sh
 export WEBRTC_PORT="$WEBRTC_PORT"
 export WEBRTC_SERVICE_URL="http://127.0.0.1:$WEBRTC_PORT"
-export WEBRTC_PUBLIC_WS_URL="ws://localhost:$WEBRTC_PORT"
+export WEBRTC_PUBLIC_WS_URL="ws://127.0.0.1:$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="e2e-secret"
+# When E2E_SECRET_MISMATCH=1, webrtc uses a different secret to simulate recording/soundboard failures
+if [ "${E2E_SECRET_MISMATCH:-}" = "1" ]; then
+  export RECORDING_CALLBACK_SECRET_WEBRTC="mismatched-e2e-secret"
+fi
 # WEBRTC_SERVICE_SECRET left unset for e2e so webrtc HTTP endpoints work without auth (service is localhost-only)
 export MAIN_APP_BASE_URL="http://127.0.0.1:$PORT"
+
+# Avoid call_join IP ban from invalid-code tests; valid-code tests need by-code to succeed
+export CALL_JOIN_FAILURE_THRESHOLD="${CALL_JOIN_FAILURE_THRESHOLD:-999}"
 
 # Short timeouts for e2e (host-leave test) - must be long enough for host to connect and send first message (~5s)
 export HOST_AWAY_GRACE_NO_GUESTS_MS="${HOST_AWAY_GRACE_NO_GUESTS_MS:-10000}"
@@ -91,6 +98,12 @@ run_playwright() {
 }
 run_playwright "$@" 2>&1 | grep --line-buffered -v -E '^\[(server|webrtc)\] '
 EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $EXIT_CODE -ne 0 ] && [ -f "$E2E_DIR/server.log" ]; then
+  echo ""
+  echo "=== Last 80 lines of server.log (look for [call] room/guest) ==="
+  tail -80 "$E2E_DIR/server.log"
+fi
 
 # Stop webrtc and server
 bash "$SCRIPT_DIR/stop-webrtc.sh"

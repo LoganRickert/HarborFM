@@ -18,6 +18,11 @@ services:
       DATA_DIR: /data
       SECRETS_DIR: /secrets
       WEBRTC_RECORDINGS_DIR: /webrtc
+      # WebRTC service: harborfm calls webrtc over internal network; clients use public WS URL
+      WEBRTC_SERVICE_URL: "${WEBRTC_SERVICE_URL:-http://webrtc:3002}"
+      WEBRTC_PUBLIC_WS_URL: "${WEBRTC_PUBLIC_WS_URL:-}"
+      WEBRTC_SERVICE_SECRET: "${WEBRTC_SERVICE_SECRET:-}"
+      RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
     volumes:
       - harborfm_data:/data
       - harborfm_secrets:/secrets
@@ -147,6 +152,8 @@ services:
       MAIN_APP_URL: "${MAIN_APP_URL:-http://harborfm:3001}"
       RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
       RECORDING_DATA_DIR: "/webrtc"
+      WEBRTC_SERVICE_SECRET: "${WEBRTC_SERVICE_SECRET:-}"
+      WEBRTC_INSECURE_SKIP_AUTH: "${WEBRTC_INSECURE_SKIP_AUTH:-}"
     volumes:
       - webrtc_recordings:/webrtc
     ports:

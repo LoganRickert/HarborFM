@@ -95,6 +95,39 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
   return recovered;
 }
 
+/** Max age in ms for soundboard temp files before cleanup on startup. 1 hour. */
+const SOUNDBOARD_TEMP_MAX_AGE_MS = 60 * 60 * 1000;
+
+/**
+ * Remove stale soundboard temp files from previous runs (crash/kill before ffmpeg close).
+ * Returns count of files removed.
+ */
+export function cleanupSoundboardTemp(recordingDataDir: string): number {
+  const tempDir = join(recordingDataDir, "soundboard-temp");
+  if (!existsSync(tempDir)) return 0;
+  let removed = 0;
+  const cutoff = Date.now() - SOUNDBOARD_TEMP_MAX_AGE_MS;
+  try {
+    const files = readdirSync(tempDir);
+    for (const f of files) {
+      if (!isSafeFileName(f) || !f.startsWith("sb_") || !f.endsWith(".tmp")) continue;
+      const fullPath = join(tempDir, f);
+      try {
+        const stat = statSync(fullPath);
+        if (stat.mtimeMs < cutoff) {
+          unlinkSync(fullPath);
+          removed++;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return removed;
+}
+
 /**
  * Read segments.jsonl and find RECORDING entries with no active process (mark INTERRUPTED).
  * Called during recovery - we don't have active processes so any RECORDING is INTERRUPTED.

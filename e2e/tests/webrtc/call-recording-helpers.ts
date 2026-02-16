@@ -82,3 +82,28 @@ export async function createCallRecordingFixture(page: Page): Promise<CallRecord
 
   return { episodeId: episode.id, podcastId: podcast.id };
 }
+
+/** Create a library asset for soundboard tests. Uses fake-mic.wav from e2e assets. */
+export async function createLibraryAsset(page: Page): Promise<string | null> {
+  const wavPath = join(E2E_DIR, 'assets', 'fake-mic.wav');
+  if (!existsSync(wavPath)) return null;
+
+  const csrf = (await page.context().storageState()).cookies.find((c) => c.name === 'harborfm_csrf')?.value;
+  if (!csrf) return null;
+
+  const buffer = readFileSync(wavPath);
+  const res = await page.request.post(`${API_BASE}/library`, {
+    headers: { 'x-csrf-token': csrf },
+    multipart: {
+      file: {
+        name: 'fake-mic.wav',
+        mimeType: 'audio/wav',
+        buffer,
+      },
+      name: 'E2E Soundboard Test',
+    },
+  });
+  if (!res.ok()) return null;
+  const data = await res.json();
+  return (data as { id?: string }).id ?? null;
+}

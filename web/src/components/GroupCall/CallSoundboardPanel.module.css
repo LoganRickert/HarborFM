@@ -6,7 +6,7 @@
   width: 320px;
   max-width: calc(100vw - 2rem);
   background: var(--bg-elevated, #1a1a1a);
-  border: 1px solid var(--border, #333);
+  border: 2px solid var(--border-strong, #444);
   border-radius: var(--radius, 8px);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }

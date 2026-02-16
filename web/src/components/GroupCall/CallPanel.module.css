@@ -28,7 +28,7 @@
   width: 320px;
   max-width: calc(100vw - 2rem);
   background: var(--bg-elevated, #1a1a1a);
-  border: 1px solid var(--border, #333);
+  border: 2px solid var(--border-strong, #444);
   border-radius: var(--radius, 8px);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   display: flex;
@@ -98,24 +98,21 @@
   font-size: 0.9375rem;
 }
 
-.mediaUnavailableBanner {
+.errorCard {
   margin: 0;
-  padding: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
   font-size: 0.8125rem;
   color: var(--text);
-  background: rgba(234, 179, 8, 0.12);
-  border: 1px solid rgba(234, 179, 8, 0.4);
-  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.mediaErrorBanner {
+.errorCardMessage {
   margin: 0;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.8125rem;
-  color: var(--text);
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 6px;
 }
 
 .joinRow {
@@ -275,12 +272,6 @@
   padding: 0.5rem 0.75rem;
 }
 
-.mediaError {
-  margin: 0.5rem 0 0;
-  font-size: 0.8125rem;
-  color: #e53e3e;
-}
-
 .participantsLabel {
   font-size: 0.75rem;
   color: var(--text-muted, #888);
@@ -437,6 +428,11 @@
 
 .recordRowRecording {
   justify-content: space-between;
+}
+
+.recordPending {
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
 }
 
 .recordRowMuteBtn {

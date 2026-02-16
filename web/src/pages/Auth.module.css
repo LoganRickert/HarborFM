@@ -34,8 +34,9 @@
 
 .joinCallFab {
   position: absolute;
-  bottom: 1.5rem;
+  bottom: 6rem;
   right: 1.5rem;
+  z-index: 1000;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -43,7 +44,7 @@
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--accent);
-  background: rgba(0, 212, 170, 0.12);
+  background: var(--bg-elevated);
   border: 2px solid rgba(0, 212, 170, 0.5);
   border-radius: 9999px;
   cursor: pointer;
@@ -52,7 +53,7 @@
 }
 
 .joinCallFab:hover {
-  background: rgba(0, 212, 170, 0.2);
+  background: var(--bg);
   border-color: var(--accent);
   box-shadow: 0 6px 24px rgba(0, 212, 170, 0.25);
 }

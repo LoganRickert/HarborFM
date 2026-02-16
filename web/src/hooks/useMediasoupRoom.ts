@@ -9,6 +9,8 @@ export function useMediasoupRoom(
   deviceId?: string,
   participantId?: string | null,
   participantName?: string | null,
+  /** Host token for host-only actions (soundboard). Only host receives this. */
+  hostToken?: string | null,
 ) {
   const [remoteTracks, setRemoteTracks] = useState<Map<string, RemoteTrackInfo>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export function useMediasoupRoom(
   const soundboardVolumeRef = useRef<number>(1);
   const setSoundboardVolumeRef = useRef<(volume: number) => void>(() => {});
   const onSoundboardStoppedRef = useRef<(() => void) | null>(null);
+  const onSoundboardErrorRef = useRef<((error: string) => void) | null>(null);
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
@@ -81,6 +84,11 @@ export function useMediasoupRoom(
         });
         if (closed) return;
 
+        // Host sends setHostToken as first message so host-only actions (soundboard) work
+        if (hostToken && webrtcWs?.readyState === WebSocket.OPEN) {
+          safeSend(webrtcWs, { type: 'setHostToken', hostToken });
+        }
+
         webrtcWs.onclose = () => {
           if (!closed) {
             setError('Audio connection lost - WebRTC service may have stopped. Please refresh or try again.');
@@ -103,6 +111,10 @@ export function useMediasoupRoom(
             }
             if (msg.type === 'soundboardStopped') {
               handleSoundboardStopped();
+              return;
+            }
+            if (msg.type === 'soundboardError' && typeof msg.error === 'string') {
+              onSoundboardErrorRef.current?.(msg.error);
               return;
             }
             const queue = pendingResolvers.get(msg.type);
@@ -328,7 +340,7 @@ export function useMediasoupRoom(
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId, deviceId, participantId, participantName]);
+  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken]);
 
   const setMuted = useCallback((muted: boolean) => {
     setMutedRef.current(muted);
@@ -378,5 +390,6 @@ export function useMediasoupRoom(
     resumeSoundboardContext,
     setSoundboardPanelOpen,
     onSoundboardStoppedRef,
+    onSoundboardErrorRef,
   };
 }

@@ -7,6 +7,8 @@ export interface CallStartResponse {
   joinCode?: string;
   webrtcUrl?: string;
   roomId?: string;
+  /** Host token for host-only WebRTC actions (soundboard). Only for host. */
+  hostToken?: string;
   /** True when WebRTC was requested but room creation failed (e.g. service down). */
   webrtcUnavailable?: boolean;
 }
@@ -26,6 +28,7 @@ export interface CallSessionResponse {
   joinCode?: string;
   webrtcUrl?: string;
   roomId?: string;
+  hostToken?: string;
   webrtcUnavailable?: boolean;
 }
 

@@ -72,6 +72,27 @@ test.describe('Call chat', () => {
     podcastId = podcast.id;
   });
 
+  async function endCallIfActive(page: import('@playwright/test').Page) {
+    const panel = page.getByRole('region', { name: /group call/i });
+    if (!(await panel.isVisible())) return;
+    // Close chat/soundboard if open so End call button is visible
+    const closeChatBtn = panel.getByRole('button', { name: /close chat/i });
+    if (await closeChatBtn.isVisible()) await closeChatBtn.click();
+    const closeSoundboardBtn = panel.getByRole('button', { name: /close soundboard/i });
+    if (await closeSoundboardBtn.isVisible()) await closeSoundboardBtn.click();
+    const endBtn = panel.getByRole('button', { name: /end call|end group call/i }).first();
+    if (!(await endBtn.isVisible())) return;
+    await endBtn.click();
+    const dialog = page.getByRole('dialog');
+    if (await dialog.isVisible()) {
+      await dialog.getByRole('button', { name: /confirm end call|end call/i }).click();
+    }
+  }
+
+  test.afterEach(async ({ page }) => {
+    await endCallIfActive(page);
+  });
+
   test('Chat button visible in CallPanel when call active', async ({ page }) => {
     await page.goto(`/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
@@ -81,7 +102,7 @@ test.describe('Call chat', () => {
   });
 
   test('Chat panel visible in CallJoin when guest joined', async ({ page, context }) => {
-    test.setTimeout(45000);
+    test.setTimeout(30000);
     const baseURL = `http://127.0.0.1:${PORT}`;
     await page.goto(`/episodes/${episodeId}`);
     await page.getByRole('button', { name: /start group call/i }).click();
@@ -105,7 +126,7 @@ test.describe('Call chat', () => {
   });
 
   test('Host sends chat message, guest sees it', async ({ page, context }) => {
-    test.setTimeout(45000);
+    test.setTimeout(30000);
     const baseURL = `http://127.0.0.1:${PORT}`;
     await page.addInitScript(() => {
       localStorage.setItem('harborfm_call_display_name', 'E2E Host');
@@ -144,7 +165,7 @@ test.describe('Call chat', () => {
   });
 
   test('Guest sends chat message, host sees it', async ({ page, context }) => {
-    test.setTimeout(45000);
+    test.setTimeout(30000);
     const baseURL = `http://127.0.0.1:${PORT}`;
     await page.addInitScript(() => {
       localStorage.setItem('harborfm_call_display_name', 'E2E Host');

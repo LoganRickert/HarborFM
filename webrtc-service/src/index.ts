@@ -1,7 +1,12 @@
 import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
+import fastifyRateLimit from "@fastify/rate-limit";
 import { RecordingManager } from "./recording/RecordingManager.js";
-import { recoverPartFiles, markInterruptedSegments } from "./recording/segmentMetadata.js";
+import {
+  recoverPartFiles,
+  markInterruptedSegments,
+  cleanupSoundboardTemp,
+} from "./recording/segmentMetadata.js";
 import { registerRoutes } from "./routes/index.js";
 import { wsHandler } from "./ws/handler.js";
 import {
@@ -11,6 +16,9 @@ import {
   RECORD_PORT_STRIDE,
   MAIN_APP_URL,
   WEBRTC_SERVICE_SECRET,
+  WEBRTC_INSECURE_SKIP_AUTH,
+  WEBRTC_RATE_LIMIT_MAX,
+  WEBRTC_RATE_LIMIT_TIME_WINDOW,
 } from "./config.js";
 import {
   getRoom,
@@ -51,7 +59,18 @@ function finalizeProducerStream(
   recordingManager.finalizeProducerStream(roomId, state, producerId, reason);
 }
 
+if (!WEBRTC_SERVICE_SECRET && !WEBRTC_INSECURE_SKIP_AUTH) {
+  console.error(
+    "[webrtc] WEBRTC_SERVICE_SECRET is unset. WebRTC is disabled. Set WEBRTC_SERVICE_SECRET in production, or WEBRTC_INSECURE_SKIP_AUTH=1 for e2e."
+  );
+  process.exit(1);
+}
+
 const app = Fastify({ logger: true });
+await app.register(fastifyRateLimit, {
+  max: WEBRTC_RATE_LIMIT_MAX,
+  timeWindow: WEBRTC_RATE_LIMIT_TIME_WINDOW,
+});
 await app.register(fastifyWebsocket);
 
 app.addContentTypeParser(/^application\/json\b/i, { parseAs: "string" }, (req, body, done) => {
@@ -87,10 +106,14 @@ if (recovered.length > 0) {
   console.warn("[webrtc] Recovered %d part files on startup: %j", recovered.length, recovered);
 }
 markInterruptedSegments(RECORDING_DATA_DIR);
+const sbCleaned = cleanupSoundboardTemp(RECORDING_DATA_DIR);
+if (sbCleaned > 0) {
+  console.warn("[webrtc] Cleaned %d stale soundboard temp files on startup", sbCleaned);
+}
 
-if (!WEBRTC_SERVICE_SECRET) {
+if (!WEBRTC_SERVICE_SECRET && WEBRTC_INSECURE_SKIP_AUTH) {
   console.warn(
-    "[webrtc] WEBRTC_SERVICE_SECRET is unset. /room, /start-recording, /stop-recording are unprotected. Set WEBRTC_SERVICE_SECRET in production."
+    "[webrtc] WEBRTC_INSECURE_SKIP_AUTH=1: /room, /start-recording, /stop-recording are unprotected. Use only for e2e."
   );
 }
 

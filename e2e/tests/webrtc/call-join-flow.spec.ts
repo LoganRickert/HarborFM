@@ -54,7 +54,7 @@ test.describe('Call join flow', () => {
     });
 
     test('Valid code navigates to join page from login', async ({ page, context }) => {
-      test.setTimeout(45000);
+      test.setTimeout(35000);
       const baseURL = `http://127.0.0.1:${PORT}`;
       await page.goto(`${baseURL}/episodes/${episodeId}`);
       await page.getByRole('button', { name: /start group call/i }).click();
@@ -63,6 +63,7 @@ test.describe('Call join flow', () => {
       await expect(joinCodeValue).toBeVisible({ timeout: 5000 });
       const code = await joinCodeValue.textContent();
       expect(code).toMatch(/^\d{4}$/);
+      await page.waitForTimeout(1500);
 
       const guestContext = await context.browser()!.newContext({ baseURL });
       const loginTab = await guestContext.newPage();
@@ -83,7 +84,7 @@ test.describe('Call join flow', () => {
   });
 
   test('Host joining own code from Dashboard sees already connected', async ({ page, context }) => {
-    test.setTimeout(45000);
+    test.setTimeout(35000);
     const baseURL = `http://127.0.0.1:${PORT}`;
 
     await page.goto(`${baseURL}/episodes/${episodeId}`);
@@ -93,6 +94,7 @@ test.describe('Call join flow', () => {
     await expect(joinCodeValue).toBeVisible({ timeout: 5000 });
     const code = await joinCodeValue.textContent();
     expect(code).toMatch(/^\d{4}$/);
+    await page.waitForTimeout(1500);
 
     const dashboardTab = await context.newPage();
     try {
@@ -118,7 +120,7 @@ test.describe('Call join flow', () => {
   });
 
   test('Guest joining via code from Dashboard navigates to join page', async ({ page, context }) => {
-    test.setTimeout(45000);
+    test.setTimeout(35000);
     const baseURL = `http://127.0.0.1:${PORT}`;
 
     await page.goto(`${baseURL}/episodes/${episodeId}`);
@@ -128,6 +130,7 @@ test.describe('Call join flow', () => {
     await expect(joinCodeValue).toBeVisible({ timeout: 5000 });
     const code = await joinCodeValue.textContent();
     expect(code).toMatch(/^\d{4}$/);
+    await page.waitForTimeout(1500);
 
     const guestContext = await context.browser()!.newContext({ baseURL });
     const guestPage = await guestContext.newPage();
