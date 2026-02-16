@@ -10,6 +10,7 @@ import {
   producerSoundboardAssetMapRef,
   soundboardVolumeByRoomRef,
   soundboardVolumeAtStopRef,
+  producerVolumeByProducerId,
   soundboardByRoom,
 } from "../room.js";
 import {
@@ -53,6 +54,8 @@ type WebRtcTransport = mediasoup.types.WebRtcTransport;
 const socketRooms = new Map<unknown, string>();
 const socketTransports = new Map<unknown, WebRtcTransport>();
 const socketToIsHost = new Map<unknown, boolean>();
+/** Producer ID -> socket that created it (for producerVolume auth) */
+const producerToSocket = new Map<string, unknown>();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const wsHandler = async (socket: any, req: any) => {
@@ -180,11 +183,14 @@ export const wsHandler = async (socket: any, req: any) => {
         }
         const producer = await transport.produce({ kind, rtpParameters });
         roomState.producers.set(producer.id, producer);
+        producerToSocket.set(producer.id, socket);
         if (source) producerSourceMapRef.set(producer.id, source);
         producer.on("@close", () => {
           roomState.producers.delete(producer.id);
           producerSourceMapRef.delete(producer.id);
           producerParticipantMapRef.delete(producer.id);
+          producerToSocket.delete(producer.id);
+          producerVolumeByProducerId.delete(producer.id);
         });
         socket.send(JSON.stringify({ type: "produced", id: producer.id, kind: producer.kind }));
         for (const [s, r] of socketRooms.entries()) {
@@ -239,6 +245,15 @@ export const wsHandler = async (socket: any, req: any) => {
           const v = Math.max(0, Math.min(1, volume));
           soundboardVolumeByRoomRef.set(roomId, v);
         }
+        return;
+      }
+
+      if (type === "producerVolume") {
+        const { producerId, volume } = msg as { producerId?: string; volume?: number };
+        if (!producerId || typeof volume !== "number") return;
+        if (producerToSocket.get(producerId) !== socket) return;
+        const v = Math.max(0, Math.min(8, volume));
+        producerVolumeByProducerId.set(producerId, v);
         return;
       }
 

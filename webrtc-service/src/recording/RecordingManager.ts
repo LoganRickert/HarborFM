@@ -70,6 +70,8 @@ export type RecordingManagerDeps = {
   getProducerSoundboardAsset?: (producerId: string) => string | undefined;
   /** Volume for soundboard segment; prefers value captured when user stopped that item */
   getSoundboardVolumeForSegment?: (roomId: string, producerId: string) => number;
+  /** Volume for mic segment (when AGC off); 0..2, default 1 */
+  getProducerVolumeForSegment?: (producerId: string) => number;
 };
 
 export class RecordingManager {
@@ -141,7 +143,7 @@ export class RecordingManager {
     await new Promise((r) => setTimeout(r, postConnectMs));
     await consumer.resume();
 
-    const filePathRelative = join("recordings", recordingDirName, `segment_${segmentId}.mp3`);
+    const filePathRelative = join("recordings", recordingDirName, `segment_${segmentId}.wav`);
 
     const now = Date.now();
     const activeSegment: ActiveSegment = {
@@ -213,7 +215,12 @@ export class RecordingManager {
     if (this.deps.recordingByRoom.get(roomId) !== state) return;
     const endMs = Date.now() - state.recordingStartedAt;
     if (result.success && result.filePath) {
-      const volume = seg.source === "soundboard" ? (this.deps.getSoundboardVolumeForSegment?.(roomId, producerId) ?? 1) : undefined;
+      let volume: number | undefined;
+      if (seg.source === "soundboard") {
+        volume = this.deps.getSoundboardVolumeForSegment?.(roomId, producerId) ?? 1;
+      } else {
+        volume = this.deps.getProducerVolumeForSegment?.(producerId) ?? 1;
+      }
       state.finalizedSegments.push({
         segmentId: seg.segmentId,
         producerId,
@@ -271,7 +278,7 @@ export class RecordingManager {
         startMs: s.startedAt - epochMs,
         endMs: epochMs ? endMs - epochMs : 0,
         filePath: s.filePathRelative,
-        codec: "mp3",
+        codec: "pcm_s16le",
       };
       if (participant?.participantName) seg.participantName = participant.participantName;
       if (source === "soundboard") seg.source = "soundboard";
@@ -347,7 +354,10 @@ export class RecordingManager {
     }
 
     const amixInputs = Array.from({ length: inputIdx }, (_, i) => `[a${i}]`).join("");
-    const filterComplex = filterParts.join(";") + ";" + `${amixInputs}amix=inputs=${inputIdx}:duration=longest[aout]`;
+    const filterComplex =
+      filterParts.join(";") +
+      ";" +
+      `${amixInputs}amix=inputs=${inputIdx}:duration=longest:dropout_transition=500[aout]`;
     const mixFf = spawn(
       "ffmpeg",
       [

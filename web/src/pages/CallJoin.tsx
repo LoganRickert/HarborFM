@@ -181,7 +181,11 @@ export function CallJoin() {
   const setupMicrophone = async (): Promise<boolean> => {
     if (streamRef.current) return true;
     const constraints: MediaStreamConstraints = {
-      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+      audio: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        autoGainControl: false,
+        noiseSuppression: false,
+      },
       video: false,
     };
     try {

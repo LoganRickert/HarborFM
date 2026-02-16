@@ -12,6 +12,10 @@ export function useMediasoupRoom(
   participantName?: string | null,
   /** Host token for host-only actions (soundboard). Only host receives this. */
   hostToken?: string | null,
+  /** When false, disables autoGainControl on the mic. Default true. */
+  autoGainControl: boolean = true,
+  /** Manual gain 0..8 when AGC off. Applied to live send and recording. Default 1. */
+  micVolume: number = 1,
 ) {
   const [remoteTracks, setRemoteTracks] = useState<Map<string, RemoteTrackInfo>>(new Map());
   const [remoteMicLevels, setRemoteMicLevels] = useState<Map<string, number>>(new Map());
@@ -33,6 +37,11 @@ export function useMediasoupRoom(
   const setSoundboardVolumeRef = useRef<(volume: number) => void>(() => {});
   const onSoundboardStoppedRef = useRef<(() => void) | null>(null);
   const onSoundboardErrorRef = useRef<((error: string) => void) | null>(null);
+  const selfListenGainRef = useRef<GainNode | null>(null);
+  const micVolumeGainRef = useRef<GainNode | null>(null);
+  const setListenToSelfStateRef = useRef<(v: boolean) => void>(() => {});
+  const [listenToSelf, setListenToSelfState] = useState(false);
+  setListenToSelfStateRef.current = setListenToSelfState;
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
@@ -151,9 +160,15 @@ export function useMediasoupRoom(
         await device.load({ routerRtpCapabilities: capsMsg.rtpCapabilities });
         if (closed) return;
 
-        const audioConstraints: boolean | MediaTrackConstraints = deviceId
-          ? { deviceId: { exact: deviceId } }
-          : true;
+        const audioConstraints: MediaTrackConstraints = {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          sampleRate: { ideal: 48000 },
+          autoGainControl,
+          noiseSuppression: false,
+          // When AGC off, also disable echo cancellation to reduce pumping/volume swings.
+          // Use headphones to avoid feedback when echo cancellation is off.
+          ...(!autoGainControl ? { echoCancellation: false } : {}),
+        };
         micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
         const micTrack = micStream.getAudioTracks()[0];
         if (!micTrack) throw new Error('No audio track');
@@ -161,16 +176,30 @@ export function useMediasoupRoom(
         const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         const ctx = new AudioCtx();
         ctxRef.current = ctx;
-        const mixNode = ctx.createGain();
-        mixNode.gain.value = 1;
 
         const micSource = ctx.createMediaStreamSource(micStream);
         const analyser = ctx.createAnalyser();
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0;
         micSource.connect(analyser);
-        analyser.connect(mixNode);
+        analyser.connect(silentGain);
+        silentGain.connect(ctx.destination);
 
-        const dest = ctx.createMediaStreamDestination();
-        mixNode.connect(dest);
+        const selfListenGain = ctx.createGain();
+        selfListenGain.gain.value = 0;
+        selfListenGain.connect(ctx.destination);
+        selfListenGainRef.current = selfListenGain;
+
+        const micVolumeGain = ctx.createGain();
+        micVolumeGain.gain.value = autoGainControl ? 1 : Math.max(0, Math.min(8, micVolume));
+        micSource.connect(micVolumeGain);
+        micVolumeGainRef.current = micVolumeGain;
+        micVolumeGain.connect(selfListenGain);
+
+        const sendDest = ctx.createMediaStreamDestination();
+        micVolumeGain.connect(sendDest);
+        const sendTrack = sendDest.stream.getAudioTracks()[0];
+        if (!sendTrack) throw new Error('No send track');
 
         const computeLevel = createAudioLevelProcessor(analyser);
         let tickId: number | undefined;
@@ -185,14 +214,16 @@ export function useMediasoupRoom(
           soundboardVolumeRef.current = Math.max(0, Math.min(1, volume));
         };
 
-        localStream = dest.stream;
-        const track = localStream.getAudioTracks()[0];
-        if (!track) throw new Error('No audio track');
+        localStream = new MediaStream([sendTrack]);
+        const track = sendTrack;
 
         cleanupRef.current = () => {
           if (tickId != null) cancelAnimationFrame(tickId);
           const ws = webrtcWsRef.current;
           safeSend(ws, { type: 'stopSoundboard' });
+          selfListenGainRef.current = null;
+          micVolumeGainRef.current = null;
+          setListenToSelfStateRef.current(false);
           ctxRef.current = null;
           ctx.close();
         };
@@ -354,6 +385,9 @@ export function useMediasoupRoom(
       closed = true;
       webrtcWsRef.current = null;
       setRemoteMicLevels(new Map());
+      selfListenGainRef.current = null;
+      micVolumeGainRef.current = null;
+      setListenToSelfStateRef.current(false);
       cleanupRef.current?.();
       pendingResolvers.forEach((queue) => queue.forEach((r) => r(null)));
       webrtcWs?.close();
@@ -362,7 +396,13 @@ export function useMediasoupRoom(
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken]);
+  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken, autoGainControl]);
+
+  useEffect(() => {
+    const gain = micVolumeGainRef.current;
+    if (!gain) return;
+    gain.gain.value = autoGainControl ? 1 : Math.max(0, Math.min(8, micVolume));
+  }, [autoGainControl, micVolume]);
 
   useEffect(() => {
     const entries = Array.from(remoteTracks.entries()).filter(
@@ -437,6 +477,24 @@ export function useMediasoupRoom(
     }
   }, []);
 
+  const toggleListenToSelf = useCallback(async () => {
+    const gain = selfListenGainRef.current;
+    const ctx = ctxRef.current;
+    if (!gain || !ctx) return;
+    await ctx.resume().catch(() => {});
+    if (ctx.state !== 'running') return;
+    setListenToSelfState((prev) => {
+      gain.gain.value = prev ? 0 : 1;
+      return !prev;
+    });
+  }, []);
+
+  const stopListenToSelf = useCallback(() => {
+    const gain = selfListenGainRef.current;
+    if (gain) gain.gain.value = 0;
+    setListenToSelfState(false);
+  }, []);
+
   const setSoundboardPanelOpen = useCallback((open: boolean) => {
     if (!open) sendIfOpen({ type: 'stopSoundboard' });
   }, [sendIfOpen]);
@@ -447,6 +505,14 @@ export function useMediasoupRoom(
 
   const stopSoundboard = useCallback(() => {
     sendIfOpen({ type: 'stopSoundboard' });
+  }, [sendIfOpen]);
+
+  const setProducerVolume = useCallback((volume: number) => {
+    const pid = producerRef.current?.id;
+    if (pid != null) {
+      const v = Math.max(0, Math.min(8, volume));
+      sendIfOpen({ type: 'producerVolume', producerId: pid, volume: v });
+    }
   }, [sendIfOpen]);
 
   return {
@@ -463,5 +529,9 @@ export function useMediasoupRoom(
     setSoundboardPanelOpen,
     onSoundboardStoppedRef,
     onSoundboardErrorRef,
+    listenToSelf,
+    toggleListenToSelf,
+    stopListenToSelf,
+    setProducerVolume,
   };
 }

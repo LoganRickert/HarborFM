@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { RotateCcw, PlusCircle, Play, Pause, X, Upload } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { RotateCcw, PlusCircle, Play, Pause, X, Upload, Settings, Mic, Volume2 } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { formatDuration } from './utils';
 import { formatDurationHMS } from '../../utils/format';
+import { createAudioLevelProcessor } from '../../utils/audioLevel';
+import { DEVICE_ID_KEY, getAgcKey, getMicVolumeKey } from '../../constants/micSettings';
 import styles from '../EpisodeEditor.module.css';
 
 export interface RecordModalProps {
@@ -28,7 +30,36 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const [audioLevel, setAudioLevel] = useState(0);
   const [hasSeenAudio, setHasSeenAudio] = useState(false);
   const hasSeenAudioRef = useRef(false);
+  const [deviceId, setDeviceId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(DEVICE_ID_KEY) || '';
+  });
+  const [autoGainControl, setAutoGainControl] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const id = localStorage.getItem(DEVICE_ID_KEY) || 'default';
+    const stored = localStorage.getItem(getAgcKey(id));
+    if (stored === 'false') return false;
+    if (stored === 'true') return true;
+    return true;
+  });
+  const [micVolume, setMicVolume] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const id = localStorage.getItem(DEVICE_ID_KEY) || 'default';
+    const stored = localStorage.getItem(getMicVolumeKey(id));
+    if (stored == null) return 1;
+    const v = parseFloat(stored);
+    return Number.isFinite(v) ? Math.max(0, Math.min(8, v)) : 1;
+  });
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [listenToSelf, setListenToSelf] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
+  const settingsStreamRef = useRef<MediaStream | null>(null);
+  const settingsAudioContextRef = useRef<AudioContext | null>(null);
+  const settingsAnalyserRef = useRef<AnalyserNode | null>(null);
+  const selfListenGainRef = useRef<GainNode | null>(null);
+  const micVolumeGainRef = useRef<GainNode | null>(null);
+  const settingsLevelAnimationRef = useRef<number | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -53,6 +84,32 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     }
   }
 
+  const refreshDevices = useCallback(() => {
+    navigator.mediaDevices
+      ?.enumerateDevices()
+      ?.then((all) => {
+        const audioInputs = all.filter((d) => d.kind === 'audioinput');
+        setDevices(audioInputs);
+        setDeviceId((prev) => {
+          const stored = typeof window !== 'undefined' ? localStorage.getItem(DEVICE_ID_KEY) || '' : '';
+          const preferred = prev || stored;
+          const stillValid = preferred && audioInputs.some((d) => d.deviceId === preferred);
+          return stillValid ? preferred : audioInputs[0]?.deviceId ?? '';
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!deviceId || typeof window === 'undefined') return;
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    const agcStored = localStorage.getItem(getAgcKey(deviceId));
+    setAutoGainControl(agcStored === 'false' ? false : true);
+    const volStored = localStorage.getItem(getMicVolumeKey(deviceId)) ?? localStorage.getItem(getMicVolumeKey('default'));
+    const v = parseFloat(volStored ?? '1');
+    setMicVolume(Number.isFinite(v) ? Math.max(0, Math.min(8, v)) : 1);
+  }, [deviceId]);
+
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     setIsMobile(mq.matches);
@@ -65,8 +122,11 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (levelAnimationRef.current != null) cancelAnimationFrame(levelAnimationRef.current);
+      if (settingsLevelAnimationRef.current != null) cancelAnimationFrame(settingsLevelAnimationRef.current);
       if (audioContextRef.current?.state !== 'closed') audioContextRef.current?.close();
+      if (settingsAudioContextRef.current?.state !== 'closed') settingsAudioContextRef.current?.close();
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      if (settingsStreamRef.current) settingsStreamRef.current.getTracks().forEach((t) => t.stop());
       releaseWakeLock();
     };
   }, []);
@@ -228,13 +288,191 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     setHasSeenAudio(false);
   }
 
+  function stopSettingsPreview() {
+    if (settingsLevelAnimationRef.current != null) {
+      cancelAnimationFrame(settingsLevelAnimationRef.current);
+      settingsLevelAnimationRef.current = null;
+    }
+    if (settingsAudioContextRef.current?.state !== 'closed') {
+      settingsAudioContextRef.current?.close();
+      settingsAudioContextRef.current = null;
+    }
+    settingsAnalyserRef.current = null;
+    selfListenGainRef.current = null;
+    micVolumeGainRef.current = null;
+    if (settingsStreamRef.current) {
+      settingsStreamRef.current.getTracks().forEach((t) => t.stop());
+      settingsStreamRef.current = null;
+    }
+    setListenToSelf(false);
+  }
+
+  async function setupSettingsMicrophone(overrides?: { autoGainControl?: boolean; micVolume?: number }): Promise<boolean> {
+    const agc = overrides?.autoGainControl ?? autoGainControl;
+    const vol = overrides?.micVolume ?? micVolume;
+    if (settingsStreamRef.current) return true;
+    const audioConstraints: MediaTrackConstraints = {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      sampleRate: { ideal: 48000 },
+      autoGainControl: agc,
+      noiseSuppression: false,
+      ...(!agc ? { echoCancellation: false } : {}),
+    };
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      settingsStreamRef.current = stream;
+      const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      settingsAudioContextRef.current = ctx;
+      const micSource = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      micSource.connect(analyser);
+      settingsAnalyserRef.current = analyser;
+      const micVolumeGain = ctx.createGain();
+      micVolumeGain.gain.value = agc ? 1 : Math.max(0, Math.min(8, vol));
+      micSource.connect(micVolumeGain);
+      micVolumeGainRef.current = micVolumeGain;
+      const selfListenGain = ctx.createGain();
+      selfListenGain.gain.value = 0;
+      micVolumeGain.connect(selfListenGain);
+      selfListenGain.connect(ctx.destination);
+      selfListenGainRef.current = selfListenGain;
+      await ctx.resume();
+      const computeLevel = createAudioLevelProcessor(analyser);
+      function tick() {
+        const an = settingsAnalyserRef.current;
+        const ctxNow = settingsAudioContextRef.current;
+        if (an && ctxNow && ctxNow.state === 'running') {
+          setAudioLevel(computeLevel());
+        }
+        settingsLevelAnimationRef.current = requestAnimationFrame(tick);
+      }
+      settingsLevelAnimationRef.current = requestAnimationFrame(tick);
+      refreshDevices();
+      return true;
+    } catch {
+      setAudioLevel(0);
+      return false;
+    }
+  }
+
+  const toggleListenToSelfSettings = async () => {
+    const ok = await setupSettingsMicrophone();
+    if (!ok) return;
+    const gain = selfListenGainRef.current;
+    const ctx = settingsAudioContextRef.current;
+    if (!gain || !ctx) return;
+    await ctx.resume().catch(() => {});
+    if (ctx.state !== 'running') return;
+    setListenToSelf((prev) => {
+      gain.gain.value = prev ? 0 : 1;
+      return !prev;
+    });
+  };
+
+  const handleDeviceChange = (newDeviceId: string) => {
+    setDeviceId(newDeviceId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DEVICE_ID_KEY, newDeviceId);
+    }
+    stopSettingsPreview();
+  };
+
+  const handleAutoGainControlChange = async (enabled: boolean) => {
+    const wasListening = listenToSelf;
+    setAutoGainControl(enabled);
+    if (typeof window !== 'undefined' && deviceId) {
+      localStorage.setItem(getAgcKey(deviceId), String(enabled));
+    }
+    stopSettingsPreview();
+    if (wasListening) {
+      const ok = await setupSettingsMicrophone({ autoGainControl: enabled });
+      if (ok) {
+        const gain = selfListenGainRef.current;
+        const ctx = settingsAudioContextRef.current;
+        if (gain && ctx) {
+          await ctx.resume().catch(() => {});
+          if (ctx.state === 'running') {
+            gain.gain.value = 1;
+            setListenToSelf(true);
+          }
+        }
+      }
+    }
+  };
+
+  const handleMicVolumeChange = (vol: number) => {
+    const clamped = Math.max(0, Math.min(8, vol));
+    setMicVolume(clamped);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(getMicVolumeKey(deviceId || 'default'), String(clamped));
+    }
+    const gain = micVolumeGainRef.current;
+    if (gain && !autoGainControl) gain.gain.value = clamped;
+  };
+
+  useEffect(() => {
+    if (settingsOpen) {
+      refreshDevices();
+    } else {
+      stopSettingsPreview();
+    }
+  }, [settingsOpen, refreshDevices]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const g = micVolumeGainRef.current;
+    if (g) g.gain.value = autoGainControl ? 1 : Math.max(0, Math.min(8, micVolume));
+  }, [settingsOpen, autoGainControl, micVolume]);
+
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+      stopSettingsPreview();
+      const audioConstraints: MediaTrackConstraints = {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        sampleRate: { ideal: 48000 },
+        autoGainControl,
+        noiseSuppression: false,
+        ...(!autoGainControl ? { echoCancellation: false } : {}),
+      };
+      const rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      streamRef.current = rawStream;
       chunksRef.current = [];
-      startLevelMeter(stream);
-      const recorder = new MediaRecorder(stream);
+      let streamForRecorder: MediaStream;
+      if (autoGainControl) {
+        streamForRecorder = rawStream;
+        startLevelMeter(rawStream);
+      } else {
+        const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AudioCtx();
+        audioContextRef.current = ctx;
+        const micSource = ctx.createMediaStreamSource(rawStream);
+        const analyser = ctx.createAnalyser();
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0;
+        micSource.connect(analyser);
+        analyser.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        analyserRef.current = analyser;
+        const micVolumeGain = ctx.createGain();
+        micVolumeGain.gain.value = Math.max(0, Math.min(8, micVolume));
+        micSource.connect(micVolumeGain);
+        const sendDest = ctx.createMediaStreamDestination();
+        micVolumeGain.connect(sendDest);
+        streamForRecorder = sendDest.stream;
+        ctx.resume().catch(() => {});
+        const computeLevel = createAudioLevelProcessor(analyser);
+        function tick() {
+          const an = analyserRef.current;
+          const ctxNow = audioContextRef.current;
+          if (an && ctxNow && ctxNow.state === 'running') {
+            setAudioLevel(computeLevel());
+          }
+          levelAnimationRef.current = requestAnimationFrame(tick);
+        }
+        levelAnimationRef.current = requestAnimationFrame(tick);
+      }
+      const recorder = new MediaRecorder(streamForRecorder);
       recorderRef.current = recorder;
       recorder.ondataavailable = (e) => {
         if (e.data.size) chunksRef.current.push(e.data);
@@ -370,9 +608,11 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
             <X size={18} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
-        <p className={styles.recordSub}>Use your microphone or upload audio. To begin, click the red record button below.</p>
+        {!recording && !hasPreview && !settingsOpen && (
+          <p className={styles.recordSub}>Use your microphone or upload audio. To begin, click the red record button below.</p>
+        )}
 
-        {!recording && !hasPreview && (
+        {!recording && !hasPreview && !settingsOpen && (
           <>
             <button ref={recordButtonRef} type="button" className={`${styles.recordBtn} ${styles.record}`} onClick={startRecording} aria-label="Start recording">
               ●
@@ -490,11 +730,111 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
         )}
 
         {!hasPreview && !recording && (
-          <div className={styles.recordFooterRow}>
-            <button ref={cancelButtonRef} type="button" className={styles.libraryClose} onClick={requestClose} aria-label="Cancel">
-              Cancel
-            </button>
-          </div>
+          <>
+            {settingsOpen && (
+              <div className={styles.recordSettingsPanel}>
+                {devices.length > 0 ? (
+                  <>
+                <div className={styles.recordSettingsMic}>
+                  <label className={styles.recordSettingsLabel} htmlFor="record-modal-mic">
+                    Microphone
+                  </label>
+                  <select
+                    id="record-modal-mic"
+                    className={styles.recordSettingsSelect}
+                    value={deviceId}
+                    onChange={(e) => handleDeviceChange(e.target.value)}
+                    aria-label="Microphone"
+                  >
+                    {devices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className={styles.recordSettingsAgc}>
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={autoGainControl}
+                      onChange={(e) => handleAutoGainControlChange(e.target.checked)}
+                      aria-label="Auto Gain Control"
+                    />
+                    <span className="toggle__track" aria-hidden="true" />
+                    <span>Auto Gain Control</span>
+                  </label>
+                </div>
+                {!autoGainControl && (
+                  <>
+                    <div className={styles.recordSettingsVolume}>
+                      <label className={styles.recordSettingsLabel}>Volume</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={800}
+                        step={1}
+                        value={Math.round((micVolume ?? 1) * 100)}
+                        onChange={(e) => {
+                          const raw = parseFloat(e.target.value);
+                          if (Number.isFinite(raw)) handleMicVolumeChange(raw / 100);
+                        }}
+                        className={styles.recordSettingsSlider}
+                        aria-label="Microphone volume"
+                      />
+                      <span className={styles.recordSettingsVolumeValue}>{Math.round((micVolume ?? 1) * 100)}%</span>
+                    </div>
+                    <p className={styles.recordSettingsHint}>
+                      Use headphones to avoid feedback. If volume pumps, try disabling &quot;Allow WebRTC to adjust input volume&quot; in chrome://flags.
+                    </p>
+                  </>
+                )}
+                <div className={styles.recordSettingsListen}>
+                  <button
+                    type="button"
+                    className={styles.recordListenBtn}
+                    onClick={toggleListenToSelfSettings}
+                    aria-pressed={listenToSelf}
+                    aria-label={listenToSelf ? 'Stop listening to yourself' : 'Listen to yourself'}
+                  >
+                    {listenToSelf ? <Volume2 size={16} /> : <Mic size={16} />}
+                    {listenToSelf ? ' Stop listening' : ' Listen to yourself'}
+                  </button>
+                </div>
+                  </>
+                ) : (
+                  <p className={styles.recordSettingsEmpty}>No microphones found. Grant microphone permission and refresh.</p>
+                )}
+              </div>
+            )}
+            <div className={styles.recordFooterRow}>
+              <button ref={cancelButtonRef} type="button" className={styles.libraryClose} onClick={requestClose} aria-label="Cancel">
+                Cancel
+              </button>
+              {!settingsOpen && (
+                <button
+                  type="button"
+                  className={styles.recordFooterSettingsBtn}
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label="Settings"
+                  aria-expanded={settingsOpen}
+                >
+                  <Settings size={16} strokeWidth={2} aria-hidden />
+                  <span>Settings</span>
+                </button>
+              )}
+              {settingsOpen && (
+                <button
+                  type="button"
+                  className={styles.recordFooterPrimaryBtn}
+                  onClick={() => setSettingsOpen(false)}
+                  aria-label="Back to record"
+                >
+                  <span>Back To Record</span>
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         {error && <p className={styles.error} style={{ marginTop: '0.5rem' }}>{error}</p>}

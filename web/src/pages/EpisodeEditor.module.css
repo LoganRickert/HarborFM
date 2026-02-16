@@ -1224,6 +1224,172 @@
   cursor: not-allowed;
 }
 
+.recordFooterSettingsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted, #888);
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.recordFooterSettingsBtn:hover {
+  color: var(--text, #e5e5e5);
+  border-color: var(--accent, #00d4aa);
+}
+
+.recordFooterSettingsBtnActive {
+  background: rgba(0, 212, 170, 0.2);
+  border-color: var(--accent, #00d4aa);
+  color: var(--accent, #00d4aa);
+}
+
+.recordSettingsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin-top: 1rem;
+  background: var(--bg-elevated, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+
+.recordSettingsMic,
+.recordSettingsVolume {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.recordSettingsAgc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.recordSettingsListen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.recordSettingsLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+}
+
+.recordSettingsSelect {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9375rem;
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text, #e5e5e5);
+}
+
+.recordSettingsSelect:focus {
+  outline: none;
+  border-color: var(--accent, #00d4aa);
+}
+
+.recordSettingsVolume {
+  flex-direction: row;
+  align-items: center;
+}
+
+.recordSettingsVolume .recordSettingsLabel {
+  flex-shrink: 0;
+  width: 4.5rem;
+}
+
+.recordSettingsSlider {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  appearance: none;
+  background: var(--bg-muted, #252525);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.recordSettingsSlider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent, #00d4aa);
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.recordSettingsSlider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent, #00d4aa);
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.recordSettingsVolumeValue {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #888);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.recordSettingsHint {
+  margin: 0;
+  padding: 0 0 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  line-height: 1.3;
+}
+
+.recordListenBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--bg, #0c0e12);
+  background: var(--accent, #00d4aa);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.recordListenBtn:hover {
+  filter: brightness(1.1);
+}
+
+.recordListenBtn[aria-pressed="true"] {
+  background: var(--accent-dim, #00a884);
+}
+
+.recordSettingsEmpty {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+  background: var(--bg, #0c0e12);
+  border: 1px dashed var(--border, #333);
+  border-radius: 8px;
+  text-align: center;
+}
+
 /* Library modal */
 .libraryOverlay {
   position: fixed;

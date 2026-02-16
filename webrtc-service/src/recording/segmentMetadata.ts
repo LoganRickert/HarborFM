@@ -25,7 +25,7 @@ export type SegmentLogLine = {
 };
 
 /**
- * Scan for .mp3.part files on startup and recover or discard.
+ * Scan for .mp3.part and .wav.part files on startup and recover or discard.
  * Returns list of recovered relative paths.
  */
 export function recoverPartFiles(recordingDataDir: string): string[] {
@@ -50,7 +50,9 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
         }
         continue;
       }
-      if (!f.endsWith(".mp3.part")) continue;
+      const isMp3Part = f.endsWith(".mp3.part");
+      const isWavPart = f.endsWith(".wav.part");
+      if (!isMp3Part && !isWavPart) continue;
       const fullPath = join(epDir, f);
       let stat;
       try {
@@ -59,7 +61,9 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
         continue;
       }
       if (stat.size > RECOVERY_SIZE_THRESHOLD) {
-        const recoveredName = f.replace(/\.mp3\.part$/, ".recovered.mp3");
+        const recoveredName = isWavPart
+          ? f.replace(/\.wav\.part$/, ".recovered.wav")
+          : f.replace(/\.mp3\.part$/, ".recovered.mp3");
         if (!isSafeFileName(recoveredName)) continue; /* recovered name must stay safe */
         const recoveredPath = join(epDir, recoveredName);
         const resolvedPath = resolve(recoveredPath);
@@ -71,7 +75,7 @@ export function recoverPartFiles(recordingDataDir: string): string[] {
           recovered.push(rel);
           const jsonlPath = join(epDir, "segments.jsonl");
           if (existsSync(jsonlPath)) {
-            const match = f.match(/^segment_(.+)\.mp3\.part$/);
+            const match = f.match(/^segment_(.+)\.(?:mp3|wav)\.part$/);
             const rawSegmentId = match?.[1] ?? "unknown";
             const segmentId = typeof rawSegmentId === "string" && SAFE_ID.test(rawSegmentId) ? rawSegmentId : "unknown";
             appendSegmentLog(jsonlPath, {

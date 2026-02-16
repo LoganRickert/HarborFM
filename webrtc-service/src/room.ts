@@ -21,6 +21,9 @@ const producerParticipantMap = new Map<string, { participantId: string; particip
 const producerSoundboardAssetMap = new Map<string, string>();
 const soundboardVolumeByRoom = new Map<string, number>();
 const soundboardVolumeAtStop = new Map<string, number>();
+/** Per-producer volume 0..1 for mic segments (when AGC off). Default 1. */
+export const producerVolumeByProducerId = new Map<string, number>();
+
 export type SoundboardState = {
   producer: mediasoup.types.Producer;
   transport: mediasoup.types.PlainTransport;

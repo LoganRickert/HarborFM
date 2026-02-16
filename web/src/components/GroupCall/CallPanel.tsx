@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
 import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, Settings, X } from 'lucide-react';
 import { callWebSocketUrl } from '../../api/call';
+import { DEVICE_ID_KEY, getAgcKey, getMicVolumeKey } from '../../constants/micSettings';
 import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
 import { useWakeLock } from '../../hooks/useWakeLock';
@@ -78,8 +80,27 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const [soundboardMinimized, setSoundboardMinimized] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsMinimized, setSettingsMinimized] = useState(false);
-  const [deviceId, setDeviceId] = useState<string>('');
+  const [deviceId, setDeviceId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem(DEVICE_ID_KEY) || '';
+  });
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [autoGainControl, setAutoGainControl] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const id = localStorage.getItem(DEVICE_ID_KEY) || 'default';
+    const stored = localStorage.getItem(getAgcKey(id));
+    if (stored === 'false') return false;
+    if (stored === 'true') return true;
+    return true;
+  });
+  const [micVolume, setMicVolume] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const id = localStorage.getItem(DEVICE_ID_KEY) || 'default';
+    const stored = localStorage.getItem(getMicVolumeKey(id));
+    if (stored == null) return 1;
+    const v = parseFloat(stored);
+    return Number.isFinite(v) ? Math.max(0, Math.min(8, v)) : 1;
+  });
   const [soundboardVolume, setSoundboardVolumeState] = useState(() => {
     if (typeof window === 'undefined') return 1;
     const stored = localStorage.getItem(SOUNDBOARD_VOLUME_KEY);
@@ -108,8 +129,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
         const audioInputs = all.filter((d) => d.kind === 'audioinput');
         setDevices(audioInputs);
         setDeviceId((prev) => {
-          const stillValid = prev && audioInputs.some((d) => d.deviceId === prev);
-          return stillValid ? prev : audioInputs[0]?.deviceId ?? '';
+          const stored = typeof window !== 'undefined' ? localStorage.getItem(DEVICE_ID_KEY) || '' : '';
+          const preferred = prev || stored;
+          const stillValid = preferred && audioInputs.some((d) => d.deviceId === preferred);
+          return stillValid ? preferred : audioInputs[0]?.deviceId ?? '';
         });
       })
       .catch(() => {});
@@ -123,6 +146,16 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   }, [refreshDevices]);
 
   useEffect(() => {
+    if (!deviceId || typeof window === 'undefined') return;
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    const agcStored = localStorage.getItem(getAgcKey(deviceId));
+    setAutoGainControl(agcStored === 'false' ? false : true);
+    const volStored = localStorage.getItem(getMicVolumeKey(deviceId));
+    const v = parseFloat(volStored ?? '1');
+    setMicVolume(Number.isFinite(v) ? Math.max(0, Math.min(8, v)) : 1);
+  }, [deviceId]);
+
+  useEffect(() => {
     if (!effectiveWebrtcUrl || !effectiveRoomId || !navigator.mediaDevices?.getUserMedia) return;
     navigator.mediaDevices
       .getUserMedia({ audio: true })
@@ -133,20 +166,36 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       .catch(() => {});
   }, [effectiveWebrtcUrl, effectiveRoomId, refreshDevices]);
 
-  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     deviceId || undefined,
     myParticipant?.id ?? null,
     myParticipant?.name ?? null,
     effectiveHostToken,
+    autoGainControl,
+    micVolume,
   );
+
+  const debouncedSetProducerVolume = useDebouncedCallback(setProducerVolume, 300);
   useWakeLock(true);
 
   useEffect(() => {
     setSoundboardPanelOpen(soundboardOpen);
     return () => setSoundboardPanelOpen(false);
   }, [soundboardOpen, setSoundboardPanelOpen]);
+
+  useEffect(() => {
+    if (!autoGainControl && producerReady) {
+      debouncedSetProducerVolume(micVolume);
+    }
+  }, [autoGainControl, producerReady, micVolume, debouncedSetProducerVolume]);
+
+  useEffect(() => {
+    if ((!settingsOpen || settingsMinimized) && listenToSelf) {
+      stopListenToSelf();
+    }
+  }, [settingsOpen, settingsMinimized, listenToSelf, stopListenToSelf]);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -434,6 +483,20 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
     setSoundboardVolumeState(volume);
     if (typeof window !== 'undefined') {
       localStorage.setItem(SOUNDBOARD_VOLUME_KEY, String(volume));
+    }
+  };
+
+  const handleAutoGainControlChange = (enabled: boolean) => {
+    setAutoGainControl(enabled);
+    if (typeof window !== 'undefined' && deviceId) {
+      localStorage.setItem(getAgcKey(deviceId), String(enabled));
+    }
+  };
+
+  const handleMicVolumeChange = (volume: number) => {
+    setMicVolume(volume);
+    if (typeof window !== 'undefined' && deviceId) {
+      localStorage.setItem(getMicVolumeKey(deviceId), String(volume));
     }
   };
 
@@ -743,6 +806,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           onDeviceChange={setDeviceId}
           minimized={false}
           onMinimizeToggle={() => {}}
+          listenToSelf={listenToSelf}
+          onListenToSelfToggle={toggleListenToSelf}
+          listenToSelfDisabled={!effectiveWebrtcUrl || !producerReady}
+          autoGainControl={autoGainControl}
+          onAutoGainControlChange={handleAutoGainControlChange}
+          micVolume={micVolume}
+          onMicVolumeChange={handleMicVolumeChange}
+          embedded
         />
       )}
       {!showChatView && !showSoundboardView && !showSettingsView && (
@@ -844,6 +915,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
               onClose={() => setSettingsOpen(false)}
               minimized={settingsMinimized}
               onMinimizeToggle={() => setSettingsMinimized((m) => !m)}
+              listenToSelf={listenToSelf}
+              onListenToSelfToggle={toggleListenToSelf}
+              listenToSelfDisabled={!effectiveWebrtcUrl || !producerReady}
+              autoGainControl={autoGainControl}
+              onAutoGainControlChange={handleAutoGainControlChange}
+              micVolume={micVolume}
+              onMicVolumeChange={handleMicVolumeChange}
             />
           </div>
         )}

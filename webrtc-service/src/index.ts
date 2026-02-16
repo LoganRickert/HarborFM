@@ -28,6 +28,7 @@ import {
   producerSoundboardAssetMapRef,
   soundboardVolumeByRoomRef,
   soundboardVolumeAtStopRef,
+  producerVolumeByProducerId,
 } from "./room.js";
 
 const recordingManager = new RecordingManager({
@@ -48,6 +49,8 @@ const recordingManager = new RecordingManager({
     }
     return soundboardVolumeByRoomRef.get(roomId) ?? 1;
   },
+  getProducerVolumeForSegment: (producerId) =>
+    producerVolumeByProducerId.get(producerId) ?? 1,
 });
 
 function finalizeProducerStream(
