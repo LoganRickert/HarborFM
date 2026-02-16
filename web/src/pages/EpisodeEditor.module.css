@@ -1030,7 +1030,8 @@
 .recordRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  justify-content: space-around;
   gap: 1rem;
   width: 100%;
   margin-bottom: 1rem;
