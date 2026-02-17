@@ -174,6 +174,21 @@ server {
         proxy_read_timeout 600s;
     }
 
+    location ~ ^/api/episodes/[^/]+/ws\$ {
+        proxy_pass http://harborfm:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        proxy_connect_timeout 60s;
+        proxy_buffering off;
+    }
+
     location / {
         limit_req zone=general burst=40 nodelay;
         proxy_pass http://harborfm:3001;
@@ -183,7 +198,7 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
         proxy_connect_timeout 600s;
         proxy_send_timeout 600s;
         proxy_read_timeout 600s;

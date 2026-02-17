@@ -47,6 +47,7 @@ import {
   getIpBan,
   recordFailureAndMaybeBan,
 } from "../../services/loginAttempts.js";
+import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 
 const CALL_JOIN_CONTEXT = "call_join" as const;
 
@@ -217,6 +218,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             }
           }
           broadcastToSession(endedSession.sessionId, { type: "callEnded" });
+          broadcastToEpisode(endedSession.episodeId, { type: "callEnded" });
           sessionSockets.delete(endedSession.sessionId);
         },
       );
@@ -283,6 +285,15 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         if (session.hostToken) payload.hostToken = session.hostToken;
       }
       if (webrtcUnavailable) payload.webrtcUnavailable = true;
+      broadcastToEpisode(episodeId, {
+        type: "callStarted",
+        sessionId: session.sessionId,
+        joinUrl: payload.joinUrl,
+        joinCode: session.joinCode,
+        webrtcUrl: payload.webrtcUrl,
+        roomId: payload.roomId,
+        hostToken: payload.hostToken,
+      });
       return reply.send(payload);
     },
   );
@@ -812,6 +823,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             segment: row,
           });
         }
+        broadcastToEpisode(body.episodeId, { type: "segmentAdded", segment: row });
         try {
           unlinkSync(sourcePath);
         } catch (unlinkErr) {

@@ -2254,6 +2254,8 @@
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 0.25rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .episodeTranscriptBody .transcriptText {
   flex: 1;

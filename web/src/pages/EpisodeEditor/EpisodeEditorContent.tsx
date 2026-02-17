@@ -40,6 +40,7 @@ import styles from '../EpisodeEditor.module.css';
 import { getPublicConfig } from '../../api/public';
 import { startCall, getActiveSession } from '../../api/call';
 import { CallPanel } from '../../components/GroupCall/CallPanel';
+import { useEpisodeWebSocket } from '../../hooks/useEpisodeWebSocket';
 import { EndCallConfirmDialog } from '../../components/GroupCall/EndCallConfirmDialog';
 
 export interface EpisodeEditorContentProps {
@@ -93,77 +94,66 @@ export function EpisodeEditorContent({
   const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
   const [coverUploadKey, setCoverUploadKey] = useState(0);
   const [debouncedArtworkUrl, setDebouncedArtworkUrl] = useState('');
-  const [buildInProgress, setBuildInProgress] = useState(false);
   const [buildAlreadyInProgressMessage, setBuildAlreadyInProgressMessage] = useState<string | null>(null);
-  const [renderPollError, setRenderPollError] = useState<string | null>(null);
   const [showEpisodeTranscript, setShowEpisodeTranscript] = useState(false);
-  const [activeCall, setActiveCall] = useState<{
-    sessionId: string;
-    token: string;
-    joinUrl: string;
-    joinCode?: string;
-    webrtcUrl?: string;
-    roomId?: string;
-    hostToken?: string;
-    webrtcUnavailable?: boolean;
-  } | null>(null);
   const [startCallError, setStartCallError] = useState<string | null>(null);
   const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
 
+  useEpisodeWebSocket(id, podcastId);
+
+  const { data: activeSession } = useQuery({
+    queryKey: ['call-session', id],
+    queryFn: () => getActiveSession(id!),
+    enabled: !!id && !segmentReadOnly,
+  });
+  const { data: renderStatus } = useQuery({
+    queryKey: ['render-status', id],
+    queryFn: () => getRenderStatus(id!),
+    enabled: !!id,
+    refetchInterval: (query) => (query.state.data?.status === 'building' ? 5000 : false),
+  });
+  const activeCall = activeSession
+    ? {
+        sessionId: activeSession.sessionId,
+        token: activeSession.token,
+        joinUrl: activeSession.joinUrl,
+        joinCode: activeSession.joinCode,
+        webrtcUrl: activeSession.webrtcUrl,
+        roomId: activeSession.roomId,
+        hostToken: activeSession.hostToken,
+        webrtcUnavailable: activeSession.webrtcUnavailable,
+      }
+    : null;
+
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playingSegmentIdRef = useRef<string | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const finalPauseRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    if (!id || segmentReadOnly) return;
-    getActiveSession(id).then((session) => {
-      if (session)
-        setActiveCall({
-          sessionId: session.sessionId,
-          token: session.token,
-          joinUrl: session.joinUrl,
-          joinCode: session.joinCode,
-          webrtcUrl: session.webrtcUrl,
-          roomId: session.roomId,
-          hostToken: session.hostToken,
-          webrtcUnavailable: session.webrtcUnavailable,
-        });
-    }).catch(() => {});
-  }, [id, segmentReadOnly]);
-
-  const handleCallEnded = useCallback(() => setActiveCall(null), []);
+  const handleCallEnded = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+  }, [queryClient, id]);
 
   const handleSegmentRecorded = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['segments', id] });
   }, [queryClient, id]);
 
   const handleEndGroupCallConfirmed = useCallback(() => {
-    setActiveCall(null);
+    queryClient.invalidateQueries({ queryKey: ['call-session', id] });
     setEndCallConfirmOpen(false);
-  }, []);
+  }, [queryClient, id]);
 
   const handleStartGroupCall = useCallback(() => {
     setStartCallError(null);
     startCall(id)
-      .then((res) => {
-        setActiveCall({
-          sessionId: res.sessionId,
-          token: res.token,
-          joinUrl: res.joinUrl,
-          joinCode: res.joinCode,
-          webrtcUrl: res.webrtcUrl,
-          roomId: res.roomId,
-          hostToken: res.hostToken,
-          webrtcUnavailable: res.webrtcUnavailable,
-        });
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['call-session', id] });
       })
       .catch((err) => {
         setStartCallError(err?.message ?? 'Failed to start call. Please try again.');
       });
-  }, [id]);
+  }, [id, queryClient]);
 
   const handleSegmentPlayRequest = useCallback((segmentId: string) => {
     // Pause and reset all other segments to 0
@@ -290,9 +280,8 @@ export function EpisodeEditorContent({
     mutationFn: () => startRenderEpisode(id),
     onSuccess: (result) => {
       if (result.status === 'building' || result.status === 'already_building') {
-        setRenderPollError(null);
-        setBuildInProgress(true);
         setBuildAlreadyInProgressMessage(result.status === 'already_building' ? (result.message ?? 'A build is already in progress.') : null);
+        queryClient.invalidateQueries({ queryKey: ['render-status', id] });
       }
     },
   });
@@ -315,59 +304,16 @@ export function EpisodeEditorContent({
     },
   });
 
-  // On load, check if a build is already in progress (e.g. user refreshed or navigated here)
   useEffect(() => {
-    if (!id) return;
-    getRenderStatus(id)
-      .then(({ status }) => {
-        if (status === 'building') {
-          setBuildInProgress(true);
-          setBuildAlreadyInProgressMessage('A build is already in progress.');
-        }
-      })
-      .catch(() => {
-        // Ignore: render-status may be unavailable; building state will be correct after user starts a build
-      });
-  }, [id]);
-
-  useEffect(() => {
-    if (!buildInProgress || !id) return;
-    const poll = () => {
-      getRenderStatus(id)
-        .then(({ status, error }) => {
-          if (status === 'done') {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-              pollIntervalRef.current = null;
-            }
-            setBuildInProgress(false);
-            setBuildAlreadyInProgressMessage(null);
-            setRenderPollError(null);
-            queryClient.invalidateQueries({ queryKey: ['episode', id] });
-            queryClient.invalidateQueries({ queryKey: ['segments', id] });
-          } else if (status === 'failed') {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-              pollIntervalRef.current = null;
-            }
-            setBuildInProgress(false);
-            setBuildAlreadyInProgressMessage(null);
-            setRenderPollError(error ?? 'Build failed');
-          }
-        })
-        .catch(() => {
-          // Keep polling on network error
-        });
-    };
-    poll();
-    pollIntervalRef.current = setInterval(poll, 5000);
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    };
-  }, [buildInProgress, id, queryClient]);
+    if (!renderStatus || !id) return;
+    if (renderStatus.status === 'done') {
+      setBuildAlreadyInProgressMessage(null);
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+      queryClient.invalidateQueries({ queryKey: ['segments', id] });
+    } else if (renderStatus.status === 'failed') {
+      setBuildAlreadyInProgressMessage(null);
+    }
+  }, [renderStatus?.status, id, queryClient]);
 
   function handleMoveUp(index: number) {
     if (index <= 0) return;
@@ -489,11 +435,8 @@ export function EpisodeEditorContent({
       <GenerateFinalBar
         episodeId={id}
         segmentCount={segments.length}
-        onBuild={() => {
-          setRenderPollError(null);
-          renderMutation.mutate();
-        }}
-        isBuilding={renderMutation.isPending || buildInProgress}
+        onBuild={() => renderMutation.mutate()}
+        isBuilding={renderMutation.isPending || renderStatus?.status === 'building'}
         buildMessage={buildAlreadyInProgressMessage}
         hasFinalAudio={Boolean(episode.audio_final_path)}
         finalDurationSec={episode.audio_duration_sec ?? 0}
@@ -506,7 +449,7 @@ export function EpisodeEditorContent({
         onGenerateTranscript={episode.has_transcript !== true ? async () => { await generateTranscriptMutation.mutateAsync(); } : undefined}
         canGenerateTranscript={meData?.user?.can_transcribe === 1}
         error={
-          renderPollError ??
+          (renderStatus?.status === 'failed' ? (renderStatus.error ?? 'Build failed') : null) ??
           (renderMutation.isError ? renderMutation.error?.message : null) ??
           (generateTranscriptMutation.isError ? generateTranscriptMutation.error?.message : null)
         }

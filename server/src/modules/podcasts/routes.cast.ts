@@ -16,6 +16,7 @@ import {
   canAddEditHost,
   canAddEditGuest,
 } from "../../services/access.js";
+import { broadcastToPodcast } from "../../services/episodeBroadcast.js";
 import { assertPathUnder, assertResolvedPathUnder, castPhotoDir } from "../../services/paths.js";
 import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
@@ -280,6 +281,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
       );
 
       const row = db.prepare("SELECT * FROM podcast_cast WHERE id = ?").get(id) as CastRow;
+      broadcastToPodcast(podcastId, { type: "showCastChanged" });
       return reply.status(201).send(castRowToResponse(row));
     },
   );
@@ -378,6 +380,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         `UPDATE podcast_cast SET ${updates.join(", ")} WHERE id = ? AND podcast_id = ?`,
       ).run(...values);
 
+      broadcastToPodcast(podcastId, { type: "showCastChanged" });
       const row = db.prepare("SELECT * FROM podcast_cast WHERE id = ?").get(castId) as CastRow;
       return castRowToResponse(row);
     },
@@ -435,6 +438,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         castId,
         podcastId,
       );
+      broadcastToPodcast(podcastId, { type: "showCastChanged" });
       return reply.status(204).send();
     },
   );
@@ -495,6 +499,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
       db.prepare(
         "UPDATE podcast_cast SET photo_path = ?, photo_url = NULL WHERE id = ? AND podcast_id = ?",
       ).run(destPath, castId, podcastId);
+      broadcastToPodcast(podcastId, { type: "showCastChanged" });
       const oldPath = existing.photo_path;
       if (oldPath && oldPath !== destPath) {
         try {

@@ -52,6 +52,7 @@ import { messagesRoutes } from "./modules/messages/index.js";
 import { sitemapRoutes } from "./modules/sitemap/index.js";
 import { bansRoutes } from "./modules/bans/index.js";
 import { callRoutes } from "./modules/call/index.js";
+import { episodeCollaborationRoutes } from "./modules/episodeCollaboration/index.js";
 import fastifyWebsocket from "@fastify/websocket";
 import {
   flush,
@@ -268,6 +269,7 @@ async function main() {
   await app.register(sitemapRoutes, { prefix: apiPrefix });
   await app.register(bansRoutes, { prefix: apiPrefix });
   await app.register(callRoutes, { prefix: apiPrefix });
+  await app.register(episodeCollaborationRoutes, { prefix: apiPrefix });
 
   pruneListenDedup();
   startFlushInterval();
