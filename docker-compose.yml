@@ -18,6 +18,8 @@ services:
       DATA_DIR: /data
       SECRETS_DIR: /secrets
       WEBRTC_RECORDINGS_DIR: /webrtc
+      # WebRTC: set to 1 or true to enable group calls; also pass --profile webrtc when starting
+      WEBRTC_ENABLED: "${WEBRTC_ENABLED:-0}"
       # WebRTC service: harborfm calls webrtc over internal network; clients use public WS URL
       WEBRTC_SERVICE_URL: "${WEBRTC_SERVICE_URL:-http://webrtc:3002}"
       WEBRTC_PUBLIC_WS_URL: "${WEBRTC_PUBLIC_WS_URL:-}"

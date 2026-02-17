@@ -96,6 +96,11 @@ app.addContentTypeParser(/^application\/json\b/i, { parseAs: "string" }, (req, b
 
 app.get("/health", async (_request, reply) => reply.send({ ok: true }));
 
+// Nginx proxies /webrtc-ws/ (no /ws) to /; handle gracefully so requests to base path don't 404
+app.get("/", async (_request, reply) =>
+  reply.send({ ok: true, message: "WebRTC service; connect to /ws or /webrtc-ws/ws for WebSocket" })
+);
+
 app.addHook("preHandler", async (request, reply) => {
   const path = request.url.split("?")[0] ?? "";
   const protectedPaths = ["/room", "/start-recording", "/stop-recording"];
