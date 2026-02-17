@@ -41,6 +41,9 @@ export type FinalizedSegmentInfo = {
 
 const RECORDING_WARMUP_MS = Number(process.env.RECORDING_WARMUP_MS) || 500;
 
+/** LUFS target for final mixed segment. Gentle normalization so it's not too strong. */
+const SEGMENT_LOUDNESS_TARGET_LUFS = -18;
+
 export type RecordingState = RecordingMeta & {
   activeSegmentsByProducerId: Map<string, ActiveSegment>;
   finalizedSegments: FinalizedSegmentInfo[];
@@ -301,13 +304,17 @@ export class RecordingManager {
       const srcPath = join(dataDir, only.filePathRelative);
       if (existsSync(srcPath) && statSync(srcPath).size > 0) {
         const vol = only.volume != null && only.volume !== 1 ? only.volume : 1;
-        const volFilter = vol !== 1 ? ["-af", `volume=${vol}`] : [];
+        const afParts =
+          vol !== 1
+            ? [`volume=${vol}`, `loudnorm=I=${SEGMENT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=14`]
+            : [`loudnorm=I=${SEGMENT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=14`];
         const proc = spawn("ffmpeg", [
           "-loglevel",
           "warning",
           "-i",
           srcPath,
-          ...volFilter,
+          "-af",
+          afParts.join(","),
           "-acodec",
           "pcm_s16le",
           "-ar",
@@ -357,7 +364,8 @@ export class RecordingManager {
     const filterComplex =
       filterParts.join(";") +
       ";" +
-      `${amixInputs}amix=inputs=${inputIdx}:duration=longest:dropout_transition=500[aout]`;
+      `${amixInputs}amix=inputs=${inputIdx}:duration=longest:dropout_transition=500[aout];` +
+      `[aout]loudnorm=I=${SEGMENT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=14[out]`;
     const mixFf = spawn(
       "ffmpeg",
       [
@@ -367,7 +375,7 @@ export class RecordingManager {
         "-filter_complex",
         filterComplex,
         "-map",
-        "[aout]",
+        "[out]",
         "-acodec",
         "pcm_s16le",
         "-ar",
