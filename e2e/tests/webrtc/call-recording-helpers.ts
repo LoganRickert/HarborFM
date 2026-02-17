@@ -83,6 +83,15 @@ export async function createCallRecordingFixture(page: Page): Promise<CallRecord
   return { episodeId: episode.id, podcastId: podcast.id };
 }
 
+/** Navigate to episode page and start group call. Waits for Start Group Call button (fetches publicConfig) then clicks. */
+export async function gotoEpisodeAndStartCall(page: Page, episodeId: string): Promise<void> {
+  console.log('[e2e] gotoEpisodeAndStartCall: navigating to episode', episodeId);
+  await page.goto(`/episodes/${episodeId}`);
+  console.log('[e2e] gotoEpisodeAndStartCall: page loaded, waiting for Start Group Call button');
+  await page.getByRole('button', { name: /start group call/i }).click({ timeout: 25000 });
+  console.log('[e2e] gotoEpisodeAndStartCall: clicked Start Group Call');
+}
+
 /** Create a library asset for soundboard tests. Uses fake-mic.wav from e2e assets. */
 export async function createLibraryAsset(page: Page): Promise<string | null> {
   const wavPath = join(E2E_DIR, 'assets', 'fake-mic.wav');

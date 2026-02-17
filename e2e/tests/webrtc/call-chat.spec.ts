@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { test, expect } from '@playwright/test';
 import { readFileSync, existsSync } from 'fs';
+import { gotoEpisodeAndStartCall } from './call-recording-helpers';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -70,6 +71,7 @@ test.describe('Call chat', () => {
     const episode = await episodeRes.json();
     episodeId = episode.id;
     podcastId = podcast.id;
+    console.log('[e2e] beforeEach: created episode', episodeId, 'podcast', podcastId);
   });
 
   async function endCallIfActive(page: import('@playwright/test').Page) {
@@ -94,18 +96,21 @@ test.describe('Call chat', () => {
   });
 
   test('Chat button visible in CallPanel when call active', async ({ page }) => {
-    await page.goto(`/episodes/${episodeId}`);
-    await page.getByRole('button', { name: /start group call/i }).click();
+    console.log('[e2e] Chat button visible: starting, episodeId=', episodeId);
+    await gotoEpisodeAndStartCall(page, episodeId);
+    console.log('[e2e] Chat button visible: call started, waiting for Record Segment button');
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+    console.log('[e2e] Chat button visible: Record Segment visible, checking chat button');
     const chatBtn = page.getByTestId('chat-open-btn');
     await expect(chatBtn).toBeVisible();
+    console.log('[e2e] Chat button visible: chat button visible, done');
   });
 
   test('Chat panel visible in CallJoin when guest joined', async ({ page, context }) => {
     test.setTimeout(30000);
     const baseURL = `http://127.0.0.1:${PORT}`;
-    await page.goto(`/episodes/${episodeId}`);
-    await page.getByRole('button', { name: /start group call/i }).click();
+    console.log('[e2e] Chat panel guest: starting, episodeId=', episodeId);
+    await gotoEpisodeAndStartCall(page, episodeId);
     await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
     const joinUrlRaw = await page.getByRole('region', { name: /group call/i }).getByRole('textbox', { name: 'Join link' }).inputValue();
     const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;

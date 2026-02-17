@@ -17,6 +17,7 @@ export E2E_SECRETS_DIR="$E2E_DIR/secrets"
 
 # WebRTC env for server and start-webrtc.sh
 export WEBRTC_PORT="$WEBRTC_PORT"
+export WEBRTC_ENABLED="1"
 export WEBRTC_SERVICE_URL="http://127.0.0.1:$WEBRTC_PORT"
 export WEBRTC_PUBLIC_WS_URL="ws://127.0.0.1:$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="e2e-secret"

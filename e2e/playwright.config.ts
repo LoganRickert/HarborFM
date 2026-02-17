@@ -25,6 +25,7 @@ export default defineConfig({
     baseURL,
     trace: 'on-first-retry',
     permissions: ['microphone'],
+    actionTimeout: 15000,
     headless: false, // Headed required for reliable WebRTC fake device
     launchOptions: {
       args: [
