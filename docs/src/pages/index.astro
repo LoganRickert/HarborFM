@@ -62,7 +62,9 @@ docker run --name harborfm -p 3001:3001 \
         </div>
         <div class="install-panel" id="panel-terraform-aws" role="tabpanel" aria-labelledby="tab-terraform-aws">
           <div class="code-block-wrap">
-            <pre><code>cd terraform/terraform/aws
+            <pre><code>git clone https://github.com/LoganRickert/harborfm.git
+cd harborfm
+cd terraform/terraform/aws
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars: ami_id, domain, admin_email, admin_password, etc.
 ./run.sh init
