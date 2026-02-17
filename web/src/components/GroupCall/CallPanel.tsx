@@ -170,7 +170,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       .catch(() => {});
   }, [effectiveWebrtcUrl, effectiveRoomId, refreshDevices]);
 
-  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume, leaveRoom } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     deviceId || undefined,
@@ -391,12 +391,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   };
 
   const handleEndCall = useCallback(() => {
+    leaveRoom();
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'endCall' }));
       wsRef.current.close();
     }
     onEnd();
-  }, [onEnd]);
+  }, [onEnd, leaveRoom]);
 
   useEffect(() => {
     onRegisterEndCall?.(handleEndCall);

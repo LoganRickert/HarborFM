@@ -42,6 +42,7 @@ export function useMediasoupRoom(
   const setListenToSelfStateRef = useRef<(v: boolean) => void>(() => {});
   const [listenToSelf, setListenToSelfState] = useState(false);
   setListenToSelfStateRef.current = setListenToSelfState;
+  const mediaStreamsRef = useRef<{ micStream: MediaStream | null; localStream: MediaStream | null }>({ micStream: null, localStream: null });
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
@@ -215,6 +216,7 @@ export function useMediasoupRoom(
         };
 
         localStream = new MediaStream([sendTrack]);
+        mediaStreamsRef.current = { micStream, localStream };
         const track = sendTrack;
 
         cleanupRef.current = () => {
@@ -383,6 +385,7 @@ export function useMediasoupRoom(
     run(url, rid);
     return () => {
       closed = true;
+      mediaStreamsRef.current = { micStream: null, localStream: null };
       webrtcWsRef.current = null;
       setRemoteMicLevels(new Map());
       selfListenGainRef.current = null;
@@ -515,6 +518,13 @@ export function useMediasoupRoom(
     }
   }, [sendIfOpen]);
 
+  const leaveRoom = useCallback(() => {
+    const { micStream, localStream } = mediaStreamsRef.current;
+    micStream?.getTracks().forEach((t) => t.stop());
+    localStream?.getTracks().forEach((t) => t.stop());
+    mediaStreamsRef.current = { micStream: null, localStream: null };
+  }, []);
+
   return {
     remoteTracks,
     remoteMicLevels,
@@ -533,5 +543,6 @@ export function useMediasoupRoom(
     toggleListenToSelf,
     stopListenToSelf,
     setProducerVolume,
+    leaveRoom,
   };
 }

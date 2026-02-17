@@ -137,6 +137,7 @@ export function EpisodeEditorContent({
 
   const handleCallEnded = useCallback(() => {
     setWsPendingSegmentIds(null);
+    queryClient.setQueryData(['call-session', id], null);
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
   }, [queryClient, id]);
 
