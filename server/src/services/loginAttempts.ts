@@ -1,5 +1,6 @@
 import type { FastifyRequest } from "fastify";
 import {
+  CALL_JOIN_FAILURE_THRESHOLD,
   LOGIN_BAN_MINUTES,
   LOGIN_FAILURE_THRESHOLD,
   LOGIN_WINDOW_MINUTES,
@@ -10,7 +11,8 @@ export type AttemptContext =
   | "auth_login"
   | "setup"
   | "auth_apikey"
-  | "auth_subscriber_token";
+  | "auth_subscriber_token"
+  | "call_join";
 
 export function getClientIp(request: FastifyRequest): string {
   // Note: if you run behind a reverse proxy, configure Fastify trustProxy so request.ip is correct.
@@ -50,6 +52,10 @@ export function getIpBan(
   return { banned: true, retryAfterSec };
 }
 
+function getThresholdForContext(context: AttemptContext): number {
+  return context === "call_join" ? CALL_JOIN_FAILURE_THRESHOLD : LOGIN_FAILURE_THRESHOLD;
+}
+
 export function recordFailureAndMaybeBan(
   ip: string,
   context: AttemptContext,
@@ -77,8 +83,9 @@ export function recordFailureAndMaybeBan(
     .get(ip, context, `-${LOGIN_WINDOW_MINUTES} minutes`) as { count: number };
 
   const failures = Number(row?.count ?? 0);
-  console.log(`[ban] IP ${ip} context=${context}: recorded failure, failuresInWindow=${failures} (threshold=${LOGIN_FAILURE_THRESHOLD})`);
-  if (failures <= LOGIN_FAILURE_THRESHOLD) {
+  const threshold = getThresholdForContext(context);
+  console.log(`[ban] IP ${ip} context=${context}: recorded failure, failuresInWindow=${failures} (threshold=${threshold})`);
+  if (failures <= threshold) {
     return { bannedNow: false, retryAfterSec: 0, failuresInWindow: failures };
   }
 

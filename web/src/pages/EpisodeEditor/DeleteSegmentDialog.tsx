@@ -32,7 +32,7 @@ export function DeleteSegmentDialog({
             </Dialog.Close>
           </div>
           <Dialog.Description className={styles.dialogDescription}>{description}</Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.cancel} aria-label="Cancel removing section">
                 Cancel

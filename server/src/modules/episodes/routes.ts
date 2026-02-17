@@ -13,6 +13,7 @@ import {
   canEditEpisodeOrPodcastMetadata,
   canAssignCastToEpisode,
 } from "../../services/access.js";
+import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { episodeCreateSchema, episodeUpdateSchema, episodeCastAssignBodySchema } from "@harborfm/shared";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
@@ -436,6 +437,7 @@ export async function episodeRoutes(app: FastifyInstance) {
       } catch (_) {
         // non-fatal
       }
+      broadcastToEpisode(id, { type: "episodeUpdated" });
       return episodeRowWithFilename(row);
     },
   );
@@ -598,6 +600,7 @@ export async function episodeRoutes(app: FastifyInstance) {
       } catch (_) {
         // non-fatal
       }
+      broadcastToEpisode(episodeId, { type: "episodeUpdated" });
       const row = db
         .prepare("SELECT * FROM episodes WHERE id = ?")
         .get(episodeId) as Record<string, unknown>;
@@ -727,6 +730,7 @@ export async function episodeRoutes(app: FastifyInstance) {
            ORDER BY c.role ASC, c.created_at DESC`,
         )
         .all(episodeId) as Record<string, unknown>[];
+      broadcastToEpisode(episodeId, { type: "castChanged" });
       return { cast: rows };
     },
   );

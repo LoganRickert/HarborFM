@@ -34,6 +34,8 @@ const DEFAULT_FORM_STATE: AppSettings = {
   captcha_site_key: '',
   captcha_secret_key: '',
   email_provider: 'none',
+  email_webhook_url: '',
+  email_webhook_field_key: 'content',
   smtp_host: '',
   smtp_port: 587,
   smtp_secure: true,
@@ -63,6 +65,9 @@ const DEFAULT_FORM_STATE: AppSettings = {
   dns_default_domain: '',
   dns_default_enable_cloudflare_proxy: false,
   gdpr_consent_banner_enabled: false,
+  webrtc_service_url: '',
+  webrtc_public_ws_url: '',
+  recording_callback_secret: '',
 };
 
 export function useSettingsForm(initialSettings?: AppSettings) {

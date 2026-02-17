@@ -272,6 +272,8 @@ export function Library() {
   const pixabayImportMutation = useMutation({
     mutationFn: (url: string) => importFromPixabay(url),
     onSuccess: () => {
+      setShowPixabayImport(false);
+      setPixabayUrl('');
       queryClient.invalidateQueries({ queryKey: ['library', userId] });
       setShowPixabayImport(false);
       setPixabayUrl('');
@@ -459,15 +461,17 @@ export function Library() {
           {!pendingFile ? (
             <>
               <div className={styles.uploadChooseRow}>
-                <button
-                  type="button"
-                  className={styles.uploadChooseBtn}
-                  onClick={() => fileInputRef.current?.click()}
-                  aria-label="Choose audio file to add to library"
-                >
-                  <Upload size={20} strokeWidth={2} aria-hidden />
-                  Upload Audio
-                </button>
+                {!showPixabayImport && (
+                  <button
+                    type="button"
+                    className={styles.uploadChooseBtn}
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Choose audio file to add to library"
+                  >
+                    <Upload size={20} strokeWidth={2} aria-hidden />
+                    Upload Audio
+                  </button>
+                )}
                 {isAdmin && (
                   !showPixabayImport ? (
                     <button
@@ -788,7 +792,7 @@ export function Library() {
                 ? `This will permanently delete "${assetToDelete.name}".`
                 : 'This will permanently delete this item.'}
             </Dialog.Description>
-            <div className={styles.dialogActions}>
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
               <Dialog.Close asChild>
                 <button type="button" className={styles.cancel} aria-label="Cancel deleting library item">Cancel</button>
               </Dialog.Close>

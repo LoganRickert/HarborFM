@@ -206,7 +206,8 @@ export async function authRoutes(app: FastifyInstance) {
 
       const requiresVerification =
         (settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid") &&
+          settings.email_provider === "sendgrid" ||
+          settings.email_provider === "webhook") &&
         settings.email_enable_registration_verification;
       let email_verified = 1;
       let email_verification_token: string | null = null;
@@ -341,7 +342,8 @@ export async function authRoutes(app: FastifyInstance) {
       const settings = readSettings();
       if (
         (settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid") &&
+          settings.email_provider === "sendgrid" ||
+          settings.email_provider === "webhook") &&
         settings.email_enable_welcome_after_verify
       ) {
         const baseUrl =
@@ -506,7 +508,8 @@ export async function authRoutes(app: FastifyInstance) {
       }
       if (
         (settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid") &&
+          settings.email_provider === "sendgrid" ||
+          settings.email_provider === "webhook") &&
         row.email_verified === 0
       ) {
         request.log.warn(
@@ -571,7 +574,8 @@ export async function authRoutes(app: FastifyInstance) {
       const settings = readSettings();
       if (
         settings.email_provider !== "smtp" &&
-        settings.email_provider !== "sendgrid"
+        settings.email_provider !== "sendgrid" &&
+        settings.email_provider !== "webhook"
       ) {
         return reply.status(503).send({
           error:

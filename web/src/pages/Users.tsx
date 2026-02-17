@@ -677,7 +677,7 @@ export function Users() {
                   : 'Are you sure you want to delete this user? This action cannot be undone.';
               })()}
             </Dialog.Description>
-            <div className={styles.dialogActions}>
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
               <Dialog.Close asChild>
                 <button type="button" className={styles.cancel} aria-label="Cancel deleting user">Cancel</button>
               </Dialog.Close>

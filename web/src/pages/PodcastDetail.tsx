@@ -41,6 +41,7 @@ export function PodcastDetail() {
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [linksDialogOpen, setLinksDialogOpen] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   if (!id) return null;
   if (isLoading || (!podcast && isFetching)) return <FullPageLoading />;
@@ -63,8 +64,9 @@ export function PodcastDetail() {
           onEditClick={() => setDetailsDialogOpen(true)}
           onLinksClick={() => setLinksDialogOpen(true)}
           centerTitle
+          publicFeedsEnabled={publicFeedsEnabled}
         />
-        <PodcastDetailsGrid podcast={podcast} publicFeedsEnabled={publicFeedsEnabled} />
+        <PodcastDetailsGrid podcast={podcast} detailsExpanded={detailsExpanded} onDetailsToggle={() => setDetailsExpanded((e) => !e)} />
       </div>
 
       {detailsDialogOpen && (

@@ -1,4 +1,5 @@
 .wrap {
+  position: relative;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
@@ -29,6 +30,29 @@
   text-align: center;
   overflow-wrap: break-word;
   word-break: break-word;
+}
+
+.joinCallBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0.5rem 0;
+  padding: 0.625rem 1.125rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-elevated);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 212, 170, 0.25);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.joinCallBtn:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(0, 212, 170, 0.35);
 }
 
 .card {
@@ -317,7 +341,7 @@
 }
 
 .footerBelowCard {
-  margin: 1.25rem 0 0;
+  margin: 1rem 0 0;
   font-size: 0.875rem;
   color: var(--text-muted);
   text-align: center;

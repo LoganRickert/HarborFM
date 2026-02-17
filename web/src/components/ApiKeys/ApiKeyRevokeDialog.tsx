@@ -41,7 +41,7 @@ export function ApiKeyRevokeDialog({
               ? `This will permanently revoke the API key "${name}". Any scripts or apps using this key will stop working. This cannot be undone.`
               : 'This will permanently revoke this API key. This cannot be undone.'}
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.subscriberDialogCancelBtn} aria-label="Cancel">
                 Cancel

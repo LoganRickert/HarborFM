@@ -43,6 +43,7 @@ export function canRecordNewSectionFromUser(user: User | null | undefined): bool
 }
 
 export const RECORD_BLOCKED_STORAGE_MESSAGE = 'Less than 5 MB storage free. Free up space to record.';
+export const START_CALL_BLOCKED_STORAGE_MESSAGE = 'You are out of disk space';
 
 export interface MeResponse {
   user: User;

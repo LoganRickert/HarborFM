@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock, Settings, Share2 } from 'lucide-react';
+import { Lock, Settings, Share2, Users } from 'lucide-react';
 import { ShareDialog } from '../../components/ShareDialog';
 import styles from '../EpisodeEditor.module.css';
 
@@ -18,6 +18,18 @@ export interface EpisodeDetailsSummaryCardProps {
   shareUrl?: string;
   shareTitle?: string;
   embedCode?: string;
+  /** When set, a "Start Group Call" or "End Group Call" button is shown to the left of Edit Details. */
+  onStartGroupCall?: () => void;
+  /** When true, Start Group Call is shown but disabled (e.g. out of disk space). */
+  startGroupCallDisabled?: boolean;
+  /** Tooltip when startGroupCallDisabled (e.g. "You are out of disk space"). */
+  startGroupCallDisabledMessage?: string;
+  /** When true, the button shows "End Group Call" (host) or "Join Group Call" (collaborator). */
+  isCallActive?: boolean;
+  /** When isCallActive and user is host, clicking triggers this (e.g. to show confirm dialog). */
+  onEndGroupCall?: () => void;
+  /** When isCallActive and user is collaborator, this URL opens the join call page. */
+  callJoinUrl?: string | null;
 }
 
 export function EpisodeDetailsSummaryCard({
@@ -31,14 +43,30 @@ export function EpisodeDetailsSummaryCard({
   shareUrl,
   shareTitle,
   embedCode,
+  onStartGroupCall,
+  startGroupCallDisabled,
+  startGroupCallDisabledMessage,
+  isCallActive,
+  onEndGroupCall,
+  callJoinUrl,
 }: EpisodeDetailsSummaryCardProps) {
   const [shareOpen, setShareOpen] = useState(false);
-  const metaParts: string[] = [status];
+  const statusLabel = status ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() : 'Draft';
+  const statusBadgeClass =
+    status === 'published'
+      ? styles.detailsSummaryStatusBadgePublished
+      : status === 'scheduled'
+        ? styles.detailsSummaryStatusBadgeScheduled
+        : styles.detailsSummaryStatusBadgeDraft;
+  const metaParts: string[] = [];
   if (seasonNumber != null || episodeNumber != null) {
     metaParts.push(`S${seasonNumber ?? '?'} E${episodeNumber ?? '?'}`);
   }
   const isSubscriberOnly = subscriberOnly === 1;
-  
+  const showStartCallBtn = !isCallActive && (onStartGroupCall != null || startGroupCallDisabled);
+  const showJoinCallBtn = isCallActive && callJoinUrl;
+  const hasActions = onEditClick != null || shareUrl != null || showStartCallBtn || onEndGroupCall != null || showJoinCallBtn;
+
   return (
     <div className={isSubscriberOnly ? `${styles.detailsSummaryCard} ${styles.detailsSummaryCardSubscriberOnly}` : styles.detailsSummaryCard}>
       <div className={styles.detailsSummaryRow}>
@@ -56,15 +84,49 @@ export function EpisodeDetailsSummaryCard({
             )}
             <h2 className={styles.detailsSummaryTitle}>{title || 'Untitled episode'}</h2>
           </div>
-          <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
+          <p className={styles.detailsSummaryMeta}>
+            <span className={`${styles.detailsSummaryStatusBadge} ${statusBadgeClass}`}>{statusLabel}</span>
+            {metaParts.length > 0 && <span>{metaParts.join(' · ')}</span>}
+          </p>
         </div>
       </div>
-      {(onEditClick != null || shareUrl != null) && (
+      {hasActions && (
         <div className={styles.detailsSummaryActions}>
+          {(showStartCallBtn || onEndGroupCall != null || showJoinCallBtn) && (
+            isCallActive && onEndGroupCall ? (
+              <button type="button" className={styles.detailsSummaryEndCallBtn} onClick={onEndGroupCall} aria-label="End group call">
+                <Users size={18} strokeWidth={2} aria-hidden />
+                End Group Call
+              </button>
+            ) : showJoinCallBtn ? (
+              <a
+                href={callJoinUrl!}
+                className={styles.detailsSummaryJoinCallBtn}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Join group call"
+                title="Join group call"
+              >
+                <Users size={18} strokeWidth={2} aria-hidden />
+                Join Group Call
+              </a>
+            ) : showStartCallBtn ? (
+              <button
+                type="button"
+                className={`${styles.detailsSummaryEditBtn} ${styles.detailsSummaryStartCallBtn}`}
+                onClick={startGroupCallDisabled ? undefined : onStartGroupCall}
+                disabled={startGroupCallDisabled}
+                title={startGroupCallDisabled ? startGroupCallDisabledMessage : undefined}
+                aria-label={startGroupCallDisabled ? `Start group call (${startGroupCallDisabledMessage ?? 'disabled'})` : 'Start group call'}
+              >
+                <Users size={18} strokeWidth={2} aria-hidden />
+                Start Group Call
+              </button>
+            ) : null
+          )}
           {onEditClick != null && (
-            <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details">
+            <button type="button" className={styles.detailsSummaryEditBtn} onClick={onEditClick} aria-label="Edit episode details" title="Edit episode details">
               <Settings size={18} strokeWidth={2} aria-hidden />
-              Edit Details
             </button>
           )}
           {shareUrl != null && (

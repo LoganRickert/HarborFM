@@ -91,6 +91,37 @@ export const FFPROBE_PATH = process.env.FFPROBE_PATH ?? "ffprobe";
 export const AUDIOWAVEFORM_PATH =
   process.env.AUDIOWAVEFORM_PATH ?? "audiowaveform";
 
+/** When false, WebRTC/group calls are disabled (e.g. Terraform webrtc_enabled=0). Env: WEBRTC_ENABLED. Default false when unset or invalid. */
+export const WEBRTC_ENABLED =
+  process.env.WEBRTC_ENABLED?.trim() === "1" ||
+  process.env.WEBRTC_ENABLED?.trim() === "true";
+
+/** WebRTC service base URL (e.g. http://webrtc:3002). When set, group call creates a mediasoup room. Env: WEBRTC_SERVICE_URL. */
+export const WEBRTC_SERVICE_URL = process.env.WEBRTC_SERVICE_URL?.trim() || null;
+
+/** Public WebSocket URL for the WebRTC service (e.g. wss://example.com/webrtc-ws or ws://localhost:3002 for dev). Returned to the client so the browser can connect. Env: WEBRTC_PUBLIC_WS_URL. */
+export const WEBRTC_PUBLIC_WS_URL = process.env.WEBRTC_PUBLIC_WS_URL?.trim() || null;
+
+/** Secret for webrtc service to call back when a recording is ready (create segment from path). Env: RECORDING_CALLBACK_SECRET. */
+export const RECORDING_CALLBACK_SECRET =
+  process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
+
+/** Host-away grace period (ms) when no guests. Env: HOST_AWAY_GRACE_NO_GUESTS_MS. Default 60000 (1 min). */
+export const HOST_AWAY_GRACE_NO_GUESTS_MS =
+  Number(process.env.HOST_AWAY_GRACE_NO_GUESTS_MS) || 60_000;
+
+/** Host-away grace period (ms) when recording in progress, no guests. Env: HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS. Default 120000 (2 min). */
+export const HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS =
+  Number(process.env.HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS) || 120_000;
+
+/** Host-away grace period (ms) when guests are present. Env: HOST_AWAY_GRACE_WITH_GUESTS_MS. Default 300000 (5 min). */
+export const HOST_AWAY_GRACE_WITH_GUESTS_MS =
+  Number(process.env.HOST_AWAY_GRACE_WITH_GUESTS_MS) || 300_000;
+
+/** Host-away checker interval (ms). Env: HOST_AWAY_CHECK_INTERVAL_MS. Default 30000. */
+export const HOST_AWAY_CHECK_INTERVAL_MS =
+  Number(process.env.HOST_AWAY_CHECK_INTERVAL_MS) || 30_000;
+
 /** Path to geoipupdate binary. Env: GEOIPUPDATE_PATH. Default "geoipupdate". */
 export const GEOIPUPDATE_PATH = process.env.GEOIPUPDATE_PATH ?? "geoipupdate";
 
@@ -156,6 +187,10 @@ export const FORGOT_PASSWORD_RATE_MINUTES =
 /** Login failure threshold: ban after this many failures in the window. Env: LOGIN_FAILURE_THRESHOLD. Default 3. */
 export const LOGIN_FAILURE_THRESHOLD =
   Number(process.env.LOGIN_FAILURE_THRESHOLD) || 3;
+
+/** Call-join failure threshold: ban after this many failures. Higher than login because invalid links can trigger multiple requests per page load (e.g. getJoinInfo + WebSocket guest). Env: CALL_JOIN_FAILURE_THRESHOLD. Default 6 (allows ~3 real attempts). */
+export const CALL_JOIN_FAILURE_THRESHOLD =
+  Number(process.env.CALL_JOIN_FAILURE_THRESHOLD) || 6;
 
 /** Login ban duration (minutes). Env: LOGIN_BAN_MINUTES. Default 10. */
 export const LOGIN_BAN_MINUTES = Number(process.env.LOGIN_BAN_MINUTES) || 10;
@@ -266,3 +301,13 @@ export const ROLE_MIN_MANAGE_COLLABORATORS = parseShareRole(
 /** AAD for DNS-related encrypted secrets (Cloudflare API token etc). Env: DNS_SECRETS_AAD. */
 export const DNS_SECRETS_AAD =
   process.env.DNS_SECRETS_AAD?.trim() || `${APP_NAME}-dns`;
+
+/** Initial setup token for /setup?id=... URL. Env: SETUP_ID or SETUP_TOKEN. When set, used instead of file. */
+export const SETUP_ID =
+  process.env.SETUP_ID?.trim() || process.env.SETUP_TOKEN?.trim() || null;
+
+/** Bootstrap admin email. With ADMIN_PASSWORD_HASH, creates admin on first boot. Env: ADMIN_EMAIL. */
+export const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || null;
+
+/** Bootstrap admin password (argon2 hash). Requires ADMIN_EMAIL. Env: ADMIN_PASSWORD_HASH. */
+export const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH?.trim() || null;

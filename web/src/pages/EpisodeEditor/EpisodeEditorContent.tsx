@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb } from '../../components/Breadcrumb';
 import { useAuthStore } from '../../store/auth';
-import { me, canRecordNewSection, isReadOnly, RECORD_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
+import { me, canRecordNewSection, isReadOnly, RECORD_BLOCKED_STORAGE_MESSAGE, START_CALL_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
 import { updateEpisode, uploadEpisodeArtwork } from '../../api/episodes';
 import {
   addRecordedSegment,
@@ -16,7 +16,7 @@ import {
 } from '../../api/segments';
 import { episodeToForm, formToApiPayload } from './utils';
 import { EpisodeDetailsSummaryCard } from './EpisodeDetailsSummaryCard';
-import { EpisodeDetailsForm } from './EpisodeDetailsForm';
+import { EpisodeDetailsForm, type EpisodeDetailsTab } from './EpisodeDetailsForm';
 import { GenerateFinalBar } from './GenerateFinalBar';
 import { EpisodeCastCard } from './EpisodeCastCard';
 import { EpisodeSectionsPanel } from './EpisodeSectionsPanel';
@@ -37,6 +37,11 @@ import type { Episode, EpisodeUpdate } from '../../api/episodes';
 import type { Podcast } from '../../api/podcasts';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
+import { getPublicConfig } from '../../api/public';
+import { startCall, getActiveSession } from '../../api/call';
+import { CallPanel } from '../../components/GroupCall/CallPanel';
+import { useEpisodeWebSocket } from '../../hooks/useEpisodeWebSocket';
+import { EndCallConfirmDialog } from '../../components/GroupCall/EndCallConfirmDialog';
 
 export interface EpisodeEditorContentProps {
   episode: Episode;
@@ -58,6 +63,12 @@ export function EpisodeEditorContent({
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
+  const host = typeof window !== 'undefined' ? window.location.host : '';
+  const { data: publicConfig } = useQuery({
+    queryKey: ['publicConfig', host],
+    queryFn: getPublicConfig,
+  });
+  const webrtcEnabled = publicConfig?.webrtc_enabled === true;
   const canRecord = (podcast?.can_record_new_section ?? canRecordNewSection(meData)) === true;
   const readOnly = isReadOnly(meData?.user ?? user);
   const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
@@ -71,6 +82,7 @@ export function EpisodeEditorContent({
   const [showRecord, setShowRecord] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [episodeDetailsActiveTab, setEpisodeDetailsActiveTab] = useState<EpisodeDetailsTab>('overview');
   const [segmentToDelete, setSegmentToDelete] = useState<string | null>(null);
   const [segmentIdForInfo, setSegmentIdForInfo] = useState<string | null>(null);
   const [transcriptEntryToDelete, setTranscriptEntryToDelete] = useState<{
@@ -83,17 +95,82 @@ export function EpisodeEditorContent({
   const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
   const [coverUploadKey, setCoverUploadKey] = useState(0);
   const [debouncedArtworkUrl, setDebouncedArtworkUrl] = useState('');
-  const [buildInProgress, setBuildInProgress] = useState(false);
   const [buildAlreadyInProgressMessage, setBuildAlreadyInProgressMessage] = useState<string | null>(null);
-  const [renderPollError, setRenderPollError] = useState<string | null>(null);
   const [showEpisodeTranscript, setShowEpisodeTranscript] = useState(false);
+  const [startCallError, setStartCallError] = useState<string | null>(null);
+  const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
+  /** Pending segment IDs from WebSocket; refetch overwrites cache too early so we keep this. */
+  const [wsPendingSegmentIds, setWsPendingSegmentIds] = useState<string[] | null>(null);
+
+  useEpisodeWebSocket(id, podcastId);
+
+  const { data: activeSession } = useQuery({
+    queryKey: ['call-session', id],
+    queryFn: () => getActiveSession(id!),
+    enabled: !!id && !segmentReadOnly,
+  });
+  const { data: renderStatus } = useQuery({
+    queryKey: ['render-status', id],
+    queryFn: () => getRenderStatus(id!),
+    enabled: !!id,
+    refetchInterval: (query) => (query.state.data?.status === 'building' ? 5000 : false),
+  });
+  const activeCall = activeSession
+    ? {
+        sessionId: activeSession.sessionId,
+        token: activeSession.token,
+        joinUrl: activeSession.joinUrl,
+        joinCode: activeSession.joinCode,
+        webrtcUrl: activeSession.webrtcUrl,
+        roomId: activeSession.roomId,
+        hostToken: activeSession.hostToken,
+        webrtcUnavailable: activeSession.webrtcUnavailable,
+      }
+    : null;
 
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playingSegmentIdRef = useRef<string | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const finalPauseRef = useRef<(() => void) | null>(null);
+  const endCallFnRef = useRef<(() => void) | null>(null);
+
+  const handleCallEnded = useCallback(() => {
+    setWsPendingSegmentIds(null);
+    queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+  }, [queryClient, id]);
+
+  const handleSegmentRecorded = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['segments', id] });
+  }, [queryClient, id]);
+
+  const handleRecordingStateChange = useCallback(
+    (pendingSegmentIds?: string[]) => {
+      if (pendingSegmentIds !== undefined) {
+        setWsPendingSegmentIds(pendingSegmentIds);
+      }
+      queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+    },
+    [queryClient, id],
+  );
+
+  const handleEndGroupCallConfirmed = useCallback(() => {
+    setEndCallConfirmOpen(false);
+    setWsPendingSegmentIds(null);
+    endCallFnRef.current?.();
+    queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+  }, [queryClient, id]);
+
+  const handleStartGroupCall = useCallback(() => {
+    setStartCallError(null);
+    startCall(id)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+      })
+      .catch((err) => {
+        setStartCallError(err?.message ?? 'Failed to start call. Please try again.');
+      });
+  }, [id, queryClient]);
 
   const handleSegmentPlayRequest = useCallback((segmentId: string) => {
     // Pause and reset all other segments to 0
@@ -220,9 +297,8 @@ export function EpisodeEditorContent({
     mutationFn: () => startRenderEpisode(id),
     onSuccess: (result) => {
       if (result.status === 'building' || result.status === 'already_building') {
-        setRenderPollError(null);
-        setBuildInProgress(true);
         setBuildAlreadyInProgressMessage(result.status === 'already_building' ? (result.message ?? 'A build is already in progress.') : null);
+        queryClient.invalidateQueries({ queryKey: ['render-status', id] });
       }
     },
   });
@@ -245,59 +321,16 @@ export function EpisodeEditorContent({
     },
   });
 
-  // On load, check if a build is already in progress (e.g. user refreshed or navigated here)
   useEffect(() => {
-    if (!id) return;
-    getRenderStatus(id)
-      .then(({ status }) => {
-        if (status === 'building') {
-          setBuildInProgress(true);
-          setBuildAlreadyInProgressMessage('A build is already in progress.');
-        }
-      })
-      .catch(() => {
-        // Ignore: render-status may be unavailable; building state will be correct after user starts a build
-      });
-  }, [id]);
-
-  useEffect(() => {
-    if (!buildInProgress || !id) return;
-    const poll = () => {
-      getRenderStatus(id)
-        .then(({ status, error }) => {
-          if (status === 'done') {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-              pollIntervalRef.current = null;
-            }
-            setBuildInProgress(false);
-            setBuildAlreadyInProgressMessage(null);
-            setRenderPollError(null);
-            queryClient.invalidateQueries({ queryKey: ['episode', id] });
-            queryClient.invalidateQueries({ queryKey: ['segments', id] });
-          } else if (status === 'failed') {
-            if (pollIntervalRef.current) {
-              clearInterval(pollIntervalRef.current);
-              pollIntervalRef.current = null;
-            }
-            setBuildInProgress(false);
-            setBuildAlreadyInProgressMessage(null);
-            setRenderPollError(error ?? 'Build failed');
-          }
-        })
-        .catch(() => {
-          // Keep polling on network error
-        });
-    };
-    poll();
-    pollIntervalRef.current = setInterval(poll, 5000);
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    };
-  }, [buildInProgress, id, queryClient]);
+    if (!renderStatus || !id) return;
+    if (renderStatus.status === 'done') {
+      setBuildAlreadyInProgressMessage(null);
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+      queryClient.invalidateQueries({ queryKey: ['segments', id] });
+    } else if (renderStatus.status === 'failed') {
+      setBuildAlreadyInProgressMessage(null);
+    }
+  }, [renderStatus, id, queryClient]);
 
   function handleMoveUp(index: number) {
     if (index <= 0) return;
@@ -360,13 +393,45 @@ export function EpisodeEditorContent({
               })()
             : undefined
         }
+        onStartGroupCall={
+          webrtcEnabled && !segmentReadOnly && canEditSegments && !activeCall && (canRecord || myRole !== 'owner')
+            ? handleStartGroupCall
+            : undefined
+        }
+        startGroupCallDisabled={
+          webrtcEnabled && !segmentReadOnly && canEditSegments && !canRecord && myRole === 'owner' && !activeCall
+        }
+        startGroupCallDisabledMessage={START_CALL_BLOCKED_STORAGE_MESSAGE}
+        isCallActive={webrtcEnabled && !!activeCall}
+        onEndGroupCall={
+          webrtcEnabled && !segmentReadOnly && canEditSegments && activeCall?.hostToken ? () => setEndCallConfirmOpen(true) : undefined
+        }
+        callJoinUrl={
+          webrtcEnabled && activeCall && !activeCall.hostToken ? activeCall.joinUrl : null
+        }
       />
 
+      {startCallError && (
+        <div className={styles.callErrorBanner} role="alert">
+          {startCallError}
+          <button
+            type="button"
+            className={styles.callErrorBannerDismiss}
+            onClick={() => setStartCallError(null)}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className={styles.card}>
         <EpisodeSectionsPanel
               episodeId={id}
               segments={segments}
               segmentsLoading={segmentsLoading}
+              processingSegmentIds={(wsPendingSegmentIds ?? activeSession?.pendingSegmentIds ?? []).filter(
+                (segId) => !segments.some((s) => s.id === segId)
+              )}
               onAddRecord={() => setShowRecord(true)}
               onAddLibrary={() => setShowLibrary(true)}
               recordDisabled={!canRecord}
@@ -393,11 +458,8 @@ export function EpisodeEditorContent({
       <GenerateFinalBar
         episodeId={id}
         segmentCount={segments.length}
-        onBuild={() => {
-          setRenderPollError(null);
-          renderMutation.mutate();
-        }}
-        isBuilding={renderMutation.isPending || buildInProgress}
+        onBuild={() => renderMutation.mutate()}
+        isBuilding={renderMutation.isPending || renderStatus?.status === 'building'}
         buildMessage={buildAlreadyInProgressMessage}
         hasFinalAudio={Boolean(episode.audio_final_path)}
         finalDurationSec={episode.audio_duration_sec ?? 0}
@@ -410,7 +472,7 @@ export function EpisodeEditorContent({
         onGenerateTranscript={episode.has_transcript !== true ? async () => { await generateTranscriptMutation.mutateAsync(); } : undefined}
         canGenerateTranscript={meData?.user?.can_transcribe === 1}
         error={
-          renderPollError ??
+          (renderStatus?.status === 'failed' ? (renderStatus.error ?? 'Build failed') : null) ??
           (renderMutation.isError ? renderMutation.error?.message : null) ??
           (generateTranscriptMutation.isError ? generateTranscriptMutation.error?.message : null)
         }
@@ -432,12 +494,17 @@ export function EpisodeEditorContent({
 
       <Dialog.Root
         open={detailsDialogOpen}
-        onOpenChange={(o) => !o && setDetailsDialogOpen(false)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDetailsDialogOpen(false);
+            setEpisodeDetailsActiveTab('overview');
+          }
+        }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className={styles.dialogOverlay} />
+          <Dialog.Overlay className={sharedStyles.dialogOverlay} />
           <Dialog.Content
-            className={`${sharedStyles.dialogContent} ${sharedStyles.dialogContentWide} ${sharedStyles.dialogContentScrollable} ${styles.episodeDetailsDialog}`}
+            className={`${sharedStyles.dialogContent} ${sharedStyles.dialogContentWide} ${sharedStyles.dialogContentScrollable} ${sharedStyles.dialogShowDetailsGrid}`}
           >
             <div className={sharedStyles.dialogHeaderRow}>
               <Dialog.Title className={sharedStyles.dialogTitle}>
@@ -457,8 +524,53 @@ export function EpisodeEditorContent({
             <Dialog.Description className={sharedStyles.dialogDescription}>
               Edit the episode title, description, and publish settings.
             </Dialog.Description>
+            <div className={sharedStyles.editDetailsTabSelectWrap}>
+              <select
+                className={sharedStyles.editDetailsTabSelect}
+                value={episodeDetailsActiveTab}
+                onChange={(e) => setEpisodeDetailsActiveTab(e.target.value as EpisodeDetailsTab)}
+                aria-label="Jump to section"
+              >
+                <option value="overview">Overview</option>
+                <option value="publish">Publish</option>
+                <option value="more">More</option>
+              </select>
+            </div>
+            <div
+              className={sharedStyles.editDetailsTabs}
+              role="tablist"
+              aria-label="Edit sections"
+              onKeyDown={(e) => {
+                const tabs: EpisodeDetailsTab[] = ['overview', 'publish', 'more'];
+                const i = tabs.indexOf(episodeDetailsActiveTab);
+                if (e.key === 'ArrowLeft' && i > 0) {
+                  e.preventDefault();
+                  setEpisodeDetailsActiveTab(tabs[i - 1]!);
+                } else if (e.key === 'ArrowRight' && i < tabs.length - 1) {
+                  e.preventDefault();
+                  setEpisodeDetailsActiveTab(tabs[i + 1]!);
+                }
+              }}
+            >
+              {(['overview', 'publish', 'more'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  tabIndex={episodeDetailsActiveTab === tab ? 0 : -1}
+                  aria-selected={episodeDetailsActiveTab === tab}
+                  aria-controls={`episode-details-panel-${tab}`}
+                  id={`episode-details-tab-${tab}`}
+                  className={`${sharedStyles.editDetailsTab} ${episodeDetailsActiveTab === tab ? sharedStyles.editDetailsTabActive : ''}`}
+                  onClick={() => setEpisodeDetailsActiveTab(tab)}
+                >
+                  {tab === 'overview' ? 'Overview' : tab === 'publish' ? 'Publish' : 'More'}
+                </button>
+              ))}
+            </div>
             <div className={sharedStyles.dialogBodyScroll}>
               <EpisodeDetailsForm
+                activeTab={episodeDetailsActiveTab}
                 form={dialogForm}
                 setForm={setDialogForm}
                 descriptionTextareaRef={descriptionTextareaRef}
@@ -507,14 +619,14 @@ export function EpisodeEditorContent({
                 }}
               />
             </div>
-            <div className={styles.dialogFooter}>
-              <button type="button" className={styles.cancel} onClick={() => setDetailsDialogOpen(false)} aria-label="Cancel editing episode">
+            <div className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}>
+              <button type="button" className={sharedStyles.cancel} onClick={() => setDetailsDialogOpen(false)} aria-label="Cancel editing episode">
                 Cancel
               </button>
               <button
                 type="submit"
                 form="episode-details-form"
-                className={styles.submit}
+                className={sharedStyles.dialogConfirm}
                 disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
                 aria-label="Save episode details"
               >
@@ -525,6 +637,30 @@ export function EpisodeEditorContent({
         </Dialog.Portal>
       </Dialog.Root>
 
+      <EndCallConfirmDialog
+        open={endCallConfirmOpen}
+        onOpenChange={setEndCallConfirmOpen}
+        onConfirm={handleEndGroupCallConfirmed}
+      />
+      {activeCall?.hostToken && (
+        <CallPanel
+          sessionId={activeCall.sessionId}
+          joinUrl={activeCall.joinUrl}
+          joinCode={activeCall.joinCode}
+          webrtcUrl={activeCall.webrtcUrl}
+          roomId={activeCall.roomId}
+          hostToken={activeCall.hostToken}
+          mediaUnavailable={!activeCall.webrtcUrl || !activeCall.roomId || activeCall.webrtcUnavailable}
+          onEnd={handleCallEnded}
+          onCallEnded={handleCallEnded}
+          onSegmentRecorded={handleSegmentRecorded}
+          onRecordingStateChange={handleRecordingStateChange}
+          onEndRequest={() => setEndCallConfirmOpen(true)}
+          onRegisterEndCall={(fn) => { endCallFnRef.current = fn; }}
+          recordDisabled={!canRecord}
+          recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
+        />
+      )}
       {showRecord && (
         <RecordModal
           onClose={() => setShowRecord(false)}

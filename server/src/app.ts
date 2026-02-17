@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
@@ -50,6 +51,9 @@ import { contactRoutes } from "./modules/contact/index.js";
 import { messagesRoutes } from "./modules/messages/index.js";
 import { sitemapRoutes } from "./modules/sitemap/index.js";
 import { bansRoutes } from "./modules/bans/index.js";
+import { callRoutes } from "./modules/call/index.js";
+import { episodeCollaborationRoutes } from "./modules/episodeCollaboration/index.js";
+import fastifyWebsocket from "@fastify/websocket";
 import {
   flush,
   pruneListenDedup,
@@ -57,7 +61,11 @@ import {
   stopFlushInterval,
 } from "./services/podcastStats.js";
 import { ensureSecretsDir, getSecretsDir } from "./services/paths.js";
-import { getOrCreateSetupToken, isSetupComplete } from "./services/setup.js";
+import {
+  bootstrapIfNeeded,
+  getOrCreateSetupToken,
+  isSetupComplete,
+} from "./services/setup.js";
 import { getSecretsKey } from "./services/secrets.js";
 import { SWAGGER_TITLE, SWAGGER_THEME_CSS } from "./swagger-theme.js";
 
@@ -107,7 +115,22 @@ async function main() {
   // (Otherwise we'd only touch it when creating/testing/deploying exports.)
   getSecretsKey();
 
-  // One-time setup phase
+  // One-time setup phase (bootstrap from env when ADMIN_EMAIL + ADMIN_PASSWORD_HASH set)
+  const setupComplete = isSetupComplete();
+  const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  const adminHash = process.env.ADMIN_PASSWORD_HASH?.trim();
+  const hasEmail = Boolean(adminEmail);
+  const hasHash = Boolean(adminHash);
+  const hashValid = Boolean(adminHash?.startsWith("$argon2"));
+  console.info(
+    `[setup] Startup: isSetupComplete=${setupComplete} ADMIN_EMAIL=${hasEmail ? "set" : "unset"} ADMIN_PASSWORD_HASH=${hasHash ? "set" : "unset"} hashStartsWithArgon2=${hashValid}`,
+  );
+  try {
+    bootstrapIfNeeded();
+  } catch (err) {
+    console.error("[setup] Bootstrap failed:", err);
+    throw err;
+  }
   if (!isSetupComplete()) {
     const token = getOrCreateSetupToken();
     const path = `/setup?id=${token}`;
@@ -138,6 +161,7 @@ async function main() {
     cookie: { cookieName: JWT_COOKIE_NAME, signed: JWT_COOKIE_SIGNED },
   });
   await app.register(authPlugin);
+  await app.register(fastifyWebsocket);
 
   const apiPrefix = `/${API_PREFIX}`;
   await app.register(fastifySwagger, {
@@ -244,6 +268,8 @@ async function main() {
   await app.register(publicRoutes, { prefix: apiPrefix });
   await app.register(sitemapRoutes, { prefix: apiPrefix });
   await app.register(bansRoutes, { prefix: apiPrefix });
+  await app.register(callRoutes, { prefix: apiPrefix });
+  await app.register(episodeCollaborationRoutes, { prefix: apiPrefix });
 
   pruneListenDedup();
   startFlushInterval();

@@ -102,15 +102,12 @@ for (const m of migrations) {
 }
 console.log("Migrations complete.");
 
-// After settings migration, migrate settings from file if needed
-if (settingsMigrationApplied) {
-  // Use dynamic import with .then() to avoid top-level await
-  import("../modules/settings/index.js")
-    .then((module) => {
-      module.migrateSettingsFromFile();
-    })
-    .catch((err) => {
-      // Settings module might not be loaded yet, that's okay
-      console.warn("Could not migrate settings from file:", err);
-    });
-}
+// After migrations, run settings migrations
+import("../modules/settings/index.js")
+  .then((module) => {
+    if (settingsMigrationApplied) module.migrateSettingsFromFile();
+    module.migrateWebRtcFromEnv();
+  })
+  .catch((err) => {
+    console.warn("Could not run settings migrations:", err);
+  });

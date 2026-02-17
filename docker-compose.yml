@@ -17,9 +17,25 @@ services:
       PORT: "3001"
       DATA_DIR: /data
       SECRETS_DIR: /secrets
+      WEBRTC_RECORDINGS_DIR: /webrtc
+      # WebRTC service: harborfm calls webrtc over internal network; clients use public WS URL
+      WEBRTC_SERVICE_URL: "${WEBRTC_SERVICE_URL:-http://webrtc:3002}"
+      WEBRTC_PUBLIC_WS_URL: "${WEBRTC_PUBLIC_WS_URL:-}"
+      WEBRTC_SERVICE_SECRET: "${WEBRTC_SERVICE_SECRET:-}"
+      RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
+      SETUP_ID: "${SETUP_ID:-}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
+      ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH:-}"
+      # When set, server reads hash from file (avoids storing in .env). User-data writes to /secrets/admin_password_hash.
+      ADMIN_PASSWORD_HASH_FILE: "/secrets/admin_password_hash"
+      ADMIN_REGISTRATION_ENABLED: "${ADMIN_REGISTRATION_ENABLED:-}"
+      ADMIN_PUBLIC_FEEDS_ENABLED: "${ADMIN_PUBLIC_FEEDS_ENABLED:-}"
+      ADMIN_HOSTNAME: "${ADMIN_HOSTNAME:-}"
     volumes:
       - harborfm_data:/data
       - harborfm_secrets:/secrets
+      - webrtc_recordings:/webrtc
     networks:
       - internal
     healthcheck:
@@ -130,6 +146,29 @@ services:
     networks:
       - internal
 
+  webrtc:
+    profiles: ["webrtc"]
+    image: ghcr.io/loganrickert/harborfm-webrtc:latest
+    container_name: harborfm-webrtc
+    restart: unless-stopped
+    environment:
+      PORT: "3002"
+      RTC_MIN_PORT: "41000"
+      RTC_MAX_PORT: "41100"
+      MEDIASOUP_ANNOUNCED_IP: "${MEDIASOUP_ANNOUNCED_IP:-}"
+      MAIN_APP_URL: "${MAIN_APP_URL:-http://harborfm:3001}"
+      RECORDING_CALLBACK_SECRET: "${RECORDING_CALLBACK_SECRET:-}"
+      RECORDING_DATA_DIR: "/webrtc"
+      WEBRTC_SERVICE_SECRET: "${WEBRTC_SERVICE_SECRET:-}"
+      WEBRTC_INSECURE_SKIP_AUTH: "${WEBRTC_INSECURE_SKIP_AUTH:-}"
+    volumes:
+      - webrtc_recordings:/webrtc
+    ports:
+      - "3002:3002"
+      - "41000-41100:41000-41100/udp"
+    networks:
+      - internal
+
   fail2ban:
     image: crazymax/fail2ban:latest
     container_name: harborfm-fail2ban
@@ -148,68 +187,74 @@ services:
       TZ: ${TZ:-UTC}
       F2B_LOG_LEVEL: info
 
-# Named volumes backed by ${INSTALL_DIR}/harborfm-docker-data/ (install.sh sets INSTALL_DIR in .env)
+# Named volumes. App data (data, secrets, webrtc) shared across deploy types. Proxy infra under proxy/, whisper under whisper/.
 volumes:
   harborfm_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/data
+      device: ${INSTALL_DIR:-.}/harborfm-data/data
   harborfm_secrets:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/secrets
+      device: ${INSTALL_DIR:-.}/harborfm-data/secrets
   certbot_webroot:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/certbot/webroot
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/certbot/webroot
   certbot_certs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/certbot/certs
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/certbot/certs
   nginx_logs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/logs
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/nginx/logs
   nginx_sites_enabled:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/sites-enabled
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/nginx/sites-enabled
   caddy_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/data
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/caddy/data
   caddy_config:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/config
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/caddy/config
   caddy_logs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/logs
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/caddy/logs
   whisper_cache:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/whisper/cache
+      device: ${INSTALL_DIR:-.}/harborfm-data/whisper/cache
+  webrtc_recordings:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${INSTALL_DIR:-.}/harborfm-data/webrtc
 
 networks:
   internal:

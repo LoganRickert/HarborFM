@@ -614,6 +614,9 @@
   gap: 0.75rem;
   justify-content: flex-end;
 }
+.dialogActionsCancelLeft {
+  justify-content: space-between;
+}
 
 .dialogForm {
   display: grid;
@@ -650,7 +653,7 @@
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--bg);
+  color: black;
   background: var(--error);
   border: 1px solid var(--error);
   border-radius: var(--radius);

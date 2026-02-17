@@ -6,15 +6,24 @@ ROOT="$(cd "$E2E_DIR/.." && pwd)"
 PORT="${E2E_PORT:-3099}"
 export DATA_DIR="$E2E_DIR/data"
 export SECRETS_DIR="$E2E_DIR/secrets"
+export WEBRTC_RECORDINGS_DIR="$E2E_DIR/webrtc-recordings"
 export PORT
+# Pass through WebRTC env when set (e.g. by run-e2e-webrtc.sh)
+[ -n "${WEBRTC_SERVICE_URL:-}" ] && export WEBRTC_SERVICE_URL
+[ -n "${WEBRTC_PUBLIC_WS_URL:-}" ] && export WEBRTC_PUBLIC_WS_URL
+[ -n "${RECORDING_CALLBACK_SECRET:-}" ] && export RECORDING_CALLBACK_SECRET
+[ -n "${MAIN_APP_BASE_URL:-}" ] && export MAIN_APP_BASE_URL
 export NODE_ENV="${NODE_ENV:-development}"
 export RATE_LIMIT_MAX="${RATE_LIMIT_MAX:-2000}"
 export RATE_LIMIT_TIME_WINDOW="${RATE_LIMIT_TIME_WINDOW:-1 minute}"
+
+echo "" > "$E2E_DIR/server.log"
 
 # Ensure server is built
 pnpm --filter server build 1>/dev/null 2>&1 || true
 
 cd "$ROOT"
+
 node server/dist/app.js 1>>"$E2E_DIR/server.log" 2>&1 &
 echo $! > "$E2E_DIR/server.pid"
 

@@ -19,6 +19,8 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 ## Table of contents
 
 - [Overview](#overview)
+- [Deploy with Terraform](#deploy-with-terraform)
+- [WebRTC (group calls)](#webrtc-group-calls)
 - [Requirements](#requirements)
 - [Quick start (local)](#quick-start-local)
 - [Docker](#docker)
@@ -56,6 +58,89 @@ docker run --name harborfm -p 3001:3001 \
 Use nginx+letsencrypt to provide a secure connection.
 
 If you are using `http`, you need to set `COOKIE_SECURE=false` as an environment variable.
+
+### Deploy with Terraform
+
+Use Terraform to provision a VM (AWS EC2 or Vultr) that runs Harbor FM via user-data (PM2 + nginx, with optional WebRTC and Let's Encrypt).
+
+#### AWS (EC2)
+
+1. **Install Terraform** – see [terraform/terraform/QUICKSTART.md](terraform/terraform/QUICKSTART.md) (macOS, Debian, CentOS).
+2. **Configure AWS** – set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or use `aws configure`).
+3. **Apply** from the AWS Terraform directory:
+
+   ```bash
+   cd terraform/terraform/aws
+   cp terraform.tfvars.example terraform.tfvars
+   # Edit terraform.tfvars: deploy_type, ami_id (Debian 12 for your region), domain, admin_email, admin_password, etc.
+   ./run.sh init
+   ./run.sh apply
+   ```
+
+4. Use the **url** output to open the app; if you set `admin_email` and `admin_password`, the admin is created on first boot.
+
+#### Vultr
+
+1. **Install Terraform** – see [terraform/terraform/QUICKSTART.md](terraform/terraform/QUICKSTART.md).
+2. **Set** `VULTR_API_KEY` in `.env` (copy from `terraform/terraform/.env.example`).
+3. **Apply** from the Vultr directory:
+
+   ```bash
+   cd terraform/terraform/vultr
+   cp terraform.tfvars.example terraform.tfvars
+   # Edit terraform.tfvars: deploy_type, region, os_id, plan, domain, etc.
+   ./run.sh init
+   ./run.sh apply
+   ```
+
+#### Getting Vultr OS IDs
+
+List available OS images:
+
+```bash
+curl -s -H "Authorization: Bearer $VULTR_API_KEY" https://api.vultr.com/v2/os | jq '.os[] | {id, name}'
+```
+
+Common mappings: Debian 11 `477`, Debian 12 `2136`, Debian 13 `2625`; Ubuntu 22 `1743`, Ubuntu 24 `2285`, Ubuntu 25 `2657`; CentOS 9 `542`, CentOS 10 `2467`. Vultr derives the `os` variable from `os_id` via [terraform/terraform/vultr/scripts/os-from-id.sh](terraform/terraform/vultr/scripts/os-from-id.sh).
+
+#### Getting AWS AMI IDs
+
+Look up a Debian 12 AMI for your region (owner `136693071363` is Debian):
+
+```bash
+aws ec2 describe-images --region us-east-2 --owners 136693071363 \
+  --filters "Name=name,Values=debian-12-*" "Name=state,Values=available" \
+  --query "sort_by(Images, &CreationDate)[-1].ImageId" --output text
+```
+
+Change `us-east-2` to your region. The Terraform `os` variable (e.g. `debian-12`) must match the image.
+
+Full variable reference, optional persistent data volume (survives destroy+apply), and multi-environment (dev/prod) details: **[terraform/terraform/README.md](terraform/terraform/README.md)**.
+
+### WebRTC (group calls)
+
+Group calls use a separate **webrtc-service** (mediasoup). The main app talks to it over HTTP; browsers connect via WebSocket.
+
+**Enabling:**
+
+- Set `WEBRTC_ENABLED=1` (or `true`) on the main app.
+- Configure `WEBRTC_SERVICE_URL` (internal, e.g. `http://webrtc:3002`) and `WEBRTC_PUBLIC_WS_URL` (public, e.g. `wss://example.com/webrtc-ws`). Nginx/Caddy proxy `/webrtc-ws/` to the webrtc service.
+
+**Docker Compose:** WebRTC runs under profile `webrtc`. Start with:
+
+```bash
+docker compose --profile nginx --profile webrtc up -d
+```
+
+(or `caddy` instead of `nginx`). Required .env: `WEBRTC_ENABLED`, `WEBRTC_SERVICE_URL`, `WEBRTC_PUBLIC_WS_URL`, `WEBRTC_SERVICE_SECRET`, `RECORDING_CALLBACK_SECRET`, and `MEDIASOUP_ANNOUNCED_IP` (when behind NAT).
+
+**PM2 / bare metal:** Use [ecosystem.config.cjs](ecosystem.config.cjs); it starts both `harborfm` and `webrtc`. Ensure the firewall allows UDP `RTC_MIN_PORT`–`RTC_MAX_PORT` (webrtc-service default 40000–40200; Docker uses 41000–41100).
+
+**Debugging:**
+
+- No "Record" or group-call UI: check `WEBRTC_ENABLED` and `WEBRTC_SERVICE_URL` / `WEBRTC_PUBLIC_WS_URL`.
+- Can't connect / no audio: verify firewall UDP ports; behind NAT, set `MEDIASOUP_ANNOUNCED_IP` to the server's public IP.
+- Logs: `docker compose logs webrtc` or `pm2 logs webrtc`.
 
 ### Docker Compose Quick Start (Curl)
 
@@ -282,6 +367,17 @@ All environment variables supported by the server work the same in Docker. Set t
 | `JWT_COOKIE_SIGNED` | (false) | Set to `true` or `1` to sign the JWT cookie (requires @fastify/cookie secret) |
 | **Recording & storage** | | |
 | `RECORD_MIN_FREE_MB` | `5` | Min free storage (MB) required to record a new section |
+| **WebRTC** | | |
+| `WEBRTC_ENABLED` | (false) | Set to `1` or `true` to enable group calls |
+| `WEBRTC_SERVICE_URL` | (none) | Internal URL to webrtc service (e.g. `http://webrtc:3002`) |
+| `WEBRTC_PUBLIC_WS_URL` | (none) | Public WebSocket base for clients (e.g. `wss://example.com/webrtc-ws`) |
+| `WEBRTC_SERVICE_SECRET` | (none) | Optional; auth header for server → webrtc HTTP requests |
+| `WEBRTC_RECORDINGS_DIR` | `{DATA_DIR}/webrtc-recordings` | Directory for webrtc recording output; server reads from here |
+| `RECORDING_CALLBACK_SECRET` | (none) | Secret for webrtc → server recording callback auth |
+| `HOST_AWAY_GRACE_NO_GUESTS_MS` | `60000` | Host-away grace period (ms) when no guests |
+| `HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS` | `120000` | Host-away grace (ms) when recording, no guests |
+| `HOST_AWAY_GRACE_WITH_GUESTS_MS` | `300000` | Host-away grace (ms) when guests present |
+| `HOST_AWAY_CHECK_INTERVAL_MS` | `30000` | Host-away checker interval (ms) |
 | **RSS & sitemap** | | |
 | `RSS_CACHE_MAX_AGE_MS` | `3600000` | RSS/sitemap cache max age in ms (1 hour) |
 | `RSS_FEED_FILENAME` | `feed.xml` | RSS feed filename |
@@ -305,15 +401,24 @@ All environment variables supported by the server work the same in Docker. Set t
 | **Audio** | | |
 | `WAVEFORM_EXTENSION` | `.waveform.json` | Extension for waveform JSON files |
 | **Auth & users** | | |
-| `MAX_PLATFORM_INVITES_PER_DAY` | `10` | Max "invite to platform" emails per inviter per 24 hours |
+| `PLATFORM_INVITES_PER_DAY` | `10` | Max "invite to platform" emails per inviter per 24 hours |
 | `API_KEY_PREFIX` | `hfm_` | Prefix for API keys |
 | `MAX_API_KEYS_PER_USER` | `5` | Max API keys per user |
 | `FORGOT_PASSWORD_RATE_MINUTES` | `5` | Cooldown (minutes) between password-reset requests per email |
 | `RESET_TOKEN_EXPIRY_HOURS` | `1` | Password-reset and set-password link validity (hours) |
 | **Login protection** | | |
 | `LOGIN_FAILURE_THRESHOLD` | `3` | Ban after this many failed login attempts in the window |
+| `CALL_JOIN_FAILURE_THRESHOLD` | `6` | Ban after this many call-join failures in the window |
 | `LOGIN_BAN_MINUTES` | `10` | Login ban duration (minutes) |
 | `LOGIN_WINDOW_MINUTES` | `10` | Window (minutes) for counting login failures |
+| **Setup & bootstrap** | | |
+| `SETUP_ID` | (none) | Pre-set setup token for `/setup?id=...` (deterministic URL) |
+| `ADMIN_EMAIL` | (none) | Bootstrap admin email (with hash/password, creates admin on first boot) |
+| `ADMIN_PASSWORD_HASH` | (none) | Bootstrap admin argon2 hash |
+| `ADMIN_PASSWORD_HASH_FILE` | (none) | Path to file containing hash (avoids storing in .env) |
+| `ADMIN_REGISTRATION_ENABLED` | (none) | When bootstrapping: `1` = allow registration |
+| `ADMIN_PUBLIC_FEEDS_ENABLED` | (none) | When bootstrapping: `1` = public RSS enabled |
+| `ADMIN_HOSTNAME` | (none) | Bootstrap: public base URL (e.g. `https://podcasts.example.com`) |
 | **Rate limits** | | |
 | `RATE_LIMIT_MAX` | `100` | Global rate limit: max requests per time window |
 | `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
@@ -336,7 +441,13 @@ All environment variables supported by the server work the same in Docker. Set t
 | **FTP** | | |
 | `FTP_CLIENT_TIMEOUT_MS` | `60000` | FTP client timeout (ms) |
 | **Import** | | |
+| `IMPORT_USER_AGENT` | `${APP_NAME}-Import/1.0` | User-Agent for podcast import HTTP requests |
+| `IMPORT_FETCH_TIMEOUT_MS` | `60000` | Import HTTP timeout (ms) |
 | `IMPORT_ALLOW_PRIVATE_URLS` | (false) | Set to `true` or `1` to allow podcast import from private/internal URLs (localhost, 10.x, 192.168.x, etc). Dev/testing only; disables SSRF protection. |
+| **Subscriber tokens** | | |
+| `SUBSCRIBER_TOKEN_PREFIX` | `hfm_sub_` | Prefix for subscriber RSS tokens in URL path |
+| **DNS secrets** | | |
+| `DNS_SECRETS_AAD` | `${APP_NAME}-dns` | AAD for encrypted DNS-related secrets (e.g. Cloudflare) |
 | **Roles** | | |
 | `ROLE_MIN_EDIT_SEGMENTS` | `editor` | Minimum share role to edit segments (`view`, `editor`, `manager`, `owner`) |
 | `ROLE_MIN_EDIT_METADATA` | `manager` | Minimum share role to edit episode/podcast metadata |
@@ -376,6 +487,10 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Segments.** Each episode is a sequence of segments. A segment is either recorded (audio uploaded for that episode) or reusable (from your library). Reorder, trim, split, and remove silence. The app uses ffmpeg to concatenate segments into the final episode audio.
 
+- **Group calls.** Record remote guests via WebRTC; host starts a call, guests join by link or 4-digit code; in-call chat, soundboard, and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
+
+- **Real-time collaboration.** Episode editor WebSocket; collaborators see live segment, call, and render updates.
+
 - **Library.** Upload reusable audio (intros, outros, bumpers, ads). Tag them and insert them into any episode as segments.
 
 - **Transcripts.** For recorded segments you can generate transcripts (via a configurable Whisper ASR URL), edit text, and use SRT-style timings. Optional LLM integration (Ollama or OpenAI) lets you ask questions about a segment’s transcript (e.g. summarise or suggest copy).
@@ -412,14 +527,17 @@ Check `e.origin` against your HarborFM origin in production if you want to restr
 
 ## Tech stack
 
-- **Monorepo:** pnpm workspaces with three packages:
+- **Monorepo:** pnpm workspaces with four packages:
   - **shared** – Zod schemas and shared types
   - **server** – Fastify API, SQLite (better-sqlite3), ffmpeg for audio
   - **web** – React, Vite, TanStack Query
+  - **webrtc-service** – mediasoup for group calls (optional)
 
 - **Server:** Single Node process serves the API and the built web app (static files from `PUBLIC_DIR`). SQLite for persistence; no separate database server.
 
 - **Audio:** ffmpeg and ffprobe for segment processing (trim, concat, silence removal, etc.). The Docker image includes ffmpeg.
+
+- **Group calls:** Optional webrtc-service (mediasoup) for WebRTC; host and guests join a room, record to segments.
 
 ## Project structure
 
@@ -427,6 +545,7 @@ Check `e.origin` against your HarborFM origin in production if you want to restr
 harborfm/
 ├── server/           # API and app entry
 ├── web/              # React frontend
+├── webrtc-service/   # WebRTC/mediasoup for group calls
 ├── shared/           # Shared schemas and types
 ├── Dockerfile        # Multi-stage build, Node + ffmpeg
 ├── package.json      # Root scripts and workspace config
@@ -444,9 +563,10 @@ From the repo root:
 | `pnpm run dev:web` | Run only the web dev server (Vite) |
 | `pnpm run build` | Build shared, then server, then web |
 | `pnpm run db:migrate` | Run database migrations |
+| `pnpm --filter server run db:seedSetup` | Automated initial setup from env (ADMIN_EMAIL, ADMIN_PASSWORD, etc.) |
 | `pnpm run deploy:pm2` | Deploy to PM2 (install, build, start/reload); see [Deploy with PM2](#deploy-with-pm2) |
 | `pnpm run reset-password` | Reset the first user’s password (server) |
-| `pnpm run db:clear-ip-bans` | Clear the IP ban table (server) |
+| `pnpm run db:clear-ip-bans` | Clear the IP ban and login-attempt tables (server) |
 | `pnpm run lint` | Lint all packages |
 | `pnpm run typecheck` | Type-check all packages |
 | `pnpm run test` | Run tests in all packages |
@@ -760,6 +880,7 @@ networks:
 
 - **Setup URL / "Server not set up yet"** - On first run, the one-time setup URL is printed in the server (or container) logs. Open that URL in your browser (e.g. `https://your-host/setup?id=...`) to create the admin account. If you lost the URL, restart the server to see it again (the token is regenerated only if the secrets file is missing).
 - **ffmpeg or audiowaveform not found** - Ensure they are installed and on your `PATH`. The Docker image includes ffmpeg; for local dev, install via your package manager or [audiowaveform](https://github.com/bbc/audiowaveform) from source.
+- **Group calls not working** - See [WebRTC (group calls)](#webrtc-group-calls).
 
 ## Backup and upgrading
 

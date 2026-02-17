@@ -115,7 +115,11 @@ export interface AppSettings {
   /** Secret key for the selected CAPTCHA provider. */
   captcha_secret_key: string;
   /** Email provider for sending mail (e.g. notifications). */
-  email_provider: "none" | "smtp" | "sendgrid";
+  email_provider: "none" | "smtp" | "sendgrid" | "webhook";
+  /** Webhook URL for email (when email_provider is webhook). POST body is { [email_webhook_field_key]: content }. */
+  email_webhook_url: string;
+  /** Key for the webhook JSON body (default "content"). Discord uses "content". */
+  email_webhook_field_key: string;
   /** SMTP host. */
   smtp_host: string;
   /** SMTP port (e.g. 587). */
@@ -176,6 +180,12 @@ export interface AppSettings {
   dns_default_enable_cloudflare_proxy: boolean;
   /** When true, show GDPR-style cookie/tracking consent banner on public pages. */
   gdpr_consent_banner_enabled: boolean;
+  /** WebRTC service base URL (e.g. http://webrtc:3002). When set with webrtc_public_ws_url, group calls create a mediasoup room. */
+  webrtc_service_url: string;
+  /** Public WebSocket URL for the WebRTC service (e.g. wss://example.com/webrtc-ws). Returned to clients so the browser can connect. */
+  webrtc_public_ws_url: string;
+  /** Secret for webrtc service to call back when a recording is ready. Env RECORDING_CALLBACK_SECRET can override. */
+  recording_callback_secret: string;
 }
 
 const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -212,6 +222,8 @@ const DEFAULTS: AppSettings = {
   captcha_site_key: "",
   captcha_secret_key: "",
   email_provider: "none",
+  email_webhook_url: "",
+  email_webhook_field_key: "content",
   smtp_host: "",
   smtp_port: 587,
   smtp_secure: true,
@@ -242,6 +254,9 @@ const DEFAULTS: AppSettings = {
   dns_default_domain: "",
   dns_default_enable_cloudflare_proxy: false,
   gdpr_consent_banner_enabled: false,
+  webrtc_service_url: "",
+  webrtc_public_ws_url: "",
+  recording_callback_secret: "",
 };
 
 const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -369,6 +384,14 @@ export function migrateSettingsFromFile(): void {
       "email_provider",
       (settings as Partial<AppSettings>).email_provider ?? "none",
     );
+    stmt.run(
+      "email_webhook_url",
+      (settings as Partial<AppSettings>).email_webhook_url ?? "",
+    );
+    stmt.run(
+      "email_webhook_field_key",
+      (settings as Partial<AppSettings>).email_webhook_field_key ?? "content",
+    );
     stmt.run("smtp_host", (settings as Partial<AppSettings>).smtp_host ?? "");
     stmt.run(
       "smtp_port",
@@ -438,6 +461,34 @@ export function migrateSettingsFromFile(): void {
       return;
     }
     console.error("Failed to migrate settings from file:", err);
+  }
+}
+
+/**
+ * Populate WebRTC settings in DB from env vars when WebRTC is enabled via env (Docker/PM2).
+ * Only writes when env has values and DB has empty webrtc settings, so the Settings page displays them.
+ */
+export function migrateWebRtcFromEnv(): void {
+  const envService = process.env.WEBRTC_SERVICE_URL?.trim();
+  const envPublic = process.env.WEBRTC_PUBLIC_WS_URL?.trim();
+  if (!envService || !envPublic) return;
+
+  try {
+    const rows = db.prepare("SELECT key, value FROM settings WHERE key IN ('webrtc_service_url', 'webrtc_public_ws_url')").all() as Array<{ key: string; value: string }>;
+    const current: Record<string, string> = {};
+    for (const row of rows) current[row.key] = row.value ?? "";
+
+    const needsService = !(current.webrtc_service_url ?? "").trim();
+    const needsPublic = !(current.webrtc_public_ws_url ?? "").trim();
+    if (!needsService && !needsPublic) return;
+
+    const stmt = db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))");
+    if (needsService) stmt.run("webrtc_service_url", envService);
+    if (needsPublic) stmt.run("webrtc_public_ws_url", envPublic);
+    console.log("Migrated WebRTC settings from environment to database");
+  } catch (err) {
+    if ((err as Error).message?.includes("no such table")) return;
+    console.warn("Could not migrate WebRTC settings from env:", err);
   }
 }
 
@@ -525,9 +576,13 @@ export function readSettings(): AppSettings {
       settings.captcha_secret_key = row.value;
     else if (row.key === "email_provider") {
       const v = row.value as AppSettings["email_provider"];
-      if (v === "smtp" || v === "sendgrid" || v === "none")
+      if (v === "smtp" || v === "sendgrid" || v === "webhook" || v === "none")
         settings.email_provider = v;
-    } else if (row.key === "smtp_host") settings.smtp_host = row.value;
+    } else if (row.key === "email_webhook_url")
+      settings.email_webhook_url = row.value;
+    else if (row.key === "email_webhook_field_key")
+      settings.email_webhook_field_key = row.value;
+    else if (row.key === "smtp_host") settings.smtp_host = row.value;
     else if (row.key === "smtp_port") {
       const v = Number(row.value);
       if (!Number.isNaN(v)) settings.smtp_port = v;
@@ -588,6 +643,12 @@ export function readSettings(): AppSettings {
     else if (row.key === "gdpr_consent_banner_enabled")
       (settings as Partial<AppSettings>).gdpr_consent_banner_enabled =
         row.value === "true";
+    else if (row.key === "webrtc_service_url")
+      (settings as Partial<AppSettings>).webrtc_service_url = row.value;
+    else if (row.key === "webrtc_public_ws_url")
+      (settings as Partial<AppSettings>).webrtc_public_ws_url = row.value;
+    else if (row.key === "recording_callback_secret")
+      (settings as Partial<AppSettings>).recording_callback_secret = row.value;
   }
 
   return {
@@ -640,6 +701,9 @@ export function readSettings(): AppSettings {
     captcha_secret_key:
       settings.captcha_secret_key ?? DEFAULTS.captcha_secret_key,
     email_provider: settings.email_provider ?? DEFAULTS.email_provider,
+    email_webhook_url: settings.email_webhook_url ?? DEFAULTS.email_webhook_url,
+    email_webhook_field_key:
+      settings.email_webhook_field_key ?? DEFAULTS.email_webhook_field_key,
     smtp_host: settings.smtp_host ?? DEFAULTS.smtp_host,
     smtp_port: settings.smtp_port ?? DEFAULTS.smtp_port,
     smtp_secure: settings.smtp_secure ?? DEFAULTS.smtp_secure,
@@ -695,6 +759,15 @@ export function readSettings(): AppSettings {
     gdpr_consent_banner_enabled:
       (settings as Partial<AppSettings>).gdpr_consent_banner_enabled ??
       DEFAULTS.gdpr_consent_banner_enabled,
+    webrtc_service_url:
+      (settings as Partial<AppSettings>).webrtc_service_url ??
+      DEFAULTS.webrtc_service_url,
+    webrtc_public_ws_url:
+      (settings as Partial<AppSettings>).webrtc_public_ws_url ??
+      DEFAULTS.webrtc_public_ws_url,
+    recording_callback_secret:
+      (settings as Partial<AppSettings>).recording_callback_secret ??
+      DEFAULTS.recording_callback_secret,
   };
 }
 
@@ -762,6 +835,11 @@ function writeSettings(settings: AppSettings): void {
   stmt.run("captcha_site_key", settings.captcha_site_key);
   stmt.run("captcha_secret_key", settings.captcha_secret_key);
   stmt.run("email_provider", settings.email_provider);
+  stmt.run("email_webhook_url", settings.email_webhook_url ?? "");
+  stmt.run(
+    "email_webhook_field_key",
+    settings.email_webhook_field_key ?? "content",
+  );
   stmt.run("smtp_host", settings.smtp_host);
   stmt.run("smtp_port", String(settings.smtp_port));
   stmt.run("smtp_secure", String(settings.smtp_secure));
@@ -804,6 +882,9 @@ function writeSettings(settings: AppSettings): void {
   stmt.run("dns_default_domain", settings.dns_default_domain);
   stmt.run("dns_default_enable_cloudflare_proxy", String(settings.dns_default_enable_cloudflare_proxy));
   stmt.run("gdpr_consent_banner_enabled", String(settings.gdpr_consent_banner_enabled));
+  stmt.run("webrtc_service_url", settings.webrtc_service_url ?? "");
+  stmt.run("webrtc_public_ws_url", settings.webrtc_public_ws_url ?? "");
+  stmt.run("recording_callback_secret", settings.recording_callback_secret ?? "");
 }
 
 /** Whether a transcription provider is configured and usable. */
@@ -884,6 +965,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         captcha_secret_key: settings.captcha_secret_key ? "(set)" : "",
         smtp_password: settings.smtp_password ? "(set)" : "",
         sendgrid_api_key: settings.sendgrid_api_key ? "(set)" : "",
+        recording_callback_secret: settings.recording_callback_secret ? "(set)" : "",
         custom_terms: settings.custom_terms ?? "",
         custom_privacy: settings.custom_privacy ?? "",
         dns_provider_api_token_enc: "", // never send to client
@@ -1121,7 +1203,17 @@ export async function settingsRoutes(app: FastifyInstance) {
           ? "smtp"
           : body.email_provider === "sendgrid"
             ? "sendgrid"
-            : "none";
+            : body.email_provider === "webhook"
+              ? "webhook"
+              : "none";
+      const email_webhook_url =
+        body.email_webhook_url !== undefined
+          ? String(body.email_webhook_url).trim()
+          : current.email_webhook_url;
+      const email_webhook_field_key =
+        body.email_webhook_field_key !== undefined
+          ? String(body.email_webhook_field_key).trim() || "content"
+          : current.email_webhook_field_key;
       const smtp_host =
         body.smtp_host !== undefined
           ? String(body.smtp_host).trim()
@@ -1270,6 +1362,19 @@ export async function settingsRoutes(app: FastifyInstance) {
         body.gdpr_consent_banner_enabled !== undefined
           ? Boolean(body.gdpr_consent_banner_enabled)
           : current.gdpr_consent_banner_enabled;
+      const webrtc_service_url =
+        body.webrtc_service_url !== undefined
+          ? String(body.webrtc_service_url).trim()
+          : current.webrtc_service_url;
+      const webrtc_public_ws_url =
+        body.webrtc_public_ws_url !== undefined
+          ? String(body.webrtc_public_ws_url).trim()
+          : current.webrtc_public_ws_url;
+      let recording_callback_secret = current.recording_callback_secret;
+      if (body.recording_callback_secret !== undefined) {
+        const v = String(body.recording_callback_secret).trim();
+        recording_callback_secret = v === "(set)" ? current.recording_callback_secret : v;
+      }
 
       const next: AppSettings = {
         whisper_asr_url,
@@ -1307,6 +1412,8 @@ export async function settingsRoutes(app: FastifyInstance) {
         captcha_site_key,
         captcha_secret_key,
         email_provider,
+        email_webhook_url,
+        email_webhook_field_key,
         smtp_host,
         smtp_port,
         smtp_secure,
@@ -1337,6 +1444,9 @@ export async function settingsRoutes(app: FastifyInstance) {
         dns_default_domain,
         dns_default_enable_cloudflare_proxy,
         gdpr_consent_banner_enabled,
+        webrtc_service_url,
+        webrtc_public_ws_url,
+        recording_callback_secret,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||
@@ -1373,6 +1483,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         captcha_secret_key: next.captcha_secret_key ? "(set)" : "",
         smtp_password: next.smtp_password ? "(set)" : "",
         sendgrid_api_key: next.sendgrid_api_key ? "(set)" : "",
+        recording_callback_secret: next.recording_callback_secret ? "(set)" : "",
         custom_terms: next.custom_terms ?? "",
         custom_privacy: next.custom_privacy ?? "",
         dns_provider_api_token_enc: "",

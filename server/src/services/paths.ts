@@ -1,4 +1,4 @@
-import { join, resolve, sep } from "path";
+import { join, relative, resolve, sep } from "path";
 import { mkdirSync, existsSync, realpathSync } from "fs";
 
 const DATA_DIR = resolve(process.env.DATA_DIR ?? join(process.cwd(), "data"));
@@ -68,6 +68,12 @@ export function getDataDir() {
 
 export function getSecretsDir() {
   return SECRETS_DIR;
+}
+
+/** Directory where WebRTC service writes recordings. Server copies from here to segment path. */
+export function getWebrtcRecordingsDir(): string {
+  const dir = process.env.WEBRTC_RECORDINGS_DIR?.trim();
+  return dir ? resolve(dir) : join(DATA_DIR, "webrtc-recordings");
 }
 
 export function ensureSecretsDir() {
@@ -175,6 +181,37 @@ export function libraryAssetPath(
   return join(libraryDir(userId), filename);
 }
 
+/** Format epoch ms as YYYYMMDD_HHMMSS for folder names (matches segments format). */
+function formatEpochForFolder(epochMs: number): string {
+  const d = new Date(epochMs);
+  const y = String(d.getFullYear());
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  return `${y}${mo}${day}_${h}${min}${s}`;
+}
+
+/** Directory for multitrack recording files (per-producer MP3s + manifest) for a segment. */
+export function multitrackRecordingsDir(
+  podcastId: string,
+  episodeId: string,
+  segmentId: string,
+  recordingEpochMs?: number,
+): string {
+  assertSafeId(segmentId, "segmentId");
+  const folderName =
+    typeof recordingEpochMs === "number"
+      ? `${formatEpochForFolder(recordingEpochMs)}_${segmentId}`
+      : segmentId;
+  const dir = join(uploadsDir(podcastId, episodeId), "recordings", folderName);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
 /** Recorded segment stored under episode uploads. */
 export function segmentPath(
   podcastId: string,
@@ -188,4 +225,14 @@ export function segmentPath(
   ensureDir(dir);
   const filename = generateTimestampedFilename(segmentId, ext);
   return join(dir, filename);
+}
+
+/** Path relative to DATA_DIR. Used so webrtc can write to its own data mount and server can resolve. */
+export function pathRelativeToData(absolutePath: string): string {
+  const base = resolve(DATA_DIR);
+  const p = resolve(absolutePath);
+  if (p !== base && !p.startsWith(base + sep)) {
+    throw new Error("Path is not under DATA_DIR");
+  }
+  return relative(base, p);
 }

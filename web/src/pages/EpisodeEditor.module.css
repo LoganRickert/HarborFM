@@ -352,6 +352,26 @@
   border-radius: var(--radius);
 }
 
+.segmentBlockProcessing {
+  background: #111;
+  border-color: #333;
+}
+
+.segmentBlockProcessing .segmentIcon {
+  background: #1a1a1a;
+  border-color: #333;
+}
+
+.segmentProcessingSpinner {
+  color: var(--accent);
+  animation: segmentProcessingSpin 1s linear infinite;
+}
+
+@keyframes segmentProcessingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .segmentBlockTop {
   display: flex;
   align-items: center;
@@ -861,6 +881,36 @@
   cursor: not-allowed;
 }
 
+/* Group call start failed */
+.callErrorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: rgba(229, 62, 62, 0.12);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  border-radius: var(--radius);
+}
+.callErrorBannerDismiss {
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.callErrorBannerDismiss:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.1);
+}
+
 .error {
   margin: 0;
   font-size: 0.875rem;
@@ -995,6 +1045,38 @@
 .recordBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.recordRow {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 1rem;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.recordRow .recordBtn {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.recordDurationBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text, #e5e5e5);
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  min-width: 5.5ch;
 }
 
 .recordTime {
@@ -1160,6 +1242,172 @@
 .recordFooterPrimaryBtn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.recordFooterSettingsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted, #888);
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.recordFooterSettingsBtn:hover {
+  color: var(--text, #e5e5e5);
+  border-color: var(--accent, #00d4aa);
+}
+
+.recordFooterSettingsBtnActive {
+  background: rgba(0, 212, 170, 0.2);
+  border-color: var(--accent, #00d4aa);
+  color: var(--accent, #00d4aa);
+}
+
+.recordSettingsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin-top: 1rem;
+  background: var(--bg-elevated, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+
+.recordSettingsMic,
+.recordSettingsVolume {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.recordSettingsAgc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.recordSettingsListen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.recordSettingsLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+}
+
+.recordSettingsSelect {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9375rem;
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text, #e5e5e5);
+}
+
+.recordSettingsSelect:focus {
+  outline: none;
+  border-color: var(--accent, #00d4aa);
+}
+
+.recordSettingsVolume {
+  flex-direction: row;
+  align-items: center;
+}
+
+.recordSettingsVolume .recordSettingsLabel {
+  flex-shrink: 0;
+  width: 4.5rem;
+}
+
+.recordSettingsSlider {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  appearance: none;
+  background: var(--bg-muted, #252525);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.recordSettingsSlider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent, #00d4aa);
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.recordSettingsSlider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent, #00d4aa);
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.recordSettingsVolumeValue {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #888);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+.recordSettingsHint {
+  margin: 0;
+  padding: 0 0 0 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  line-height: 1.3;
+}
+
+.recordListenBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--bg, #0c0e12);
+  background: var(--accent, #00d4aa);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.recordListenBtn:hover {
+  filter: brightness(1.1);
+}
+
+.recordListenBtn[aria-pressed="true"] {
+  background: var(--accent-dim, #00a884);
+}
+
+.recordSettingsEmpty {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+  background: var(--bg, #0c0e12);
+  border: 1px dashed var(--border, #333);
+  border-radius: 8px;
+  text-align: center;
 }
 
 /* Library modal */
@@ -2026,6 +2274,8 @@
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 0.25rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .episodeTranscriptBody .transcriptText {
   flex: 1;
@@ -2061,6 +2311,9 @@
   align-items: center;
   padding: 1rem 0 0;
 }
+.dialogActionsCancelLeft {
+  justify-content: space-between;
+}
 .episodeTranscriptDialogActions {
   justify-content: space-between;
 }
@@ -2068,7 +2321,7 @@
   padding: 0.5rem 1rem;
   font-size: 0.9375rem;
   font-weight: 600;
-  color: white;
+  color: black;
   background: var(--error);
   border: none;
   border-radius: var(--radius);
@@ -2150,6 +2403,37 @@
   margin: 0.35rem 0 0;
   font-size: 0.85rem;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.detailsSummaryStatusBadge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.detailsSummaryStatusBadgeDraft {
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.detailsSummaryStatusBadgeScheduled {
+  color: #fff;
+  background: #d97706;
+  border: 1px solid rgba(217, 119, 6, 0.5);
+}
+
+.detailsSummaryStatusBadgePublished {
+  color: var(--success);
+  background: rgba(0, 212, 170, 0.12);
+  border: 1px solid rgba(0, 212, 170, 0.25);
 }
 
 .detailsSummaryEditBtn {
@@ -2167,6 +2451,7 @@
   border-radius: var(--radius);
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  text-decoration: none; /* for Join Group Call link */
 }
 
 .detailsSummaryEditBtn:hover {
@@ -2177,6 +2462,61 @@
 
 .detailsSummaryEditBtn:focus-visible {
   outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.detailsSummaryJoinCallBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: #d97706;
+  border: 1px solid #d97706;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  text-decoration: none;
+}
+
+.detailsSummaryJoinCallBtn:hover {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+
+.detailsSummaryJoinCallBtn:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: 2px;
+}
+
+.detailsSummaryEndCallBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: #c53030;
+  border: 1px solid #c53030;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.detailsSummaryEndCallBtn:hover {
+  background: #e53e3e;
+  border-color: #e53e3e;
+}
+
+.detailsSummaryEndCallBtn:focus-visible {
+  outline: 2px solid #e53e3e;
   outline-offset: 2px;
 }
 
@@ -2225,6 +2565,11 @@
     padding: 0.875rem 2rem;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .detailsSummaryStartCallBtn {
+    flex: 1;
+    min-width: 0;
   }
 
   .generateBar {

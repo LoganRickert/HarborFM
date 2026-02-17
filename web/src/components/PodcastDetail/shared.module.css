@@ -415,6 +415,9 @@ textarea.input:disabled {
   padding-top: 1rem;
   border-top: 1px solid var(--border);
 }
+.dialogActionsCancelLeft {
+  justify-content: space-between;
+}
 
 .dialogFooter {
   flex-shrink: 0;
@@ -459,7 +462,7 @@ textarea.input:disabled {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--bg);
+  color: black;
   background: var(--error);
   border: 1px solid var(--error);
   border-radius: var(--radius);

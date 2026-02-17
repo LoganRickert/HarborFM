@@ -64,6 +64,8 @@ import {
   segmentTranscriptGenerateQuerySchema,
   segmentTranscriptDeleteQuerySchema,
 } from "@harborfm/shared";
+import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
+import { redactSegmentForClient } from "../../utils/segment.js";
 
 const exec = promisify(execFile);
 
@@ -366,6 +368,79 @@ function getSegmentAudioPath(
   return null;
 }
 
+/**
+ * Convert a reusable (library) segment to a recorded segment by copying the library
+ * audio into the episode's segment directory. Call before trim/remove-silence/noise-suppression
+ * when the segment is type "reusable". Returns the updated segment row.
+ */
+async function promoteReusableSegmentToRecorded(
+  segment: Record<string, unknown>,
+  episodeId: string,
+  podcastId: string,
+): Promise<Record<string, unknown>> {
+  if (segment.type !== "reusable" || !segment.reusable_asset_id) {
+    throw new Error("Segment is not a reusable (library) segment");
+  }
+  const asset = db
+    .prepare(
+      "SELECT audio_path, owner_user_id FROM reusable_assets WHERE id = ?",
+    )
+    .get(segment.reusable_asset_id) as
+    | { audio_path: string; owner_user_id: string }
+    | undefined;
+  if (!asset?.audio_path || !existsSync(asset.audio_path)) {
+    throw new Error("Library asset audio not found");
+  }
+  assertPathUnder(asset.audio_path, libraryDir(asset.owner_user_id));
+
+  const storageUserId = getPodcastOwnerId(podcastId);
+  if (!storageUserId) {
+    throw new Error("Podcast owner not found");
+  }
+  const bytesToAdd = statSync(asset.audio_path).size;
+  if (wouldExceedStorageLimit(db, storageUserId, bytesToAdd)) {
+    throw new Error("Storage limit exceeded");
+  }
+
+  const ext = (extname(asset.audio_path).replace(/^\./, "") || "mp3").toLowerCase();
+  const destPath = segmentPath(podcastId, episodeId, segment.id as string, ext);
+  copyFileSync(asset.audio_path, destPath);
+
+  let durationSec = 0;
+  try {
+    const probe = await audioService.probeAudio(
+      destPath,
+      uploadsDir(podcastId, episodeId),
+    );
+    durationSec = Math.max(0, probe.durationSec);
+  } catch {
+    /* keep 0 if probe fails */
+  }
+
+  try {
+    await audioService.generateWaveformFile(
+      destPath,
+      uploadsDir(podcastId, episodeId),
+    );
+  } catch {
+    /* best-effort */
+  }
+
+  db.prepare(
+    `UPDATE users SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ? WHERE id = ?`,
+  ).run(bytesToAdd, storageUserId);
+
+  db.prepare(
+    `UPDATE episode_segments
+     SET type = 'recorded', audio_path = ?, reusable_asset_id = NULL, duration_sec = ?
+     WHERE id = ? AND episode_id = ?`,
+  ).run(destPath, durationSec, segment.id, episodeId);
+
+  return db
+    .prepare("SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?")
+    .get(segment.id, episodeId) as Record<string, unknown>;
+}
+
 const ALLOWED_MIME = [
   "audio/wav",
   "audio/wave",
@@ -443,7 +518,15 @@ export async function segmentRoutes(app: FastifyInstance) {
            WHERE s.episode_id = ? ORDER BY s.position ASC, s.created_at ASC`,
         )
         .all(episodeId) as Record<string, unknown>[];
-      return { segments: rows };
+      const segments = rows.map((row) => {
+        const audio = getSegmentAudioPath(row, access.podcastId, episodeId);
+        const waveformExists =
+          audio && existsSync(audio.path)
+            ? existsSync(waveformPath(audio.path))
+            : false;
+        return redactSegmentForClient({ ...row, waveform_exists: waveformExists });
+      });
+      return { segments };
     },
   );
 
@@ -539,7 +622,11 @@ export async function segmentRoutes(app: FastifyInstance) {
           const row = db
             .prepare("SELECT * FROM episode_segments WHERE id = ?")
             .get(id) as Record<string, unknown>;
-          return reply.status(201).send(row);
+          broadcastToEpisode(episodeId, {
+            type: "segmentAdded",
+            segment: redactSegmentForClient(row),
+          });
+          return reply.status(201).send(redactSegmentForClient(row));
         }
       }
 
@@ -653,7 +740,11 @@ export async function segmentRoutes(app: FastifyInstance) {
       const row = db
         .prepare("SELECT * FROM episode_segments WHERE id = ?")
         .get(segmentId) as Record<string, unknown>;
-      return reply.status(201).send(row);
+      broadcastToEpisode(episodeId, {
+        type: "segmentAdded",
+        segment: redactSegmentForClient(row),
+      });
+      return reply.status(201).send(redactSegmentForClient(row));
     },
   );
 
@@ -714,10 +805,21 @@ export async function segmentRoutes(app: FastifyInstance) {
       }
       const rows = db
         .prepare(
-          "SELECT * FROM episode_segments WHERE episode_id = ? ORDER BY position ASC",
+          `SELECT s.*, a.name AS asset_name FROM episode_segments s
+           LEFT JOIN reusable_assets a ON a.id = s.reusable_asset_id
+           WHERE s.episode_id = ? ORDER BY s.position ASC`,
         )
         .all(episodeId) as Record<string, unknown>[];
-      return { segments: rows };
+      const segments = rows.map((row) => {
+        const audio = getSegmentAudioPath(row, access.podcastId, episodeId);
+        const waveformExists =
+          audio && existsSync(audio.path)
+            ? existsSync(waveformPath(audio.path))
+            : false;
+        return redactSegmentForClient({ ...row, waveform_exists: waveformExists });
+      });
+      broadcastToEpisode(episodeId, { type: "segmentReordered" });
+      return { segments };
     },
   );
 
@@ -784,10 +886,11 @@ export async function segmentRoutes(app: FastifyInstance) {
       db.prepare(
         "UPDATE episode_segments SET name = ? WHERE id = ? AND episode_id = ?",
       ).run(name, segmentId, episodeId);
+      broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
       const updated = db
         .prepare("SELECT * FROM episode_segments WHERE id = ?")
         .get(segmentId) as Record<string, unknown>;
-      return updated;
+      return redactSegmentForClient(updated);
     },
   );
 
@@ -863,6 +966,77 @@ export async function segmentRoutes(app: FastifyInstance) {
         .header("Content-Type", contentType)
         .header("Cache-Control", "private, no-transform");
       return reply.send(result.stream);
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/waveforms-bulk",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Segments"],
+        summary: "Get multiple segment waveforms",
+        description:
+          "Returns waveform JSON for up to 10 segments at once. All must belong to the episode. Requires auth.",
+        params: {
+          type: "object",
+          properties: { episodeId: { type: "string" } },
+          required: ["episodeId"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            segment_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 10 },
+          },
+          required: ["segment_ids"],
+        },
+        response: {
+          200: { description: "Waveforms map" },
+          400: { description: "Validation failed" },
+          404: { description: "Episode not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const paramsParsed = segmentEpisodeIdOnlyParamSchema.safeParse(request.params);
+      if (!paramsParsed.success) {
+        return reply
+          .status(400)
+          .send({ error: paramsParsed.error.issues[0]?.message ?? "Validation failed", details: paramsParsed.error.flatten() });
+      }
+      const body = request.body as { segment_ids?: unknown };
+      const segmentIds = Array.isArray(body?.segment_ids)
+        ? (body.segment_ids as string[]).filter((id): id is string => typeof id === "string")
+        : [];
+      if (segmentIds.length === 0 || segmentIds.length > 10) {
+        return reply
+          .status(400)
+          .send({ error: "segment_ids must be an array of 1-10 segment ID strings" });
+      }
+      const { episodeId } = paramsParsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      const waveforms: Record<string, unknown> = {};
+      for (const segmentId of segmentIds) {
+        const segment = db
+          .prepare("SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?")
+          .get(segmentId, episodeId) as Record<string, unknown> | undefined;
+        if (!segment) continue;
+        const audio = getSegmentAudioPath(segment, access.podcastId, episodeId);
+        if (!audio || !existsSync(audio.path)) continue;
+        const wavPath = waveformPath(audio.path);
+        if (!existsSync(wavPath)) continue;
+        try {
+          assertPathUnder(audio.path, audio.base);
+          assertPathUnder(wavPath, audio.base);
+          const json = readFileSync(wavPath, "utf-8");
+          waveforms[segmentId] = JSON.parse(json);
+        } catch {
+          /* skip on read/parse error */
+        }
+      }
+      reply.header("Cache-Control", "private, max-age=3600");
+      return reply.send({ waveforms });
     },
   );
 
@@ -1152,7 +1326,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         return reply
           .status(403)
           .send({ error: "You do not have permission to edit segments." });
-      const segment = db
+      let segment = db
         .prepare(
           "SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?",
         )
@@ -1160,11 +1334,27 @@ export async function segmentRoutes(app: FastifyInstance) {
       if (!segment)
         return reply.status(404).send({ error: "Segment not found" });
 
-      // Only recorded segments can be trimmed
-      if (segment.type !== "recorded") {
+      // Convert library segments to recorded (copy audio) so we can trim
+      if (segment.type === "reusable") {
+        try {
+          segment = await promoteReusableSegmentToRecorded(
+            segment,
+            episodeId,
+            access.podcastId,
+          );
+        } catch (err) {
+          request.log.error(err);
+          return reply
+            .status(500)
+            .send({
+              error:
+                err instanceof Error ? err.message : "Failed to prepare segment for editing",
+            });
+        }
+      } else if (segment.type !== "recorded") {
         return reply
           .status(400)
-          .send({ error: "Only recorded segments can be trimmed" });
+          .send({ error: "Only recorded or library segments can be trimmed" });
       }
 
       const audio = getSegmentAudioPath(segment, access.podcastId, episodeId);
@@ -1271,6 +1461,7 @@ export async function segmentRoutes(app: FastifyInstance) {
           unlinkSync(txtPathToRemove);
         }
 
+        broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
         return reply.status(204).send();
       } catch (err) {
         try {
@@ -1346,7 +1537,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         return reply
           .status(403)
           .send({ error: "You do not have permission to edit segments." });
-      const segment = db
+      let segment = db
         .prepare(
           "SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?",
         )
@@ -1354,11 +1545,27 @@ export async function segmentRoutes(app: FastifyInstance) {
       if (!segment)
         return reply.status(404).send({ error: "Segment not found" });
 
-      // Only recorded segments can have silence removed
-      if (segment.type !== "recorded") {
+      // Convert library segments to recorded (copy audio) so we can edit
+      if (segment.type === "reusable") {
+        try {
+          segment = await promoteReusableSegmentToRecorded(
+            segment,
+            episodeId,
+            access.podcastId,
+          );
+        } catch (err) {
+          request.log.error(err);
+          return reply
+            .status(500)
+            .send({
+              error:
+                err instanceof Error ? err.message : "Failed to prepare segment for editing",
+            });
+        }
+      } else if (segment.type !== "recorded") {
         return reply
           .status(400)
-          .send({ error: "Only recorded segments can have silence removed" });
+          .send({ error: "Only recorded or library segments can have silence removed" });
       }
 
       const audio = getSegmentAudioPath(segment, access.podcastId, episodeId);
@@ -1522,6 +1729,7 @@ export async function segmentRoutes(app: FastifyInstance) {
           unlinkSync(txtPathToRemove);
         }
 
+        broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
         return reply.status(204).send();
       } catch (err) {
         try {
@@ -1585,7 +1793,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         return reply
           .status(403)
           .send({ error: "You do not have permission to edit segments." });
-      const segment = db
+      let segment = db
         .prepare(
           "SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?",
         )
@@ -1593,11 +1801,28 @@ export async function segmentRoutes(app: FastifyInstance) {
       if (!segment)
         return reply.status(404).send({ error: "Segment not found" });
 
-      if (segment.type !== "recorded") {
+      // Convert library segments to recorded (copy audio) so we can edit
+      if (segment.type === "reusable") {
+        try {
+          segment = await promoteReusableSegmentToRecorded(
+            segment,
+            episodeId,
+            access.podcastId,
+          );
+        } catch (err) {
+          request.log.error(err);
+          return reply
+            .status(500)
+            .send({
+              error:
+                err instanceof Error ? err.message : "Failed to prepare segment for editing",
+            });
+        }
+      } else if (segment.type !== "recorded") {
         return reply
           .status(400)
           .send({
-            error: "Only recorded segments can have noise suppression applied",
+            error: "Only recorded or library segments can have noise suppression applied",
           });
       }
 
@@ -1655,6 +1880,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         if (existsSync(oldTxtPath) && oldTxtPath !== newTxtPath)
           unlinkSync(oldTxtPath);
 
+        broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
         return reply.status(204).send();
       } catch (err) {
         try {
@@ -1736,6 +1962,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       const txtPath = transcriptPath(audio.path);
       assertPathUnder(dirname(txtPath), audio.base);
       writeFileSync(txtPath, transcriptText, "utf-8");
+      broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
       return reply.send({ text: transcriptText });
     },
   );
@@ -1902,6 +2129,7 @@ export async function segmentRoutes(app: FastifyInstance) {
             ).run(newAudioPath, newDurationSec, segmentId, episodeId);
           }
 
+          broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
           return reply.send({ text: updatedSrt });
         } catch (err) {
           // Clean up new file if it exists
@@ -1919,6 +2147,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         // Delete entire transcript (original behavior)
         assertPathUnder(txtPath, audio.base);
         unlinkSync(txtPath);
+        broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
         return reply.status(204).send();
       }
     },
@@ -2011,6 +2240,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         ).run(bytesFreed, bytesFreed, storageUserId);
       }
 
+      broadcastToEpisode(episodeId, { type: "segmentDeleted", segmentId });
       return reply.status(204).send();
     },
   );
@@ -2292,6 +2522,7 @@ export async function segmentRoutes(app: FastifyInstance) {
             assertResolvedPathUnder(srtPath, getDataDir());
             writeFileSync(srtPath, text, "utf-8");
             transcriptStatusByEpisode.set(episodeId, "done");
+            broadcastToEpisode(episodeId, { type: "transcriptGenerated", status: "done" });
           } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
             if (msg === "CHUNK_TOO_LARGE") {
@@ -2307,6 +2538,11 @@ export async function segmentRoutes(app: FastifyInstance) {
               );
             }
             transcriptStatusByEpisode.set(episodeId, "failed");
+            broadcastToEpisode(episodeId, {
+              type: "transcriptGenerated",
+              status: "failed",
+              error: transcriptErrorByEpisode.get(episodeId),
+            });
           }
         })();
       });
@@ -2499,6 +2735,7 @@ export async function segmentRoutes(app: FastifyInstance) {
 
       renderStatusByEpisode.set(episodeId, "building");
       renderErrorByEpisode.delete(episodeId);
+      broadcastToEpisode(episodeId, { type: "renderStarted" });
 
       const srtPath = transcriptSrtPath(podcastId, episodeId);
       if (existsSync(srtPath)) {
@@ -2576,13 +2813,17 @@ export async function segmentRoutes(app: FastifyInstance) {
               );
             }
             renderStatusByEpisode.set(episodeId, "done");
+            broadcastToEpisode(episodeId, { type: "renderCompleted", status: "done" });
           } catch (err) {
             log.error(err);
             renderStatusByEpisode.set(episodeId, "failed");
-            renderErrorByEpisode.set(
-              episodeId,
-              err instanceof Error ? err.message : "Render failed",
-            );
+            const errMsg = err instanceof Error ? err.message : "Render failed";
+            renderErrorByEpisode.set(episodeId, errMsg);
+            broadcastToEpisode(episodeId, {
+              type: "renderCompleted",
+              status: "failed",
+              error: errMsg,
+            });
           }
         })();
       });

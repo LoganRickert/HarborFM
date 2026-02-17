@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Mic, Library, Info, Trash2 } from 'lucide-react';
-import { segmentStreamUrl, segmentWaveformUrl } from '../../api/segments';
+import { segmentStreamUrl } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { formatDuration } from './utils';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
@@ -21,6 +21,8 @@ export interface SegmentRowProps {
   registerPause: (id: string, pause: () => void) => void;
   unregisterPause: (id: string) => void;
   readOnly?: boolean;
+  /** When provided (from batched parent fetch), use instead of fetching. undefined = loading, null = failed. */
+  waveformData?: WaveformData | null;
 }
 
 export function SegmentRow({
@@ -38,6 +40,7 @@ export function SegmentRow({
   registerPause,
   unregisterPause,
   readOnly = false,
+  waveformData: waveformDataProp,
 }: SegmentRowProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressTrackRef = useRef<HTMLDivElement>(null);
@@ -48,32 +51,12 @@ export function SegmentRow({
   const isRecorded = segment.type === 'recorded';
   const defaultName = isRecorded ? 'Recorded section' : (segment.asset_name ?? 'Library clip');
   const [localName, setLocalName] = useState(segment.name ?? '');
-  const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
+  const waveformData = waveformDataProp;
+  const showWaveform = waveformData && waveformData.data?.length;
 
   useEffect(() => {
     setLocalName(segment.name ?? '');
   }, [segment.name]);
-
-  // Refetch waveform when segment changes (e.g. after trim / remove-silence / noise-suppression)
-  useEffect(() => {
-    if (!episodeId || !segment.id || durationSec <= 0) {
-      setWaveformData(null);
-      return;
-    }
-    let cancelled = false;
-    fetch(segmentWaveformUrl(episodeId, segment.id), { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.data?.length) setWaveformData(data as WaveformData);
-        else if (!cancelled) setWaveformData(null);
-      })
-      .catch(() => {
-        if (!cancelled) setWaveformData(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [episodeId, segment.id, segment.audio_path, durationSec]);
 
   // Clear loaded segment when episode/segment or audio file path changes (e.g. after trim → new file)
   useEffect(() => {
@@ -201,9 +184,9 @@ export function SegmentRow({
           <button type="button" className={styles.segmentBtn} onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'} aria-label={isPlaying ? 'Pause segment' : 'Play segment'}>
             {isPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
           </button>
-          {waveformData ? (
+          {showWaveform ? (
             <WaveformCanvas
-              data={waveformData}
+              data={waveformData!}
               durationSec={durationSec}
               currentTime={currentTime}
               onSeek={(time) => {

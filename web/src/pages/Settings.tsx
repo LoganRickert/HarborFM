@@ -15,6 +15,7 @@ import {
   WhisperSection,
   LLMSection,
   CaptchaSection,
+  WebRTCSection,
   EmailSection,
   DnsConfigurationSection,
   CustomLegalSection,
@@ -115,6 +116,8 @@ export function Settings() {
         captcha_secret_key:
           form.captcha_provider === 'none' ? '' : form.captcha_secret_key === '(set)' ? undefined : form.captcha_secret_key,
         email_provider: form.email_provider,
+        email_webhook_url: form.email_provider === 'webhook' ? form.email_webhook_url.trim() : '',
+        email_webhook_field_key: form.email_provider === 'webhook' ? (form.email_webhook_field_key.trim() || 'content') : 'content',
         smtp_host: form.email_provider === 'smtp' ? form.smtp_host.trim() : '',
         smtp_port: form.smtp_port,
         smtp_secure: form.smtp_secure,
@@ -163,6 +166,10 @@ export function Settings() {
         dns_default_allow_sub_domain: form.dns_default_allow_sub_domain,
         dns_default_domain: form.dns_default_domain,
         dns_default_enable_cloudflare_proxy: form.dns_default_enable_cloudflare_proxy,
+        webrtc_service_url: form.webrtc_service_url?.trim() ?? '',
+        webrtc_public_ws_url: form.webrtc_public_ws_url?.trim() ?? '',
+        recording_callback_secret:
+          form.recording_callback_secret === '(set)' ? undefined : form.recording_callback_secret,
       } as unknown as Parameters<typeof updateSettings>[0]),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -325,6 +332,8 @@ export function Settings() {
         />
 
         <CaptchaSection form={form} onFormChange={updateForm} />
+
+        <WebRTCSection form={form} onFormChange={updateForm} />
 
         <EmailSection
           form={form}

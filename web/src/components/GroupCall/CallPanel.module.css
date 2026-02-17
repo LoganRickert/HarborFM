@@ -1,0 +1,574 @@
+.panelsWrapper {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: 0.5rem;
+  z-index: 1000;
+}
+
+.panelsWrapper .panel {
+  position: relative;
+  bottom: auto;
+  right: auto;
+}
+
+.chatPanelInWrapper,
+.soundboardPanelInWrapper,
+.settingsPanelInWrapper {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+.panel {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  width: 320px;
+  max-width: calc(100vw - 2rem);
+  background: var(--bg-elevated, #1a1a1a);
+  border: 2px solid var(--border-strong, #444);
+  border-radius: var(--radius, 8px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+@media (max-width: 768px) {
+  .panel {
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+    bottom: 1rem;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-strong, #444);
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text, #e5e5e5);
+}
+
+.headerSpacer {
+  flex: 1;
+  min-width: 0.5rem;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  color: var(--text, #e5e5e5);
+  border-color: var(--accent, #00d4aa);
+}
+
+.iconBtnActive {
+  background: var(--accent, #00d4aa) !important;
+  border-color: var(--accent, #00d4aa) !important;
+  color: var(--bg, #0c0e12) !important;
+}
+
+.iconBtnActive:hover {
+  background: var(--accent-dim, #00a884) !important;
+  border-color: var(--accent-dim, #00a884) !important;
+  color: var(--bg, #0c0e12) !important;
+}
+
+.iconBtnUnread {
+  color: #eab308 !important;
+  border-color: rgba(234, 179, 8, 0.5) !important;
+}
+
+.iconBtnUnread:hover {
+  color: #facc15 !important;
+  border-color: rgba(234, 179, 8, 0.7) !important;
+}
+
+.endBtnHeader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  color: #e53e3e;
+  background: transparent;
+  border: 1px solid rgba(229, 62, 62, 0.5);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.endBtnHeader:hover {
+  background: rgba(229, 62, 62, 0.1);
+  border-color: #e53e3e;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.errorCard {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: rgba(239, 68, 68, 0.15);
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.errorCardMessage {
+  margin: 0;
+}
+
+.joinRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.joinInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text, #e5e5e5);
+}
+
+.copyBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.copyBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent, #00d4aa);
+}
+
+.joinCodeCard {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius, 8px);
+}
+
+.joinCodeLabel {
+  font-size: 0.6875rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.joinCodeValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2em;
+  color: var(--accent, #00d4aa);
+}
+
+.displayNameEditRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.displayNameInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8125rem;
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  color: var(--text, #e5e5e5);
+}
+
+.displayNameInput:focus {
+  outline: none;
+  border-color: var(--accent, #00d4aa);
+}
+
+.participantEditBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  color: var(--accent, #00d4aa);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: var(--radius, 8px);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.participantEditBtn:hover {
+  background: rgba(0, 212, 170, 0.15);
+  border-color: var(--accent, #00d4aa);
+  color: var(--accent, #00d4aa);
+}
+
+.participantEditBtn.saveBtn {
+  color: var(--bg, #0c0e12);
+  background: var(--accent, #00d4aa);
+  border: none;
+  box-shadow: 0 0 12px var(--accent-glow, rgba(0, 212, 170, 0.25));
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.participantEditBtn.saveBtn:hover {
+  background: var(--accent-dim, #00a884);
+  transform: translateY(-1px);
+  box-shadow: 0 0 16px var(--accent-glow, rgba(0, 212, 170, 0.25));
+}
+
+.participantInfo .displayNameEditRow {
+  flex: 1;
+  min-width: 0;
+}
+
+.micLevel {
+  height: 6px;
+  margin: 0.5rem 0;
+  background: var(--bg-muted, #252525);
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.micLevelBar {
+  height: 100%;
+  background: var(--accent, #00d4aa);
+  border-radius: 3px;
+  transition: width 0.1s ease;
+}
+
+.participants {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recordingProcessing {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #888);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.3);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+.participantsLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.noParticipants {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+  background: var(--bg, #0c0e12);
+  border: 1px dashed var(--border, #333);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.participantsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.participantCard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.65rem 0.65rem;
+  font-size: 0.875rem;
+  color: var(--text, #e5e5e5);
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+
+.participantMicLevel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--bg-muted, #252525);
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+.participantCard[data-host] {
+  border-color: rgba(0, 212, 170, 0.3);
+  background: rgba(0, 212, 170, 0.06);
+}
+
+.participantRoleIcon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted, #888);
+}
+
+.participantCard[data-host] .participantRoleIcon {
+  color: var(--accent, #00d4aa);
+}
+
+.participantInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.participantNameBlock {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.participantName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.mutedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted, #888);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+
+.participantActions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.muteBtn {
+  padding: 0.25rem;
+  color: var(--accent, #00d4aa);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.2);
+  border-radius: var(--radius, 8px);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.muteBtn:hover {
+  background: rgba(0, 212, 170, 0.15);
+  border-color: var(--accent, #00d4aa);
+  color: var(--accent, #00d4aa);
+}
+
+.disconnectBtn {
+  padding: 0.25rem;
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius, 8px);
+  color: var(--text-muted, #888);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.disconnectBtn:hover {
+  border-color: #e53e3e;
+  color: #e53e3e;
+}
+
+.recordSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.recordRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  align-self: stretch;
+}
+
+.recordRowIdle {
+  justify-content: center;
+}
+
+.recordRowRecording {
+  justify-content: space-between;
+}
+
+.recordPending {
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+}
+
+.recordRowMuteBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.recordRowMuteBtn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent, #00d4aa);
+}
+
+.recordRowMuteBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.recordDurationBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text, #e5e5e5);
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  min-width: 5.5ch;
+}
+
+.recordSegmentBtn,
+.stopRecordBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.recordSegmentBtn:hover,
+.stopRecordBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent, #00d4aa);
+}
+
+.stopRecordBtn {
+  color: #e53e3e;
+  border-color: #e53e3e;
+}
+
+.stopRecordBtn:hover {
+  border-color: #c53030;
+  background: rgba(229, 62, 62, 0.1);
+}
+
+.endBtnHeader:focus-visible {
+  outline: 2px solid #e53e3e;
+  outline-offset: 2px;
+}
+
+.alreadyInCallMessage {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+}
+
+.migrateBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text, #e5e5e5);
+  background: var(--accent, #00d4aa);
+  border: 1px solid var(--accent, #00d4aa);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.migrateBtn:hover {
+  filter: brightness(1.1);
+}

@@ -1060,7 +1060,7 @@ export function TranscriptModal({
                       ? `Are you sure you want to trim ${pendingTrimAction.timeSec.toFixed(3)} seconds from the start? This will update the audio file.`
                       : `Are you sure you want to trim ${pendingTrimAction?.timeSec.toFixed(3) ?? 0} seconds from the end? This will update the audio file.`}
                   </Dialog.Description>
-                  <div className={styles.dialogActions}>
+                  <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
                     <button
                       type="button"
                       className={styles.cancel}
@@ -1121,7 +1121,7 @@ export function TranscriptModal({
                   <Dialog.Description className={styles.dialogDescription}>
                     Are you sure you want to remove all silence periods longer than 2 seconds? This will update the audio file.
                   </Dialog.Description>
-                  <div className={styles.dialogActions}>
+                  <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
                     <button
                       type="button"
                       className={styles.cancel}
@@ -1181,7 +1181,7 @@ export function TranscriptModal({
                   <Dialog.Description className={styles.dialogDescription}>
                     Apply FFT-based noise suppression to reduce background noise? This will update the audio file. Transcript timings are unchanged.
                   </Dialog.Description>
-                  <div className={styles.dialogActions}>
+                  <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
                     <button
                       type="button"
                       className={styles.cancel}

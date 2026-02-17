@@ -1,0 +1,88 @@
+# Copy to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+
+# Required: deploy type (passed to unified ../user-data/harborfm-user-data.sh)
+deploy_type = "pm2"  # nginx | caddy | pm2
+
+# Required: Vultr region and plan
+region = "ewr"       # ewr, lax, sfo, ord, etc.
+plan   = "vc2-1c-1gb"
+
+# Required: Vultr OS image ID. os (debian-12, ubuntu-22, etc.) is derived automatically via Vultr API.
+# See: curl -s -H "Authorization: Bearer $VULTR_API_KEY" https://api.vultr.com/v2/os | jq '.os[] | {id, name}'
+os_id  = "2136"     # Debian 12 x64 (bookworm)
+
+# Supported os_id -> os mapping (derived at plan/apply):
+# Debian 11 477  -> debian-11
+# Debian 12 2136 -> debian-12
+# Debian 13 2625 -> debian-13
+# Ubuntu 22 1743 -> ubuntu-22
+# Ubuntu 24 2285 -> ubuntu-24
+# Ubuntu 25 2657 -> ubuntu-25
+# CentOS 9  542  -> centos-9
+# CentOS 10 2467 -> centos-10
+
+# Optional: Domain and cert (for nginx with Let's Encrypt)
+domain       = "localhost"
+certbot_email = ""
+
+# Optional: When certbot_email is blank, use self-signed cert for HTTPS. 1 = enabled, 0 (default) = HTTP only.
+# self_signed_cert = "1"
+
+# Optional: Cloudflare DNS - when cloudflare_api_token and a zone are set, creates/updates A records.
+# Zone must be the apex domain as shown in Cloudflare (e.g. harborfm.com). If domain is a subdomain
+# (e.g. tfdev.harborfm.com), set cloudflare_zone_name = "harborfm.com" so the lookup finds the zone.
+# cloudflare_api_token   = "your-token"   # use .env with CLOUDFLARE_API_TOKEN or TF_VAR to avoid tfvars
+# cloudflare_zone_id    = "abc123..."    # optional; from Cloudflare dashboard
+# cloudflare_zone_name  = "harborfm.com" # optional; must match zone in Cloudflare (defaults to domain)
+# domains               = ["www.example.com", "example.com"]  # default: [domain]
+
+# Optional: WebRTC/group calls. 1 = enabled, 0 (default) = disabled.
+# webrtc_enabled = "0"
+
+# Optional: Pre-set setup token. Setup URL will be /setup?id=<value>. Use -var to avoid tfvars.
+# setup_id = "my-secret-setup-token-32chars"
+
+# Optional: Reverse proxy for PM2. Default "nginx"; use "caddy" for Caddy.
+# reverse_proxy = "caddy"
+
+# Optional: Cookie Secure flag. Set to "false" when using HTTP (e.g. before certbot, or dev).
+# cookie_secure = "false"
+
+# Bootstrap admin on first boot (hash computed locally; password never sent to instance)
+# admin_email    = "admin@example.com"
+# admin_password = "..."  # Prefer: pass via CLI to avoid committing:
+#   export TF_VAR_admin_password="your-password"
+#   ./run.sh apply
+# admin_registration_enabled = "1"   # 1 = allow new signups, 0 = disabled (default)
+# admin_public_feeds_enabled = "1"  # 1 = public RSS (default), 0 = disabled
+# admin_hostname = "https://podcasts.example.com"  # public base URL; empty = derive from domain
+
+# Optional: Vultr automatic backups. Default "enabled"; use "disabled" to turn off.
+# backups = "disabled"
+
+# Optional: SSH public key (raw key content). Added to root/harborfm on first boot. Alternative to ssh_key_ids.
+# ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2E... you@host"
+
+# Optional: CIDR allowed for SSH. Default 192.168.1.1/32 effectively closes SSH.
+# Set to 0.0.0.0/0 to allow all, or 1.2.3.4/32 for your IP only.
+# ssh_allowed_cidr = "0.0.0.0/0"
+
+# Optional: SSH keys (Vultr key IDs from: vultr-cli ssh-key list). Use ssh_public_key for raw key.
+# ssh_key_ids = ["cb67646e-9d4a-4f1b-8c3d-2e5a6b7c8d9e"]
+
+# Optional: Email provider. When "webhook", server POSTs { [field_key]: "Subject: ...\n\nBody" } to email_webhook_url. Default field key "content" works with Discord.
+# email_provider    = "webhook"   # none (default) or webhook
+# email_webhook_url = "https://discord.com/api/webhooks/..."
+# email_webhook_field_key = "content"   # optional; default content
+
+# Optional: Persistent data block storage (GB). When > 0, a block volume is attached and mounted at /mnt/harborfm-data.
+# data_volume_size = 20   # 0 = use root disk only (default)
+
+# Optional: Custom install dir, repo, branch
+# install_dir   = ""
+# harborfm_repo = "loganrickert/harborfm"
+# harborfm_branch = "main"
+
+# Optional: Override user-data script URL. When set, instance fetches script at boot instead of inlining. Empty = inline full script (default).
+# script_url = "https://raw.githubusercontent.com/loganrickert/harborfm/main/terraform/user-data/harborfm-user-data.sh"

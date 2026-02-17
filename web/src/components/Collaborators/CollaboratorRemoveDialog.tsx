@@ -37,7 +37,7 @@ export function CollaboratorRemoveDialog({
               ? `This will remove ${collaborator.email} from this show. They will lose access.`
               : 'This will remove this collaborator from this show.'}
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <Dialog.Close asChild>
               <button type="button" className={styles.cancel} aria-label="Cancel">Cancel</button>
             </Dialog.Close>

@@ -23,7 +23,7 @@
   min-width: 0;
   display: grid;
   grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   gap: 0.5rem 1rem;
   align-items: center;
 }
@@ -61,6 +61,24 @@
 .podcastHeroMain .podcastHeroDescription {
   grid-column: 1 / -1;
   grid-row: 2;
+}
+
+.podcastHeroFeedRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  grid-column: 1;
+  grid-row: 3;
+  justify-self: start;
+  align-self: end;
+  margin-top: 0.75rem;
+}
+
+.podcastHeroFeedRow .podcastDetailsActions {
+  flex-grow: 1;
+  justify-content: center;
 }
 
 .podcastHeroMain .cardHeaderActions {
@@ -182,9 +200,58 @@
 
 /* Podcast Details Grid */
 .podcastDetails {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
+}
+
+.podcastDetailsActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Desktop: no flex grow on action links */
+.podcastDetailsActions .podcastDetailsActionLink {
+  flex: 0 0 auto;
+}
+
+.podcastDetailsToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  align-self: center;
+}
+
+.podcastDetailsToggle:hover {
+  color: var(--accent);
+}
+
+.podcastDetailsToggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.podcastDetailsContent {
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.podcastDetailsContentCollapsed {
+  display: none;
 }
 
 .podcastDetailsTitle {
@@ -365,6 +432,17 @@
 
 /* Media Queries */
 @media (max-width: 640px) {
+  .podcastDetailsActions {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .podcastDetailsActions .podcastDetailsActionLink {
+    flex: 1 1 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
   .podcastHero {
     flex-direction: column;
     align-items: stretch;
@@ -380,7 +458,7 @@
 
   .podcastHeroMain {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto auto auto;
   }
 
   .podcastHeroMain .podcastHeroTitleRow {
@@ -398,6 +476,31 @@
     grid-row: 3;
     justify-self: stretch;
     width: 100%;
+  }
+
+  .podcastHeroFeedRow {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    grid-column: 1;
+    grid-row: 4;
+    justify-self: start;
+    margin-top: 1rem;
+  }
+
+  .podcastHeroFeedRow .podcastDetailsActions {
+    flex-grow: 1;
+    flex-direction: row;
+    flex-wrap: nowrap;
+  }
+
+  .podcastHeroFeedRow .podcastDetailsActionLink {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .podcastDetailsToggle {
+    align-self: center;
   }
 
   .podcastHeroMain .cardHeaderActions .cardHeaderPrimary,

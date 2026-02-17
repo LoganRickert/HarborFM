@@ -48,7 +48,7 @@ export function DeleteTranscriptSegmentDialog({
           <Dialog.Description className={styles.dialogDescription}>
             This will remove the segment from both the audio file and transcript. This cannot be undone.
           </Dialog.Description>
-          <div className={styles.dialogActions}>
+          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <button type="button" className={styles.cancel} onClick={handleCancel} aria-label="Cancel deleting transcript segment">
               Cancel
             </button>

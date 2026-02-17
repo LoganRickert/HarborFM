@@ -30,6 +30,8 @@ import { FeedHome } from './pages/FeedHome';
 import { FeedPodcast } from './pages/FeedPodcast';
 import { FeedEpisode } from './pages/FeedEpisode';
 import { EmbedEpisode } from './pages/EmbedEpisode';
+import { CallJoin } from './pages/CallJoin';
+import { CallJoinIndex } from './pages/CallJoinIndex';
 import { Library } from './pages/Library';
 import { SubscriberAuthProvider } from './hooks/useSubscriberAuth';
 import { ConsentBanner } from './components/ConsentBanner/ConsentBanner';
@@ -293,6 +295,9 @@ export default function App() {
       <SubscriberAuthProvider>
         <ConsentBanner />
         <Routes>
+          {/* Call join first - public, no auth (guests join via link) */}
+          <Route path="/call/join" element={<CallJoinIndex />} />
+          <Route path="/call/join/:token" element={<CallJoin />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
           <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />

@@ -13,7 +13,9 @@ import {
   requireNotReadOnly,
 } from "../../plugins/auth.js";
 import { isAdmin, canReadLibraryAsset } from "../../services/access.js";
+import { broadcastToUser } from "../../services/episodeBroadcast.js";
 import { libraryDir, libraryAssetPath, assertPathUnder } from "../../services/paths.js";
+import { assertUrlNotPrivate } from "../../utils/ssrf.js";
 import { normalizeHostname } from "../../utils/url.js";
 import * as audioService from "../../services/audio.js";
 import {
@@ -259,6 +261,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         const assetId = nanoid();
         const dir = libraryDir(request.userId);
         const destPath = libraryAssetPath(request.userId, assetId, "mp3");
+        await assertUrlNotPrivate(downloadUrl);
         const res = await fetch(downloadUrl);
         if (!res.ok) {
           return reply
@@ -303,6 +306,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         const row = db
           .prepare("SELECT * FROM reusable_assets WHERE id = ?")
           .get(assetId) as Record<string, unknown>;
+        broadcastToUser(request.userId, { type: "libraryAdded" });
         return reply.status(201).send(row);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Import failed";
@@ -437,6 +441,7 @@ export async function libraryRoutes(app: FastifyInstance) {
       const row = db
         .prepare("SELECT * FROM reusable_assets WHERE id = ?")
         .get(id) as Record<string, unknown>;
+      broadcastToUser(request.userId, { type: "libraryAdded" });
       return reply.status(201).send(row);
     },
   );

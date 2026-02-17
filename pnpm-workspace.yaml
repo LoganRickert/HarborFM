@@ -3,6 +3,8 @@ packages:
   - web
   - shared
   - docs
+  - webrtc-service
+  - e2e
 
 ignoredBuiltDependencies:
   - argon2
@@ -12,3 +14,4 @@ ignoredBuiltDependencies:
 
 onlyBuiltDependencies:
   - better-sqlite3
+  - mediasoup

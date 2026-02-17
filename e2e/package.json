@@ -4,6 +4,17 @@
   "type": "module",
   "scripts": {
     "e2e": "bash scripts/run-e2e.sh",
-    "e2e:run": "node run.js"
+    "e2e:run": "node run.js",
+    "e2e:webrtc": "bash scripts/run-e2e-webrtc.sh",
+    "e2e:webrtc:slow": "E2E_WEBRTC_MODE=slow bash scripts/run-e2e-webrtc.sh",
+    "e2e:webrtc:full": "E2E_WEBRTC_MODE=full bash scripts/run-e2e-webrtc.sh",
+    "e2e:seed": "bash scripts/run-e2e-seed.sh"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.19.9"
   }
 }

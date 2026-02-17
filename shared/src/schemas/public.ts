@@ -96,6 +96,8 @@ export const publicConfigSchema = z.object({
   custom_feed_slug: z.string().optional(),
   /** When true, show GDPR-style cookie/tracking consent banner on public pages. */
   gdpr_consent_banner_enabled: z.boolean().optional(),
+  /** When true, WebRTC group calls are configured (service + public WS URL). */
+  webrtc_enabled: z.boolean().optional(),
 });
 
 export type PublicPodcast = z.infer<typeof publicPodcastSchema>;

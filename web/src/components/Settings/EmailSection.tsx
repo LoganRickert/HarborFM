@@ -9,6 +9,7 @@ const EMAIL_OPTIONS: ProviderOption<AppSettings['email_provider']>[] = [
   { value: 'none', label: 'None' },
   { value: 'smtp', label: 'SMTP' },
   { value: 'sendgrid', label: 'SendGrid' },
+  { value: 'webhook', label: 'Webhook' },
 ];
 
 export function EmailSection({
@@ -111,6 +112,39 @@ export function EmailSection({
         </>
       )}
 
+      {form.email_provider === 'webhook' && (
+        <>
+          <label className={styles.label}>
+            Webhook URL
+            <input
+              type="url"
+              className={styles.input}
+              placeholder="https://discord.com/api/webhooks/..."
+              value={form.email_webhook_url}
+              onChange={(e) => onFormChange({ email_webhook_url: e.target.value })}
+              autoComplete="off"
+            />
+            <p className={styles.inputHelp}>
+              Server POSTs JSON with one key (the field key below) and value &quot;Subject: …\n\nBody&quot;. Default <code>content</code> works with Discord.
+            </p>
+          </label>
+          <label className={styles.label}>
+            Body field key
+            <input
+              type="text"
+              className={styles.input}
+              placeholder="content"
+              value={form.email_webhook_field_key}
+              onChange={(e) => onFormChange({ email_webhook_field_key: e.target.value })}
+              autoComplete="off"
+            />
+            <p className={styles.inputHelp}>
+              JSON key for the message content. Use <code>content</code> for Discord webhooks.
+            </p>
+          </label>
+        </>
+      )}
+
       {form.email_provider === 'sendgrid' && (
         <>
           <label className={styles.label}>
@@ -156,7 +190,7 @@ export function EmailSection({
         </>
       )}
 
-      {(form.email_provider === 'smtp' || form.email_provider === 'sendgrid') && (
+      {(form.email_provider === 'smtp' || form.email_provider === 'sendgrid' || form.email_provider === 'webhook') && (
         <div className={styles.emailNotifications}>
           <h3 className={styles.emailNotificationsTitle}>Email notifications</h3>
           <p className={styles.emailNotificationsIntro}>Choose which emails the server sends when email is configured.</p>

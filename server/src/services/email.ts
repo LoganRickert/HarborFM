@@ -61,7 +61,9 @@ export async function sendMail(
   const fromRaw =
     settings.email_provider === "smtp"
       ? settings.smtp_from
-      : settings.sendgrid_from;
+      : settings.email_provider === "webhook"
+        ? ""
+        : settings.sendgrid_from;
   const hostnameRaw = (settings.hostname?.trim() || "localhost")
     .replace(/^https?:\/\//i, "")
     .split("/")[0]
@@ -119,6 +121,42 @@ export async function sendMail(
           (data as { errors?: Array<{ message?: string }> })?.errors?.[0]
             ?.message ?? res.statusText;
         return { sent: false, error: errMsg };
+      }
+      return { sent: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { sent: false, error: msg };
+    }
+  }
+
+  if (settings.email_provider === "webhook") {
+    const url = settings.email_webhook_url?.trim();
+    if (!url) {
+      return { sent: false, error: "Webhook URL is not configured" };
+    }
+    const fieldKey = (settings.email_webhook_field_key?.trim() || "content").replace(
+      /[^\w-]/g,
+      "_",
+    ) || "content";
+    const textContent =
+      options.text?.trim() ||
+      (options.html
+        ? options.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+        : "");
+    const content = `Subject: ${toTitleCase(options.subject)}\n\n${textContent}`.trim();
+    try {
+      const payload: Record<string, string> = { [fieldKey]: content };
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        return {
+          sent: false,
+          error: text ? `${res.status} ${res.statusText}: ${text.slice(0, 200)}` : res.statusText,
+        };
       }
       return { sent: true };
     } catch (err) {

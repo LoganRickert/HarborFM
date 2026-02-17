@@ -29,7 +29,9 @@ export interface AppSettings {
   captcha_provider: 'none' | 'recaptcha_v2' | 'recaptcha_v3' | 'hcaptcha';
   captcha_site_key: string;
   captcha_secret_key: string;
-  email_provider: 'none' | 'smtp' | 'sendgrid';
+  email_provider: 'none' | 'smtp' | 'sendgrid' | 'webhook';
+  email_webhook_url: string;
+  email_webhook_field_key: string;
   smtp_host: string;
   smtp_port: number;
   smtp_secure: boolean;
@@ -62,6 +64,9 @@ export interface AppSettings {
   dns_default_domain: string;
   dns_default_enable_cloudflare_proxy: boolean;
   gdpr_consent_banner_enabled: boolean;
+  webrtc_service_url: string;
+  webrtc_public_ws_url: string;
+  recording_callback_secret: string;
 }
 
 export function getSettings(): Promise<AppSettings> {

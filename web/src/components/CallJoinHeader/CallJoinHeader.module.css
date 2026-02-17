@@ -1,0 +1,43 @@
+.siteHeader {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  margin-top: calc(-2rem - env(safe-area-inset-top, 0px));
+  margin-bottom: 2rem;
+  width: 100vw;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(calc(1rem + env(safe-area-inset-left, 0px)), calc(50vw - 400px));
+  padding-right: max(calc(1rem + env(safe-area-inset-right, 0px)), calc(50vw - 400px));
+}
+
+.siteHeaderContent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 0;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.logo:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.logoIcon {
+  width: 28px;
+  height: 28px;
+  display: block;
+}

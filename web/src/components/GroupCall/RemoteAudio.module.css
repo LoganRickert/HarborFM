@@ -1,0 +1,14 @@
+.enableAudioBtn {
+  margin: 0.25rem 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--accent, #00d4aa);
+  background: transparent;
+  border: 1px solid var(--accent, #00d4aa);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.enableAudioBtn:hover {
+  background: rgba(0, 212, 170, 0.1);
+}

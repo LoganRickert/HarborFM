@@ -16,6 +16,14 @@ export const segmentEpisodeIdOnlyParamSchema = z.object({
   episodeId: z.string().min(1),
 });
 
+/** Body for POST /episodes/:episodeId/segments/waveforms-bulk. Max 10 segment IDs. */
+export const segmentWaveformsBulkBodySchema = z.object({
+  segment_ids: z
+    .array(z.string().min(1))
+    .min(1, { message: 'segment_ids required' })
+    .max(10, { message: 'max 10 segment_ids' }),
+});
+
 /** JSON body for POST /episodes/:id/segments when adding a reusable segment. */
 export const segmentCreateReusableBodySchema = z.object({
   type: z.literal('reusable'),
@@ -89,6 +97,8 @@ export const segmentResponseSchema = z.object({
   audio_path: z.string().nullable().optional(),
   duration_sec: z.number(),
   created_at: z.string(),
+  /** True when waveform file exists on disk; client can skip fetch when false. */
+  waveform_exists: z.boolean().optional(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */
