@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Rss, ExternalLink } from 'lucide-react';
-import { getPublicRssUrl } from '../../api/rss';
+import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import localStyles from './PodcastDetail.module.css';
 import sharedStyles from './shared.module.css';
 
@@ -28,39 +27,29 @@ interface PodcastDetailsGridProps {
     email?: string | null;
     explicit?: number;
   };
-  publicFeedsEnabled: boolean;
+  detailsExpanded: boolean;
+  onDetailsToggle: () => void;
 }
 
-export function PodcastDetailsGrid({ podcast, publicFeedsEnabled }: PodcastDetailsGridProps) {
+export function PodcastDetailsGrid({ podcast, detailsExpanded, onDetailsToggle }: PodcastDetailsGridProps) {
   return (
     <div className={styles.podcastDetails}>
-      <h2 className={styles.podcastDetailsTitle}>Show details</h2>
-      <dl className={styles.podcastDetailsGrid}>
-        {publicFeedsEnabled && (
-          <div className={styles.podcastDetailsItem}>
-            <dt className={styles.podcastDetailsTerm}>Public Feed Page</dt>
-            <dd className={styles.podcastDetailsValue}>
-              <Link to={`/feed/${podcast.slug}`} className={styles.podcastDetailsActionLink}>
-                <Rss size={16} strokeWidth={2} aria-hidden />
-                Public Feed Page
-              </Link>
-            </dd>
-          </div>
+      <button
+        type="button"
+        className={styles.podcastDetailsToggle}
+        onClick={onDetailsToggle}
+        aria-expanded={detailsExpanded}
+        aria-controls="podcast-details-content"
+      >
+        {detailsExpanded ? (
+          <ChevronUp size={18} strokeWidth={2} aria-hidden />
+        ) : (
+          <ChevronDown size={18} strokeWidth={2} aria-hidden />
         )}
-        <div className={styles.podcastDetailsItem}>
-          <dt className={styles.podcastDetailsTerm}>Public Feed XML</dt>
-          <dd className={styles.podcastDetailsValue}>
-            <a
-              href={getPublicRssUrl(podcast.slug)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.podcastDetailsActionLink}
-            >
-              <Rss size={16} strokeWidth={2} aria-hidden />
-              Public Feed XML
-            </a>
-          </dd>
-        </div>
+        Show details
+      </button>
+      <div id="podcast-details-content" className={detailsExpanded ? styles.podcastDetailsContent : styles.podcastDetailsContentCollapsed}>
+        <dl className={styles.podcastDetailsGrid}>
         {podcast.site_url && (
           <div className={styles.podcastDetailsItem}>
             <dt className={styles.podcastDetailsTerm}>Website</dt>
@@ -136,7 +125,8 @@ export function PodcastDetailsGrid({ podcast, publicFeedsEnabled }: PodcastDetai
             <dd className={styles.podcastDetailsValue}>Yes</dd>
           </div>
         )}
-      </dl>
+        </dl>
+      </div>
     </div>
   );
 }

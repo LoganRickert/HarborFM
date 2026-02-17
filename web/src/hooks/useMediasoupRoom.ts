@@ -396,7 +396,7 @@ export function useMediasoupRoom(
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken, autoGainControl]);
+  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken, autoGainControl, micVolume]);
 
   useEffect(() => {
     const gain = micVolumeGainRef.current;

@@ -203,7 +203,7 @@ export function CallJoin() {
     selfListenGainRef.current = null;
     micVolumeGainRef.current = null;
     setListeningToSelf(false);
-  }, [deviceId, joined]);
+  }, [deviceId, joined, autoGainControl]);
 
   const setupMicrophone = useCallback(async (): Promise<boolean> => {
     if (streamRef.current) {
@@ -258,7 +258,7 @@ export function CallJoin() {
       setMicLevel(0);
       return false;
     }
-  }, [deviceId, autoGainControl, micVolume]);
+  }, [deviceId, autoGainControl, micVolume, refreshDevices]);
 
   const resumeAudioContext = () => {
     if (!streamRef.current) {

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { BarChart3, List, Link2, Settings as GearIcon, Lock } from 'lucide-react';
+import { BarChart3, List, Link2, Settings as GearIcon, Lock, Rss } from 'lucide-react';
+import { getPublicRssUrl } from '../../api/rss';
 import localStyles from './PodcastDetail.module.css';
 import sharedStyles from './shared.module.css';
 
@@ -9,6 +10,7 @@ interface PodcastHeroProps {
   podcast: {
     id: string;
     title: string;
+    slug: string;
     description?: string | null;
     artwork_url?: string | null;
     artwork_filename?: string | null;
@@ -22,9 +24,13 @@ interface PodcastHeroProps {
   onLinksClick?: () => void;
   /** When true, center the podcast title (e.g. on the podcast detail page). */
   centerTitle?: boolean;
+  /** When set, show Public Page / Public RSS buttons at bottom left. */
+  publicFeedsEnabled?: boolean;
 }
 
-export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onLinksClick, centerTitle }: PodcastHeroProps) {
+export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onLinksClick, centerTitle, publicFeedsEnabled }: PodcastHeroProps) {
+  const showFeedButtons = publicFeedsEnabled !== undefined;
+
   return (
     <div className={styles.podcastHero}>
       {(podcast.artwork_url || podcast.artwork_filename) && (
@@ -52,6 +58,27 @@ export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onL
         </div>
         {podcast.description && (
           <p className={styles.podcastHeroDescription}>{podcast.description}</p>
+        )}
+        {showFeedButtons && (
+          <div className={styles.podcastHeroFeedRow}>
+            <div className={styles.podcastDetailsActions}>
+              {publicFeedsEnabled && (
+                <Link to={`/feed/${podcast.slug}`} className={styles.podcastDetailsActionLink}>
+                  <Rss size={16} strokeWidth={2} aria-hidden />
+                  Public Page
+                </Link>
+              )}
+              <a
+                href={getPublicRssUrl(podcast.slug)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.podcastDetailsActionLink}
+              >
+                <Rss size={16} strokeWidth={2} aria-hidden />
+                Public RSS
+              </a>
+            </div>
+          </div>
         )}
         <div className={styles.cardHeaderActions}>
           <Link to={`/podcasts/${podcast.id}/analytics`} className={styles.cardHeaderSecondary}>
