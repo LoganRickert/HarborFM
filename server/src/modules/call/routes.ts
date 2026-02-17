@@ -41,7 +41,7 @@ import { contentTypeFromAudioPath } from "../../utils/audio.js";
 import { createSegmentFromPath } from "../../services/segmentFromRecording.js";
 import * as audioService from "../../services/audio.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
-import { RECORD_MIN_FREE_BYTES } from "../../config.js";
+import { RECORD_MIN_FREE_BYTES, WEBRTC_ENABLED } from "../../config.js";
 import {
   getClientIp,
   getIpBan,
@@ -166,7 +166,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           joinCode: existing.joinCode,
         };
         const webrtcCfg = getWebRtcConfig();
-        if (existing.roomId && webrtcCfg.publicWsUrl) {
+        if (WEBRTC_ENABLED && existing.roomId && webrtcCfg.publicWsUrl) {
           payload.webrtcUrl =
             webrtcCfg.publicWsUrl.replace(/^http/, "ws").replace(/\/$/, "") + "/ws";
           payload.roomId = existing.roomId;
@@ -238,7 +238,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               }
             })()
           : null;
-      if (webrtcCfg.serviceUrl) {
+      if (WEBRTC_ENABLED && webrtcCfg.serviceUrl) {
         const hostToken = nanoid(24);
         const roomUrl = `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/room`;
         const roomBody = JSON.stringify({
