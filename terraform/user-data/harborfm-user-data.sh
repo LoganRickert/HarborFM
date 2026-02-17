@@ -365,6 +365,7 @@ MOUNT_SVC
     echo "REVERSE_PROXY=$REVERSE_PROXY"
     echo "CERTBOT_EMAIL=$CERTBOT_EMAIL"
     echo "TZ=$TZ"
+    echo "WEBRTC_ENABLED=${WEBRTC_ENABLED:-0}"
     [ -n "$SETUP_ID" ] && echo "SETUP_ID=$SETUP_ID"
     [ -n "$COOKIE_SECURE" ] && echo "COOKIE_SECURE=$COOKIE_SECURE"
     [ -n "$ADMIN_EMAIL" ] && printf 'ADMIN_EMAIL=%s\n' "$ADMIN_EMAIL"
