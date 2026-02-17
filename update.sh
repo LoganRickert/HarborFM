@@ -85,17 +85,17 @@ echo "Configs updated."
 echo ""
 
 # Ensure nginx sites-enabled exists with placeholder (for existing installs that added this later)
-mkdir -p "$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled"
-placeholder="$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled/00-placeholder.conf"
+mkdir -p "$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled"
+placeholder="$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled/00-placeholder.conf"
 if [ ! -f "$placeholder" ]; then
   echo '# Additional sites; add .conf files here (e.g. via nginx-add-domain.sh).' > "$placeholder"
   echo "Created nginx sites-enabled placeholder."
 fi
 
 # Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
-mkdir -p "$INSTALL_DIR/harborfm-docker-data/caddy/logs"
-touch "$INSTALL_DIR/harborfm-docker-data/nginx/logs/access.log" 2>/dev/null || true
-touch "$INSTALL_DIR/harborfm-docker-data/caddy/logs/access.log" 2>/dev/null || true
+mkdir -p "$INSTALL_DIR/harborfm-data/proxy/caddy/logs"
+touch "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
+touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || true
 
 echo "Pulling images..."
 docker compose pull

@@ -136,30 +136,29 @@ fi
 # Export so docker compose sees it when run from this script
 export INSTALL_DIR
 
-echo "Ensuring harborfm-docker-data directories exist..."
+echo "Ensuring harborfm-data directories exist (shared layout with PM2 for data/secrets/webrtc)..."
 mkdir -p \
-  "$INSTALL_DIR/harborfm-docker-data/data" \
-  "$INSTALL_DIR/harborfm-docker-data/webrtc" \
-  "$INSTALL_DIR/harborfm-docker-data/secrets" \
-  "$INSTALL_DIR/harborfm-docker-data/certbot/webroot" \
-  "$INSTALL_DIR/harborfm-docker-data/certbot/certs" \
-  "$INSTALL_DIR/harborfm-docker-data/nginx/logs" \
-  "$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled" \
-  "$INSTALL_DIR/harborfm-docker-data/caddy/data" \
-  "$INSTALL_DIR/harborfm-docker-data/caddy/config" \
-  "$INSTALL_DIR/harborfm-docker-data/caddy/logs" \
-  "$INSTALL_DIR/harborfm-docker-data/redis" \
-  "$INSTALL_DIR/harborfm-docker-data/whisper/cache"
+  "$INSTALL_DIR/harborfm-data/data" \
+  "$INSTALL_DIR/harborfm-data/secrets" \
+  "$INSTALL_DIR/harborfm-data/webrtc" \
+  "$INSTALL_DIR/harborfm-data/proxy/certbot/webroot" \
+  "$INSTALL_DIR/harborfm-data/proxy/certbot/certs" \
+  "$INSTALL_DIR/harborfm-data/proxy/nginx/logs" \
+  "$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled" \
+  "$INSTALL_DIR/harborfm-data/proxy/caddy/data" \
+  "$INSTALL_DIR/harborfm-data/proxy/caddy/config" \
+  "$INSTALL_DIR/harborfm-data/proxy/caddy/logs" \
+  "$INSTALL_DIR/harborfm-data/whisper/cache"
 
 # Placeholder so nginx include sites-enabled/*.conf does not fail when no extra sites exist
-placeholder="$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled/00-placeholder.conf"
+placeholder="$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled/00-placeholder.conf"
 if [ ! -f "$placeholder" ]; then
   echo '# Additional sites; add .conf files here (e.g. via nginx-add-domain.sh).' > "$placeholder"
 fi
 
 # Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
-touch "$INSTALL_DIR/harborfm-docker-data/caddy/logs/access.log" 2>/dev/null || true
-touch "$INSTALL_DIR/harborfm-docker-data/nginx/logs/access.log" 2>/dev/null || true
+touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || true
+touch "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
 
 echo "Starting containers (compose up with profile: $REVERSE_PROXY)..."
 set +e
@@ -172,7 +171,7 @@ if [ "$compose_rc" -ne 0 ]; then
     echo ""
     echo "One or more volume paths are missing (e.g. after moving the install directory)."
     echo "Recreate volumes with: docker compose down -v && docker compose --profile $REVERSE_PROXY up -d"
-    echo "Warning: -v removes volume data (app data, certs, whisper cache). Back up harborfm-docker-data first if needed."
+    echo "Warning: -v removes volume data (app data, certs, whisper cache). Back up harborfm-data first if needed."
   fi
   exit 1
 fi

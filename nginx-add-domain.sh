@@ -59,7 +59,7 @@ if [ -n "${DOMAIN:-}" ] && [ "$ADD_DOMAIN" = "$DOMAIN" ]; then
   exit 1
 fi
 
-SITES_ENABLED="$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled"
+SITES_ENABLED="$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled"
 mkdir -p "$SITES_ENABLED"
 
 echo "Using sites-enabled: $SITES_ENABLED"

@@ -21,20 +21,39 @@ function writeSetting(key: string, value: string): void {
 }
 
 /**
+ * Read admin password hash from env or from file (ADMIN_PASSWORD_HASH_FILE).
+ * Prefers file when ADMIN_PASSWORD_HASH_FILE is set and file exists.
+ */
+function getAdminPasswordHash(): string | null {
+  const filePath = process.env.ADMIN_PASSWORD_HASH_FILE?.trim();
+  if (filePath) {
+    try {
+      if (existsSync(filePath)) {
+        const content = readFileSync(filePath, "utf8").trim();
+        if (content) return content;
+      }
+    } catch {
+      /* fall through to env */
+    }
+  }
+  return process.env.ADMIN_PASSWORD_HASH?.trim() || null;
+}
+
+/**
  * Bootstrap admin from ADMIN_EMAIL + ADMIN_PASSWORD_HASH when set.
  * Used by Terraform/user-data to avoid passing the plaintext password.
  * Hash must be argon2 format (from Terraform external data source or similar).
- * Reads process.env at runtime so we see env set by PM2 env_file / dotenv after process start.
+ * Reads from ADMIN_PASSWORD_HASH_FILE (preferred) or process.env.ADMIN_PASSWORD_HASH.
  */
 export function bootstrapIfNeeded(): boolean {
   if (isSetupComplete()) return false;
 
   const email = process.env.ADMIN_EMAIL?.trim() || null;
-  const passwordHash = process.env.ADMIN_PASSWORD_HASH?.trim() || null;
+  const passwordHash = getAdminPasswordHash();
 
   if (!email || !email.includes("@") || !passwordHash) {
     const hasEmail = Boolean(email || process.env.ADMIN_EMAIL?.trim());
-    const hasHash = Boolean(passwordHash || process.env.ADMIN_PASSWORD_HASH?.trim());
+    const hasHash = Boolean(passwordHash || process.env.ADMIN_PASSWORD_HASH?.trim() || process.env.ADMIN_PASSWORD_HASH_FILE?.trim());
     if (hasEmail || hasHash) {
       console.warn(
         `[setup] Bootstrap skipped: ADMIN_EMAIL (set=${hasEmail}) and ADMIN_PASSWORD_HASH (set=${hasHash}) both required`,

@@ -27,6 +27,8 @@ services:
       COOKIE_SECURE: "${COOKIE_SECURE:-}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
       ADMIN_PASSWORD_HASH: "${ADMIN_PASSWORD_HASH:-}"
+      # When set, server reads hash from file (avoids storing in .env). User-data writes to /secrets/admin_password_hash.
+      ADMIN_PASSWORD_HASH_FILE: "/secrets/admin_password_hash"
       ADMIN_REGISTRATION_ENABLED: "${ADMIN_REGISTRATION_ENABLED:-}"
       ADMIN_PUBLIC_FEEDS_ENABLED: "${ADMIN_PUBLIC_FEEDS_ENABLED:-}"
       ADMIN_HOSTNAME: "${ADMIN_HOSTNAME:-}"
@@ -185,74 +187,74 @@ services:
       TZ: ${TZ:-UTC}
       F2B_LOG_LEVEL: info
 
-# Named volumes backed by ${INSTALL_DIR}/harborfm-docker-data/ (install.sh sets INSTALL_DIR in .env)
+# Named volumes. App data (data, secrets, webrtc) shared across deploy types. Proxy infra under proxy/, whisper under whisper/.
 volumes:
   harborfm_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/data
+      device: ${INSTALL_DIR:-.}/harborfm-data/data
   harborfm_secrets:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/secrets
+      device: ${INSTALL_DIR:-.}/harborfm-data/secrets
   certbot_webroot:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/certbot/webroot
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/certbot/webroot
   certbot_certs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/certbot/certs
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/certbot/certs
   nginx_logs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/logs
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/nginx/logs
   nginx_sites_enabled:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/nginx/sites-enabled
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/nginx/sites-enabled
   caddy_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/data
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/caddy/data
   caddy_config:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/config
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/caddy/config
   caddy_logs:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/caddy/logs
+      device: ${INSTALL_DIR:-.}/harborfm-data/proxy/caddy/logs
   whisper_cache:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/whisper/cache
+      device: ${INSTALL_DIR:-.}/harborfm-data/whisper/cache
   webrtc_recordings:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ${INSTALL_DIR:-.}/harborfm-docker-data/webrtc
+      device: ${INSTALL_DIR:-.}/harborfm-data/webrtc
 
 networks:
   internal:

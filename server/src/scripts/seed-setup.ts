@@ -55,7 +55,78 @@ async function main(): Promise<void> {
   }
 
   if (isSetupComplete()) {
-    console.info("[seed-setup] Setup already complete, skipping.");
+    // Persistent data reattach: update admin if email or password hash changed
+    const existing = db
+      .prepare(
+        "SELECT id, email, password_hash FROM users WHERE role = 'admin' LIMIT 1",
+      )
+      .get() as { id: string; email: string; password_hash: string } | undefined;
+    if (existing) {
+      const emailNorm = email.toLowerCase();
+      let newHash: string | null = null;
+      if (hashB64) {
+        const decoded = decodeHashB64(hashB64);
+        if (decoded) newHash = decoded;
+      } else if (password) {
+        newHash = await argon2.hash(password);
+      }
+      const emailChanged = existing.email !== emailNorm;
+      const hashChanged =
+        newHash !== null && existing.password_hash !== newHash;
+      if (emailChanged || hashChanged) {
+        if (newHash === null && hashChanged) {
+          console.warn(
+            "[seed-setup] ADMIN_PASSWORD_HASH_B64 invalid or missing; not updating password.",
+          );
+        }
+        if (emailChanged) {
+          db.prepare("UPDATE users SET email = ? WHERE id = ?").run(
+            emailNorm,
+            existing.id,
+          );
+        }
+        if (hashChanged && newHash !== null) {
+          db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(
+            newHash,
+            existing.id,
+          );
+        }
+        const hostnameRaw =
+          process.env.ADMIN_HOSTNAME?.trim() ||
+          (process.env.DOMAIN &&
+          process.env.DOMAIN !== "localhost" &&
+          process.env.DOMAIN !== "_"
+            ? `https://${process.env.DOMAIN}`
+            : "");
+        const hostname = hostnameRaw ? normalizeHostname(hostnameRaw) : "";
+        writeSetting("hostname", hostname);
+        writeSetting(
+          "registration_enabled",
+          process.env.ADMIN_REGISTRATION_ENABLED === "1" ? "true" : "false",
+        );
+        writeSetting(
+          "public_feeds_enabled",
+          process.env.ADMIN_PUBLIC_FEEDS_ENABLED === "1" ? "true" : "false",
+        );
+        const emailProvider =
+          process.env.EMAIL_PROVIDER?.trim()?.toLowerCase();
+        const emailWebhookUrl = process.env.EMAIL_WEBHOOK_URL?.trim();
+        const emailWebhookFieldKey =
+          process.env.EMAIL_WEBHOOK_FIELD_KEY?.trim() || "content";
+        if (emailProvider === "webhook" && emailWebhookUrl) {
+          writeSetting("email_provider", "webhook");
+          writeSetting("email_webhook_url", emailWebhookUrl);
+          writeSetting("email_webhook_field_key", emailWebhookFieldKey);
+        }
+        console.info(
+          `[seed-setup] Updated admin (email=${emailChanged} hash=${hashChanged}).`,
+        );
+      } else {
+        console.info("[seed-setup] Setup already complete, no changes needed.");
+      }
+    } else {
+      console.info("[seed-setup] Setup already complete, skipping.");
+    }
     process.exit(0);
   }
 

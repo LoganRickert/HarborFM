@@ -60,14 +60,14 @@ if [ "${overwrite_env:-false}" = true ]; then
   echo ""
 fi
 
-echo "Ensuring harborfm-docker-data directories exist..."
-mkdir -p harborfm-docker-data/{data,secrets,certbot/webroot,certbot/certs,nginx/logs,nginx/sites-enabled,caddy/data,caddy/config,caddy/logs,redis,whisper/cache}
+echo "Ensuring harborfm-data directories exist (shared layout with PM2 for data/secrets/webrtc)..."
+mkdir -p harborfm-data/{data,secrets,webrtc,proxy/certbot/webroot,proxy/certbot/certs,proxy/nginx/logs,proxy/nginx/sites-enabled,proxy/caddy/data,proxy/caddy/config,proxy/caddy/logs,whisper/cache}
 
 # Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
-touch harborfm-docker-data/caddy/logs/access.log 2>/dev/null || true
+touch harborfm-data/proxy/caddy/logs/access.log 2>/dev/null || true
 
 # Placeholder so nginx include sites-enabled/*.conf does not fail when no extra sites exist
-placeholder="harborfm-docker-data/nginx/sites-enabled/00-placeholder.conf"
+placeholder="harborfm-data/proxy/nginx/sites-enabled/00-placeholder.conf"
 if [ ! -f "$placeholder" ]; then
   echo '# Additional sites; add .conf files here (e.g. via nginx-add-domain.sh).' > "$placeholder"
 fi
