@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import localStyles from './PodcastDetail.module.css';
 import sharedStyles from './shared.module.css';
