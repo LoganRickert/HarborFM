@@ -480,8 +480,12 @@ export function EpisodeEditorContent({
               episodeId={id}
               segments={segments}
               segmentsLoading={segmentsLoading}
-              isRecordingActive={wsRecordingActive ?? activeSession?.recordingInProgress === true}
-              processingSegmentIds={(wsPendingSegmentIds ?? activeSession?.pendingSegmentIds ?? []).filter(
+              isRecordingActive={
+                callPanelOpenInThisTab ? (wsRecordingActive ?? activeSession?.recordingInProgress === true) : (activeSession?.recordingInProgress === true)
+              }
+              processingSegmentIds={(
+                callPanelOpenInThisTab ? (wsPendingSegmentIds ?? activeSession?.pendingSegmentIds ?? []) : (activeSession?.pendingSegmentIds ?? [])
+              ).filter(
                 (segId) => !segments.some((s) => s.id === segId)
               )}
               onAddRecord={() => setShowRecord(true)}

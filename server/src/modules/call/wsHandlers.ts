@@ -445,6 +445,14 @@ export function handleStartRecording(
             recordingEpochMs: typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : undefined,
             pendingSegmentIds: sessForSegId?.pendingSegmentIds ?? [segId],
           });
+          if (session.episodeId) {
+            const pendingIds = sessForSegId?.pendingSegmentIds ?? [segId];
+            broadcastToEpisode(session.episodeId, {
+              type: "segmentAdded",
+              recordingInProgress: true,
+              pendingSegmentIds: pendingIds,
+            });
+          }
         } else {
           const text = await res.text();
           let errorMsg = "Failed to start recording";

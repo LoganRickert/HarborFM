@@ -57,11 +57,31 @@ export function useEpisodeWebSocket(
             case 'callSessionUpdated':
               queryClient.invalidateQueries({ queryKey: ['call-session', episodeId] });
               break;
+            case 'recordingStarted': {
+              const rec = msg as { recordingInProgress?: boolean; pendingSegmentIds?: string[] };
+              queryClient.setQueryData(
+                ['call-session', episodeId],
+                (old: { recordingInProgress?: boolean; pendingSegmentIds?: string[] } | undefined) =>
+                  old ? { ...old, recordingInProgress: rec.recordingInProgress ?? true, pendingSegmentIds: rec.pendingSegmentIds ?? [] } : old,
+              );
+              queryClient.invalidateQueries({ queryKey: ['call-session', episodeId] });
+              break;
+            }
             case 'segmentAdded':
             case 'segmentUpdated':
-            case 'segmentReordered':
+            case 'segmentReordered': {
               queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
+              const segMsg = msg as { recordingInProgress?: boolean; pendingSegmentIds?: string[] };
+              if (segMsg.recordingInProgress === true && Array.isArray(segMsg.pendingSegmentIds)) {
+                queryClient.setQueryData(
+                  ['call-session', episodeId],
+                  (old: { recordingInProgress?: boolean; pendingSegmentIds?: string[] } | undefined) =>
+                    old ? { ...old, recordingInProgress: true, pendingSegmentIds: segMsg.pendingSegmentIds } : old,
+                );
+                queryClient.invalidateQueries({ queryKey: ['call-session', episodeId] });
+              }
               break;
+            }
             case 'segmentDeleted':
               queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
               queryClient.invalidateQueries({ queryKey: ['me'] });

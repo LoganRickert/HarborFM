@@ -382,10 +382,25 @@ export function useMediasoupRoom(
       }
     }
 
+    const stopMediaTracks = () => {
+      const { micStream: ms, localStream: ls } = mediaStreamsRef.current;
+      ms?.getTracks().forEach((t) => t.stop());
+      ls?.getTracks().forEach((t) => t.stop());
+      mediaStreamsRef.current = { micStream: null, localStream: null };
+    };
+
+    const handlePageUnload = () => {
+      stopMediaTracks();
+    };
+    window.addEventListener('beforeunload', handlePageUnload);
+    window.addEventListener('pagehide', handlePageUnload);
+
     run(url, rid);
     return () => {
+      window.removeEventListener('beforeunload', handlePageUnload);
+      window.removeEventListener('pagehide', handlePageUnload);
       closed = true;
-      mediaStreamsRef.current = { micStream: null, localStream: null };
+      stopMediaTracks();
       webrtcWsRef.current = null;
       setRemoteMicLevels(new Map());
       selfListenGainRef.current = null;
