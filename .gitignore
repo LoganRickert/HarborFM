@@ -12,7 +12,7 @@ logs/
 coverage
 .turbo
 secrets/
-harborfm-docker-data/
+harborfm-data/
 openapi.json
 docs-dist/
 server/public/
@@ -26,6 +26,5 @@ e2e/reports/
 e2e/webrtc-recordings/
 e2e/server.log.pnpm-store
 .pnpm-store/
-_infra/
 docker-compose.override.yml
 web/tsconfig.tsbuildinfo

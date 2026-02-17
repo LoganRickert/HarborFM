@@ -19,6 +19,7 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 ## Table of contents
 
 - [Overview](#overview)
+- [Deploy with Terraform (AWS)](#deploy-with-terraform-aws)
 - [Requirements](#requirements)
 - [Quick start (local)](#quick-start-local)
 - [Docker](#docker)
@@ -56,6 +57,26 @@ docker run --name harborfm -p 3001:3001 \
 Use nginx+letsencrypt to provide a secure connection.
 
 If you are using `http`, you need to set `COOKIE_SECURE=false` as an environment variable.
+
+### Deploy with Terraform (AWS)
+
+To run Harbor FM on **AWS EC2** (recommended for a dedicated server): use Terraform to create an instance, security group, optional persistent data volume, and Cloudflare DNS. The instance runs the same user-data script (PM2 + nginx, with optional WebRTC and Let's Encrypt).
+
+1. **Install Terraform** – see [terraform/terraform/QUICKSTART.md](terraform/terraform/QUICKSTART.md) (macOS, Debian, CentOS).
+2. **Configure AWS** – set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or use `aws configure`).
+3. **Apply** from the AWS Terraform directory:
+
+   ```bash
+   cd terraform/terraform/aws
+   cp terraform.tfvars.example terraform.tfvars
+   # Edit terraform.tfvars: deploy_type, ami_id (Debian 12 for your region), domain, admin_email, admin_password, etc.
+   ./run.sh init
+   ./run.sh apply
+   ```
+
+4. Use the **url** output to open the app; if you set `admin_email` and `admin_password`, the admin is created on first boot.
+
+Full variable reference, optional persistent data volume (survives destroy+apply), and multi-environment (dev/prod) details: **[terraform/terraform/README.md](terraform/terraform/README.md)**.
 
 ### Docker Compose Quick Start (Curl)
 

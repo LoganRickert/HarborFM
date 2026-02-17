@@ -29,9 +29,10 @@ import Layout from '../layouts/Layout.astro';
           <button type="button" role="tab" aria-selected="true" aria-controls="panel-compose-nginx" id="tab-compose-nginx">Docker Compose + Nginx</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-compose-caddy" id="tab-compose-caddy">Docker Compose + Caddy</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-docker" id="tab-docker">Docker only</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="panel-terraform-aws" id="tab-terraform-aws">Terraform (AWS)</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-local" id="tab-local">Install locally</button>
         </div>
-        <div class="install-panel" id="panel-compose-nginx" data-active role="tabpanel" aria-labelledby="tab-compose-nginx">
+        <div class="install-panel" id="panel-compose-nginx" role="tabpanel" aria-labelledby="tab-compose-nginx">
           <div class="code-block-wrap">
             <pre><code>curl -fsSL https://raw.githubusercontent.com/LoganRickert/harborfm/main/install.sh | bash</code></pre>
             <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
@@ -58,6 +59,17 @@ docker run --name harborfm -p 3001:3001 \
             <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
           </div>
           <p class="help">Runs HarborFM as a single container. Use nginx or Caddy on the host for HTTPS. Open <code>http://localhost:3001</code> and complete the one-time setup from the container logs.</p>
+        </div>
+        <div class="install-panel" id="panel-terraform-aws" data-active role="tabpanel" aria-labelledby="tab-terraform-aws">
+          <div class="code-block-wrap">
+            <pre><code>cd terraform/terraform/aws
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: ami_id, domain, admin_email, admin_password, etc.
+./run.sh init
+./run.sh apply</code></pre>
+            <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
+          </div>
+          <p class="help">Deploys Harbor FM on <strong>AWS EC2</strong>: one instance, security group, optional persistent data volume and Cloudflare DNS. Requires Terraform and AWS credentials. See <a href="https://github.com/LoganRickert/harborfm/blob/main/terraform/terraform/QUICKSTART.md" target="_blank" rel="noopener">QUICKSTART</a> to install Terraform and <a href="https://github.com/LoganRickert/harborfm/blob/main/terraform/terraform/README.md" target="_blank" rel="noopener">terraform/README</a> for all options (Debian 12 default, WebRTC, root + data EBS).</p>
         </div>
         <div class="install-panel" id="panel-local" role="tabpanel" aria-labelledby="tab-local">
           <div class="code-block-wrap">

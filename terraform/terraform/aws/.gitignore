@@ -1,0 +1,15 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+crash.*
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local env (API keys)
+.env

@@ -1,0 +1,75 @@
+# Copy to terraform.tfvars and fill in your values:
+#   cp terraform.tfvars.example terraform.tfvars
+
+# Required: OS and deploy type (passed to unified ../user-data/harborfm-user-data.sh). Default OS: debian-12.
+# os         = "debian-12"   # default
+deploy_type = "pm2"  # nginx | caddy | pm2
+
+# Required: AMI ID (must match os). Debian 12 for your region, e.g.:
+#   aws ec2 describe-images --region us-east-2 --owners 136693071363 --filters "Name=name,Values=debian-12-*" "Name=state,Values=available" --query "sort_by(Images, &CreationDate)[-1].ImageId" --output text
+ami_id = "ami-0707d92f84e248ff3"  # Example: replace with Debian 12 AMI for your region
+
+# Optional: instance type, root EBS (OS, default 8 GB), data EBS (persistent, survives destroy), region, environment
+# instance_type     = "t3.small"
+# root_volume_size  = 8
+# data_volume_size  = 20   # second EBS for data/secrets/webrtc; 0 = disable
+# region            = "us-east-2"
+# environment       = "prod"   # e.g. "dev" or "prod" when using workspaces
+
+# Optional: Domain and cert (for nginx with Let's Encrypt)
+domain       = "localhost"
+certbot_email = ""
+
+# Optional: When certbot_email is blank, use self-signed cert for HTTPS. 1 = enabled, 0 (default) = HTTP only.
+# self_signed_cert = "1"
+
+# Optional: Cloudflare DNS - when cloudflare_api_token and a zone are set, creates/updates A records.
+# Zone can be specified by ID (cloudflare_zone_id) or by name (cloudflare_zone_name); if both empty, domain is used as zone name.
+# cloudflare_api_token   = "your-token"   # use -var or TF_VAR to avoid tfvars
+# cloudflare_zone_id    = "abc123..."    # optional; from Cloudflare dashboard
+# cloudflare_zone_name  = "example.com"  # optional; looked up via API (defaults to domain)
+# domains               = ["www.example.com", "example.com"]  # default: [domain]
+
+# Optional: EC2 key pair for SSH (create in AWS Console or: aws ec2 create-key-pair --key-name my-key)
+# key_name = "my-key"
+
+# Optional: CIDR allowed for SSH. Default 192.168.1.1/32 effectively closes SSH.
+# Set to 0.0.0.0/0 to allow all, or 1.2.3.4/32 for your IP only.
+# ssh_allowed_cidr = "0.0.0.0/0"
+
+# Optional: Raw SSH public key (alternative to key_name). Added to root/harborfm on first boot.
+# ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2E... you@host"
+
+# Optional: WebRTC/group calls. 1 = enabled, 0 (default) = disabled.
+# webrtc_enabled = "0"
+
+# Optional: Public IP for mediasoup (when behind NAT). Empty = script auto-detects at boot. Set e.g. to your Elastic IP if known.
+# mediasoup_announced_ip = ""
+
+# Optional: Pre-set setup token. Setup URL will be /setup?id=<value>. Use -var to avoid tfvars.
+# setup_id = "my-secret-setup-token-32chars"
+
+# Optional: Reverse proxy for PM2. Default "nginx"; use "caddy" for Caddy.
+# reverse_proxy = "caddy"
+
+# Optional: Cookie Secure flag. Set to "false" when using HTTP (e.g. before certbot, or dev).
+# cookie_secure = "false"
+
+# Bootstrap admin on first boot (hash computed locally; password never sent to instance)
+# admin_email    = "admin@example.com"
+# admin_password = "your-secure-password"  # Prefer: pass via CLI to avoid committing:
+#   export TF_VAR_admin_password="your-password"
+#   ./run.sh apply
+# admin_registration_enabled = "1"   # 1 = allow new signups, 0 = disabled (default)
+# admin_public_feeds_enabled = "1"  # 1 = public RSS (default), 0 = disabled
+# admin_hostname = "https://podcasts.example.com"  # public base URL; empty = derive from domain
+
+# Optional: Email provider. When "webhook", server POSTs to email_webhook_url. Default field key "content" works with Discord.
+# email_provider    = "webhook"
+# email_webhook_url = "https://discord.com/api/webhooks/..."
+# email_webhook_field_key = "content"
+
+# Optional: Custom install dir, repo, branch
+# install_dir   = ""
+# harborfm_repo = "loganrickert/harborfm"
+# harborfm_branch = "main"
