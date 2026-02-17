@@ -2403,6 +2403,37 @@
   margin: 0.35rem 0 0;
   font-size: 0.85rem;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.detailsSummaryStatusBadge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.detailsSummaryStatusBadgeDraft {
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+.detailsSummaryStatusBadgeScheduled {
+  color: #fff;
+  background: #d97706;
+  border: 1px solid rgba(217, 119, 6, 0.5);
+}
+
+.detailsSummaryStatusBadgePublished {
+  color: var(--success);
+  background: rgba(0, 212, 170, 0.12);
+  border: 1px solid rgba(0, 212, 170, 0.25);
 }
 
 .detailsSummaryEditBtn {
@@ -2534,6 +2565,11 @@
     padding: 0.875rem 2rem;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .detailsSummaryStartCallBtn {
+    flex: 1;
+    min-width: 0;
   }
 
   .generateBar {

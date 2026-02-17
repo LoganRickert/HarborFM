@@ -51,7 +51,14 @@ export function EpisodeDetailsSummaryCard({
   callJoinUrl,
 }: EpisodeDetailsSummaryCardProps) {
   const [shareOpen, setShareOpen] = useState(false);
-  const metaParts: string[] = [status];
+  const statusLabel = status ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase() : 'Draft';
+  const statusBadgeClass =
+    status === 'published'
+      ? styles.detailsSummaryStatusBadgePublished
+      : status === 'scheduled'
+        ? styles.detailsSummaryStatusBadgeScheduled
+        : styles.detailsSummaryStatusBadgeDraft;
+  const metaParts: string[] = [];
   if (seasonNumber != null || episodeNumber != null) {
     metaParts.push(`S${seasonNumber ?? '?'} E${episodeNumber ?? '?'}`);
   }
@@ -77,7 +84,10 @@ export function EpisodeDetailsSummaryCard({
             )}
             <h2 className={styles.detailsSummaryTitle}>{title || 'Untitled episode'}</h2>
           </div>
-          <p className={styles.detailsSummaryMeta}>{metaParts.join(' · ')}</p>
+          <p className={styles.detailsSummaryMeta}>
+            <span className={`${styles.detailsSummaryStatusBadge} ${statusBadgeClass}`}>{statusLabel}</span>
+            {metaParts.length > 0 && <span>{metaParts.join(' · ')}</span>}
+          </p>
         </div>
       </div>
       {hasActions && (
@@ -103,7 +113,7 @@ export function EpisodeDetailsSummaryCard({
             ) : showStartCallBtn ? (
               <button
                 type="button"
-                className={styles.detailsSummaryEditBtn}
+                className={`${styles.detailsSummaryEditBtn} ${styles.detailsSummaryStartCallBtn}`}
                 onClick={startGroupCallDisabled ? undefined : onStartGroupCall}
                 disabled={startGroupCallDisabled}
                 title={startGroupCallDisabled ? startGroupCallDisabledMessage : undefined}

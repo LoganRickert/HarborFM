@@ -16,7 +16,7 @@ import {
 } from '../../api/segments';
 import { episodeToForm, formToApiPayload } from './utils';
 import { EpisodeDetailsSummaryCard } from './EpisodeDetailsSummaryCard';
-import { EpisodeDetailsForm } from './EpisodeDetailsForm';
+import { EpisodeDetailsForm, type EpisodeDetailsTab } from './EpisodeDetailsForm';
 import { GenerateFinalBar } from './GenerateFinalBar';
 import { EpisodeCastCard } from './EpisodeCastCard';
 import { EpisodeSectionsPanel } from './EpisodeSectionsPanel';
@@ -82,6 +82,7 @@ export function EpisodeEditorContent({
   const [showRecord, setShowRecord] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [episodeDetailsActiveTab, setEpisodeDetailsActiveTab] = useState<EpisodeDetailsTab>('overview');
   const [segmentToDelete, setSegmentToDelete] = useState<string | null>(null);
   const [segmentIdForInfo, setSegmentIdForInfo] = useState<string | null>(null);
   const [transcriptEntryToDelete, setTranscriptEntryToDelete] = useState<{
@@ -493,12 +494,17 @@ export function EpisodeEditorContent({
 
       <Dialog.Root
         open={detailsDialogOpen}
-        onOpenChange={(o) => !o && setDetailsDialogOpen(false)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDetailsDialogOpen(false);
+            setEpisodeDetailsActiveTab('overview');
+          }
+        }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className={styles.dialogOverlay} />
+          <Dialog.Overlay className={sharedStyles.dialogOverlay} />
           <Dialog.Content
-            className={`${sharedStyles.dialogContent} ${sharedStyles.dialogContentWide} ${sharedStyles.dialogContentScrollable} ${styles.episodeDetailsDialog}`}
+            className={`${sharedStyles.dialogContent} ${sharedStyles.dialogContentWide} ${sharedStyles.dialogContentScrollable} ${sharedStyles.dialogShowDetailsGrid}`}
           >
             <div className={sharedStyles.dialogHeaderRow}>
               <Dialog.Title className={sharedStyles.dialogTitle}>
@@ -518,8 +524,53 @@ export function EpisodeEditorContent({
             <Dialog.Description className={sharedStyles.dialogDescription}>
               Edit the episode title, description, and publish settings.
             </Dialog.Description>
+            <div className={sharedStyles.editDetailsTabSelectWrap}>
+              <select
+                className={sharedStyles.editDetailsTabSelect}
+                value={episodeDetailsActiveTab}
+                onChange={(e) => setEpisodeDetailsActiveTab(e.target.value as EpisodeDetailsTab)}
+                aria-label="Jump to section"
+              >
+                <option value="overview">Overview</option>
+                <option value="publish">Publish</option>
+                <option value="more">More</option>
+              </select>
+            </div>
+            <div
+              className={sharedStyles.editDetailsTabs}
+              role="tablist"
+              aria-label="Edit sections"
+              onKeyDown={(e) => {
+                const tabs: EpisodeDetailsTab[] = ['overview', 'publish', 'more'];
+                const i = tabs.indexOf(episodeDetailsActiveTab);
+                if (e.key === 'ArrowLeft' && i > 0) {
+                  e.preventDefault();
+                  setEpisodeDetailsActiveTab(tabs[i - 1]!);
+                } else if (e.key === 'ArrowRight' && i < tabs.length - 1) {
+                  e.preventDefault();
+                  setEpisodeDetailsActiveTab(tabs[i + 1]!);
+                }
+              }}
+            >
+              {(['overview', 'publish', 'more'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  tabIndex={episodeDetailsActiveTab === tab ? 0 : -1}
+                  aria-selected={episodeDetailsActiveTab === tab}
+                  aria-controls={`episode-details-panel-${tab}`}
+                  id={`episode-details-tab-${tab}`}
+                  className={`${sharedStyles.editDetailsTab} ${episodeDetailsActiveTab === tab ? sharedStyles.editDetailsTabActive : ''}`}
+                  onClick={() => setEpisodeDetailsActiveTab(tab)}
+                >
+                  {tab === 'overview' ? 'Overview' : tab === 'publish' ? 'Publish' : 'More'}
+                </button>
+              ))}
+            </div>
             <div className={sharedStyles.dialogBodyScroll}>
               <EpisodeDetailsForm
+                activeTab={episodeDetailsActiveTab}
                 form={dialogForm}
                 setForm={setDialogForm}
                 descriptionTextareaRef={descriptionTextareaRef}
@@ -568,14 +619,14 @@ export function EpisodeEditorContent({
                 }}
               />
             </div>
-            <div className={styles.dialogFooter}>
-              <button type="button" className={styles.cancel} onClick={() => setDetailsDialogOpen(false)} aria-label="Cancel editing episode">
+            <div className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}>
+              <button type="button" className={sharedStyles.cancel} onClick={() => setDetailsDialogOpen(false)} aria-label="Cancel editing episode">
                 Cancel
               </button>
               <button
                 type="submit"
                 form="episode-details-form"
-                className={styles.submit}
+                className={sharedStyles.dialogConfirm}
                 disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
                 aria-label="Save episode details"
               >
