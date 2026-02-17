@@ -5,11 +5,17 @@ import { canAccessEpisode } from "../../services/access.js";
 import {
   subscribeEpisode,
   unsubscribeEpisode,
+  startStaleAccessCheck,
 } from "../../services/episodeBroadcast.js";
 
 export async function episodeCollaborationRoutes(
   app: FastifyInstance,
 ): Promise<void> {
+  const stopStaleAccessCheck = startStaleAccessCheck();
+  app.addHook("onClose", async () => {
+    stopStaleAccessCheck();
+  });
+
   app.get(
     "/episodes/:episodeId/ws",
     {

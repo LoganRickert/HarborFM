@@ -52,6 +52,10 @@ export interface CallSession {
   hostDisconnectedAt?: number;
   /** Grace period ms from hostDisconnectedAt before ending session. */
   hostDisconnectGraceMs?: number;
+  /** Segment IDs being processed (recording stopped, webrtc finalizing). Cleared when callback completes. */
+  pendingSegmentIds?: string[];
+  /** Internal: segmentId of current recording (moved to pendingSegmentIds when stop received). */
+  currentRecordingSegmentId?: string;
 }
 
 const sessionsByToken = new Map<string, CallSession>();

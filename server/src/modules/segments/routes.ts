@@ -65,6 +65,7 @@ import {
   segmentTranscriptDeleteQuerySchema,
 } from "@harborfm/shared";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
+import { redactSegmentForClient } from "../../utils/segment.js";
 
 const exec = promisify(execFile);
 
@@ -523,7 +524,7 @@ export async function segmentRoutes(app: FastifyInstance) {
           audio && existsSync(audio.path)
             ? existsSync(waveformPath(audio.path))
             : false;
-        return { ...row, waveform_exists: waveformExists };
+        return redactSegmentForClient({ ...row, waveform_exists: waveformExists });
       });
       return { segments };
     },
@@ -621,8 +622,11 @@ export async function segmentRoutes(app: FastifyInstance) {
           const row = db
             .prepare("SELECT * FROM episode_segments WHERE id = ?")
             .get(id) as Record<string, unknown>;
-          broadcastToEpisode(episodeId, { type: "segmentAdded", segment: row });
-          return reply.status(201).send(row);
+          broadcastToEpisode(episodeId, {
+            type: "segmentAdded",
+            segment: redactSegmentForClient(row),
+          });
+          return reply.status(201).send(redactSegmentForClient(row));
         }
       }
 
@@ -736,8 +740,11 @@ export async function segmentRoutes(app: FastifyInstance) {
       const row = db
         .prepare("SELECT * FROM episode_segments WHERE id = ?")
         .get(segmentId) as Record<string, unknown>;
-      broadcastToEpisode(episodeId, { type: "segmentAdded", segment: row });
-      return reply.status(201).send(row);
+      broadcastToEpisode(episodeId, {
+        type: "segmentAdded",
+        segment: redactSegmentForClient(row),
+      });
+      return reply.status(201).send(redactSegmentForClient(row));
     },
   );
 
@@ -809,7 +816,7 @@ export async function segmentRoutes(app: FastifyInstance) {
           audio && existsSync(audio.path)
             ? existsSync(waveformPath(audio.path))
             : false;
-        return { ...row, waveform_exists: waveformExists };
+        return redactSegmentForClient({ ...row, waveform_exists: waveformExists });
       });
       broadcastToEpisode(episodeId, { type: "segmentReordered" });
       return { segments };
@@ -883,7 +890,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       const updated = db
         .prepare("SELECT * FROM episode_segments WHERE id = ?")
         .get(segmentId) as Record<string, unknown>;
-      return updated;
+      return redactSegmentForClient(updated);
     },
   );
 

@@ -1,4 +1,4 @@
-import { Mic, Library } from 'lucide-react';
+import { Mic, Library, Loader2 } from 'lucide-react';
 import { SegmentRow } from './SegmentRow';
 import { useBatchedSegmentWaveforms } from '../../hooks/useBatchedSegmentWaveforms';
 import type { EpisodeSegment } from '../../api/segments';
@@ -9,6 +9,8 @@ export interface EpisodeSectionsPanelProps {
   episodeId: string;
   segments: EpisodeSegment[];
   segmentsLoading: boolean;
+  /** Segment IDs still being processed (recording stopped, not yet added). Shown as placeholder cards. */
+  processingSegmentIds?: string[];
   onAddRecord: () => void;
   onAddLibrary: () => void;
   /** When true, disable "Record new section" (e.g. less than 5 MB free). */
@@ -33,6 +35,7 @@ export function EpisodeSectionsPanel({
   episodeId,
   segments,
   segmentsLoading,
+  processingSegmentIds = [],
   onAddRecord,
   onAddLibrary,
   recordDisabled = false,
@@ -100,7 +103,7 @@ export function EpisodeSectionsPanel({
 
       {segmentsLoading ? (
         <p className={sharedStyles.pdCardEmptyState}>Loading sections...</p>
-      ) : segments.length === 0 ? (
+      ) : segments.length === 0 && processingSegmentIds.length === 0 ? (
         <p className={sharedStyles.pdCardEmptyState}>No sections yet. Record or add from library above.</p>
       ) : (
         <ul className={styles.segmentList}>
@@ -123,6 +126,19 @@ export function EpisodeSectionsPanel({
               readOnly={readOnly}
               waveformData={segmentWaveforms.get(seg.id)}
             />
+          ))}
+          {processingSegmentIds.map((segId) => (
+            <li key={segId} className={`${styles.segmentBlock} ${styles.segmentBlockProcessing}`}>
+              <div className={styles.segmentBlockTop}>
+                <span className={styles.segmentIcon} title="Processing">
+                  <Loader2 size={18} strokeWidth={2} className={styles.segmentProcessingSpinner} aria-hidden />
+                </span>
+                <div className={styles.segmentBody}>
+                  <span className={styles.segmentName}>Processing recording…</span>
+                  <div className={styles.segmentMeta}>Generating segment</div>
+                </div>
+              </div>
+            </li>
           ))}
         </ul>
       )}

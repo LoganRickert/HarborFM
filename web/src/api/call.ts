@@ -30,6 +30,8 @@ export interface CallSessionResponse {
   roomId?: string;
   hostToken?: string;
   webrtcUnavailable?: boolean;
+  /** Segment IDs being processed (recording stopped, not yet added). Host only. */
+  pendingSegmentIds?: string[];
 }
 
 export function startCall(episodeId: string, password?: string | null): Promise<CallStartResponse> {

@@ -5,6 +5,16 @@ import { episodeWebSocketUrl } from '../api/episodeWs';
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 
+/** Check if session is still valid. Returns true if auth ok, false if 401. */
+async function checkAuth(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/auth/me', { credentials: 'include', method: 'GET' });
+    return res.status !== 401;
+  } catch {
+    return true;
+  }
+}
+
 export function useEpisodeWebSocket(
   episodeId: string | undefined,
   podcastId: string | undefined,
@@ -91,13 +101,18 @@ export function useEpisodeWebSocket(
       ws.onclose = () => {
         ws = null;
         if (closed) return;
-        reconnectTimeoutRef.current = setTimeout(() => {
-          reconnectDelayRef.current = Math.min(
-            reconnectDelayRef.current * 2,
-            MAX_RECONNECT_DELAY_MS,
-          );
-          connect();
-        }, reconnectDelayRef.current);
+        checkAuth().then((authOk) => {
+          if (closed) return;
+          if (!authOk) return;
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (closed) return;
+            reconnectDelayRef.current = Math.min(
+              reconnectDelayRef.current * 2,
+              MAX_RECONNECT_DELAY_MS,
+            );
+            connect();
+          }, reconnectDelayRef.current);
+        });
       };
 
       ws.onerror = () => {

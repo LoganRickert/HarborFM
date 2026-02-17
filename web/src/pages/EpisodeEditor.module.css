@@ -352,6 +352,26 @@
   border-radius: var(--radius);
 }
 
+.segmentBlockProcessing {
+  background: #111;
+  border-color: #333;
+}
+
+.segmentBlockProcessing .segmentIcon {
+  background: #1a1a1a;
+  border-color: #333;
+}
+
+.segmentProcessingSpinner {
+  color: var(--accent);
+  animation: segmentProcessingSpin 1s linear infinite;
+}
+
+@keyframes segmentProcessingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .segmentBlockTop {
   display: flex;
   align-items: center;
@@ -2400,6 +2420,7 @@
   border-radius: var(--radius);
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  text-decoration: none; /* for Join Group Call link */
 }
 
 .detailsSummaryEditBtn:hover {
@@ -2410,6 +2431,35 @@
 
 .detailsSummaryEditBtn:focus-visible {
   outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.detailsSummaryJoinCallBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: #d97706;
+  border: 1px solid #d97706;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  text-decoration: none;
+}
+
+.detailsSummaryJoinCallBtn:hover {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+
+.detailsSummaryJoinCallBtn:focus-visible {
+  outline: 2px solid #d97706;
   outline-offset: 2px;
 }
 

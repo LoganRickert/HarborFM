@@ -37,8 +37,12 @@ export interface CallPanelProps {
   onEnd: () => void;
   onCallEnded: () => void;
   onSegmentRecorded?: () => void;
+  /** Called when recording state changes (stopped, segment added) so parent can refetch call-session for pendingSegmentIds. */
+  onRecordingStateChange?: () => void;
   /** When set, End call button triggers this (e.g. to show confirm dialog) instead of ending immediately. */
   onEndRequest?: () => void;
+  /** Called with the actual end-call function (or null on unmount) so parent can invoke it when confirm dialog accepts. */
+  onRegisterEndCall?: (endCall: (() => void) | null) => void;
   /** When true, Record segment button is disabled (e.g. owner out of disk space). */
   recordDisabled?: boolean;
   /** Message shown when recordDisabled (e.g. tooltip). */
@@ -52,7 +56,7 @@ const SOUNDBOARD_VOLUME_KEY = 'harborfm_soundboard_volume';
 const pendingEndCallTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 const END_CALL_DELAY_MS = 200;
 
-export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hostToken, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onEndRequest, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
+export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hostToken, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onRecordingStateChange, onEndRequest, onRegisterEndCall, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
   const [displayName, setDisplayName] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
@@ -251,6 +255,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
             const epoch = typeof msg.recordingStartedAtEpochMs === 'number' ? msg.recordingStartedAtEpochMs : Date.now();
             setRecordingSeconds(Math.max(0, Math.floor((Date.now() - epoch) / 1000)));
           }
+          onRecordingStateChange?.();
         } else if (msg.type === 'participants') {
           setParticipants(msg.participants ?? []);
         } else if (msg.type === 'participantJoined') {
@@ -277,6 +282,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingError(null);
           setRecordingProcessing(true);
           setRecordingProgressMessage(null);
+          onRecordingStateChange?.();
         } else if (msg.type === 'recordingProgress') {
           setRecordingProgressMessage(msg.message ?? msg.stage ?? 'Processing…');
         } else if (msg.type === 'recordingError') {
@@ -298,6 +304,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingProcessing(true);
           setRecordingProgressMessage('Segment added successfully');
           onSegmentRecorded?.();
+          onRecordingStateChange?.();
           setTimeout(() => {
             setRecordingProcessing(false);
             setRecordingProgressMessage(null);
@@ -354,7 +361,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       }, END_CALL_DELAY_MS);
       pendingEndCallTimeouts.set(sessionId, timeoutId);
     };
-  }, [sessionId, onCallEnded, onSegmentRecorded, setMuted]);
+  }, [sessionId, onCallEnded, onSegmentRecorded, onRecordingStateChange, setMuted]);
 
   const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
   const showChatView = isMobile && chatOpen;
@@ -382,13 +389,18 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
     });
   };
 
-  const handleEndCall = () => {
+  const handleEndCall = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'endCall' }));
       wsRef.current.close();
     }
     onEnd();
-  };
+  }, [onEnd]);
+
+  useEffect(() => {
+    onRegisterEndCall?.(handleEndCall);
+    return () => onRegisterEndCall?.(null);
+  }, [onRegisterEndCall, handleEndCall]);
 
   const handleStartRecording = () => {
     const ws = wsRef.current;

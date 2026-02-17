@@ -24,10 +24,12 @@ export interface EpisodeDetailsSummaryCardProps {
   startGroupCallDisabled?: boolean;
   /** Tooltip when startGroupCallDisabled (e.g. "You are out of disk space"). */
   startGroupCallDisabledMessage?: string;
-  /** When true, the button shows red "End Group Call" instead of "Start Group Call". */
+  /** When true, the button shows "End Group Call" (host) or "Join Group Call" (collaborator). */
   isCallActive?: boolean;
-  /** When isCallActive, clicking the button triggers this (e.g. to show confirm dialog). */
+  /** When isCallActive and user is host, clicking triggers this (e.g. to show confirm dialog). */
   onEndGroupCall?: () => void;
+  /** When isCallActive and user is collaborator, this URL opens the join call page. */
+  callJoinUrl?: string | null;
 }
 
 export function EpisodeDetailsSummaryCard({
@@ -46,6 +48,7 @@ export function EpisodeDetailsSummaryCard({
   startGroupCallDisabledMessage,
   isCallActive,
   onEndGroupCall,
+  callJoinUrl,
 }: EpisodeDetailsSummaryCardProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const metaParts: string[] = [status];
@@ -54,7 +57,8 @@ export function EpisodeDetailsSummaryCard({
   }
   const isSubscriberOnly = subscriberOnly === 1;
   const showStartCallBtn = !isCallActive && (onStartGroupCall != null || startGroupCallDisabled);
-  const hasActions = onEditClick != null || shareUrl != null || showStartCallBtn || onEndGroupCall != null;
+  const showJoinCallBtn = isCallActive && callJoinUrl;
+  const hasActions = onEditClick != null || shareUrl != null || showStartCallBtn || onEndGroupCall != null || showJoinCallBtn;
 
   return (
     <div className={isSubscriberOnly ? `${styles.detailsSummaryCard} ${styles.detailsSummaryCardSubscriberOnly}` : styles.detailsSummaryCard}>
@@ -78,12 +82,24 @@ export function EpisodeDetailsSummaryCard({
       </div>
       {hasActions && (
         <div className={styles.detailsSummaryActions}>
-          {(showStartCallBtn || onEndGroupCall != null) && (
-            isCallActive ? (
+          {(showStartCallBtn || onEndGroupCall != null || showJoinCallBtn) && (
+            isCallActive && onEndGroupCall ? (
               <button type="button" className={styles.detailsSummaryEndCallBtn} onClick={onEndGroupCall} aria-label="End group call">
                 <Users size={18} strokeWidth={2} aria-hidden />
                 End Group Call
               </button>
+            ) : showJoinCallBtn ? (
+              <a
+                href={callJoinUrl!}
+                className={styles.detailsSummaryJoinCallBtn}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Join group call"
+                title="Join group call"
+              >
+                <Users size={18} strokeWidth={2} aria-hidden />
+                Join Group Call
+              </a>
             ) : showStartCallBtn ? (
               <button
                 type="button"

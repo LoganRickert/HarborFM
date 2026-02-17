@@ -1,4 +1,5 @@
 import type { WebSocket } from "ws";
+import { canAccessEpisode } from "./access.js";
 
 interface SocketInfo {
   episodeId: string;
@@ -101,4 +102,28 @@ export function broadcastToPodcast(podcastId: string, payload: object): void {
       sendToSocket(ws, payload);
     }
   }
+}
+
+const STALE_ACCESS_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Start periodic re-check of episode access for active sockets.
+ * Closes sockets when the user no longer has access (e.g. removed from podcast share).
+ * Returns a function to stop the interval (call on server shutdown).
+ */
+export function startStaleAccessCheck(): () => void {
+  const id = setInterval(() => {
+    for (const [ws, info] of socketToInfo) {
+      if (ws.readyState !== 1) continue;
+      const access = canAccessEpisode(info.userId, info.episodeId);
+      if (!access) {
+        try {
+          ws.close();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, STALE_ACCESS_CHECK_INTERVAL_MS);
+  return () => clearInterval(id);
 }

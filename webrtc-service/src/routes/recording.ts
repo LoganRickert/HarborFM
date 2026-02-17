@@ -31,6 +31,37 @@ const startRecordingByRoom = new Map<string, { resolve: () => void; promise: Pro
 /** Per-room lock to prevent concurrent start-recording for the same room. */
 const startRecordingLockByRoom = new Map<string, Promise<void>>();
 
+/**
+ * Cancel an orphaned recording (e.g. from a dead call after server restart).
+ * Cleans up resources without delivering the callback.
+ */
+function cancelOrphanedRecording(orphanRoomId: string, log: { warn: (o: object, msg: string) => void }): void {
+  const state = recordingByRoom.get(orphanRoomId);
+  if (!state) return;
+  log.warn({ orphanRoomId, episodeId: state.episodeId }, "Cancelling orphaned recording (stale call)");
+  if (state.checkStorageInterval) clearInterval(state.checkStorageInterval);
+  if (state.producerCheckInterval) clearInterval(state.producerCheckInterval);
+  if (state.heartbeatInterval) clearInterval(state.heartbeatInterval);
+  for (const seg of state.activeSegmentsByProducerId.values()) {
+    try {
+      seg.consumer.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      seg.plainTransport.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      seg.ffmpeg.kill("SIGINT");
+    } catch {
+      /* ignore */
+    }
+  }
+  recordingByRoom.delete(orphanRoomId);
+}
+
 function sendProgress(
   request: { log: { error: (o: object, msg: string) => void } },
   state: { sessionId?: string | null },
@@ -127,9 +158,13 @@ export function registerRecordingRoutes(
     const existingLock = startRecordingLockByRoom.get(roomId);
     if (existingLock) {
       await existingLock;
-      const existingAfterWait = Array.from(recordingByRoom.values()).find((s) => s.episodeId === episodeId);
-      if (existingAfterWait) {
-        return reply.status(409).send({ error: "A recording is already in progress for this episode." });
+      const existingEntry = Array.from(recordingByRoom.entries()).find(([, s]) => s.episodeId === episodeId);
+      if (existingEntry) {
+        const [existingRoomId] = existingEntry;
+        if (existingRoomId === roomId) {
+          return reply.status(409).send({ error: "A recording is already in progress for this episode." });
+        }
+        cancelOrphanedRecording(existingRoomId, request.log);
       }
     }
 
@@ -140,13 +175,17 @@ export function registerRecordingRoutes(
     startRecordingLockByRoom.set(roomId, lockPromise);
     lockAcquired = true;
 
-    const existingForEpisode = Array.from(recordingByRoom.values()).find((s) => s.episodeId === episodeId);
-    if (existingForEpisode) {
-      releaseLock!();
-      startRecordingLockByRoom.delete(roomId);
-      lockAcquired = false;
-      request.log.warn({ roomId, episodeId }, "Recording already in progress for episode");
-      return reply.status(409).send({ error: "A recording is already in progress for this episode." });
+    const existingEntry = Array.from(recordingByRoom.entries()).find(([, s]) => s.episodeId === episodeId);
+    if (existingEntry) {
+      const [existingRoomId] = existingEntry;
+      if (existingRoomId === roomId) {
+        releaseLock!();
+        startRecordingLockByRoom.delete(roomId);
+        lockAcquired = false;
+        request.log.warn({ roomId, episodeId }, "Recording already in progress for episode");
+        return reply.status(409).send({ error: "A recording is already in progress for this episode." });
+      }
+      cancelOrphanedRecording(existingRoomId, request.log);
     }
 
     const audioProducers = Array.from(room.producers.values()).filter((p) => p.kind === "audio");

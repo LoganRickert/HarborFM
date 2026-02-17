@@ -130,6 +130,7 @@ export function EpisodeEditorContent({
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const finalPauseRef = useRef<(() => void) | null>(null);
+  const endCallFnRef = useRef<(() => void) | null>(null);
 
   const handleCallEnded = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
@@ -139,9 +140,14 @@ export function EpisodeEditorContent({
     queryClient.invalidateQueries({ queryKey: ['segments', id] });
   }, [queryClient, id]);
 
-  const handleEndGroupCallConfirmed = useCallback(() => {
+  const handleRecordingStateChange = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+  }, [queryClient, id]);
+
+  const handleEndGroupCallConfirmed = useCallback(() => {
     setEndCallConfirmOpen(false);
+    endCallFnRef.current?.();
+    queryClient.invalidateQueries({ queryKey: ['call-session', id] });
   }, [queryClient, id]);
 
   const handleStartGroupCall = useCallback(() => {
@@ -313,7 +319,7 @@ export function EpisodeEditorContent({
     } else if (renderStatus.status === 'failed') {
       setBuildAlreadyInProgressMessage(null);
     }
-  }, [renderStatus?.status, id, queryClient]);
+  }, [renderStatus, id, queryClient]);
 
   function handleMoveUp(index: number) {
     if (index <= 0) return;
@@ -387,7 +393,10 @@ export function EpisodeEditorContent({
         startGroupCallDisabledMessage={START_CALL_BLOCKED_STORAGE_MESSAGE}
         isCallActive={webrtcEnabled && !!activeCall}
         onEndGroupCall={
-          webrtcEnabled && !segmentReadOnly && canEditSegments && activeCall ? () => setEndCallConfirmOpen(true) : undefined
+          webrtcEnabled && !segmentReadOnly && canEditSegments && activeCall?.hostToken ? () => setEndCallConfirmOpen(true) : undefined
+        }
+        callJoinUrl={
+          webrtcEnabled && activeCall && !activeCall.hostToken ? activeCall.joinUrl : null
         }
       />
 
@@ -409,6 +418,9 @@ export function EpisodeEditorContent({
               episodeId={id}
               segments={segments}
               segmentsLoading={segmentsLoading}
+              processingSegmentIds={(activeSession?.pendingSegmentIds ?? []).filter(
+                (segId) => !segments.some((s) => s.id === segId)
+              )}
               onAddRecord={() => setShowRecord(true)}
               onAddLibrary={() => setShowLibrary(true)}
               recordDisabled={!canRecord}
@@ -569,7 +581,7 @@ export function EpisodeEditorContent({
         onOpenChange={setEndCallConfirmOpen}
         onConfirm={handleEndGroupCallConfirmed}
       />
-      {activeCall && (
+      {activeCall?.hostToken && (
         <CallPanel
           sessionId={activeCall.sessionId}
           joinUrl={activeCall.joinUrl}
@@ -581,7 +593,9 @@ export function EpisodeEditorContent({
           onEnd={handleCallEnded}
           onCallEnded={handleCallEnded}
           onSegmentRecorded={handleSegmentRecorded}
+          onRecordingStateChange={handleRecordingStateChange}
           onEndRequest={() => setEndCallConfirmOpen(true)}
+          onRegisterEndCall={(fn) => { endCallFnRef.current = fn; }}
           recordDisabled={!canRecord}
           recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
         />

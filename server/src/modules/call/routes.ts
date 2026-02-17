@@ -35,8 +35,15 @@ import {
 import { getWebRtcConfig, webrtcRequestHeaders } from "../../services/webrtcConfig.js";
 import { join, resolve } from "path";
 import { copyFileSync, unlinkSync, existsSync, writeFileSync } from "fs";
-import { segmentPath, getWebrtcRecordingsDir, multitrackRecordingsDir, libraryDir } from "../../services/paths.js";
-import { assertPathUnder, assertResolvedPathUnder } from "../../services/paths.js";
+import {
+  segmentPath,
+  getWebrtcRecordingsDir,
+  multitrackRecordingsDir,
+  libraryDir,
+  assertPathUnder,
+  assertResolvedPathUnder,
+  assertSafeId,
+} from "../../services/paths.js";
 import { contentTypeFromAudioPath } from "../../utils/audio.js";
 import { createSegmentFromPath } from "../../services/segmentFromRecording.js";
 import * as audioService from "../../services/audio.js";
@@ -48,6 +55,17 @@ import {
   recordFailureAndMaybeBan,
 } from "../../services/loginAttempts.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
+import { redactSegmentForClient } from "../../utils/segment.js";
+import { timingSafeEqualStrings } from "../../utils/secretCompare.js";
+
+function validateRecordingSecret(
+  secret: string | undefined,
+  expected: string | null,
+): boolean {
+  if (!expected) return false;
+  const s = typeof secret === "string" ? secret : "";
+  return timingSafeEqualStrings(s, expected);
+}
 
 const CALL_JOIN_CONTEXT = "call_join" as const;
 
@@ -497,8 +515,14 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { episodeId } = request.query as { episodeId: string };
-      const session = getActiveSessionForEpisode(episodeId, request.userId);
-      if (!session) return reply.send(null);
+      let session = getActiveSessionForEpisode(episodeId, request.userId);
+      const isHost = !!session;
+      if (!session) {
+        session = getAnyActiveSessionForEpisode(episodeId);
+        if (!session) return reply.send(null);
+        const access = canAccessEpisode(request.userId, episodeId);
+        if (!access) return reply.send(null);
+      }
       ensureSessionJoinCode(session);
       const origin = getRequestOrigin(
         request.headers["origin"] as string | undefined,
@@ -530,7 +554,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
       if (session.roomId && publicWs) {
         payload.webrtcUrl = publicWs;
         payload.roomId = session.roomId;
-        if (session.hostToken) payload.hostToken = session.hostToken;
+        if (isHost && session.hostToken) payload.hostToken = session.hostToken;
+      }
+      if (isHost && session.pendingSegmentIds?.length) {
+        payload.pendingSegmentIds = session.pendingSegmentIds;
       }
       return reply.send(payload);
     },
@@ -543,7 +570,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         tags: ["Call"],
         summary: "Check if owner would exceed storage (internal)",
         description:
-          "Called by webrtc service during recording. Returns whether to stop. Requires X-Recording-Secret.",
+          "INTERNAL: For WebRTC service only. Do not call from external clients. Called by webrtc service during recording. Returns whether to stop. Requires X-Recording-Secret.",
         body: {
           type: "object",
           properties: {
@@ -557,7 +584,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const secret = request.headers["x-recording-secret"] as string | undefined;
       const webrtcCfg = getWebRtcConfig();
-      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+      if (!validateRecordingSecret(secret, webrtcCfg.recordingCallbackSecret)) {
         return reply.status(401).send({ error: "Unauthorized" });
       }
       const body = request.body as { sessionId?: string | null; bytesRecordedSoFar: number };
@@ -582,7 +609,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         tags: ["Call"],
         summary: "Record failed WebRTC connection (internal)",
         description:
-          "Called by webrtc service when WS connection is rejected (no/invalid room). Counts toward call_join ban. Requires X-Recording-Secret.",
+          "INTERNAL: For WebRTC service only. Do not call from external clients. Called by webrtc service when WS connection is rejected (no/invalid room). Counts toward call_join ban. Requires X-Recording-Secret.",
         body: {
           type: "object",
           properties: {
@@ -595,7 +622,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const secret = request.headers["x-recording-secret"] as string | undefined;
       const webrtcCfg = getWebRtcConfig();
-      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+      if (!validateRecordingSecret(secret, webrtcCfg.recordingCallbackSecret)) {
         return reply.status(401).send({ error: "Unauthorized" });
       }
       const body = request.body as { ip: string };
@@ -612,7 +639,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         tags: ["Call"],
         summary: "Notify recording stopped early (internal)",
         description:
-          "Called by webrtc service when recording stops due to error. Requires X-Recording-Secret.",
+          "INTERNAL: For WebRTC service only. Do not call from external clients. Called by webrtc service when recording stops due to error. Requires X-Recording-Secret.",
         body: {
           type: "object",
           properties: {
@@ -626,7 +653,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const secret = request.headers["x-recording-secret"] as string | undefined;
       const webrtcCfg = getWebRtcConfig();
-      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+      if (!validateRecordingSecret(secret, webrtcCfg.recordingCallbackSecret)) {
         return reply.status(401).send({ error: "Unauthorized" });
       }
       const body = request.body as { sessionId?: string | null; error: string };
@@ -647,7 +674,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         tags: ["Call"],
         summary: "Notify recording processing progress (internal)",
         description:
-          "Called by webrtc service to broadcast progress during post-stop processing. Requires X-Recording-Secret.",
+          "INTERNAL: For WebRTC service only. Do not call from external clients. Called by webrtc service to broadcast progress during post-stop processing. Requires X-Recording-Secret.",
         body: {
           type: "object",
           properties: {
@@ -662,7 +689,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const secret = request.headers["x-recording-secret"] as string | undefined;
       const webrtcCfg = getWebRtcConfig();
-      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+      if (!validateRecordingSecret(secret, webrtcCfg.recordingCallbackSecret)) {
         return reply.status(401).send({ error: "Unauthorized" });
       }
       const body = request.body as { sessionId?: string | null; stage: string; message?: string };
@@ -684,7 +711,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         tags: ["Call"],
         summary: "Stream library asset (internal)",
         description:
-          "Stream audio file for soundboard playback. Requires X-Recording-Secret. Used by webrtc service.",
+          "INTERNAL: For WebRTC service only. Do not call from external clients. Stream audio file for soundboard playback. Requires X-Recording-Secret.",
         querystring: {
           type: "object",
           properties: {
@@ -705,7 +732,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const secret = request.headers["x-recording-secret"] as string | undefined;
       const webrtcCfg = getWebRtcConfig();
-      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+      if (!validateRecordingSecret(secret, webrtcCfg.recordingCallbackSecret)) {
         return reply.status(401).send({ error: "Unauthorized" });
       }
       const { assetId, sessionId } = request.query as { assetId: string; sessionId: string };
@@ -751,7 +778,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         tags: ["Call"],
         summary: "Create segment from recording file (internal)",
         description:
-          "Called by the webrtc recording service when a recording is ready. Requires X-Recording-Secret.",
+          "INTERNAL: For WebRTC service only. Do not call from external clients. Called by the webrtc recording service when a recording is ready. Requires X-Recording-Secret.",
         body: {
           type: "object",
           properties: {
@@ -771,7 +798,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const secret = request.headers["x-recording-secret"] as string | undefined;
       const webrtcCfg = getWebRtcConfig();
-      if (!webrtcCfg.recordingCallbackSecret || secret !== webrtcCfg.recordingCallbackSecret) {
+      if (!validateRecordingSecret(secret, webrtcCfg.recordingCallbackSecret)) {
         return reply.status(401).send({ error: "Unauthorized" });
       }
       const body = request.body as {
@@ -784,6 +811,13 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
         tracksManifest?: unknown;
         perTrackFilePaths?: string[];
       };
+      try {
+        assertSafeId(body.segmentId, "segmentId");
+        assertSafeId(body.episodeId, "episodeId");
+        assertSafeId(body.podcastId, "podcastId");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid ID" });
+      }
       try {
         if (body.sessionId) {
           broadcastToSession(body.sessionId, {
@@ -818,12 +852,22 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           body.name?.trim() || null,
         );
         if (body.sessionId) {
+          const sess = getSessionById(body.sessionId);
+          if (sess?.pendingSegmentIds) {
+            sess.pendingSegmentIds = sess.pendingSegmentIds.filter((id) => id !== body.segmentId);
+            if (sess.pendingSegmentIds.length === 0) sess.pendingSegmentIds = undefined;
+          }
+          const sessAfterAdd = getSessionById(body.sessionId);
           broadcastToSession(body.sessionId, {
             type: "segmentRecorded",
-            segment: row,
+            segment: redactSegmentForClient(row),
+            pendingSegmentIds: sessAfterAdd?.pendingSegmentIds ?? [],
           });
         }
-        broadcastToEpisode(body.episodeId, { type: "segmentAdded", segment: row });
+        broadcastToEpisode(body.episodeId, {
+          type: "segmentAdded",
+          segment: redactSegmentForClient(row),
+        });
         try {
           unlinkSync(sourcePath);
         } catch (unlinkErr) {
@@ -868,7 +912,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             request.log.warn({ err: mtErr }, "Failed to save multitrack files (segment created successfully)");
           }
         }
-        return reply.status(201).send(row);
+        return reply.status(201).send(redactSegmentForClient(row));
       } catch (err) {
         request.log.error(err);
         return reply
@@ -1010,6 +1054,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     participants: [...session.participants],
                     recordingInProgress: session.recordingInProgress === true,
                     recordingStartedAtEpochMs: session.recordingStartedAtEpochMs,
+                    pendingSegmentIds: session.pendingSegmentIds ?? [],
                   };
                   const webrtcCfg = getWebRtcConfig();
                   const publicWs =
@@ -1396,6 +1441,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                     }
                   }
                   req.log.info({ sid }, "[call] broadcasting recordingStarted");
+                  const sessForSegId = getSessionById(sid);
+                  if (sessForSegId) {
+                    sessForSegId.currentRecordingSegmentId = segId;
+                  }
                   broadcastToSession(sid, {
                     type: "recordingStarted",
                     recordingEpochMs: typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : undefined,
@@ -1476,6 +1525,10 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
           if (session) {
             session.recordingInProgress = false;
             session.recordingStartedAtEpochMs = undefined;
+            if (session.currentRecordingSegmentId) {
+              session.pendingSegmentIds = [...(session.pendingSegmentIds ?? []), session.currentRecordingSegmentId];
+              session.currentRecordingSegmentId = undefined;
+            }
           }
           const webrtcCfg = getWebRtcConfig();
           if (session?.roomId && webrtcCfg.serviceUrl) {
@@ -1504,7 +1557,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
                 const sockets = sessionSockets.get(sid);
                 req.log.info({ sid, socketCount: sockets?.size ?? 0 }, "[call] broadcasting recordingStopped");
                 console.log("[call] broadcasting recordingStopped");
-                broadcastToSession(sid, { type: "recordingStopped" });
+                const sessAfterStop = getSessionById(sid);
+                broadcastToSession(sid, {
+                  type: "recordingStopped",
+                  pendingSegmentIds: sessAfterStop?.pendingSegmentIds ?? [],
+                });
               })
               .catch((err) => {
                 clearTimeout(timeout);
@@ -1517,7 +1574,11 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
               });
           } else {
             req.log.info({ sid, reason: !session?.roomId ? "no roomId" : "no serviceUrl" }, "[call] stopRecording else branch, broadcasting recordingStopped");
-            broadcastToSession(sid, { type: "recordingStopped" });
+            const sessElse = getSessionById(sid);
+            broadcastToSession(sid, {
+              type: "recordingStopped",
+              pendingSegmentIds: sessElse?.pendingSegmentIds ?? [],
+            });
           }
           return;
         }
@@ -1615,6 +1676,7 @@ export async function callRoutes(app: FastifyInstance): Promise<void> {
             const endedSession = endSession(sessionId);
             if (endedSession) {
               broadcastToSession(sessionId, { type: "callEnded" });
+              broadcastToEpisode(endedSession.episodeId, { type: "callEnded" });
               sessionSockets.delete(sessionId);
             }
             removeSocketFromSession(sessionId, socket);

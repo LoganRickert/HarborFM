@@ -15,6 +15,7 @@ import {
 import { isAdmin, canReadLibraryAsset } from "../../services/access.js";
 import { broadcastToUser } from "../../services/episodeBroadcast.js";
 import { libraryDir, libraryAssetPath, assertPathUnder } from "../../services/paths.js";
+import { assertUrlNotPrivate } from "../../utils/ssrf.js";
 import { normalizeHostname } from "../../utils/url.js";
 import * as audioService from "../../services/audio.js";
 import {
@@ -260,6 +261,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         const assetId = nanoid();
         const dir = libraryDir(request.userId);
         const destPath = libraryAssetPath(request.userId, assetId, "mp3");
+        await assertUrlNotPrivate(downloadUrl);
         const res = await fetch(downloadUrl);
         if (!res.ok) {
           return reply
