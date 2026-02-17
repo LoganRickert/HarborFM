@@ -11,6 +11,16 @@
 - **Seed script:** `pnpm run db:seed-podcast-episodes` to create a podcast with 100 episodes and cast assignments.
 - **Docs & install:** Updated documentation; note for `COOKIE_SECURE=false` when using HTTP; install and update script fixes.
 
+## v1.2 - 2026-02-16
+
+- **Group call improvements:** Group chat during calls; call settings panel (mic selector, auto gain control, listen-to-self, volume); redesigned soundboard panel with waveform preview and search; wake lock on mobile to prevent screen sleep during calls; dedicated join-by-code page for guests.
+- **Real-time episode collaboration:** WebSocket for episode editing; collaborators receive live updates for segment add/update/delete/reorder, call start/end, episode updates, render progress, and transcript generation.
+- **Segment editor:** Batched waveform fetching (10 at a time) with in-memory cache to avoid rate limits; WebSocket integration for live segment updates.
+- **Podcast details:** Expand/collapse for podcast metadata on the podcast page.
+- **Terraform deployment:** AWS and Vultr Terraform scripts to provision VMs; user-data script for PM2, nginx, Let's Encrypt, optional WebRTC; Cloudflare DNS integration.
+- **Setup from scripts:** Seed script for automated initial setup (`ADMIN_EMAIL`, `ADMIN_PASSWORD` or `ADMIN_PASSWORD_HASH_B64`); supports Terraform user-data and headless install.
+- **Install & docs:** Updated install and update script paths; Terraform quick start and README; optional `WEBRTC_ENABLED` flag.
+
 ## v1.0 - 2026-02-13
 
 Officially version 1.0!

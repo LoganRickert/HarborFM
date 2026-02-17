@@ -820,7 +820,7 @@ WEBRTC_DIR="${WEBRTC_DIR:-/var/lib/harborfm/webrtc}"
 mkdir -p "$DATA_DIR" "$SECRETS_DIR" "$INSTALL_DIR/logs"
 [ "$WEBRTC_ENABLED" = "1" ] && mkdir -p "$WEBRTC_DIR"
 
-# Persistent data present? (e.g. reattach after destroy+apply) — reuse secrets and run update-admin instead of full seed
+# Persistent data present? (e.g. reattach after destroy+apply) - reuse secrets and run update-admin instead of full seed
 PERSISTENT_DATA_EXISTS=""
 if [ -f "$DATA_DIR/harborfm.db" ]; then
   PERSISTENT_DATA_EXISTS="1"

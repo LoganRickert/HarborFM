@@ -4,7 +4,7 @@ Deploy Harbor FM by creating a VM with user-data (AWS or Vultr).
 
 **First time?** See [QUICKSTART.md](QUICKSTART.md) for a step-by-step walkthrough.
 
-For Kubernetes, use the Helm chart directly — see [../helm/harborfm/README.md](../helm/harborfm/README.md).
+For Kubernetes, use the Helm chart directly - see [../helm/harborfm/README.md](../helm/harborfm/README.md).
 
 Notes: I am not a terraform expert so just be glad if any of this even kind of works.
 
@@ -32,7 +32,7 @@ Creates an EC2 instance and security group. The instance runs the chosen user-da
 |----------|----------|---------|-------------|
 | `os` | no | `debian-12` | One of: `debian-11`, `debian-12`, `debian-13`, `ubuntu-22`, `ubuntu-24`, `ubuntu-25`, `centos-9`, `centos-10`. Must match your AMI. |
 | `deploy_type` | yes | - | One of: `nginx`, `caddy`, `pm2`. |
-| `ami_id` | yes | - | AMI ID (must match `os`; e.g. Debian 12 for `debian-12`—look up for your region). |
+| `ami_id` | yes | - | AMI ID (must match `os`; e.g. Debian 12 for `debian-12`-look up for your region). |
 | `instance_type` | no | `t3.small` | EC2 instance type. **Note:** t3.micro runs out of RAM with PM2; use at least t3.small. |
 | `root_volume_size` | no | `8` | Root EBS volume size in GB (OS only). |
 | `data_volume_size` | no | `20` | Persistent data EBS volume in GB (data, secrets, webrtc). When > 0, a second volume is attached and survives `terraform destroy` so a new instance can reattach; set to `0` to disable. See [Deleting the data EBS](#deleting-the-data-ebs) to destroy it. |

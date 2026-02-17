@@ -93,7 +93,7 @@ variable "ssh_allowed_cidr" {
 }
 
 variable "setup_id" {
-  description = "Pre-set setup token for /setup?id=... URL. When admin_email is not set, a setup_id is required—provide one here or leave empty to have Terraform generate a random one (shown in outputs). When admin_email is set, leave empty to skip setup token."
+  description = "Pre-set setup token for /setup?id=... URL. When admin_email is not set, a setup_id is required-provide one here or leave empty to have Terraform generate a random one (shown in outputs). When admin_email is set, leave empty to skip setup token."
   type        = string
   default     = ""
   sensitive   = true

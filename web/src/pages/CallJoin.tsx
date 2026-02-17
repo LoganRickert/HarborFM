@@ -507,7 +507,7 @@ export function CallJoin() {
           )}
           {hostDisconnected && (
             <p className={styles.hostAwayBanner} role="status">
-              Host has left. Call will end in {hostAwayCountdown != null ? `${Math.floor(hostAwayCountdown / 60)}:${String(hostAwayCountdown % 60).padStart(2, '0')}` : '—'} unless they return.
+              Host has left. Call will end in {hostAwayCountdown != null ? `${Math.floor(hostAwayCountdown / 60)}:${String(hostAwayCountdown % 60).padStart(2, '0')}` : '-'} unless they return.
             </p>
           )}
           <div className={styles.callActions}>
