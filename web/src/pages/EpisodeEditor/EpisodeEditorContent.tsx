@@ -164,7 +164,21 @@ export function EpisodeEditorContent({
   const handleStartGroupCall = useCallback(() => {
     setStartCallError(null);
     startCall(id)
-      .then(() => {
+      .then((res) => {
+        // Set session data immediately so CallPanel has webrtcUrl/roomId before refetch
+        if (res?.sessionId && res?.token) {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          queryClient.setQueryData(['call-session', id], {
+            sessionId: res.sessionId,
+            token: res.token,
+            joinUrl: res.joinUrl ?? `${origin}/call/join/${res.token}`,
+            joinCode: res.joinCode,
+            webrtcUrl: res.webrtcUrl,
+            roomId: res.roomId,
+            hostToken: res.hostToken,
+            webrtcUnavailable: res.webrtcUnavailable,
+          });
+        }
         queryClient.invalidateQueries({ queryKey: ['call-session', id] });
       })
       .catch((err) => {

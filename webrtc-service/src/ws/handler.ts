@@ -59,6 +59,9 @@ const producerToSocket = new Map<string, unknown>();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const wsHandler = async (socket: any, req: any) => {
+  // Non-WebSocket requests (HEAD, GET without Upgrade) can hit this route; ignore them
+  if (typeof socket?.close !== "function") return;
+
   const url = new URL(req.url ?? "", `http://${req.headers?.host ?? "localhost"}`);
   const roomId = url.searchParams.get("roomId");
   const clientIp = getClientIpFromRequest(req);
