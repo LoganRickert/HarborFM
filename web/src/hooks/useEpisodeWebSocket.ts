@@ -54,6 +54,9 @@ export function useEpisodeWebSocket(
               queryClient.invalidateQueries({ queryKey: ['episode', episodeId] });
               queryClient.invalidateQueries({ queryKey: ['call-session', episodeId] });
               break;
+            case 'callSessionUpdated':
+              queryClient.invalidateQueries({ queryKey: ['call-session', episodeId] });
+              break;
             case 'segmentAdded':
             case 'segmentUpdated':
             case 'segmentReordered':

@@ -31,6 +31,7 @@ import {
   pendingMigrateHosts,
   hostSocketAddedAt,
 } from "./shared.js";
+import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import type { JWTPayload } from "../../plugins/auth.js";
 
 export interface WsState {
@@ -521,6 +522,9 @@ export function handleStopRecording(req: FastifyRequest, sessionId: string): voi
           type: "recordingStopped",
           pendingSegmentIds: sessAfterStop?.pendingSegmentIds ?? [],
         });
+        if (session?.episodeId) {
+          broadcastToEpisode(session.episodeId, { type: "callSessionUpdated" });
+        }
       })
       .catch((err) => {
         clearTimeout(timeout);
@@ -541,5 +545,8 @@ export function handleStopRecording(req: FastifyRequest, sessionId: string): voi
       type: "recordingStopped",
       pendingSegmentIds: sessElse?.pendingSegmentIds ?? [],
     });
+    if (session?.episodeId) {
+      broadcastToEpisode(session.episodeId, { type: "callSessionUpdated" });
+    }
   }
 }

@@ -37,8 +37,8 @@ export interface CallPanelProps {
   onEnd: () => void;
   onCallEnded: () => void;
   onSegmentRecorded?: () => void;
-  /** Called when recording state changes (stopped, segment added) so parent can refetch call-session for pendingSegmentIds. */
-  onRecordingStateChange?: () => void;
+  /** Called when recording state changes (stopped, segment added) so parent can refetch call-session for pendingSegmentIds. May receive fresh pendingSegmentIds from WebSocket for immediate UI update. */
+  onRecordingStateChange?: (pendingSegmentIds?: string[]) => void;
   /** When set, End call button triggers this (e.g. to show confirm dialog) instead of ending immediately. */
   onEndRequest?: () => void;
   /** Called with the actual end-call function (or null on unmount) so parent can invoke it when confirm dialog accepts. */
@@ -255,7 +255,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
             const epoch = typeof msg.recordingStartedAtEpochMs === 'number' ? msg.recordingStartedAtEpochMs : Date.now();
             setRecordingSeconds(Math.max(0, Math.floor((Date.now() - epoch) / 1000)));
           }
-          onRecordingStateChange?.();
+          onRecordingStateChange?.(msg.pendingSegmentIds ?? []);
         } else if (msg.type === 'participants') {
           setParticipants(msg.participants ?? []);
         } else if (msg.type === 'participantJoined') {
@@ -282,7 +282,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingError(null);
           setRecordingProcessing(true);
           setRecordingProgressMessage(null);
-          onRecordingStateChange?.();
+          onRecordingStateChange?.(msg.pendingSegmentIds ?? []);
         } else if (msg.type === 'recordingProgress') {
           setRecordingProgressMessage(msg.message ?? msg.stage ?? 'Processing…');
         } else if (msg.type === 'recordingError') {
@@ -304,6 +304,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingProcessing(true);
           setRecordingProgressMessage('Segment added successfully');
           onSegmentRecorded?.();
+          /* Don't pass pendingSegmentIds: keep showing placeholder until segment appears in list */
           onRecordingStateChange?.();
           setTimeout(() => {
             setRecordingProcessing(false);

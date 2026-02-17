@@ -443,7 +443,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         payload.roomId = session.roomId;
         if (isHost && session.hostToken) payload.hostToken = session.hostToken;
       }
-      if (isHost && session.pendingSegmentIds?.length) {
+      if (session.pendingSegmentIds?.length) {
         payload.pendingSegmentIds = session.pendingSegmentIds;
       }
       return reply.send(payload);

@@ -98,6 +98,8 @@ export function EpisodeEditorContent({
   const [showEpisodeTranscript, setShowEpisodeTranscript] = useState(false);
   const [startCallError, setStartCallError] = useState<string | null>(null);
   const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
+  /** Pending segment IDs from WebSocket; refetch overwrites cache too early so we keep this. */
+  const [wsPendingSegmentIds, setWsPendingSegmentIds] = useState<string[] | null>(null);
 
   useEpisodeWebSocket(id, podcastId);
 
@@ -133,6 +135,7 @@ export function EpisodeEditorContent({
   const endCallFnRef = useRef<(() => void) | null>(null);
 
   const handleCallEnded = useCallback(() => {
+    setWsPendingSegmentIds(null);
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
   }, [queryClient, id]);
 
@@ -140,12 +143,19 @@ export function EpisodeEditorContent({
     queryClient.invalidateQueries({ queryKey: ['segments', id] });
   }, [queryClient, id]);
 
-  const handleRecordingStateChange = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['call-session', id] });
-  }, [queryClient, id]);
+  const handleRecordingStateChange = useCallback(
+    (pendingSegmentIds?: string[]) => {
+      if (pendingSegmentIds !== undefined) {
+        setWsPendingSegmentIds(pendingSegmentIds);
+      }
+      queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+    },
+    [queryClient, id],
+  );
 
   const handleEndGroupCallConfirmed = useCallback(() => {
     setEndCallConfirmOpen(false);
+    setWsPendingSegmentIds(null);
     endCallFnRef.current?.();
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
   }, [queryClient, id]);
@@ -418,7 +428,7 @@ export function EpisodeEditorContent({
               episodeId={id}
               segments={segments}
               segmentsLoading={segmentsLoading}
-              processingSegmentIds={(activeSession?.pendingSegmentIds ?? []).filter(
+              processingSegmentIds={(wsPendingSegmentIds ?? activeSession?.pendingSegmentIds ?? []).filter(
                 (segId) => !segments.some((s) => s.id === segId)
               )}
               onAddRecord={() => setShowRecord(true)}
