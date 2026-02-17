@@ -32,6 +32,8 @@ export interface CallSessionResponse {
   webrtcUnavailable?: boolean;
   /** Segment IDs being processed (recording stopped, not yet added). Host only. */
   pendingSegmentIds?: string[];
+  /** True when recording is actively in progress (host has started, not yet stopped). */
+  recordingInProgress?: boolean;
 }
 
 export function startCall(episodeId: string, password?: string | null): Promise<CallStartResponse> {

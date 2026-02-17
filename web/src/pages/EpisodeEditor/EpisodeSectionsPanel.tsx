@@ -11,6 +11,8 @@ export interface EpisodeSectionsPanelProps {
   segmentsLoading: boolean;
   /** Segment IDs still being processed (recording stopped, not yet added). Shown as placeholder cards. */
   processingSegmentIds?: string[];
+  /** True when recording is actively in progress (vs generating after stop). */
+  isRecordingActive?: boolean;
   onAddRecord: () => void;
   onAddLibrary: () => void;
   /** When true, disable "Record new section" (e.g. less than 5 MB free). */
@@ -36,6 +38,7 @@ export function EpisodeSectionsPanel({
   segments,
   segmentsLoading,
   processingSegmentIds = [],
+  isRecordingActive = false,
   onAddRecord,
   onAddLibrary,
   recordDisabled = false,
@@ -112,6 +115,7 @@ export function EpisodeSectionsPanel({
               key={seg.id}
               episodeId={episodeId}
               segment={seg}
+              isRecordingActive={isRecordingActive}
               index={index}
               total={segments.length}
               onMoveUp={() => onMoveUp(index)}
@@ -130,12 +134,12 @@ export function EpisodeSectionsPanel({
           {processingSegmentIds.map((segId) => (
             <li key={segId} className={`${styles.segmentBlock} ${styles.segmentBlockProcessing}`}>
               <div className={styles.segmentBlockTop}>
-                <span className={styles.segmentIcon} title="Processing">
+                <span className={styles.segmentIcon} title={isRecordingActive ? 'Recording' : 'Processing'}>
                   <Loader2 size={18} strokeWidth={2} className={styles.segmentProcessingSpinner} aria-hidden />
                 </span>
                 <div className={styles.segmentBody}>
-                  <span className={styles.segmentName}>Processing recording…</span>
-                  <div className={styles.segmentMeta}>Generating segment</div>
+                  <span className={styles.segmentName}>{isRecordingActive ? 'Recording segment' : 'Processing recording…'}</span>
+                  <div className={styles.segmentMeta}>{isRecordingActive ? 'Capturing audio' : 'Generating segment'}</div>
                 </div>
               </div>
             </li>

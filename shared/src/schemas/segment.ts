@@ -99,6 +99,10 @@ export const segmentResponseSchema = z.object({
   created_at: z.string(),
   /** True when waveform file exists on disk; client can skip fetch when false. */
   waveform_exists: z.boolean().optional(),
+  /** True when recording is in progress (placeholder, awaiting webrtc callback). */
+  in_progress: z.boolean().optional(),
+  /** True when recording failed (ffmpeg error, server crash, etc). */
+  record_failed: z.boolean().optional(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */

@@ -453,6 +453,9 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       if (session.pendingSegmentIds?.length) {
         payload.pendingSegmentIds = session.pendingSegmentIds;
       }
+      if (session.recordingInProgress === true) {
+        payload.recordingInProgress = true;
+      }
       return reply.send(payload);
     },
   );

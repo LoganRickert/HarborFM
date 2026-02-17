@@ -32,6 +32,7 @@ import * as m030 from "./migrations/030_api_keys_disabled_valid_from.js";
 import * as m031 from "./migrations/031_podcast_dns_fields.js";
 import * as m032 from "./migrations/032_podcast_social_links.js";
 import * as m033 from "./migrations/033_podcast_cast.js";
+import * as m034 from "./migrations/034_segment_recording_state.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -67,6 +68,7 @@ const migrations = [
   { name: "031_podcast_dns_fields", ...m031 },
   { name: "032_podcast_social_links", ...m032 },
   { name: "033_podcast_cast", ...m033 },
+  { name: "034_segment_recording_state", ...m034 },
 ];
 
 const MIGRATIONS_TABLE = `
@@ -101,6 +103,14 @@ for (const m of migrations) {
   }
 }
 console.log("Migrations complete.");
+
+// Mark orphaned in-progress recording segments as failed (server crashed mid-recording)
+const orphaned = db.prepare(
+  "UPDATE episode_segments SET in_progress = 0, record_failed = 1 WHERE in_progress = 1",
+).run();
+if (orphaned.changes > 0) {
+  console.warn("[migrate] Marked %d orphaned in-progress segment(s) as record_failed", orphaned.changes);
+}
 
 // After migrations, run settings migrations
 import("../modules/settings/index.js")

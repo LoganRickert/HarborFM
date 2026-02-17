@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Mic, Library, Info, Trash2 } from 'lucide-react';
+import { Play, Pause, Mic, Library, Info, Trash2, Loader2 } from 'lucide-react';
 import { segmentStreamUrl } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { formatDuration } from './utils';
@@ -21,6 +21,8 @@ export interface SegmentRowProps {
   registerPause: (id: string, pause: () => void) => void;
   unregisterPause: (id: string) => void;
   readOnly?: boolean;
+  /** True when recording is actively in progress (vs generating after stop). */
+  isRecordingActive?: boolean;
   /** When provided (from batched parent fetch), use instead of fetching. undefined = loading, null = failed. */
   waveformData?: WaveformData | null;
 }
@@ -41,6 +43,7 @@ export function SegmentRow({
   unregisterPause,
   readOnly = false,
   waveformData: waveformDataProp,
+  isRecordingActive = false,
 }: SegmentRowProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressTrackRef = useRef<HTMLDivElement>(null);
@@ -49,6 +52,8 @@ export function SegmentRow({
   const [currentTime, setCurrentTime] = useState(0);
   const durationSec = segment.duration_sec ?? 0;
   const isRecorded = segment.type === 'recorded';
+  const recordFailed = !!segment.record_failed;
+  const inProgress = !!segment.in_progress;
   const defaultName = isRecorded ? 'Recorded section' : (segment.asset_name ?? 'Library clip');
   const [localName, setLocalName] = useState(segment.name ?? '');
   const waveformData = waveformDataProp;
@@ -70,6 +75,7 @@ export function SegmentRow({
   }
 
   function togglePlay() {
+    if (recordFailed) return;
     const el = audioRef.current;
     if (!el) return;
     if (isPlaying) {
@@ -140,12 +146,34 @@ export function SegmentRow({
 
   const progress = durationSec > 0 ? Math.min(1, currentTime / durationSec) : 0;
 
+  /* In-progress (recording or generating): render same style as processing placeholder */
+  if (inProgress) {
+    return (
+      <li className={`${styles.segmentBlock} ${styles.segmentBlockProcessing}`}>
+        <div className={styles.segmentBlockTop}>
+          <span className={styles.segmentIcon} title={isRecordingActive ? 'Recording' : 'Processing'}>
+            <Loader2 size={18} strokeWidth={2} className={styles.segmentProcessingSpinner} aria-hidden />
+          </span>
+          <div className={styles.segmentBody}>
+            <span className={styles.segmentName}>{isRecordingActive ? 'Recording segment' : 'Processing recording…'}</span>
+            <div className={styles.segmentMeta}>{isRecordingActive ? 'Capturing audio' : 'Generating segment'}</div>
+          </div>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <li className={styles.segmentBlock}>
       <div className={styles.segmentBlockTop}>
         <span className={styles.segmentIcon} title={isRecorded ? 'Recorded' : 'From library'}>
           {isRecorded ? <Mic size={18} strokeWidth={2} aria-hidden /> : <Library size={18} strokeWidth={2} aria-hidden />}
         </span>
+        {recordFailed && (
+          <span className={styles.segmentFailedBadge} role="status">
+            Recording failed
+          </span>
+        )}
         <div className={styles.segmentBody}>
           <input
             type="text"
@@ -158,7 +186,9 @@ export function SegmentRow({
             readOnly={readOnly}
           />
           <div className={styles.segmentMeta}>
-            {formatDuration(Math.floor(currentTime))} / {formatDuration(segment.duration_sec)}
+            {recordFailed
+              ? 'No audio captured'
+              : `${formatDuration(Math.floor(currentTime))} / ${formatDuration(segment.duration_sec)}`}
           </div>
         </div>
         <audio ref={audioRef} style={{ display: 'none' }} />
@@ -181,7 +211,14 @@ export function SegmentRow({
       </div>
       {durationSec > 0 && (
         <div className={styles.segmentWaveformRow}>
-          <button type="button" className={styles.segmentBtn} onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'} aria-label={isPlaying ? 'Pause segment' : 'Play segment'}>
+          <button
+            type="button"
+            className={styles.segmentBtn}
+            onClick={togglePlay}
+            disabled={recordFailed}
+            title={recordFailed ? undefined : (isPlaying ? 'Pause' : 'Play')}
+            aria-label={recordFailed ? undefined : (isPlaying ? 'Pause segment' : 'Play segment')}
+          >
             {isPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
           </button>
           {showWaveform ? (

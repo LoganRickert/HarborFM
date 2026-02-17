@@ -18,6 +18,22 @@
 	# Health check for container/orchestration
 	respond /caddy-health 200
 
+	# WebRTC WebSocket (proxies to webrtc when --profile webrtc is used)
+	handle_path /webrtc-ws/* {
+		reverse_proxy webrtc:3002 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up Upgrade {http.request.header.Upgrade}
+			header_up Connection {http.request.header.Connection}
+			transport http {
+				read_timeout 86400s
+				write_timeout 86400s
+			}
+		}
+	}
+
 	@auth path /api/auth/login /api/auth/register /api/auth/forgot-password /api/auth/reset-password /api/auth/verify-email /api/auth/validate-reset-token
 	handle @auth {
 		reverse_proxy harborfm:3001 {

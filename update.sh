@@ -100,8 +100,10 @@ touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || tr
 echo "Pulling images..."
 docker compose pull
 
-echo "Starting containers (profile: $REVERSE_PROXY)..."
-docker compose --profile "$REVERSE_PROXY" up -d
+COMPOSE_PROFILES="$REVERSE_PROXY"
+[ "${WEBRTC_ENABLED:-0}" = "1" ] && COMPOSE_PROFILES="$COMPOSE_PROFILES webrtc"
+echo "Starting containers (profile: $COMPOSE_PROFILES)..."
+docker compose --profile "$REVERSE_PROXY" $([ "${WEBRTC_ENABLED:-0}" = "1" ] && echo "--profile webrtc") up -d
 
 if [ "$REVERSE_PROXY" = "nginx" ] && [ -n "${CERTBOT_EMAIL:-}" ] && [ "${DOMAIN:-localhost}" != "localhost" ]; then
   echo ""

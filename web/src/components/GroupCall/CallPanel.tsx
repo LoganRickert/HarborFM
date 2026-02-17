@@ -37,8 +37,8 @@ export interface CallPanelProps {
   onEnd: () => void;
   onCallEnded: () => void;
   onSegmentRecorded?: () => void;
-  /** Called when recording state changes (stopped, segment added) so parent can refetch call-session for pendingSegmentIds. May receive fresh pendingSegmentIds from WebSocket for immediate UI update. */
-  onRecordingStateChange?: (pendingSegmentIds?: string[]) => void;
+  /** Called when recording state changes (stopped, segment added). Passes pendingSegmentIds and recordingActive for immediate UI update without waiting for API refetch. */
+  onRecordingStateChange?: (args?: { pendingSegmentIds?: string[]; recordingActive?: boolean }) => void;
   /** When set, End call button triggers this (e.g. to show confirm dialog) instead of ending immediately. */
   onEndRequest?: () => void;
   /** Called with the actual end-call function (or null on unmount) so parent can invoke it when confirm dialog accepts. */
@@ -115,6 +115,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const [isMobile, setIsMobile] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const migratedFromOtherTabRef = useRef(false);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const chatOpenRef = useRef(chatOpen);
   const chatMinimizedRef = useRef(chatMinimized);
@@ -122,9 +123,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   chatOpenRef.current = chatOpen;
   chatMinimizedRef.current = chatMinimized;
   myParticipantIdRef.current = participants.find((p) => p.isHost)?.id;
-  const effectiveWebrtcUrl = webrtcUrlFromWs ?? webrtcUrl;
-  const effectiveRoomId = roomIdFromWs ?? roomId;
-  const effectiveHostToken = hostTokenFromWs ?? hostToken;
+  // When alreadyInCall, we must NOT connect to WebRTC - only the other tab should be in the room.
+  // We'll connect after user clicks "Migrate" and we receive "joined".
+  const effectiveWebrtcUrl = alreadyInCall ? undefined : (webrtcUrlFromWs ?? webrtcUrl);
+  const effectiveRoomId = alreadyInCall ? undefined : (roomIdFromWs ?? roomId);
+  const effectiveHostToken = alreadyInCall ? undefined : (hostTokenFromWs ?? hostToken);
   const myParticipant = participants.find((p) => p.isHost);
   const refreshDevices = useCallback(() => {
     navigator.mediaDevices
@@ -221,6 +224,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       clearTimeout(existing);
       pendingEndCallTimeouts.delete(sessionId);
     }
+    migratedFromOtherTabRef.current = false;
     setAlreadyInCall(false);
     setWebrtcUrlFromWs(undefined);
     setRoomIdFromWs(undefined);
@@ -241,13 +245,27 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
         try {
         const msg = JSON.parse(event.data as string);
         if (msg.type === 'alreadyInCall') {
+          migratedFromOtherTabRef.current = true;
           setAlreadyInCall(true);
         } else if (msg.type === 'joined' && msg.participants) {
+          const didMigrate = migratedFromOtherTabRef.current;
+          migratedFromOtherTabRef.current = false;
           setAlreadyInCall(false);
           setParticipants(msg.participants);
           if (msg.webrtcUrl) setWebrtcUrlFromWs(msg.webrtcUrl);
           if (msg.roomId) setRoomIdFromWs(msg.roomId);
           if (msg.hostToken) setHostTokenFromWs(msg.hostToken);
+          if (didMigrate && typeof BroadcastChannel !== 'undefined') {
+            try {
+              const senderId = crypto.randomUUID?.() ?? `migrate-${Date.now()}-${Math.random()}`;
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem(`harborfm-call-migrate-sender-${sessionId}`, senderId);
+              }
+              new BroadcastChannel('harborfm-call-migrate').postMessage({ type: 'call-migrated', sessionId, senderId });
+            } catch {
+              /* ignore */
+            }
+          }
           if (msg.recordingInProgress === true) {
             setRecording(true);
             setRecordingPending(false);
@@ -255,7 +273,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
             const epoch = typeof msg.recordingStartedAtEpochMs === 'number' ? msg.recordingStartedAtEpochMs : Date.now();
             setRecordingSeconds(Math.max(0, Math.floor((Date.now() - epoch) / 1000)));
           }
-          onRecordingStateChange?.(msg.pendingSegmentIds ?? []);
+          onRecordingStateChange?.({ pendingSegmentIds: msg.pendingSegmentIds ?? [], recordingActive: msg.recordingInProgress === true });
         } else if (msg.type === 'participants') {
           setParticipants(msg.participants ?? []);
         } else if (msg.type === 'participantJoined') {
@@ -276,13 +294,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingError(null);
           setRecordingSeconds(0);
           setRecordingProcessing(false);
+          onRecordingStateChange?.({ pendingSegmentIds: msg.pendingSegmentIds ?? [], recordingActive: true });
         } else if (msg.type === 'recordingStopped') {
           setRecording(false);
           setRecordingPending(false);
           setRecordingError(null);
           setRecordingProcessing(true);
           setRecordingProgressMessage(null);
-          onRecordingStateChange?.(msg.pendingSegmentIds ?? []);
+          onRecordingStateChange?.({ pendingSegmentIds: msg.pendingSegmentIds ?? [], recordingActive: false });
         } else if (msg.type === 'recordingProgress') {
           setRecordingProgressMessage(msg.message ?? msg.stage ?? 'Processing…');
         } else if (msg.type === 'recordingError') {
@@ -291,12 +310,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingProcessing(false);
           setRecordingProgressMessage(null);
           setRecordingError(msg.error ?? 'Recording failed');
+          onRecordingStateChange?.({ recordingActive: false });
         } else if (msg.type === 'recordingStopFailed') {
           setRecording(false);
           setRecordingPending(false);
           setRecordingProcessing(false);
           setRecordingProgressMessage(null);
           setRecordingError(msg.error ?? 'Failed to stop recording');
+          onRecordingStateChange?.({ recordingActive: false });
         } else if (msg.type === 'segmentRecorded') {
           setRecording(false);
           setRecordingPending(false);
@@ -304,8 +325,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingProcessing(true);
           setRecordingProgressMessage('Segment added successfully');
           onSegmentRecorded?.();
-          /* Don't pass pendingSegmentIds: keep showing placeholder until segment appears in list */
-          onRecordingStateChange?.();
+          onRecordingStateChange?.({ recordingActive: false });
           setTimeout(() => {
             setRecordingProcessing(false);
             setRecordingProgressMessage(null);

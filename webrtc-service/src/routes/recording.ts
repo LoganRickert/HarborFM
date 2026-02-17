@@ -394,7 +394,11 @@ export function registerRecordingRoutes(
               await fetch(`${MAIN_APP_URL.replace(/\/$/, "")}/api/call/internal/recording-error`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-Recording-Secret": secretStr },
-                body: JSON.stringify({ sessionId: meta.sessionId, error: data.error }),
+                body: JSON.stringify({
+                  sessionId: meta.sessionId,
+                  segmentId: meta.segmentId,
+                  error: data.error,
+                }),
               });
             }
           } catch (e) {
@@ -606,6 +610,7 @@ export function registerRecordingRoutes(
           headers: { "Content-Type": "application/json", "X-Recording-Secret": secret },
           body: JSON.stringify({
             sessionId: state.sessionId,
+            segmentId: state.segmentId,
             error:
               "Recording produced no audio. The recording may have been stopped before any audio was captured.",
           }),

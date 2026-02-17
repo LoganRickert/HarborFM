@@ -512,6 +512,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       const rows = db
         .prepare(
           `SELECT s.id, s.episode_id, s.position, s.type, s.name, s.reusable_asset_id, s.audio_path, s.duration_sec, s.created_at,
+                  s.in_progress, s.record_failed,
                   a.name AS asset_name
            FROM episode_segments s
            LEFT JOIN reusable_assets a ON a.id = s.reusable_asset_id
@@ -524,7 +525,12 @@ export async function segmentRoutes(app: FastifyInstance) {
           audio && existsSync(audio.path)
             ? existsSync(waveformPath(audio.path))
             : false;
-        return redactSegmentForClient({ ...row, waveform_exists: waveformExists });
+        return redactSegmentForClient({
+          ...row,
+          waveform_exists: waveformExists,
+          in_progress: !!(row.in_progress as number),
+          record_failed: !!(row.record_failed as number),
+        });
       });
       return { segments };
     },
@@ -816,7 +822,12 @@ export async function segmentRoutes(app: FastifyInstance) {
           audio && existsSync(audio.path)
             ? existsSync(waveformPath(audio.path))
             : false;
-        return redactSegmentForClient({ ...row, waveform_exists: waveformExists });
+        return redactSegmentForClient({
+          ...row,
+          waveform_exists: waveformExists,
+          in_progress: !!(row.in_progress as number),
+          record_failed: !!(row.record_failed as number),
+        });
       });
       broadcastToEpisode(episodeId, { type: "segmentReordered" });
       return { segments };
@@ -2684,6 +2695,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       const DATA_DIR = getDataDir();
       const paths: string[] = [];
       for (const s of segments) {
+        if ((s.in_progress as number) === 1 || (s.record_failed as number) === 1) continue;
         if (
           s.type === "recorded" &&
           s.audio_path &&
@@ -2707,6 +2719,7 @@ export async function segmentRoutes(app: FastifyInstance) {
           .send({ error: "No valid segment audio found." });
       const copyrightLines: string[] = [];
       for (const s of segments) {
+        if ((s.in_progress as number) === 1 || (s.record_failed as number) === 1) continue;
         if (s.type === "reusable" && s.reusable_asset_id) {
           const asset = db
             .prepare("SELECT name, copyright FROM reusable_assets WHERE id = ?")

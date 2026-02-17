@@ -16,6 +16,10 @@ import {
 import { getWebRtcConfig, webrtcRequestHeaders } from "../../services/webrtcConfig.js";
 import { getPodcastOwnerId } from "../../services/access.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
+import {
+  createRecordingSegmentPlaceholder,
+  markSegmentRecordFailed,
+} from "../../services/segmentFromRecording.js";
 import { RECORD_MIN_FREE_BYTES } from "../../config.js";
 import {
   getClientIp,
@@ -390,6 +394,16 @@ export function handleStartRecording(
     session.podcastId
   ) {
     const segId = nanoid();
+    try {
+      createRecordingSegmentPlaceholder(segId, session.episodeId, session.podcastId, name);
+    } catch (err) {
+      req.log.warn({ err, episodeId: session.episodeId }, "createRecordingSegmentPlaceholder failed");
+      broadcastToSession(sessionId, {
+        type: "recordingError",
+        error: "Failed to create recording segment.",
+      });
+      return;
+    }
     const filePathRelative = `recordings/${segId}.wav`;
     const startRecordingUrl = `${webrtcCfg.serviceUrl.replace(/\/$/, "")}/start-recording`;
     const payload = {
@@ -424,10 +438,12 @@ export function handleStartRecording(
           const sessForSegId = getSessionById(sessionId);
           if (sessForSegId) {
             sessForSegId.currentRecordingSegmentId = segId;
+            sessForSegId.pendingSegmentIds = [...(sessForSegId.pendingSegmentIds ?? []), segId];
           }
           broadcastToSession(sessionId, {
             type: "recordingStarted",
             recordingEpochMs: typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : undefined,
+            pendingSegmentIds: sessForSegId?.pendingSegmentIds ?? [segId],
           });
         } else {
           const text = await res.text();
@@ -448,6 +464,7 @@ export function handleStartRecording(
             },
             "WebRTC start-recording failed",
           );
+          markSegmentRecordFailed(segId);
           const sessionOnFail = getSessionById(sessionId);
           if (sessionOnFail) {
             sessionOnFail.recordingInProgress = false;
@@ -461,6 +478,7 @@ export function handleStartRecording(
       })
       .catch((err) => {
         req.log.warn({ err, url: startRecordingUrl }, "WebRTC start-recording fetch failed");
+        markSegmentRecordFailed(segId);
         const sessionOnFail = getSessionById(sessionId);
         if (sessionOnFail) {
           sessionOnFail.recordingInProgress = false;
@@ -487,7 +505,10 @@ export function handleStopRecording(req: FastifyRequest, sessionId: string): voi
     session.recordingInProgress = false;
     session.recordingStartedAtEpochMs = undefined;
     if (session.currentRecordingSegmentId) {
-      session.pendingSegmentIds = [...(session.pendingSegmentIds ?? []), session.currentRecordingSegmentId];
+      const segId = session.currentRecordingSegmentId;
+      if (!session.pendingSegmentIds?.includes(segId)) {
+        session.pendingSegmentIds = [...(session.pendingSegmentIds ?? []), segId];
+      }
       session.currentRecordingSegmentId = undefined;
     }
   }

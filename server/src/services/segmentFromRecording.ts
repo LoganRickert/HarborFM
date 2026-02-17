@@ -7,8 +7,52 @@ import * as audioService from "./audio.js";
 import { wouldExceedStorageLimit } from "./storageLimit.js";
 
 /**
+ * Create a placeholder segment row when host clicks "Record Segment". Marked in_progress=1.
+ * Called before webrtc start-recording; actual audio is filled in by createSegmentFromPath on success.
+ */
+export function createRecordingSegmentPlaceholder(
+  segmentId: string,
+  episodeId: string,
+  podcastId: string,
+  segmentName: string | null,
+): Record<string, unknown> {
+  const episode = db.prepare("SELECT podcast_id FROM episodes WHERE id = ?").get(episodeId) as
+    | { podcast_id: string }
+    | undefined;
+  if (!episode || episode.podcast_id !== podcastId) {
+    throw new Error("Episode does not belong to podcast");
+  }
+
+  const maxPos = db
+    .prepare(
+      "SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM episode_segments WHERE episode_id = ?",
+    )
+    .get(episodeId) as { pos: number };
+
+  db.prepare(
+    `INSERT INTO episode_segments (id, episode_id, position, type, name, audio_path, duration_sec, in_progress, record_failed)
+     VALUES (?, ?, ?, 'recorded', ?, NULL, 0, 1, 0)`,
+  ).run(segmentId, episodeId, maxPos.pos, segmentName);
+
+  const row = db
+    .prepare("SELECT * FROM episode_segments WHERE id = ?")
+    .get(segmentId) as Record<string, unknown>;
+  return row;
+}
+
+/**
+ * Mark a placeholder segment as having failed to record (ffmpeg failed, webrtc error, etc).
+ */
+export function markSegmentRecordFailed(segmentId: string): void {
+  db.prepare(
+    "UPDATE episode_segments SET in_progress = 0, record_failed = 1 WHERE id = ? AND in_progress = 1",
+  ).run(segmentId);
+}
+
+/**
  * Create a segment row from an existing recording file (e.g. written by the webrtc recording service).
  * Path must be under uploadsDir(podcastId, episodeId). Updates disk usage for the podcast owner.
+ * If a placeholder segment (in_progress=1) exists, updates it instead of inserting.
  */
 export async function createSegmentFromPath(
   filePath: string,
@@ -17,9 +61,14 @@ export async function createSegmentFromPath(
   podcastId: string,
   segmentName: string | null,
 ): Promise<Record<string, unknown>> {
-  const existing = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId);
+  const existing = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId) as
+    | { in_progress?: number }
+    | undefined;
   if (existing) {
-    return existing as Record<string, unknown>;
+    if (existing.in_progress === 0) {
+      return existing as Record<string, unknown>; /* idempotency for duplicate callback */
+    }
+    /* in_progress=1: placeholder from createRecordingSegmentPlaceholder; we will UPDATE */
   }
 
   const episode = db.prepare("SELECT podcast_id FROM episodes WHERE id = ?").get(episodeId) as
@@ -72,24 +121,27 @@ export async function createSegmentFromPath(
     // best-effort
   }
 
-  const maxPos = db
-    .prepare(
-      "SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM episode_segments WHERE episode_id = ?",
-    )
-    .get(episodeId) as { pos: number };
+  const isPlaceholderUpdate = existing && existing.in_progress === 1;
 
   try {
-    db.prepare(
-      `INSERT INTO episode_segments (id, episode_id, position, type, name, audio_path, duration_sec)
-       VALUES (?, ?, ?, 'recorded', ?, ?, ?)`,
-    ).run(
-      segmentId,
-      episodeId,
-      maxPos.pos,
-      segmentName,
-      resolvedPath,
-      durationSec,
-    );
+    if (isPlaceholderUpdate) {
+      db.prepare(
+        `UPDATE episode_segments
+         SET audio_path = ?, duration_sec = ?, name = COALESCE(?, name), in_progress = 0, record_failed = 0
+         WHERE id = ? AND in_progress = 1`,
+      ).run(resolvedPath, durationSec, segmentName, segmentId);
+    } else {
+      const maxPos = db
+        .prepare(
+          "SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM episode_segments WHERE episode_id = ?",
+        )
+        .get(episodeId) as { pos: number };
+
+      db.prepare(
+        `INSERT INTO episode_segments (id, episode_id, position, type, name, audio_path, duration_sec)
+         VALUES (?, ?, ?, 'recorded', ?, ?, ?)`,
+      ).run(segmentId, episodeId, maxPos.pos, segmentName, resolvedPath, durationSec);
+    }
 
     db.prepare(
       `UPDATE users
@@ -99,8 +151,8 @@ export async function createSegmentFromPath(
   } catch (err: unknown) {
     const sqliteErr = err as { code?: string };
     if (sqliteErr?.code === "SQLITE_CONSTRAINT_PRIMARYKEY" || sqliteErr?.code === "SQLITE_CONSTRAINT") {
-      const existing = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId);
-      if (existing) return existing as Record<string, unknown>;
+      const existingRow = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId);
+      if (existingRow) return existingRow as Record<string, unknown>;
     }
     throw err;
   }

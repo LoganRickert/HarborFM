@@ -16,7 +16,10 @@ import {
   assertSafeId,
 } from "../../services/paths.js";
 import { contentTypeFromAudioPath } from "../../utils/audio.js";
-import { createSegmentFromPath } from "../../services/segmentFromRecording.js";
+import {
+  createSegmentFromPath,
+  markSegmentRecordFailed,
+} from "../../services/segmentFromRecording.js";
 import * as audioService from "../../services/audio.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { recordFailureAndMaybeBan } from "../../services/loginAttempts.js";
@@ -114,6 +117,7 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
           type: "object",
           properties: {
             sessionId: { type: "string", nullable: true },
+            segmentId: { type: "string", nullable: true },
             error: { type: "string" },
           },
           required: ["error"],
@@ -121,7 +125,30 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const body = request.body as { sessionId?: string | null; error: string };
+      const body = request.body as {
+        sessionId?: string | null;
+        segmentId?: string | null;
+        error: string;
+      };
+      let segmentId = body.segmentId?.trim() || null;
+      if (!segmentId && body.sessionId) {
+        const sess = getSessionById(body.sessionId);
+        segmentId =
+          sess?.currentRecordingSegmentId ??
+          (Array.isArray(sess?.pendingSegmentIds) && sess.pendingSegmentIds.length > 0
+            ? sess.pendingSegmentIds[sess.pendingSegmentIds.length - 1]
+            : null);
+      }
+      if (segmentId) {
+        markSegmentRecordFailed(segmentId);
+        if (body.sessionId) {
+          const sess = getSessionById(body.sessionId);
+          if (sess?.pendingSegmentIds) {
+            sess.pendingSegmentIds = sess.pendingSegmentIds.filter((id) => id !== segmentId);
+            if (sess.pendingSegmentIds.length === 0) sess.pendingSegmentIds = undefined;
+          }
+        }
+      }
       if (body.sessionId) {
         broadcastToSession(body.sessionId, {
           type: "recordingError",

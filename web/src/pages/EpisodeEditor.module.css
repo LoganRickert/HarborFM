@@ -452,6 +452,28 @@
   font-variant-numeric: tabular-nums;
 }
 
+.segmentFailedBadge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #e53e3e;
+  background: rgba(229, 62, 62, 0.15);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.segmentProgressBadge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent, #00d4aa);
+  background: rgba(0, 212, 170, 0.15);
+  border: 1px solid rgba(0, 212, 170, 0.4);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
 .segmentWaveformRow .segmentProgressTrack {
   margin-top: 0;
   flex: 1;

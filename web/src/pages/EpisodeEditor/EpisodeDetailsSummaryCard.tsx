@@ -26,6 +26,10 @@ export interface EpisodeDetailsSummaryCardProps {
   startGroupCallDisabledMessage?: string;
   /** When true, the button shows "End Group Call" (host) or "Join Group Call" (collaborator). */
   isCallActive?: boolean;
+  /** When host has call active but panel not in this tab, show "Join Group Call" to migrate panel here. */
+  callPanelOpenInThisTab?: boolean;
+  /** When host has call active but panel not in this tab, clicking migrates the call panel to this tab. */
+  onOpenGroupCall?: () => void;
   /** When isCallActive and user is host, clicking triggers this (e.g. to show confirm dialog). */
   onEndGroupCall?: () => void;
   /** When isCallActive and user is collaborator, this URL opens the join call page. */
@@ -47,6 +51,8 @@ export function EpisodeDetailsSummaryCard({
   startGroupCallDisabled,
   startGroupCallDisabledMessage,
   isCallActive,
+  callPanelOpenInThisTab = false,
+  onOpenGroupCall,
   onEndGroupCall,
   callJoinUrl,
 }: EpisodeDetailsSummaryCardProps) {
@@ -64,8 +70,9 @@ export function EpisodeDetailsSummaryCard({
   }
   const isSubscriberOnly = subscriberOnly === 1;
   const showStartCallBtn = !isCallActive && (onStartGroupCall != null || startGroupCallDisabled);
-  const showJoinCallBtn = isCallActive && callJoinUrl;
-  const hasActions = onEditClick != null || shareUrl != null || showStartCallBtn || onEndGroupCall != null || showJoinCallBtn;
+  const showJoinCallBtn = isCallActive && callJoinUrl; /* collaborator: link to join */
+  const showHostJoinCallBtn = isCallActive && onOpenGroupCall && !callPanelOpenInThisTab; /* host in other tab: button to migrate panel */
+  const hasActions = onEditClick != null || shareUrl != null || showStartCallBtn || onEndGroupCall != null || showJoinCallBtn || showHostJoinCallBtn;
 
   return (
     <div className={isSubscriberOnly ? `${styles.detailsSummaryCard} ${styles.detailsSummaryCardSubscriberOnly}` : styles.detailsSummaryCard}>
@@ -92,11 +99,16 @@ export function EpisodeDetailsSummaryCard({
       </div>
       {hasActions && (
         <div className={styles.detailsSummaryActions}>
-          {(showStartCallBtn || onEndGroupCall != null || showJoinCallBtn) && (
-            isCallActive && onEndGroupCall ? (
+          {(showStartCallBtn || onEndGroupCall != null || showJoinCallBtn || showHostJoinCallBtn) && (
+            isCallActive && onEndGroupCall && callPanelOpenInThisTab ? (
               <button type="button" className={styles.detailsSummaryEndCallBtn} onClick={onEndGroupCall} aria-label="End group call">
                 <Users size={18} strokeWidth={2} aria-hidden />
                 End Group Call
+              </button>
+            ) : showHostJoinCallBtn ? (
+              <button type="button" className={styles.detailsSummaryJoinCallBtn} onClick={onOpenGroupCall} aria-label="Join group call" title="Open call panel in this tab">
+                <Users size={18} strokeWidth={2} aria-hidden />
+                Join Group Call
               </button>
             ) : showJoinCallBtn ? (
               <a

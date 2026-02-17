@@ -101,6 +101,9 @@ export function EpisodeEditorContent({
   const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
   /** Pending segment IDs from WebSocket; refetch overwrites cache too early so we keep this. */
   const [wsPendingSegmentIds, setWsPendingSegmentIds] = useState<string[] | null>(null);
+  const [wsRecordingActive, setWsRecordingActive] = useState<boolean | null>(null);
+  /** True when this tab has the call panel open (user started call here or clicked "Open group call"). Prevents other tabs from auto-opening and spamming WebSocket connections. */
+  const [callPanelOpenInThisTab, setCallPanelOpenInThisTab] = useState(false);
 
   useEpisodeWebSocket(id, podcastId);
 
@@ -128,6 +131,26 @@ export function EpisodeEditorContent({
       }
     : null;
 
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel('harborfm-call-migrate');
+    const handler = (event: MessageEvent) => {
+      const { type, sessionId: migratedSessionId, senderId } = event.data;
+      if (type !== 'call-migrated' || !migratedSessionId || migratedSessionId !== activeSession?.sessionId || !callPanelOpenInThisTab) return;
+      // Ignore if we're the sender (same-tab BC can receive its own posts in some browsers)
+      if (typeof sessionStorage !== 'undefined' && senderId) {
+        const ourSenderId = sessionStorage.getItem(`harborfm-call-migrate-sender-${migratedSessionId}`);
+        if (ourSenderId === senderId) {
+          sessionStorage.removeItem(`harborfm-call-migrate-sender-${migratedSessionId}`);
+          return;
+        }
+      }
+      setCallPanelOpenInThisTab(false);
+    };
+    ch.addEventListener('message', handler);
+    return () => ch.removeEventListener('message', handler);
+  }, [activeSession?.sessionId, callPanelOpenInThisTab]);
+
   const segmentPauseRef = useRef<Map<string, () => void>>(new Map());
   const playingSegmentIdRef = useRef<string | null>(null);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -137,6 +160,8 @@ export function EpisodeEditorContent({
 
   const handleCallEnded = useCallback(() => {
     setWsPendingSegmentIds(null);
+    setWsRecordingActive(null);
+    setCallPanelOpenInThisTab(false);
     queryClient.setQueryData(['call-session', id], null);
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
   }, [queryClient, id]);
@@ -146,11 +171,15 @@ export function EpisodeEditorContent({
   }, [queryClient, id]);
 
   const handleRecordingStateChange = useCallback(
-    (pendingSegmentIds?: string[]) => {
-      if (pendingSegmentIds !== undefined) {
-        setWsPendingSegmentIds(pendingSegmentIds);
+    (args?: { pendingSegmentIds?: string[]; recordingActive?: boolean }) => {
+      if (args?.pendingSegmentIds !== undefined) {
+        setWsPendingSegmentIds(args.pendingSegmentIds);
+      }
+      if (args?.recordingActive !== undefined) {
+        setWsRecordingActive(args.recordingActive);
       }
       queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+      queryClient.invalidateQueries({ queryKey: ['segments', id] });
     },
     [queryClient, id],
   );
@@ -158,6 +187,8 @@ export function EpisodeEditorContent({
   const handleEndGroupCallConfirmed = useCallback(() => {
     setEndCallConfirmOpen(false);
     setWsPendingSegmentIds(null);
+    setWsRecordingActive(null);
+    setCallPanelOpenInThisTab(false);
     endCallFnRef.current?.();
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
   }, [queryClient, id]);
@@ -179,6 +210,7 @@ export function EpisodeEditorContent({
             hostToken: res.hostToken,
             webrtcUnavailable: res.webrtcUnavailable,
           });
+          setCallPanelOpenInThisTab(true);
         }
         queryClient.invalidateQueries({ queryKey: ['call-session', id] });
       })
@@ -418,6 +450,10 @@ export function EpisodeEditorContent({
         }
         startGroupCallDisabledMessage={START_CALL_BLOCKED_STORAGE_MESSAGE}
         isCallActive={webrtcEnabled && !!activeCall}
+        callPanelOpenInThisTab={callPanelOpenInThisTab}
+        onOpenGroupCall={
+          webrtcEnabled && activeCall?.hostToken && !callPanelOpenInThisTab ? () => setCallPanelOpenInThisTab(true) : undefined
+        }
         onEndGroupCall={
           webrtcEnabled && !segmentReadOnly && canEditSegments && activeCall?.hostToken ? () => setEndCallConfirmOpen(true) : undefined
         }
@@ -444,6 +480,7 @@ export function EpisodeEditorContent({
               episodeId={id}
               segments={segments}
               segmentsLoading={segmentsLoading}
+              isRecordingActive={wsRecordingActive ?? activeSession?.recordingInProgress === true}
               processingSegmentIds={(wsPendingSegmentIds ?? activeSession?.pendingSegmentIds ?? []).filter(
                 (segId) => !segments.some((s) => s.id === segId)
               )}
@@ -657,7 +694,7 @@ export function EpisodeEditorContent({
         onOpenChange={setEndCallConfirmOpen}
         onConfirm={handleEndGroupCallConfirmed}
       />
-      {activeCall?.hostToken && (
+      {activeCall?.hostToken && callPanelOpenInThisTab && (
         <CallPanel
           sessionId={activeCall.sessionId}
           joinUrl={activeCall.joinUrl}
