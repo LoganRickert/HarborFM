@@ -102,6 +102,29 @@ if [ "${overwrite_env:-false}" = true ]; then
   read -r -p "Email for Let's Encrypt (required for real SSL with nginx, empty to skip certbot): " CERTBOT_EMAIL </dev/tty
   CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 
+  # Insecure cookies: only relevant when using HTTP (localhost or nginx without certbot)
+  COOKIE_SECURE=""
+  if [ "$DOMAIN" = "localhost" ] || { [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ]; }; then
+    read -r -p "Allow insecure cookies? Required for login over HTTP-only. [y/N] " INSECURE_COOKIES </dev/tty
+    if [[ "$INSECURE_COOKIES" =~ ^[yY] ]]; then
+      COOKIE_SECURE="false"
+    fi
+  fi
+
+  read -r -p "Enable WebRTC (group calls, remote recording)? [Y/n] " WEBRTC_CHOICE </dev/tty
+  if [[ ! "$WEBRTC_CHOICE" =~ ^[nN] ]]; then
+    WEBRTC_ENABLED=1
+    WEBRTC_SERVICE_SECRET="$(openssl rand -base64 32)"
+    RECORDING_CALLBACK_SECRET="$(openssl rand -base64 32)"
+    if [ "$DOMAIN" = "localhost" ] || { [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ]; }; then
+      WEBRTC_PUBLIC_WS_URL="ws://${DOMAIN}/webrtc-ws"
+    else
+      WEBRTC_PUBLIC_WS_URL="wss://${DOMAIN}/webrtc-ws"
+    fi
+  else
+    WEBRTC_ENABLED=0
+  fi
+
   read -r -p "Optional timezone for fail2ban (e.g. America/New_York, Enter to skip): " TZ </dev/tty
   TZ="${TZ:-}"
 
@@ -111,6 +134,14 @@ if [ "${overwrite_env:-false}" = true ]; then
     echo "DOMAIN=$DOMAIN"
     echo "REVERSE_PROXY=$REVERSE_PROXY"
     echo "CERTBOT_EMAIL=$CERTBOT_EMAIL"
+    [ -n "$COOKIE_SECURE" ] && echo "COOKIE_SECURE=$COOKIE_SECURE"
+    echo "WEBRTC_ENABLED=${WEBRTC_ENABLED:-0}"
+    if [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
+      echo "WEBRTC_SERVICE_URL=http://webrtc:3002"
+      echo "WEBRTC_PUBLIC_WS_URL=$WEBRTC_PUBLIC_WS_URL"
+      echo "WEBRTC_SERVICE_SECRET=$WEBRTC_SERVICE_SECRET"
+      echo "RECORDING_CALLBACK_SECRET=$RECORDING_CALLBACK_SECRET"
+    fi
     [ -n "$TZ" ] && echo "TZ=$TZ"
   } > .env
   echo "Wrote .env"
@@ -160,9 +191,11 @@ fi
 touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || true
 touch "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
 
-echo "Starting containers (compose up with profile: $REVERSE_PROXY)..."
+COMPOSE_PROFILES="$REVERSE_PROXY"
+[ "${WEBRTC_ENABLED:-0}" = "1" ] && COMPOSE_PROFILES="$COMPOSE_PROFILES webrtc"
+echo "Starting containers (compose up with profile: $COMPOSE_PROFILES)..."
 set +e
-compose_out=$(docker compose --profile "$REVERSE_PROXY" up -d 2>&1)
+compose_out=$(docker compose --profile "$REVERSE_PROXY" $([ "${WEBRTC_ENABLED:-0}" = "1" ] && echo "--profile webrtc") up -d 2>&1)
 compose_rc=$?
 set -e
 echo "$compose_out"
