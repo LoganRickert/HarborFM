@@ -8,7 +8,7 @@ export const up = (db: { exec: (sql: string) => void }) => {
   `);
 };
 
-export const down = (db: { exec: (sql: string) => void }) => {
+export const down = (_db: { exec: (sql: string) => void }) => {
   // SQLite does not support DROP COLUMN easily; recreate table would be needed.
   // For simplicity, we leave columns in place on rollback (they default to 0).
 };

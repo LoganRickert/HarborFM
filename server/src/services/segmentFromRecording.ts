@@ -1,8 +1,8 @@
-import { statSync } from "fs";
-import { resolve } from "path";
+import { statSync, copyFileSync, existsSync } from "fs";
+import { resolve, join } from "path";
 import { db } from "../db/index.js";
 import { getPodcastOwnerId } from "./access.js";
-import { uploadsDir, assertResolvedPathUnder } from "./paths.js";
+import { uploadsDir, assertResolvedPathUnder, getWebrtcRecordingsDir, segmentPath } from "./paths.js";
 import * as audioService from "./audio.js";
 import { wouldExceedStorageLimit } from "./storageLimit.js";
 
@@ -45,8 +45,78 @@ export function createRecordingSegmentPlaceholder(
  */
 export function markSegmentRecordFailed(segmentId: string): void {
   db.prepare(
-    "UPDATE episode_segments SET in_progress = 0, record_failed = 1 WHERE id = ? AND in_progress = 1",
+    "UPDATE episode_segments SET in_progress = 0, record_failed = 1, name = COALESCE(NULLIF(TRIM(name), ''), 'Recording Failed') WHERE id = ? AND in_progress = 1",
   ).run(segmentId);
+}
+
+/**
+ * Try to recover a record_failed segment from the webrtc recordings directory.
+ * The webrtc service may have written the file before the callback failed.
+ * Returns the updated segment row on success; throws on failure.
+ */
+export async function recoverRecordedSegment(segmentId: string): Promise<Record<string, unknown>> {
+  const row = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId) as
+    | { episode_id: string; record_failed?: number }
+    | undefined;
+  if (!row || row.record_failed !== 1) {
+    throw new Error("Segment is not in failed state or does not exist");
+  }
+  const episodeId = row.episode_id;
+  const episode = db.prepare("SELECT podcast_id FROM episodes WHERE id = ?").get(episodeId) as
+    | { podcast_id: string }
+    | undefined;
+  if (!episode) {
+    throw new Error("Episode not found");
+  }
+  const podcastId = episode.podcast_id;
+  const webrtcDir = getWebrtcRecordingsDir();
+  const sourcePath = resolve(join(webrtcDir, "recordings", `${segmentId}.wav`));
+  if (!existsSync(sourcePath)) {
+    throw new Error("Recording file not found. The file may have been deleted or never saved.");
+  }
+  const stat = statSync(sourcePath);
+  if (stat.size === 0) {
+    throw new Error("Recording file is empty. No audio was captured.");
+  }
+  const destPath = segmentPath(podcastId, episodeId, segmentId, "wav");
+  const segmentBase = uploadsDir(podcastId, episodeId);
+  copyFileSync(sourcePath, destPath);
+  if (!existsSync(destPath)) {
+    throw new Error("Failed to copy recording file");
+  }
+  const storageUserId = getPodcastOwnerId(podcastId);
+  if (!storageUserId) {
+    throw new Error("Podcast owner not found");
+  }
+  if (wouldExceedStorageLimit(db, storageUserId, stat.size)) {
+    throw new Error("Storage limit exceeded");
+  }
+  let durationSec = 0;
+  try {
+    const probe = await audioService.probeAudio(destPath, segmentBase);
+    durationSec = Math.max(0, probe.durationSec);
+  } catch {
+    // keep 0 if probe fails
+  }
+  try {
+    await audioService.generateWaveformFile(destPath, segmentBase);
+  } catch {
+    // best-effort
+  }
+  db.prepare(
+    `UPDATE episode_segments SET audio_path = ?, duration_sec = ?, record_failed = 0 WHERE id = ? AND record_failed = 1`,
+  ).run(destPath, durationSec, segmentId);
+  db.prepare(
+    `UPDATE users SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ? WHERE id = ?`,
+  ).run(stat.size, storageUserId);
+  const updated = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId) as Record<string, unknown>;
+  try {
+    const { unlinkSync } = await import("fs");
+    unlinkSync(sourcePath);
+  } catch {
+    // ignore - source may be in use or permissions
+  }
+  return updated;
 }
 
 /**

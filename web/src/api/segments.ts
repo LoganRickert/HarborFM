@@ -64,6 +64,17 @@ export function updateSegment(episodeId: string, segmentId: string, payload: { n
   });
 }
 
+export function recoverRecordedSegment(episodeId: string, segmentId: string): Promise<SegmentResponse> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/recover`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json();
+  });
+}
+
 /** Include audioPath to bust cache when the segment file changes (e.g. after trim → new .wav). */
 export function segmentStreamUrl(episodeId: string, segmentId: string, audioPath?: string | null): string {
   const url = `${BASE}/episodes/${episodeId}/segments/${segmentId}/stream`;

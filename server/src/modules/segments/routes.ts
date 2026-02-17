@@ -65,6 +65,7 @@ import {
   segmentTranscriptDeleteQuerySchema,
 } from "@harborfm/shared";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
+import { recoverRecordedSegment } from "../../services/segmentFromRecording.js";
 import { redactSegmentForClient } from "../../utils/segment.js";
 
 const exec = promisify(execFile);
@@ -902,6 +903,58 @@ export async function segmentRoutes(app: FastifyInstance) {
         .prepare("SELECT * FROM episode_segments WHERE id = ?")
         .get(segmentId) as Record<string, unknown>;
       return redactSegmentForClient(updated);
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/recover",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Recover failed recording",
+        description: "Try to recover a record_failed segment from the WebRTC recordings directory.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          200: { description: "Segment recovered successfully" },
+          400: { description: "Recovery failed" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = segmentEpisodeSegmentIdParamSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: parsed.error.issues[0]?.message ?? "Validation failed", details: parsed.error.flatten() });
+      }
+      const { episodeId, segmentId } = parsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role))
+        return reply.status(403).send({ error: "You do not have permission to edit segments." });
+      const row = db
+        .prepare("SELECT id FROM episode_segments WHERE id = ? AND episode_id = ?")
+        .get(segmentId, episodeId);
+      if (!row) return reply.status(404).send({ error: "Segment not found" });
+      try {
+        const updated = await recoverRecordedSegment(segmentId);
+        broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
+        return reply.send(redactSegmentForClient(updated));
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Recovery failed" });
+      }
     },
   );
 

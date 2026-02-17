@@ -10,6 +10,7 @@ import {
   reorderSegments,
   deleteSegment,
   updateSegment,
+  recoverRecordedSegment,
   startRenderEpisode,
   getRenderStatus,
   type EpisodeSegment,
@@ -332,6 +333,13 @@ export function EpisodeEditorContent({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['segments', id] }),
   });
 
+  const recoverSegmentMutation = useMutation({
+    mutationFn: ({ segmentId }: { segmentId: string }) => recoverRecordedSegment(id, segmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['segments', id] });
+    },
+  });
+
   const deleteSegmentMutation = useMutation({
     mutationFn: (segmentId: string) => deleteSegment(id, segmentId),
     onSuccess: () => {
@@ -496,6 +504,8 @@ export function EpisodeEditorContent({
               onMoveUp={handleMoveUp}
               onMoveDown={handleMoveDown}
               onDeleteRequest={setSegmentToDelete}
+              onRecoverRequest={segmentReadOnly ? undefined : (segmentId) => recoverSegmentMutation.mutate({ segmentId })}
+              recoveringSegmentId={recoverSegmentMutation.isPending ? recoverSegmentMutation.variables?.segmentId ?? null : null}
               onUpdateSegmentName={(segmentId, name) =>
                 updateSegmentMutation.mutate({ segmentId, name })
               }

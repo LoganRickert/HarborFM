@@ -14,8 +14,10 @@ export interface SegmentRowProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDeleteRequest: () => void;
+  onRecoverRequest?: () => void;
   onUpdateName: (segmentId: string, name: string | null) => void;
   isDeleting: boolean;
+  isRecovering?: boolean;
   onPlayRequest: (segmentId: string) => void;
   onMoreInfo: () => void;
   registerPause: (id: string, pause: () => void) => void;
@@ -35,8 +37,10 @@ export function SegmentRow({
   onMoveUp,
   onMoveDown,
   onDeleteRequest,
+  onRecoverRequest,
   onUpdateName,
   isDeleting,
+  isRecovering = false,
   onPlayRequest,
   onMoreInfo,
   registerPause,
@@ -54,14 +58,18 @@ export function SegmentRow({
   const isRecorded = segment.type === 'recorded';
   const recordFailed = !!segment.record_failed;
   const inProgress = !!segment.in_progress;
-  const defaultName = isRecorded ? 'Recorded section' : (segment.asset_name ?? 'Library clip');
-  const [localName, setLocalName] = useState(segment.name ?? '');
+  const defaultName = recordFailed
+    ? 'Recording Failed'
+    : isRecorded
+      ? 'Recorded section'
+      : (segment.asset_name ?? 'Library clip');
+  const [localName, setLocalName] = useState(segment.name ?? (recordFailed ? 'Recording Failed' : ''));
   const waveformData = waveformDataProp;
   const showWaveform = waveformData && waveformData.data?.length;
 
   useEffect(() => {
-    setLocalName(segment.name ?? '');
-  }, [segment.name]);
+    setLocalName(segment.name ?? (recordFailed ? 'Recording Failed' : ''));
+  }, [segment.name, recordFailed]);
 
   // Clear loaded segment when episode/segment or audio file path changes (e.g. after trim → new file)
   useEffect(() => {
@@ -170,9 +178,22 @@ export function SegmentRow({
           {isRecorded ? <Mic size={18} strokeWidth={2} aria-hidden /> : <Library size={18} strokeWidth={2} aria-hidden />}
         </span>
         {recordFailed && (
-          <span className={styles.segmentFailedBadge} role="status">
-            Recording failed
-          </span>
+          onRecoverRequest ? (
+            <button
+              type="button"
+              className={styles.segmentRecoverBtn}
+              onClick={onRecoverRequest}
+              disabled={isRecovering || readOnly}
+              title="Try to recover the recording from disk"
+              aria-label="Recover recording"
+            >
+              {isRecovering ? 'Recovering…' : 'Recover'}
+            </button>
+          ) : (
+            <span className={styles.segmentFailedBadge} role="status">
+              Recording failed
+            </span>
+          )
         )}
         <div className={styles.segmentBody}>
           <input
