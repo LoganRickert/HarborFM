@@ -20,6 +20,7 @@ import {
   WEBRTC_INSECURE_SKIP_AUTH,
   WEBRTC_RATE_LIMIT_MAX,
   WEBRTC_RATE_LIMIT_TIME_WINDOW,
+  IS_PRODUCTION,
 } from "./config.js";
 import {
   getRoom,
@@ -66,6 +67,13 @@ function finalizeProducerStream(
 if (!WEBRTC_SERVICE_SECRET && !WEBRTC_INSECURE_SKIP_AUTH) {
   console.error(
     "[webrtc] WEBRTC_SERVICE_SECRET is unset. WebRTC is disabled. Set WEBRTC_SERVICE_SECRET in production, or WEBRTC_INSECURE_SKIP_AUTH=1 for e2e."
+  );
+  process.exit(1);
+}
+
+if (WEBRTC_INSECURE_SKIP_AUTH && IS_PRODUCTION) {
+  console.error(
+    "[webrtc] WEBRTC_INSECURE_SKIP_AUTH=1 is not allowed in production. Set WEBRTC_SERVICE_SECRET and remove WEBRTC_INSECURE_SKIP_AUTH."
   );
   process.exit(1);
 }

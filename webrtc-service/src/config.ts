@@ -1,3 +1,6 @@
+export const NODE_ENV = process.env.NODE_ENV?.trim() || "development";
+export const IS_PRODUCTION = NODE_ENV === "production";
+
 export const PORT = Number(process.env.PORT) || 3002;
 
 export const RTC_MIN_PORT = Number(process.env.RTC_MIN_PORT) || 40000;
