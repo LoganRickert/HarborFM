@@ -5,6 +5,7 @@ DOMAIN="${DOMAIN:-localhost}"
 CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
 CERT_PATH="${CERT_DIR}/fullchain.pem"
 KEY_PATH="${CERT_DIR}/privkey.pem"
+WEBRTC_ENABLED="${WEBRTC_ENABLED:-0}"
 
 # Ensure log files are real files (not symlinks to /dev/stdout) so fail2ban can read them
 LOG_DIR="/var/log/nginx"
@@ -15,6 +16,33 @@ for log in access.log error.log; do
   fi
 done
 
+# WebRTC location: proxy when enabled, 503 when disabled (avoids nginx failing when webrtc container is not running)
+write_webrtc_include() {
+  if [ "$WEBRTC_ENABLED" = "1" ]; then
+    cat > /etc/nginx/webrtc-ws.inc << 'NGINX_EOF'
+        location /webrtc-ws/ {
+            proxy_pass http://webrtc:3002/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 86400;
+            proxy_send_timeout 86400;
+        }
+NGINX_EOF
+  else
+    cat > /etc/nginx/webrtc-ws.inc << 'NGINX_EOF'
+        location /webrtc-ws/ {
+            add_header Content-Type text/plain;
+            return 503 "WebRTC service is disabled";
+        }
+NGINX_EOF
+  fi
+}
+
 write_config() {
   if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]; then
     envsubst '${DOMAIN}' < /etc/nginx/nginx-full.conf.template > /etc/nginx/nginx.conf
@@ -23,6 +51,7 @@ write_config() {
   fi
 }
 
+write_webrtc_include
 export DOMAIN
 write_config
 

@@ -60,6 +60,7 @@ services:
     environment:
       DOMAIN: ${DOMAIN:-localhost}
       CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+      WEBRTC_ENABLED: "${WEBRTC_ENABLED:-0}"
     volumes:
       - ./nginx/nginx-80-only.conf.template:/etc/nginx/nginx-80-only.conf.template:ro
       - ./nginx/nginx-full.conf.template:/etc/nginx/nginx-full.conf.template:ro

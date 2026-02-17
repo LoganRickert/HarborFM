@@ -13,6 +13,7 @@ import {
   getActiveSessionCount,
   setSessionRoomId,
   setSessionHostToken,
+  endSession,
 } from "../../services/callSession.js";
 import { getWebRtcConfig, webrtcRequestHeaders } from "../../services/webrtcConfig.js";
 import {
@@ -189,6 +190,13 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         }
         if (!roomId) webrtcUnavailable = true;
       }
+      if (webrtcUnavailable) {
+        endSession(session.sessionId);
+        return reply.status(503).send({
+          error: "WebRTC service is unavailable. Please ensure the webrtc container is running and try again.",
+          webrtcUnavailable: true,
+        });
+      }
       const joinUrl = origin ? `${origin}/call/join/${session.token}` : "";
       const payload: Record<string, unknown> = {
         token: session.token,
@@ -201,7 +209,6 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         payload.roomId = roomId;
         if (session.hostToken) payload.hostToken = session.hostToken;
       }
-      if (webrtcUnavailable) payload.webrtcUnavailable = true;
       broadcastToEpisode(episodeId, {
         type: "callStarted",
         sessionId: session.sessionId,
