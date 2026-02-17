@@ -32,7 +32,7 @@ import Layout from '../layouts/Layout.astro';
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-terraform-aws" id="tab-terraform-aws">Terraform (AWS)</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-local" id="tab-local">Install locally</button>
         </div>
-        <div class="install-panel" id="panel-compose-nginx" role="tabpanel" aria-labelledby="tab-compose-nginx">
+        <div class="install-panel" id="panel-compose-nginx" data-active role="tabpanel" aria-labelledby="tab-compose-nginx">
           <div class="code-block-wrap">
             <pre><code>curl -fsSL https://raw.githubusercontent.com/LoganRickert/harborfm/main/install.sh | bash</code></pre>
             <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
@@ -60,7 +60,7 @@ docker run --name harborfm -p 3001:3001 \
           </div>
           <p class="help">Runs HarborFM as a single container. Use nginx or Caddy on the host for HTTPS. Open <code>http://localhost:3001</code> and complete the one-time setup from the container logs.</p>
         </div>
-        <div class="install-panel" id="panel-terraform-aws" data-active role="tabpanel" aria-labelledby="tab-terraform-aws">
+        <div class="install-panel" id="panel-terraform-aws" role="tabpanel" aria-labelledby="tab-terraform-aws">
           <div class="code-block-wrap">
             <pre><code>cd terraform/terraform/aws
 cp terraform.tfvars.example terraform.tfvars
