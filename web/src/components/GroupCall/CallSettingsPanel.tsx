@@ -119,6 +119,18 @@ export function CallSettingsPanel({
   if (embedded) {
     return (
       <div className={styles.body} role="region" aria-label="Settings">
+        {onClose && (
+          <button
+            type="button"
+            className={styles.closeBtnEmbedded}
+            onClick={onClose}
+            aria-label="Close settings"
+            title="Close settings"
+          >
+            <X size={18} strokeWidth={2} aria-hidden />
+            Close
+          </button>
+        )}
         {bodyContent}
       </div>
     );

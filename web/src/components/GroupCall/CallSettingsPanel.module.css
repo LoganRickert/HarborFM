@@ -56,6 +56,33 @@
   min-height: 0;
 }
 
+.closeBtnEmbedded {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  min-height: 44px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted, #888);
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.closeBtnEmbedded:hover {
+  color: var(--text, #e5e5e5);
+  border-color: var(--accent, #00d4aa);
+}
+
+.closeBtnEmbedded:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .micSelector {
   display: flex;
   flex-direction: column;

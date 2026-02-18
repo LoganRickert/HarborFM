@@ -47,6 +47,7 @@ export function useMediasoupRoom(
   const setListenToSelfStateRef = useRef<(v: boolean) => void>(() => {});
   const [listenToSelf, setListenToSelfState] = useState(false);
   setListenToSelfStateRef.current = setListenToSelfState;
+  const [soundboardVolumeFromRoom, setSoundboardVolumeFromRoom] = useState<number>(1);
   const mediaStreamsRef = useRef<{ micStream: MediaStream | null; localStream: MediaStream | null }>({ micStream: null, localStream: null });
 
   useEffect(() => {
@@ -159,6 +160,11 @@ export function useMediasoupRoom(
               onSoundboardErrorRef.current?.(msg.error);
               return;
             }
+            if (msg.type === 'soundboardVolume' && typeof msg.volume === 'number') {
+              const v = Math.max(0, Math.min(1, msg.volume));
+              setSoundboardVolumeFromRoom(v);
+              return;
+            }
             const queue = pendingResolvers.get(msg.type);
             if (queue?.length) {
               const fn = queue.shift();
@@ -220,9 +226,15 @@ export function useMediasoupRoom(
 
         const computeLevel = createAudioLevelProcessor(analyser);
         let tickId: number | undefined;
+        let lastLevel = 0;
+        const LEVEL_THRESHOLD = 0.02;
         function tick() {
           if (closed) return;
-          setMicLevel(computeLevel());
+          const level = computeLevel();
+          if (Math.abs(level - lastLevel) >= LEVEL_THRESHOLD) {
+            lastLevel = level;
+            setMicLevel(level);
+          }
           tickId = requestAnimationFrame(tick);
         }
         tickId = requestAnimationFrame(tick);
@@ -357,8 +369,12 @@ export function useMediasoupRoom(
         }
 
         safeSend(webrtcWs, { type: 'getProducers' });
-        const producersMsg = (await waitFor('producers')) as { producerIds: string[] };
+        const producersMsg = (await waitFor('producers')) as { producerIds: string[]; soundboardVolume?: number };
         if (closed) return;
+        if (typeof producersMsg.soundboardVolume === 'number') {
+          const v = Math.max(0, Math.min(1, producersMsg.soundboardVolume));
+          setSoundboardVolumeFromRoom(v);
+        }
         const consumedProducerIds = new Set<string>();
         for (const producerId of producersMsg.producerIds || []) {
           if (producerId === myProducerId) continue;
@@ -483,14 +499,25 @@ export function useMediasoupRoom(
     }
 
     let rafId: number | undefined;
+    let lastLevels = new Map<string, number>();
+    const LEVEL_THRESHOLD = 0.02;
     function tick() {
       if (processors.length === 0) return;
       const next = new Map<string, number>();
+      let changed = false;
       for (const { producerId, computeLevel } of processors) {
         const participantId = producerIdToParticipantId.get(producerId);
-        if (participantId) next.set(participantId, computeLevel());
+        if (participantId) {
+          const level = computeLevel();
+          next.set(participantId, level);
+          const prev = lastLevels.get(participantId) ?? -1;
+          if (Math.abs(level - prev) >= LEVEL_THRESHOLD) changed = true;
+        }
       }
-      setRemoteMicLevels(next);
+      if (changed) {
+        lastLevels = next;
+        setRemoteMicLevels(next);
+      }
       rafId = requestAnimationFrame(tick);
     }
     ctx.resume().then(() => { rafId = requestAnimationFrame(tick); }).catch(() => {});
@@ -580,6 +607,7 @@ export function useMediasoupRoom(
     playSoundboard,
     stopSoundboard,
     setSoundboardVolume,
+    soundboardVolumeFromRoom,
     resumeSoundboardContext,
     setSoundboardPanelOpen,
     onSoundboardStoppedRef,

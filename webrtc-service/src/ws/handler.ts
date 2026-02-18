@@ -252,6 +252,11 @@ export const wsHandler = async (socket: any, req: any) => {
         if (typeof volume === "number") {
           const v = Math.max(0, Math.min(1, volume));
           soundboardVolumeByRoomRef.set(roomId, v);
+          for (const [s, r] of socketRooms.entries()) {
+            if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
+              (s as { send: (d: string) => void }).send(JSON.stringify({ type: "soundboardVolume", volume: v }));
+            }
+          }
         }
         return;
       }
@@ -497,7 +502,14 @@ export const wsHandler = async (socket: any, req: any) => {
 
       if (type === "getProducers") {
         const ids = Array.from(roomState.producers.keys());
-        socket.send(JSON.stringify({ type: "producers", producerIds: ids }));
+        const soundboardVol = soundboardVolumeByRoomRef.get(roomId);
+        socket.send(
+          JSON.stringify({
+            type: "producers",
+            producerIds: ids,
+            ...(soundboardVol != null ? { soundboardVolume: soundboardVol } : {}),
+          })
+        );
         return;
       }
     } catch (err) {

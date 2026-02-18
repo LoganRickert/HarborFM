@@ -62,7 +62,7 @@ export function CallJoin() {
   myParticipantIdRef.current = myParticipantId;
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
-  const { remoteTracks, remoteMicLevels, setMuted } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, soundboardVolumeFromRoom, setMuted } = useMediasoupRoom(
     webrtcUrl,
     webrtcRoomId,
     deviceId || undefined,
@@ -341,14 +341,8 @@ export function CallJoin() {
           } else {
             setHostDisconnected(null);
           }
-          if (msg.webrtcUrl) {
-            console.log('[CallJoin] joined: webrtcUrl=', msg.webrtcUrl);
-            setWebrtcUrl(msg.webrtcUrl);
-          }
-          if (msg.roomId) {
-            console.log('[CallJoin] joined: roomId=', msg.roomId);
-            setWebrtcRoomId(msg.roomId);
-          }
+          if (msg.webrtcUrl) setWebrtcUrl(msg.webrtcUrl);
+          if (msg.roomId) setWebrtcRoomId(msg.roomId);
         } else if (msg.type === 'participants') {
           const list = msg.participants ?? [];
           setParticipants(list);
@@ -481,7 +475,6 @@ export function CallJoin() {
 
   if (joined) {
     const audioUnavailable = !webrtcUrl || !webrtcRoomId;
-    console.log('[CallJoin] joined render: audioUnavailable=', audioUnavailable, 'webrtcUrl=', webrtcUrl, 'webrtcRoomId=', webrtcRoomId);
     return pageLayout(
       <AudioUnlockProvider>
       <>
@@ -641,7 +634,11 @@ export function CallJoin() {
             ))}
           </ul>
           {Array.from(remoteTracks.entries()).map(([id, info]) => (
-            <RemoteAudio key={id} track={info.track} />
+            <RemoteAudio
+              key={id}
+              track={info.track}
+              volume={info.source === 'soundboard' ? soundboardVolumeFromRoom : 1}
+            />
           ))}
           <AudioUnlockBanner />
         </div>

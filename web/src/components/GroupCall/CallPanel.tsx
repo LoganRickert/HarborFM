@@ -173,7 +173,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       .catch(() => {});
   }, [effectiveWebrtcUrl, effectiveRoomId, refreshDevices]);
 
-  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume, leaveRoom } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, soundboardVolumeFromRoom, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume, leaveRoom } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     deviceId || undefined,
@@ -801,7 +801,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           <RemoteAudio
             key={id}
             track={info.track}
-            volume={info.source === 'soundboard' ? soundboardVolume : 1}
+            volume={info.source === 'soundboard' ? (effectiveHostToken ? soundboardVolume : soundboardVolumeFromRoom) : 1}
           />
         ))}
       {!minimized && showChatView && (
@@ -838,6 +838,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           devices={devices}
           deviceId={deviceId}
           onDeviceChange={setDeviceId}
+          onClose={() => setSettingsOpen(false)}
           minimized={false}
           onMinimizeToggle={() => {}}
           listenToSelf={listenToSelf}
