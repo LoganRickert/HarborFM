@@ -14,6 +14,7 @@ import {
   assertPathUnder,
   assertResolvedPathUnder,
   assertSafeId,
+  resolveDataPath,
 } from "../../services/paths.js";
 import { contentTypeFromAudioPath } from "../../utils/audio.js";
 import {
@@ -229,7 +230,7 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
         .prepare("SELECT * FROM reusable_assets WHERE id = ?")
         .get(assetId) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: "Asset not found" });
-      const path = row.audio_path as string;
+      const path = row.audio_path ? resolveDataPath(row.audio_path as string) : "";
       const ownerUserId = row.owner_user_id as string;
       if (!path || !existsSync(path)) return reply.status(404).send({ error: "File not found" });
       const base = libraryDir(ownerUserId);

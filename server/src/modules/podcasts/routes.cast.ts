@@ -17,7 +17,13 @@ import {
   canAddEditGuest,
 } from "../../services/access.js";
 import { broadcastToPodcast } from "../../services/episodeBroadcast.js";
-import { assertPathUnder, assertResolvedPathUnder, castPhotoDir } from "../../services/paths.js";
+import {
+  assertPathUnder,
+  assertResolvedPathUnder,
+  castPhotoDir,
+  pathRelativeToData,
+  resolveDataPath,
+} from "../../services/paths.js";
 import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { ARTWORK_FILENAME_REGEX } from "./utils.js";
@@ -103,11 +109,12 @@ export async function registerCastRoutes(app: FastifyInstance) {
       const row = db
         .prepare("SELECT photo_path FROM podcast_cast WHERE id = ? AND podcast_id = ?")
         .get(castId, podcastId) as { photo_path: string | null } | undefined;
-      if (!row?.photo_path || basename(row.photo_path) !== filename) {
+      const photoPath = row?.photo_path ? resolveDataPath(row.photo_path) : "";
+      if (!photoPath || basename(photoPath) !== filename) {
         return reply.status(404).send({ error: "Not found" });
       }
       try {
-        const safePath = assertPathUnder(row.photo_path, castPhotoDir(podcastId));
+        const safePath = assertPathUnder(photoPath, castPhotoDir(podcastId));
         const ext = extname(safePath).toLowerCase();
         const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? "image/jpeg";
         const result = await send(request.raw, basename(safePath), {
@@ -428,7 +435,10 @@ export async function registerCastRoutes(app: FastifyInstance) {
       if (existing.photo_path) {
         try {
           const dir = castPhotoDir(podcastId);
-          const safePath = assertPathUnder(existing.photo_path, dir);
+          const safePath = assertPathUnder(
+            resolveDataPath(existing.photo_path),
+            dir,
+          );
           if (existsSync(safePath)) unlinkSync(safePath);
         } catch {
           // ignore
@@ -498,9 +508,11 @@ export async function registerCastRoutes(app: FastifyInstance) {
       writeFileSync(destPath, buffer);
       db.prepare(
         "UPDATE podcast_cast SET photo_path = ?, photo_url = NULL WHERE id = ? AND podcast_id = ?",
-      ).run(destPath, castId, podcastId);
+      ).run(pathRelativeToData(destPath), castId, podcastId);
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
-      const oldPath = existing.photo_path;
+      const oldPath = existing.photo_path
+        ? resolveDataPath(existing.photo_path)
+        : "";
       if (oldPath && oldPath !== destPath) {
         try {
           const safeOld = assertPathUnder(oldPath, dir);

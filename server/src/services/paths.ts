@@ -1,4 +1,4 @@
-import { join, relative, resolve, sep } from "path";
+import { isAbsolute, join, relative, resolve, sep } from "path";
 import { mkdirSync, existsSync, realpathSync } from "fs";
 import {
   DATA_DIR,
@@ -242,6 +242,17 @@ export function segmentPath(
   ensureDir(dir);
   const filename = generateTimestampedFilename(segmentId, ext);
   return join(dir, filename);
+}
+
+/**
+ * Resolve a path relative to DATA_DIR to absolute. Use when reading paths from DB.
+ * Handles legacy absolute paths by returning them as-is during transition.
+ */
+export function resolveDataPath(relativePath: string): string {
+  if (!relativePath || !relativePath.trim()) return "";
+  const p = relativePath.trim();
+  if (isAbsolute(p)) return p; // legacy: already absolute, return as-is
+  return join(DATA_DIR, p);
 }
 
 /** Path relative to DATA_DIR. Used so webrtc can write to its own data mount and server can resolve. */

@@ -9,6 +9,7 @@ import {
   assertSafeId,
   artworkDir,
   getDataDir,
+  resolveDataPath,
 } from "../../services/paths.js";
 
 export interface DeleteStatusState {
@@ -88,7 +89,7 @@ function deleteEpisodeData(
     )
     .all(episodeId) as { audio_path: string }[];
   for (const seg of segments) {
-    const path = seg.audio_path;
+    const path = seg.audio_path ? resolveDataPath(seg.audio_path) : "";
     if (!path) continue;
     try {
       assertPathUnder(path, segmentBase);
@@ -97,10 +98,13 @@ function deleteEpisodeData(
       /* best-effort */
     }
   }
-  if (episodeRow.audio_source_path && existsSync(episodeRow.audio_source_path)) {
+  const audioSourcePath = episodeRow.audio_source_path
+    ? resolveDataPath(episodeRow.audio_source_path)
+    : "";
+  if (audioSourcePath && existsSync(audioSourcePath)) {
     try {
-      assertPathUnder(episodeRow.audio_source_path, segmentBase);
-      bytesFreed += statSync(episodeRow.audio_source_path).size;
+      assertPathUnder(audioSourcePath, segmentBase);
+      bytesFreed += statSync(audioSourcePath).size;
     } catch {
       /* best-effort */
     }
@@ -129,11 +133,14 @@ function deleteEpisodeData(
       /* best-effort */
     }
   }
-  if (episodeRow.artwork_path && existsSync(episodeRow.artwork_path)) {
+  const episodeArtPath = episodeRow.artwork_path
+    ? resolveDataPath(episodeRow.artwork_path)
+    : "";
+  if (episodeArtPath && existsSync(episodeArtPath)) {
     try {
       const artDir = artworkDir(podcastId);
-      assertPathUnder(episodeRow.artwork_path, artDir);
-      unlinkSync(episodeRow.artwork_path);
+      assertPathUnder(episodeArtPath, artDir);
+      unlinkSync(episodeArtPath);
     } catch {
       /* best-effort */
     }

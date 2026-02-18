@@ -3,7 +3,11 @@ import { existsSync } from "fs";
 import { nanoid } from "nanoid";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { db } from "../../db/index.js";
-import { chaptersJsonPath, transcriptSrtPath } from "../../services/paths.js";
+import {
+  chaptersJsonPath,
+  transcriptSrtPath,
+  resolveDataPath,
+} from "../../services/paths.js";
 import {
   getPodcastRole,
   canEditEpisodeOrPodcastMetadata,
@@ -330,6 +334,12 @@ export async function exportRoutes(app: FastifyInstance) {
       }[];
       const episodes = episodesRows.map((ep) => ({
         ...ep,
+        audio_final_path: ep.audio_final_path
+          ? resolveDataPath(ep.audio_final_path)
+          : null,
+        artwork_path: ep.artwork_path
+          ? resolveDataPath(ep.artwork_path)
+          : null,
         transcript_srt_path: existsSync(transcriptSrtPath(podcastId, ep.id))
           ? transcriptSrtPath(podcastId, ep.id)
           : null,
@@ -377,7 +387,9 @@ export async function exportRoutes(app: FastifyInstance) {
             publicBaseUrl,
             xml,
             episodes,
-            artworkPath: podcastRow?.artwork_path ?? null,
+            artworkPath: podcastRow?.artwork_path
+              ? resolveDataPath(podcastRow.artwork_path)
+              : null,
             podcastId,
           });
           const { uploaded, skipped, errors } = result;
@@ -671,6 +683,12 @@ export async function exportRoutes(app: FastifyInstance) {
         }[];
         const episodes = episodesRows.map((ep) => ({
           ...ep,
+          audio_final_path: ep.audio_final_path
+            ? resolveDataPath(ep.audio_final_path)
+            : null,
+          artwork_path: ep.artwork_path
+            ? resolveDataPath(ep.artwork_path)
+            : null,
           transcript_srt_path: existsSync(transcriptSrtPath(podcastId, ep.id))
             ? transcriptSrtPath(podcastId, ep.id)
             : null,
@@ -682,7 +700,9 @@ export async function exportRoutes(app: FastifyInstance) {
           publicBaseUrl,
           xml,
           episodes,
-          artworkPath: podcastRow?.artwork_path ?? null,
+          artworkPath: podcastRow?.artwork_path
+            ? resolveDataPath(podcastRow.artwork_path)
+            : null,
           podcastId,
         });
         const { uploaded, skipped, errors } = result;

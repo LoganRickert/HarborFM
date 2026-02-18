@@ -2,7 +2,13 @@ import { statSync, copyFileSync, existsSync } from "fs";
 import { resolve, join } from "path";
 import { db } from "../db/index.js";
 import { getPodcastOwnerId } from "./access.js";
-import { uploadsDir, assertResolvedPathUnder, getWebrtcRecordingsDir, segmentPath } from "./paths.js";
+import {
+  uploadsDir,
+  assertResolvedPathUnder,
+  getWebrtcRecordingsDir,
+  segmentPath,
+  pathRelativeToData,
+} from "./paths.js";
 import * as audioService from "./audio.js";
 import { wouldExceedStorageLimit } from "./storageLimit.js";
 
@@ -105,7 +111,7 @@ export async function recoverRecordedSegment(segmentId: string): Promise<Record<
   }
   db.prepare(
     `UPDATE episode_segments SET audio_path = ?, duration_sec = ?, record_failed = 0 WHERE id = ? AND record_failed = 1`,
-  ).run(destPath, durationSec, segmentId);
+  ).run(pathRelativeToData(destPath), durationSec, segmentId);
   db.prepare(
     `UPDATE users SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ? WHERE id = ?`,
   ).run(stat.size, storageUserId);
@@ -199,7 +205,7 @@ export async function createSegmentFromPath(
         `UPDATE episode_segments
          SET audio_path = ?, duration_sec = ?, name = COALESCE(?, name), in_progress = 0, record_failed = 0
          WHERE id = ? AND in_progress = 1`,
-      ).run(resolvedPath, durationSec, segmentName, segmentId);
+      ).run(pathRelativeToData(resolvedPath), durationSec, segmentName, segmentId);
     } else {
       const maxPos = db
         .prepare(
@@ -210,7 +216,7 @@ export async function createSegmentFromPath(
       db.prepare(
         `INSERT INTO episode_segments (id, episode_id, position, type, name, audio_path, duration_sec)
          VALUES (?, ?, ?, 'recorded', ?, ?, ?)`,
-      ).run(segmentId, episodeId, maxPos.pos, segmentName, resolvedPath, durationSec);
+      ).run(segmentId, episodeId, maxPos.pos, segmentName, pathRelativeToData(resolvedPath), durationSec);
     }
 
     db.prepare(

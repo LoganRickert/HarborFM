@@ -7,7 +7,13 @@ import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { db } from "../../db/index.js";
 import { getPodcastRole, canAccessPodcast, canEditEpisodeOrPodcastMetadata } from "../../services/access.js";
 import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
-import { assertPathUnder, assertResolvedPathUnder, artworkDir } from "../../services/paths.js";
+import {
+  assertPathUnder,
+  assertResolvedPathUnder,
+  artworkDir,
+  pathRelativeToData,
+  resolveDataPath,
+} from "../../services/paths.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { podcastRowWithFilename, ARTWORK_FILENAME_REGEX } from "./utils.js";
 import { getArtworkPath } from "./repo.js";
@@ -46,7 +52,10 @@ export async function registerArtworkRoutes(app: FastifyInstance) {
       if (!ARTWORK_FILENAME_REGEX.test(filename)) {
         return reply.status(404).send({ error: "Not found" });
       }
-      const artworkPath = getArtworkPath(podcastId);
+      const artworkPathRaw = getArtworkPath(podcastId);
+      const artworkPath = artworkPathRaw
+        ? resolveDataPath(artworkPathRaw)
+        : "";
       if (!artworkPath || basename(artworkPath) !== filename) {
         return reply.status(404).send({ error: "Not found" });
       }
@@ -134,8 +143,10 @@ export async function registerArtworkRoutes(app: FastifyInstance) {
       writeFileSync(destPath, buffer);
       db.prepare(
         "UPDATE podcasts SET artwork_path = ?, artwork_url = NULL, updated_at = datetime('now') WHERE id = ?",
-      ).run(destPath, id);
-      const oldPath = existing.artwork_path;
+      ).run(pathRelativeToData(destPath), id);
+      const oldPath = existing.artwork_path
+        ? resolveDataPath(existing.artwork_path)
+        : "";
       if (oldPath && oldPath !== destPath) {
         try {
           const safeOld = assertPathUnder(oldPath, dir);

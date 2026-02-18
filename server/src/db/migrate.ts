@@ -37,6 +37,7 @@ import * as m035 from "./migrations/035_segment_trim_ranges_markers.js";
 import * as m036 from "./migrations/036_episodes_final_markers.js";
 import * as m037 from "./migrations/037_two_factor_auth.js";
 import * as m038 from "./migrations/038_password_reset_token_hash.js";
+import * as m039 from "./migrations/039_paths_to_relative.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -77,6 +78,7 @@ const migrations = [
   { name: "036_episodes_final_markers", ...m036 },
   { name: "037_two_factor_auth", ...m037 },
   { name: "038_password_reset_token_hash", ...m038 },
+  { name: "039_paths_to_relative", ...m039 },
 ];
 
 const MIGRATIONS_TABLE = `

@@ -14,7 +14,13 @@ import {
 } from "../../plugins/auth.js";
 import { isAdmin, canReadLibraryAsset } from "../../services/access.js";
 import { broadcastToUser } from "../../services/episodeBroadcast.js";
-import { libraryDir, libraryAssetPath, assertPathUnder } from "../../services/paths.js";
+import {
+  libraryDir,
+  libraryAssetPath,
+  assertPathUnder,
+  pathRelativeToData,
+  resolveDataPath,
+} from "../../services/paths.js";
 import { assertUrlNotPrivate } from "../../utils/ssrf.js";
 import { normalizeHostname } from "../../utils/url.js";
 import * as audioService from "../../services/audio.js";
@@ -294,7 +300,7 @@ export async function libraryRoutes(app: FastifyInstance) {
           request.userId,
           assetMeta.name,
           assetMeta.tag,
-          destPath,
+          pathRelativeToData(destPath),
           durationSec,
           assetMeta.copyright,
           assetMeta.license,
@@ -425,7 +431,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         request.userId,
         name,
         tag,
-        finalPath,
+        pathRelativeToData(finalPath),
         durationSec,
         copyright,
         license,
@@ -590,7 +596,8 @@ export async function libraryRoutes(app: FastifyInstance) {
           });
       }
       const { unlinkSync } = await import("fs");
-      const path = row.audio_path as string;
+      const pathRaw = row.audio_path as string;
+      const path = pathRaw ? resolveDataPath(pathRaw) : "";
       const ownerId = row.owner_user_id;
       let bytesFreed = 0;
       if (path && existsSync(path)) {
@@ -733,7 +740,8 @@ export async function libraryRoutes(app: FastifyInstance) {
         .get(id, userId) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: "Asset not found" });
       const { unlinkSync } = await import("fs");
-      const path = row.audio_path as string;
+      const pathRaw = row.audio_path as string;
+      const path = pathRaw ? resolveDataPath(pathRaw) : "";
       let bytesFreed = 0;
       if (path && existsSync(path)) {
         const base = libraryDir(userId);
@@ -819,7 +827,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         .prepare("SELECT * FROM reusable_assets WHERE id = ?")
         .get(id) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: "Asset not found" });
-      const path = row.audio_path as string;
+      const path = row.audio_path ? resolveDataPath(row.audio_path as string) : "";
       if (!path || !existsSync(path))
         return reply.status(404).send({ error: "File not found" });
       const base = libraryDir(row.owner_user_id as string);
@@ -857,7 +865,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         .prepare("SELECT * FROM reusable_assets WHERE id = ?")
         .get(id) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: "Asset not found" });
-      const path = row.audio_path as string;
+      const path = row.audio_path ? resolveDataPath(row.audio_path as string) : "";
       const ownerUserId = row.owner_user_id as string;
       if (!path || !existsSync(path))
         return reply.status(404).send({ error: "File not found" });
@@ -895,7 +903,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         )
         .get(id, userId) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: "Asset not found" });
-      const path = row.audio_path as string;
+      const path = row.audio_path ? resolveDataPath(row.audio_path as string) : "";
       if (!path || !existsSync(path))
         return reply.status(404).send({ error: "File not found" });
       return sendLibraryWaveform(reply, path, libraryDir(userId));
@@ -929,7 +937,7 @@ export async function libraryRoutes(app: FastifyInstance) {
         )
         .get(id, userId) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: "Asset not found" });
-      const path = row.audio_path as string;
+      const path = row.audio_path ? resolveDataPath(row.audio_path as string) : "";
       if (!path || !existsSync(path))
         return reply.status(404).send({ error: "File not found" });
       const base = libraryDir(userId);

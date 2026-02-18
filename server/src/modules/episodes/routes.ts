@@ -28,6 +28,8 @@ import {
   processedDir,
   transcriptSrtPath,
   uploadsDir,
+  pathRelativeToData,
+  resolveDataPath,
 } from "../../services/paths.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { APP_NAME, ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
@@ -44,7 +46,8 @@ function slugify(s: string): string {
 function episodeRowWithFilename(
   row: Record<string, unknown>,
 ): Record<string, unknown> {
-  const path = row.artwork_path as string | null | undefined;
+  const pathRaw = row.artwork_path as string | null | undefined;
+  const path = pathRaw ? resolveDataPath(pathRaw) : "";
   const podcastId = row.podcast_id as string | undefined;
   let artwork_filename: string | null = null;
   if (path && podcastId) {
@@ -411,7 +414,8 @@ export async function episodeRoutes(app: FastifyInstance) {
         const episodeRow = db
           .prepare("SELECT artwork_path FROM episodes WHERE id = ?")
           .get(id) as { artwork_path: string | null } | undefined;
-        if (episodeRow?.artwork_path) oldArtworkPath = episodeRow.artwork_path;
+        if (episodeRow?.artwork_path)
+          oldArtworkPath = resolveDataPath(episodeRow.artwork_path);
       }
 
       const guidPayload = (data as { guid?: string }).guid;
@@ -562,7 +566,7 @@ export async function episodeRoutes(app: FastifyInstance) {
         )
         .all(episodeId) as { audio_path: string }[];
       for (const seg of segments) {
-        const path = seg.audio_path;
+        const path = seg.audio_path ? resolveDataPath(seg.audio_path) : "";
         if (!path) continue;
         try {
           assertPathUnder(path, segmentBase);
@@ -571,10 +575,13 @@ export async function episodeRoutes(app: FastifyInstance) {
           /* best-effort */
         }
       }
-      if (episodeRow.audio_source_path && existsSync(episodeRow.audio_source_path)) {
+      const audioSourcePath = episodeRow.audio_source_path
+        ? resolveDataPath(episodeRow.audio_source_path)
+        : "";
+      if (audioSourcePath && existsSync(audioSourcePath)) {
         try {
-          assertPathUnder(episodeRow.audio_source_path, segmentBase);
-          bytesFreed += statSync(episodeRow.audio_source_path).size;
+          assertPathUnder(audioSourcePath, segmentBase);
+          bytesFreed += statSync(audioSourcePath).size;
         } catch {
           /* best-effort */
         }
@@ -598,11 +605,14 @@ export async function episodeRoutes(app: FastifyInstance) {
           /* best-effort */
         }
       }
-      if (episodeRow.artwork_path && existsSync(episodeRow.artwork_path)) {
+      const episodeArtPath = episodeRow.artwork_path
+        ? resolveDataPath(episodeRow.artwork_path)
+        : "";
+      if (episodeArtPath && existsSync(episodeArtPath)) {
         try {
           const artDir = artworkDir(podcastId);
-          assertPathUnder(episodeRow.artwork_path, artDir);
-          unlinkSync(episodeRow.artwork_path);
+          assertPathUnder(episodeArtPath, artDir);
+          unlinkSync(episodeArtPath);
         } catch {
           /* best-effort */
         }
@@ -680,11 +690,14 @@ export async function episodeRoutes(app: FastifyInstance) {
         .get(episodeId, podcastId) as
         | { artwork_path: string | null }
         | undefined;
-      if (!row?.artwork_path || basename(row.artwork_path) !== filename)
+      const artworkPath = row?.artwork_path
+        ? resolveDataPath(row.artwork_path)
+        : "";
+      if (!artworkPath || basename(artworkPath) !== filename)
         return reply.status(404).send({ error: "Not found" });
       try {
         const safePath = assertPathUnder(
-          row.artwork_path,
+          artworkPath,
           artworkDir(podcastId),
         );
         const ext = extname(safePath).toLowerCase();
@@ -776,8 +789,10 @@ export async function episodeRoutes(app: FastifyInstance) {
       writeFileSync(destPath, buffer);
       db.prepare(
         "UPDATE episodes SET artwork_path = ?, artwork_url = NULL, updated_at = datetime('now') WHERE id = ?",
-      ).run(destPath, episodeId);
-      const oldPath = existing.artwork_path;
+      ).run(pathRelativeToData(destPath), episodeId);
+      const oldPath = existing.artwork_path
+        ? resolveDataPath(existing.artwork_path)
+        : "";
       if (oldPath && oldPath !== destPath) {
         try {
           const safeOld = assertPathUnder(oldPath, dir);

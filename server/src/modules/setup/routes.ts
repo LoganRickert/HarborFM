@@ -21,7 +21,7 @@ import {
 import { setupTokenQuerySchema, setupCompleteBodySchema } from "@harborfm/shared";
 import { normalizeHostname } from "../../utils/url.js";
 import { timingSafeEqualStrings } from "../../utils/secretCompare.js";
-import { libraryDir, libraryAssetPath } from "../../services/paths.js";
+import { libraryDir, libraryAssetPath, pathRelativeToData } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import { existsSync, statSync } from "fs";
 
@@ -448,7 +448,7 @@ async function importPixabayAssetsIntoLibrary(
         ownerUserId,
         name,
         tag,
-        destPath,
+        pathRelativeToData(destPath),
         durationSec,
         copyright,
         license,

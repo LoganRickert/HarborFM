@@ -22,6 +22,8 @@ import {
   uploadsDir,
   processedDir,
   assertPathUnder,
+  pathRelativeToData,
+  resolveDataPath,
 } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import {
@@ -189,7 +191,7 @@ export async function audioRoutes(app: FastifyInstance) {
           audio_duration_sec = ?,
           updated_at = datetime('now')
          WHERE id = ?`,
-      ).run(destPath, audioMime, sizeBytes, durationSec, episodeId);
+      ).run(pathRelativeToData(destPath), audioMime, sizeBytes, durationSec, episodeId);
 
       const row = db
         .prepare("SELECT * FROM episodes WHERE id = ?")
@@ -239,7 +241,8 @@ export async function audioRoutes(app: FastifyInstance) {
             error: "You do not have permission to process episode audio.",
           });
       const { podcastId, episode } = access;
-      const sourcePath = episode!.audio_source_path as string | undefined;
+      const sourcePathRaw = episode!.audio_source_path as string | undefined;
+      const sourcePath = sourcePathRaw ? resolveDataPath(sourcePathRaw) : "";
       if (!sourcePath || !existsSync(sourcePath)) {
         return reply
           .status(400)
@@ -271,7 +274,7 @@ export async function audioRoutes(app: FastifyInstance) {
             updated_at = datetime('now')
            WHERE id = ?`,
         ).run(
-          finalPath,
+          pathRelativeToData(finalPath),
           meta.mime,
           meta.sizeBytes,
           meta.durationSec,
@@ -315,7 +318,9 @@ export async function audioRoutes(app: FastifyInstance) {
       const episode = db
         .prepare("SELECT audio_final_path FROM episodes WHERE id = ?")
         .get(episodeId) as { audio_final_path: string | null } | undefined;
-      const audioPath = episode?.audio_final_path;
+      const audioPath = episode?.audio_final_path
+        ? resolveDataPath(episode.audio_final_path)
+        : "";
       if (!audioPath || !existsSync(audioPath))
         return reply.status(404).send({ error: "Final audio not found" });
       const base = processedDir(access.podcastId, episodeId);
@@ -367,11 +372,11 @@ export async function audioRoutes(app: FastifyInstance) {
       const episode = db
         .prepare("SELECT * FROM episodes WHERE id = ?")
         .get(episodeId) as Record<string, unknown>;
-      const path =
+      const pathRaw =
         type === "source"
-          ? episode.audio_source_path
-          : episode.audio_final_path;
-      const p = path as string | null;
+          ? (episode.audio_source_path as string | null)
+          : (episode.audio_final_path as string | null);
+      const p = pathRaw ? resolveDataPath(pathRaw) : "";
       if (!p || !existsSync(p)) {
         return reply
           .status(404)
@@ -501,7 +506,9 @@ export async function audioRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Not found" });
       }
 
-      const path = episode.audio_final_path as string | null;
+      const path = episode.audio_final_path
+        ? resolveDataPath(episode.audio_final_path as string)
+        : "";
       if (!path || !existsSync(path)) {
         return reply.status(404).send({ error: "Audio file not found" });
       }

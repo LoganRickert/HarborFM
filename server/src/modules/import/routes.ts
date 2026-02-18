@@ -24,7 +24,13 @@ import {
 } from "../../services/importFeed.js";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
-import { uploadsDir, segmentPath, processedDir, artworkDir } from "../../services/paths.js";
+import {
+  uploadsDir,
+  segmentPath,
+  processedDir,
+  artworkDir,
+  pathRelativeToData,
+} from "../../services/paths.js";
 import { assertUrlNotPrivate } from "../../utils/ssrf.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { readSettings, isTranscriptionProviderConfigured } from "../settings/index.js";
@@ -323,7 +329,7 @@ export async function importRoutes(app: FastifyInstance) {
           await downloadArtworkToPath(channel.artwork_url, artworkPath);
           db.prepare(
             "UPDATE podcasts SET artwork_path = ?, artwork_url = NULL WHERE id = ?",
-          ).run(artworkPath, podcastId);
+          ).run(pathRelativeToData(artworkPath), podcastId);
         } catch (err) {
           request.log.warn(
             { err, podcastId },
@@ -480,7 +486,7 @@ export async function importRoutes(app: FastifyInstance) {
                   );
                   db.prepare(
                     "UPDATE episodes SET artwork_path = ?, artwork_url = NULL WHERE id = ?",
-                  ).run(episodeArtworkPath, episodeId);
+                  ).run(pathRelativeToData(episodeArtworkPath), episodeId);
                 } catch (err) {
                   log.warn(
                     { err, episodeId },
@@ -564,7 +570,7 @@ export async function importRoutes(app: FastifyInstance) {
                 episodeId,
                 maxPos.pos,
                 ep.title || "Episode",
-                finalPath,
+                pathRelativeToData(finalPath),
                 durationSec,
               );
 
@@ -597,8 +603,8 @@ export async function importRoutes(app: FastifyInstance) {
                   updated_at = datetime('now')
                  WHERE id = ?`,
               ).run(
-                outPath,
-                outPath,
+                pathRelativeToData(outPath),
+                pathRelativeToData(outPath),
                 meta.mime,
                 meta.sizeBytes,
                 meta.durationSec,

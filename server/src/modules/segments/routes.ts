@@ -31,6 +31,8 @@ import {
   assertPathUnder,
   assertResolvedPathUnder,
   transcriptSrtPath,
+  resolveDataPath,
+  pathRelativeToData,
 } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
@@ -407,7 +409,7 @@ function getSegmentAudioPath(
 ): { path: string; base: string } | null {
   if (segment.type === "recorded" && segment.audio_path) {
     return {
-      path: segment.audio_path as string,
+      path: resolveDataPath(segment.audio_path as string),
       base: uploadsDir(podcastId, episodeId),
     };
   }
@@ -420,7 +422,10 @@ function getSegmentAudioPath(
       | { audio_path: string; owner_user_id: string }
       | undefined;
     if (asset?.audio_path)
-      return { path: asset.audio_path, base: libraryDir(asset.owner_user_id) };
+      return {
+        path: resolveDataPath(asset.audio_path),
+        base: libraryDir(asset.owner_user_id),
+      };
   }
   return null;
 }
@@ -445,23 +450,23 @@ async function promoteReusableSegmentToRecorded(
     .get(segment.reusable_asset_id) as
     | { audio_path: string; owner_user_id: string }
     | undefined;
-  if (!asset?.audio_path || !existsSync(asset.audio_path)) {
-    throw new Error("Library asset audio not found");
-  }
-  assertPathUnder(asset.audio_path, libraryDir(asset.owner_user_id));
+  if (!asset?.audio_path) throw new Error("Library asset audio not found");
+  const assetPath = resolveDataPath(asset.audio_path);
+  if (!existsSync(assetPath)) throw new Error("Library asset audio not found");
+  assertPathUnder(assetPath, libraryDir(asset.owner_user_id));
 
   const storageUserId = getPodcastOwnerId(podcastId);
   if (!storageUserId) {
     throw new Error("Podcast owner not found");
   }
-  const bytesToAdd = statSync(asset.audio_path).size;
+  const bytesToAdd = statSync(assetPath).size;
   if (wouldExceedStorageLimit(db, storageUserId, bytesToAdd)) {
     throw new Error("Storage limit exceeded");
   }
 
-  const ext = (extname(asset.audio_path).replace(/^\./, "") || "mp3").toLowerCase();
+  const ext = (extname(assetPath).replace(/^\./, "") || "mp3").toLowerCase();
   const destPath = segmentPath(podcastId, episodeId, segment.id as string, ext);
-  copyFileSync(asset.audio_path, destPath);
+  copyFileSync(assetPath, destPath);
 
   let durationSec = 0;
   try {
@@ -491,7 +496,7 @@ async function promoteReusableSegmentToRecorded(
     `UPDATE episode_segments
      SET type = 'recorded', audio_path = ?, reusable_asset_id = NULL, duration_sec = ?
      WHERE id = ? AND episode_id = ?`,
-  ).run(destPath, durationSec, segment.id, episodeId);
+  ).run(pathRelativeToData(destPath), durationSec, segment.id, episodeId);
 
   return db
     .prepare("SELECT * FROM episode_segments WHERE id = ? AND episode_id = ?")
@@ -789,7 +794,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         episodeId,
         maxPos.pos,
         segmentName,
-        finalPath,
+        pathRelativeToData(finalPath),
         durationSec,
       );
 
@@ -1622,7 +1627,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         const newDurationSec = newEndSec - newStartSec;
         db.prepare(
           "UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?",
-        ).run(finalPath, newDurationSec, segmentId, episodeId);
+        ).run(pathRelativeToData(finalPath), newDurationSec, segmentId, episodeId);
 
         if (audio.path !== finalPath) unlinkSync(audio.path);
         const txtPathToRemove = transcriptPath(audio.path);
@@ -1890,7 +1895,7 @@ export async function segmentRoutes(app: FastifyInstance) {
 
         db.prepare(
           "UPDATE episode_segments SET audio_path = ?, duration_sec = ?, trim_ranges = '[]', markers = '[]' WHERE id = ? AND episode_id = ?",
-        ).run(finalPath, newDurationSec, segmentId, episodeId);
+        ).run(pathRelativeToData(finalPath), newDurationSec, segmentId, episodeId);
 
         if (audio.path !== finalPath) unlinkSync(audio.path);
         const txtPathToRemove = transcriptPath(audio.path);
@@ -2046,7 +2051,7 @@ export async function segmentRoutes(app: FastifyInstance) {
 
         db.prepare(
           "UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?",
-        ).run(finalPath, newDurationSec, segmentId, episodeId);
+        ).run(pathRelativeToData(finalPath), newDurationSec, segmentId, episodeId);
 
         if (audio.path !== finalPath) unlinkSync(audio.path);
         if (existsSync(oldTxtPath) && oldTxtPath !== newTxtPath)
@@ -2294,11 +2299,11 @@ export async function segmentRoutes(app: FastifyInstance) {
               `UPDATE episode_segments
                SET audio_path = ?, reusable_asset_id = NULL, type = 'recorded', duration_sec = ?
                WHERE id = ? AND episode_id = ?`,
-            ).run(newAudioPath, newDurationSec, segmentId, episodeId);
+            ).run(pathRelativeToData(newAudioPath), newDurationSec, segmentId, episodeId);
           } else {
             db.prepare(
               "UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?",
-            ).run(newAudioPath, newDurationSec, segmentId, episodeId);
+            ).run(pathRelativeToData(newAudioPath), newDurationSec, segmentId, episodeId);
           }
 
           broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
@@ -2371,7 +2376,8 @@ export async function segmentRoutes(app: FastifyInstance) {
         )
         .get(segmentId, episodeId) as Record<string, unknown> | undefined;
       if (!row) return reply.status(404).send({ error: "Segment not found" });
-      const path = row.audio_path as string | null;
+      const pathRaw = row.audio_path as string | null;
+      const path = pathRaw ? resolveDataPath(pathRaw) : "";
       const { unlinkSync } = await import("fs");
       let bytesFreed = 0;
       if (path && existsSync(path)) {
@@ -2655,7 +2661,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         | undefined;
       if (!row || !row.audio_final_path)
         return reply.status(404).send({ error: "Episode has no final audio" });
-      const audioPath = row.audio_final_path as string;
+      const audioPath = resolveDataPath(row.audio_final_path as string);
       if (!existsSync(audioPath))
         return reply.status(404).send({ error: "Final audio file not found" });
       const { podcastId } = access;
@@ -2913,22 +2919,24 @@ export async function segmentRoutes(app: FastifyInstance) {
               if ((s.in_progress as number) === 1 || (s.record_failed as number) === 1) continue;
               let sourcePath: string | null = null;
               let baseDir: string = uploadsDir(podcastId, episodeId);
-              if (
-                s.type === "recorded" &&
-                s.audio_path &&
-                existsSync(s.audio_path as string)
-              ) {
-                assertPathUnder(s.audio_path as string, DATA_DIR);
-                sourcePath = s.audio_path as string;
-                baseDir = uploadsDir(podcastId, episodeId);
+              if (s.type === "recorded" && s.audio_path) {
+                const segPath = resolveDataPath(s.audio_path as string);
+                if (existsSync(segPath)) {
+                  assertPathUnder(segPath, DATA_DIR);
+                  sourcePath = segPath;
+                  baseDir = uploadsDir(podcastId, episodeId);
+                }
               } else if (s.type === "reusable" && s.reusable_asset_id) {
                 const asset = db
                   .prepare("SELECT audio_path, owner_user_id FROM reusable_assets WHERE id = ?")
                   .get(s.reusable_asset_id) as { audio_path: string; owner_user_id: string } | undefined;
-                if (asset?.audio_path && existsSync(asset.audio_path)) {
-                  assertPathUnder(asset.audio_path, DATA_DIR);
-                  sourcePath = asset.audio_path;
-                  baseDir = libraryDir(asset.owner_user_id);
+                if (asset?.audio_path) {
+                  const assetPath = resolveDataPath(asset.audio_path);
+                  if (existsSync(assetPath)) {
+                    assertPathUnder(assetPath, DATA_DIR);
+                    sourcePath = assetPath;
+                    baseDir = libraryDir(asset.owner_user_id);
+                  }
                 }
               }
               if (!sourcePath) continue;
@@ -3028,8 +3036,8 @@ export async function segmentRoutes(app: FastifyInstance) {
                 updated_at = datetime('now')
                WHERE id = ?`,
             ).run(
-              outPath,
-              outPath,
+              pathRelativeToData(outPath),
+              pathRelativeToData(outPath),
               meta.mime,
               meta.sizeBytes,
               meta.durationSec,

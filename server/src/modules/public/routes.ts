@@ -19,6 +19,7 @@ import {
   castPhotoDir,
   chaptersJsonPath,
   processedDir,
+  resolveDataPath,
   rssDir,
   transcriptSrtPath,
 } from "../../services/paths.js";
@@ -1161,12 +1162,15 @@ export async function publicRoutes(app: FastifyInstance) {
       if (
         !row ||
         row.subscriber_only === 1 ||
-        !row.audio_final_path ||
-        !existsSync(row.audio_final_path)
+        !row.audio_final_path
       ) {
         return reply.status(404).send({ error: "Waveform not found" });
       }
-      const waveformPath = row.audio_final_path.replace(
+      const audioPath = resolveDataPath(row.audio_final_path);
+      if (!audioPath || !existsSync(audioPath)) {
+        return reply.status(404).send({ error: "Waveform not found" });
+      }
+      const waveformPath = audioPath.replace(
         /\.[^.]+$/,
         WAVEFORM_EXTENSION,
       );
@@ -1808,11 +1812,15 @@ export async function publicRoutes(app: FastifyInstance) {
         | { id: string; audio_final_path: string | null }
         | undefined;
 
-      if (!row || !row.audio_final_path || !existsSync(row.audio_final_path)) {
+      if (!row || !row.audio_final_path) {
+        return reply.status(404).send({ error: "Waveform not found" });
+      }
+      const audioPath = resolveDataPath(row.audio_final_path);
+      if (!audioPath || !existsSync(audioPath)) {
         return reply.status(404).send({ error: "Waveform not found" });
       }
 
-      const waveformPath = row.audio_final_path.replace(
+      const waveformPath = audioPath.replace(
         /\.[^.]+$/,
         WAVEFORM_EXTENSION,
       );
@@ -1894,11 +1902,14 @@ export async function publicRoutes(app: FastifyInstance) {
             audio_mime: string | null;
           }
         | undefined;
-      if (!episode?.audio_final_path || !existsSync(episode.audio_final_path))
+      const audioPath = episode?.audio_final_path
+        ? resolveDataPath(episode.audio_final_path)
+        : "";
+      if (!episode?.audio_final_path || !audioPath || !existsSync(audioPath))
         return reply.status(404).send({ error: "Not found" });
       try {
         const safePath = assertPathUnder(
-          episode.audio_final_path,
+          audioPath,
           processedDir(podcastId, episodeId),
         );
         const mime = (episode.audio_mime as string) || "audio/mpeg";
