@@ -9,7 +9,7 @@
  */
 import "dotenv/config";
 import { randomBytes } from "crypto";
-import { RESET_TOKEN_EXPIRY_HOURS } from "../config.js";
+import { ADMIN_EMAIL, RESET_TOKEN_EXPIRY_HOURS } from "../config.js";
 import { db } from "../db/index.js";
 import { sha256Hex } from "../utils/hash.js";
 import { readSettings } from "../modules/settings/index.js";
@@ -17,7 +17,7 @@ import { sendMail, buildWelcomeSetPasswordEmail } from "../services/email.js";
 import { normalizeHostname } from "../utils/url.js";
 
 async function main(): Promise<void> {
-  const email = process.env.ADMIN_EMAIL?.trim();
+  const email = ADMIN_EMAIL;
   if (!email || !email.includes("@")) {
     console.warn("[send-seed-admin-welcome] ADMIN_EMAIL (valid email) required. Skipping.");
     process.exit(0);

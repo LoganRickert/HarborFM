@@ -10,6 +10,8 @@ import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import { join, resolve } from "path";
 import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD_HASH,
   API_PREFIX,
   API_KEY_PREFIX,
   APP_NAME,
@@ -17,6 +19,7 @@ import {
   HOST,
   JWT_COOKIE_NAME,
   JWT_COOKIE_SIGNED,
+  JWT_SECRET as JWT_SECRET_ENV,
   LOGGER,
   PORT,
   MULTIPART_MAX_BYTES,
@@ -70,7 +73,7 @@ import { getSecretsKey } from "./services/secrets.js";
 import { SWAGGER_TITLE, SWAGGER_THEME_CSS } from "./swagger-theme.js";
 
 function loadOrCreateJwtSecret(): string {
-  const fromEnv = process.env.JWT_SECRET?.trim();
+  const fromEnv = JWT_SECRET_ENV;
   if (fromEnv) return fromEnv;
 
   ensureSecretsDir();
@@ -117,8 +120,8 @@ async function main() {
 
   // One-time setup phase (bootstrap from env when ADMIN_EMAIL + ADMIN_PASSWORD_HASH set)
   const setupComplete = isSetupComplete();
-  const adminEmail = process.env.ADMIN_EMAIL?.trim();
-  const adminHash = process.env.ADMIN_PASSWORD_HASH?.trim();
+  const adminEmail = ADMIN_EMAIL;
+  const adminHash = ADMIN_PASSWORD_HASH;
   const hasEmail = Boolean(adminEmail);
   const hasHash = Boolean(adminHash);
   const hashValid = Boolean(adminHash?.startsWith("$argon2"));

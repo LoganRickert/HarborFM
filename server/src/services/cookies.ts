@@ -1,10 +1,8 @@
-export function getCookieSecureFlag(): boolean {
-  // Correct env var name
-  const correct = process.env.COOKIE_SECURE?.trim();
-  if (correct !== undefined && correct !== "") {
-    return correct === "true" || correct === "1";
-  }
+import { COOKIE_SECURE, IS_PRODUCTION } from "../config.js";
 
-  // Production defaults to Secure cookies
-  return process.env.NODE_ENV === "production";
+export function getCookieSecureFlag(): boolean {
+  if (COOKIE_SECURE !== undefined && COOKIE_SECURE !== "") {
+    return COOKIE_SECURE === "true" || COOKIE_SECURE === "1";
+  }
+  return IS_PRODUCTION;
 }

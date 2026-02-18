@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join, resolve } from "path";
 import { parseShareRole } from "./utils/roles.js";
 
 /**
@@ -28,6 +28,12 @@ export const TRUST_PROXY =
     ? false
     : true;
 
+/** Node environment. Env: NODE_ENV. Default "development". */
+export const NODE_ENV = process.env.NODE_ENV ?? "development";
+
+/** Whether app is running in production. */
+export const IS_PRODUCTION = NODE_ENV === "production";
+
 /** API path segment (no slashes). Routes live under /${API_PREFIX}/. Env: API_PREFIX. Default "api". */
 export const API_PREFIX = process.env.API_PREFIX?.trim() || "api";
 
@@ -35,7 +41,7 @@ export const API_PREFIX = process.env.API_PREFIX?.trim() || "api";
 export const CORS_ORIGIN =
   process.env.CORS_ORIGIN !== undefined
     ? process.env.CORS_ORIGIN === "true" || process.env.CORS_ORIGIN === "1"
-    : process.env.NODE_ENV !== "production";
+    : !IS_PRODUCTION;
 
 /** Min free storage (MB) required to record a new section. Env: RECORD_MIN_FREE_MB. Default 5. */
 export const RECORD_MIN_FREE_MB = Number(process.env.RECORD_MIN_FREE_MB) || 5;
@@ -106,6 +112,10 @@ export const WEBRTC_PUBLIC_WS_URL = process.env.WEBRTC_PUBLIC_WS_URL?.trim() || 
 export const RECORDING_CALLBACK_SECRET =
   process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
 
+/** Secret for authenticating HTTP requests between main app and WebRTC service. Env: WEBRTC_SERVICE_SECRET. */
+export const WEBRTC_SERVICE_SECRET =
+  process.env.WEBRTC_SERVICE_SECRET?.trim() || null;
+
 /** Host-away grace period (ms) when no guests. Env: HOST_AWAY_GRACE_NO_GUESTS_MS. Default 60000 (1 min). */
 export const HOST_AWAY_GRACE_NO_GUESTS_MS =
   Number(process.env.HOST_AWAY_GRACE_NO_GUESTS_MS) || 60_000;
@@ -144,6 +154,20 @@ export const WAVEFORM_EXTENSION =
 export const PUBLIC_DIR =
   process.env.PUBLIC_DIR ?? join(process.cwd(), "public");
 
+/** Data directory (uploads, recordings, DB, etc). Env: DATA_DIR. Default "data" under project. */
+export const DATA_DIR = resolve(
+  process.env.DATA_DIR ?? join(process.cwd(), "data"),
+);
+
+/** Secrets directory (JWT secret, setup token, etc). Env: SECRETS_DIR. Default "secrets" under project. */
+export const SECRETS_DIR = resolve(
+  process.env.SECRETS_DIR ?? join(process.cwd(), "secrets"),
+);
+
+/** WebRTC recordings directory override. When set, webrtc service writes here. Env: WEBRTC_RECORDINGS_DIR. */
+export const WEBRTC_RECORDINGS_DIR =
+  process.env.WEBRTC_RECORDINGS_DIR?.trim() || null;
+
 /** SQLite database filename (under DATA_DIR). Env: DB_FILENAME. Default derived from APP_NAME (e.g. harborfm.db). */
 export const DB_FILENAME =
   process.env.DB_FILENAME?.trim() || `${APP_NAME_SLUG}.db`;
@@ -174,6 +198,12 @@ export const CSRF_COOKIE_MAX_AGE_SECONDS =
 /** Name of the JWT session cookie. Env: JWT_COOKIE_NAME. Default derived from APP_NAME (e.g. harborfm_jwt). */
 export const JWT_COOKIE_NAME =
   process.env.JWT_COOKIE_NAME?.trim() || `${APP_NAME_SLUG}_jwt`;
+
+/** JWT signing secret from env. When unset, app falls back to file or generates one. Env: JWT_SECRET. */
+export const JWT_SECRET = process.env.JWT_SECRET?.trim() || null;
+
+/** Explicit cookie Secure flag. When set, overrides default (Secure in production). Env: COOKIE_SECURE. */
+export const COOKIE_SECURE = process.env.COOKIE_SECURE?.trim() || undefined;
 
 /** Whether the JWT cookie is signed (requires @fastify/cookie secret). Env: JWT_COOKIE_SIGNED. Default false. */
 export const JWT_COOKIE_SIGNED =
@@ -234,8 +264,7 @@ export const SWAGGER_UI_THEME_CSS_FILENAME =
 
 /** Whether to serve Swagger UI at /api/docs. In non-production always true; in production set SWAGGER_ENABLED=true to enable. */
 export const SWAGGER_ENABLED =
-  process.env.NODE_ENV !== "production" ||
-  process.env.SWAGGER_ENABLED === "true";
+  !IS_PRODUCTION || process.env.SWAGGER_ENABLED === "true";
 
 /** OpenAI chat completions API URL. Env: OPENAI_CHAT_COMPLETIONS_URL. Default "https://api.openai.com/v1/chat/completions". */
 export const OPENAI_CHAT_COMPLETIONS_URL =
@@ -317,3 +346,61 @@ export const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || null;
 
 /** Bootstrap admin password (argon2 hash). Requires ADMIN_EMAIL. Env: ADMIN_PASSWORD_HASH. */
 export const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH?.trim() || null;
+
+/** Path to file containing admin password hash (preferred over ADMIN_PASSWORD_HASH). Env: ADMIN_PASSWORD_HASH_FILE. */
+export const ADMIN_PASSWORD_HASH_FILE =
+  process.env.ADMIN_PASSWORD_HASH_FILE?.trim() || null;
+
+/** Base64-encoded argon2 hash for seed-setup (from Terraform). Env: ADMIN_PASSWORD_HASH_B64. */
+export const ADMIN_PASSWORD_HASH_B64 =
+  process.env.ADMIN_PASSWORD_HASH_B64?.trim() || null;
+
+/** Plaintext admin password (dev/seed only). Env: ADMIN_PASSWORD. */
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim() || null;
+
+/** Bootstrap admin hostname. When unset, falls back to https://DOMAIN when DOMAIN is valid. Env: ADMIN_HOSTNAME. */
+export const ADMIN_HOSTNAME = process.env.ADMIN_HOSTNAME?.trim() || null;
+
+/** Primary domain (for DNS, hostname fallback). Env: DOMAIN. */
+export const DOMAIN = process.env.DOMAIN?.trim() ?? "";
+
+/** Bootstrap: enable registration. Env: ADMIN_REGISTRATION_ENABLED. Set "1" for true. */
+export const ADMIN_REGISTRATION_ENABLED =
+  process.env.ADMIN_REGISTRATION_ENABLED === "1";
+
+/** Bootstrap: enable public feeds. Env: ADMIN_PUBLIC_FEEDS_ENABLED. Set "1" for true. */
+export const ADMIN_PUBLIC_FEEDS_ENABLED =
+  process.env.ADMIN_PUBLIC_FEEDS_ENABLED === "1";
+
+/** Master key for secrets encryption (base64). Env: HARBORFM_SECRETS_KEY. */
+export const HARBORFM_SECRETS_KEY =
+  process.env.HARBORFM_SECRETS_KEY?.trim() || null;
+
+/** Email provider for seed-setup (smtp, sendgrid, webhook). Env: EMAIL_PROVIDER. */
+export const EMAIL_PROVIDER =
+  process.env.EMAIL_PROVIDER?.trim()?.toLowerCase() || null;
+
+/** Webhook URL for email webhook provider. Env: EMAIL_WEBHOOK_URL. */
+export const EMAIL_WEBHOOK_URL =
+  process.env.EMAIL_WEBHOOK_URL?.trim() || null;
+
+/** Field key for email webhook payload. Env: EMAIL_WEBHOOK_FIELD_KEY. Default "content". */
+export const EMAIL_WEBHOOK_FIELD_KEY =
+  process.env.EMAIL_WEBHOOK_FIELD_KEY?.trim() || "content";
+
+/** Secret for Caddy on-demand TLS permission check. Env: CADDY_TLS_CHECK_SECRET. */
+export const CADDY_TLS_CHECK_SECRET =
+  process.env.CADDY_TLS_CHECK_SECRET?.trim() ?? "";
+
+/** Computed admin hostname from env: ADMIN_HOSTNAME or https://DOMAIN when DOMAIN is valid (not localhost or wildcard). */
+export function getAdminHostnameFromEnv(): string {
+  if (ADMIN_HOSTNAME) return ADMIN_HOSTNAME;
+  if (
+    DOMAIN &&
+    DOMAIN !== "localhost" &&
+    DOMAIN !== "_"
+  ) {
+    return `https://${DOMAIN}`;
+  }
+  return "";
+}

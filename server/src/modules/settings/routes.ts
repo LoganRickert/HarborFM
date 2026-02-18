@@ -14,6 +14,8 @@ import {
   OPENAI_MODELS_URL,
   SENDGRID_SCOPES_URL,
   DNS_SECRETS_AAD,
+  WEBRTC_SERVICE_URL,
+  WEBRTC_PUBLIC_WS_URL,
 } from "../../config.js";
 import {
   runGeoIPUpdate,
@@ -478,8 +480,8 @@ export function migrateSettingsFromFile(): void {
  * Only writes when env has values and DB has empty webrtc settings, so the Settings page displays them.
  */
 export function migrateWebRtcFromEnv(): void {
-  const envService = process.env.WEBRTC_SERVICE_URL?.trim();
-  const envPublic = process.env.WEBRTC_PUBLIC_WS_URL?.trim();
+  const envService = WEBRTC_SERVICE_URL;
+  const envPublic = WEBRTC_PUBLIC_WS_URL;
   if (!envService || !envPublic) return;
 
   try {

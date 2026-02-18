@@ -1,5 +1,6 @@
 import { db } from "../../db/index.js";
 import { readSettings } from "../../modules/settings/index.js";
+import { DOMAIN } from "../../config.js";
 import type { AppSettings } from "../../modules/settings/routes.js";
 
 /**
@@ -85,7 +86,7 @@ export function isDomainAllowed(domain: string): boolean {
   const settings = readSettings();
 
   // Primary domain from env (not localhost or wildcard)
-  const envDomain = (process.env.DOMAIN ?? "").trim().toLowerCase();
+  const envDomain = (DOMAIN ?? "").trim().toLowerCase();
   if (envDomain && envDomain !== "localhost" && envDomain !== "_" && raw === envDomain) {
     return true;
   }

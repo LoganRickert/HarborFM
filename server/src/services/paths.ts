@@ -1,10 +1,10 @@
 import { join, relative, resolve, sep } from "path";
 import { mkdirSync, existsSync, realpathSync } from "fs";
-
-const DATA_DIR = resolve(process.env.DATA_DIR ?? join(process.cwd(), "data"));
-const SECRETS_DIR = resolve(
-  process.env.SECRETS_DIR ?? join(process.cwd(), "secrets"),
-);
+import {
+  DATA_DIR,
+  SECRETS_DIR,
+  WEBRTC_RECORDINGS_DIR,
+} from "../config.js";
 
 /** Only allow IDs that cannot be used for path traversal (nanoid-style: alphanumeric, hyphen, underscore). */
 const SAFE_ID = /^[a-zA-Z0-9_-]+$/;
@@ -79,7 +79,7 @@ export function getSecretsDir() {
 
 /** Directory where WebRTC service writes recordings. Server copies from here to segment path. */
 export function getWebrtcRecordingsDir(): string {
-  const dir = process.env.WEBRTC_RECORDINGS_DIR?.trim();
+  const dir = WEBRTC_RECORDINGS_DIR;
   return dir ? resolve(dir) : join(DATA_DIR, "webrtc-recordings");
 }
 

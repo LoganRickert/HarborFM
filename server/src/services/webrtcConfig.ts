@@ -1,3 +1,9 @@
+import {
+  RECORDING_CALLBACK_SECRET,
+  WEBRTC_PUBLIC_WS_URL,
+  WEBRTC_SERVICE_SECRET,
+  WEBRTC_SERVICE_URL,
+} from "../config.js";
 import { readSettings } from "../modules/settings/index.js";
 
 /** WebRTC config. Env vars override settings. */
@@ -8,10 +14,10 @@ export function getWebRtcConfig(): {
   webrtcServiceSecret: string | null;
 } {
   const settings = readSettings();
-  const envService = process.env.WEBRTC_SERVICE_URL?.trim();
-  const envPublic = process.env.WEBRTC_PUBLIC_WS_URL?.trim();
-  const envSecret = process.env.RECORDING_CALLBACK_SECRET?.trim();
-  const envServiceSecret = process.env.WEBRTC_SERVICE_SECRET?.trim();
+  const envService = WEBRTC_SERVICE_URL;
+  const envPublic = WEBRTC_PUBLIC_WS_URL;
+  const envSecret = RECORDING_CALLBACK_SECRET;
+  const envServiceSecret = WEBRTC_SERVICE_SECRET;
 
   return {
     serviceUrl: envService || (settings.webrtc_service_url ?? "").trim() || null,
