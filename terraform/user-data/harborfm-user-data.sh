@@ -121,7 +121,8 @@ if [ "$DEPLOY_TYPE" != "pm2" ]; then
   # Non-root user setup when running as root
   if [ "$(id -u)" -eq 0 ]; then
     NEW_USER="${NEW_USER:-harborfm}"
-    id "$NEW_USER" &>/dev/null || useradd -m -s /bin/bash "$NEW_USER"
+    # For Docker: UID 10001 matches harborfm image's appuser so bind-mounted data is writable. Create user with that UID when possible.
+    if id "$NEW_USER" &>/dev/null; then :; elif useradd -m -s /bin/bash -u 10001 "$NEW_USER" 2>/dev/null; then :; else useradd -m -s /bin/bash "$NEW_USER"; fi
     echo "$NEW_USER ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$NEW_USER"
     chmod 440 "/etc/sudoers.d/$NEW_USER"
     mkdir -p "/home/$NEW_USER/.ssh" && chmod 700 "/home/$NEW_USER/.ssh"
@@ -182,6 +183,11 @@ if [ "$DEPLOY_TYPE" != "pm2" ]; then
         FSTYPE=$(blkid -s TYPE -o value "$DEV" 2>/dev/null || echo "ext4")
         [ -n "$UUID" ] && ! grep -q "$MOUNT_DATA" /etc/fstab 2>/dev/null && echo "UUID=$UUID $MOUNT_DATA $FSTYPE defaults,nofail 0 2" >> /etc/fstab
       fi
+      # Fail closed: read-only mount causes silent data loss on subsequent terraform apply
+      if ! touch "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null || ! rm -f "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null; then
+        echo "[harborfm-userdata] ERROR: $MOUNT_DATA is read-only. Refusing to continue - proceeding would cause data loss on subsequent terraform apply. Check: dmesg | grep -i ext4; run fsck on the block device; remount rw." >&2
+        exit 1
+      fi
       # Shared layout: data, secrets, webrtc (PM2-compatible). Proxy infra under proxy/, whisper under whisper/
       mkdir -p "$MOUNT_DATA/data" "$MOUNT_DATA/secrets" "$MOUNT_DATA/webrtc" \
         "$MOUNT_DATA/proxy/certbot/webroot" "$MOUNT_DATA/proxy/certbot/certs" \
@@ -193,7 +199,8 @@ if [ "$DEPLOY_TYPE" != "pm2" ]; then
       mkdir -p "$INSTALL_DIR"
       rm -rf "$INSTALL_DIR/harborfm-data" 2>/dev/null || true
       ln -sf "$MOUNT_DATA" "$INSTALL_DIR/harborfm-data"
-      chown -R "$NEW_USER:$NEW_USER" "$MOUNT_DATA"
+      # Chown to 10001:10001 (Docker appuser) so container can write; fallback to NEW_USER if 10001 not used
+      chown -R "10001:10001" "$MOUNT_DATA" 2>/dev/null || chown -R "$NEW_USER:$NEW_USER" "$MOUNT_DATA"
 
       # Install boot mount script for Docker (same layout as PM2 for data/secrets/webrtc)
       cat > /usr/local/bin/harborfm-mount-data-volume.sh << 'DOCKER_MOUNT_SCRIPT'
@@ -227,13 +234,31 @@ if [ -n "$DEV" ] && ! mountpoint -q "$MOUNT_DATA" 2>/dev/null; then
   [ -n "$UUID" ] && ! grep -q "$MOUNT_DATA" /etc/fstab 2>/dev/null && echo "UUID=$UUID $MOUNT_DATA $FSTYPE defaults,nofail 0 2" >> /etc/fstab
 fi
 if [ -n "$DEV" ]; then
+  if ! touch "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null || ! rm -f "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null; then
+    echo "[harborfm-mount] ERROR: $MOUNT_DATA is read-only. Refusing to continue - proceeding would cause data loss on subsequent terraform apply. Check: dmesg | grep -i ext4; run fsck on the block device; remount rw." >&2
+    exit 1
+  fi
   mkdir -p "$MOUNT_DATA/data" "$MOUNT_DATA/secrets" "$MOUNT_DATA/webrtc" \
     "$MOUNT_DATA/proxy/certbot/webroot" "$MOUNT_DATA/proxy/certbot/certs" \
     "$MOUNT_DATA/proxy/nginx/logs" "$MOUNT_DATA/proxy/nginx/sites-enabled" \
     "$MOUNT_DATA/proxy/caddy/data" "$MOUNT_DATA/proxy/caddy/config" "$MOUNT_DATA/proxy/caddy/logs" \
     "$MOUNT_DATA/whisper/cache"
   [ -f "$MOUNT_DATA/proxy/nginx/sites-enabled/00-placeholder.conf" ] || echo '# Placeholder' > "$MOUNT_DATA/proxy/nginx/sites-enabled/00-placeholder.conf"
-  [ -d "$INSTALL_DIR_DOCKER" ] && { rm -f "$INSTALL_DIR_DOCKER/harborfm-data"; ln -sf "$MOUNT_DATA" "$INSTALL_DIR_DOCKER/harborfm-data"; }
+  [ -d "$INSTALL_DIR_DOCKER" ] && {
+    HF="$INSTALL_DIR_DOCKER/harborfm-data"
+    if [ -L "$HF" ]; then rm -f "$HF"
+    elif [ -d "$HF" ]; then
+      # Mount is authoritative (persists across rebuilds). Only migrate dir->mount if mount is empty
+      # (e.g. block volume newly added to existing instance). Otherwise preserve mount data.
+      if [ ! -d "$MOUNT_DATA/data" ] || [ -z "$(ls -A "$MOUNT_DATA/data" 2>/dev/null)" ]; then
+        rsync -a --ignore-errors "$HF/" "$MOUNT_DATA/" 2>/dev/null || { for f in "$HF"/*; do [ -e "$f" ] && cp -a "$f" "$MOUNT_DATA/"; done; }
+      fi
+      rm -rf "$HF"
+    fi
+    ln -sf "$MOUNT_DATA" "$HF"
+    chown -h 10001:10001 "$HF" 2>/dev/null || chown -h "$DOCKER_USER:$DOCKER_USER" "$HF" 2>/dev/null || true
+  }
+  chown -R 10001:10001 "$MOUNT_DATA" 2>/dev/null || chown -R "$DOCKER_USER:$DOCKER_USER" "$MOUNT_DATA"
   ENV_FILE="$INSTALL_DIR_PM2/server/.env"
   if [ -f "$ENV_FILE" ]; then
     sed -i "s|^DATA_DIR=.*|DATA_DIR=$MOUNT_DATA/data|" "$ENV_FILE"
@@ -516,6 +541,10 @@ if [ -n "$DEV" ]; then
       echo "UUID=$UUID $MOUNT_DATA $FSTYPE defaults,nofail 0 2" >> /etc/fstab
     fi
   fi
+  if ! touch "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null || ! rm -f "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null; then
+    echo "[harborfm-userdata] ERROR: $MOUNT_DATA is read-only. Refusing to continue - proceeding would cause data loss on subsequent terraform apply. Check: dmesg | grep -i ext4; run fsck on the block device; remount rw." >&2
+    exit 1
+  fi
   mkdir -p "$MOUNT_DATA/data" "$MOUNT_DATA/secrets" "$MOUNT_DATA/webrtc"
   DATA_DIR="$MOUNT_DATA/data"
   SECRETS_DIR="$MOUNT_DATA/secrets"
@@ -597,6 +626,12 @@ if [ -n "$DEV" ] && ! mountpoint -q "$MOUNT_DATA" 2>/dev/null; then
   UUID=$(blkid -s UUID -o value "$DEV" 2>/dev/null)
   FSTYPE=$(blkid -s TYPE -o value "$DEV" 2>/dev/null || echo "ext4")
   [ -n "$UUID" ] && ! grep -q "$MOUNT_DATA" /etc/fstab 2>/dev/null && echo "UUID=$UUID $MOUNT_DATA $FSTYPE defaults,nofail 0 2" >> /etc/fstab
+fi
+if [ -n "$DEV" ]; then
+  if ! touch "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null || ! rm -f "$MOUNT_DATA/.harborfm-write-test" 2>/dev/null; then
+    echo "[harborfm-mount] ERROR: $MOUNT_DATA is read-only. Refusing to continue - proceeding would cause data loss on subsequent terraform apply. Check: dmesg | grep -i ext4; run fsck on the block device; remount rw." >&2
+    exit 1
+  fi
   mkdir -p "$MOUNT_DATA/data" "$MOUNT_DATA/secrets" "$MOUNT_DATA/webrtc"
   ENV_FILE="$INSTALL_DIR/server/.env"
   if [ -f "$ENV_FILE" ]; then

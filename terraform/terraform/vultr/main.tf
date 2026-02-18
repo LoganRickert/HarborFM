@@ -16,6 +16,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -81,12 +85,24 @@ module "userdata" {
   email_webhook_field_key   = var.email_webhook_field_key
   mediasoup_announced_ip    = var.mediasoup_announced_ip
   data_volume_device        = var.data_volume_size > 0 ? "vdb" : ""
-  # When set: fetch script at boot (useful for custom URLs or large scripts). Empty = inline full script.
-  script_url = var.script_url
+  # When set: fetch script at boot. Empty = use GitHub raw URL from harborfm_repo/branch (inline if URL fails).
+  script_url = var.script_url != "" ? var.script_url : "https://raw.githubusercontent.com/${var.harborfm_repo}/${var.harborfm_branch}/terraform/user-data/harborfm-user-data.sh"
 }
 
 resource "vultr_firewall_group" "harborfm" {
   description = "Harbor FM instance firewall"
+}
+
+# Workaround for firewall group teardown: Vultr's API can fail to delete a firewall group if the
+# instance deletion hasn't fully propagated. This adds a short delay after instance destroy
+# before attempting to delete the firewall group. See: vultr/terraform-provider-vultr#544
+resource "null_resource" "instance_gone_delay" {
+  depends_on = [vultr_firewall_group.harborfm]
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "sleep 10"
+  }
 }
 
 resource "vultr_firewall_rule" "http" {
@@ -139,6 +155,8 @@ resource "vultr_instance" "harborfm" {
   ssh_key_ids       = length(var.ssh_key_ids) > 0 ? var.ssh_key_ids : null
   backups           = var.backups
   firewall_group_id = vultr_firewall_group.harborfm.id
+
+  depends_on = [null_resource.instance_gone_delay]
 }
 
 # Persistent data block storage: survives destroy so a new instance can reattach (lifecycle prevent_destroy).

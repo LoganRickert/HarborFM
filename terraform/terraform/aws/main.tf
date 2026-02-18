@@ -76,7 +76,7 @@ module "userdata" {
   email_webhook_field_key   = var.email_webhook_field_key
   mediasoup_announced_ip    = var.mediasoup_announced_ip
   data_volume_device        = var.data_volume_size > 0 ? "sdf" : ""
-  # Fetch script at boot to stay under AWS 16KB user_data limit
+  # When set: fetch script at boot. Empty = use harborfm-user-data.sh from harborfm_repo/branch on GitHub.
   script_url = var.script_url != "" ? var.script_url : "https://raw.githubusercontent.com/${var.harborfm_repo}/${var.harborfm_branch}/terraform/user-data/harborfm-user-data.sh"
 }
 

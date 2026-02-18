@@ -73,3 +73,6 @@ certbot_email = ""
 # install_dir   = ""
 # harborfm_repo = "loganrickert/harborfm"
 # harborfm_branch = "main"
+
+# Optional: Override user-data script URL. When unset, uses harborfm-user-data.sh from harborfm_repo/branch on GitHub.
+# script_url = "https://raw.githubusercontent.com/loganrickert/harborfm/main/terraform/user-data/harborfm-user-data.sh"

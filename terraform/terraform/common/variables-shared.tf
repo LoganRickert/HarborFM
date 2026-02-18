@@ -74,7 +74,7 @@ variable "harborfm_branch" {
 }
 
 variable "script_url" {
-  description = "Override URL for user-data script (fetched at boot). Empty = inline full script (Vultr) or use default GitHub raw URL (AWS 16KB limit). Set to use a custom URL."
+  description = "Override URL for user-data script (fetched at boot). Empty = use harborfm-user-data.sh from GitHub (harborfm_repo/branch). Set to use a custom URL."
   type        = string
   default     = ""
 }
