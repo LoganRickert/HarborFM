@@ -271,10 +271,8 @@ export async function publicRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Not found" });
       }
       try {
-        const safePath = assertPathUnder(
-          row.artwork_path,
-          artworkDir(podcastId),
-        );
+        const resolved = resolveDataPath(row.artwork_path);
+        const safePath = assertPathUnder(resolved, artworkDir(podcastId));
         const ext = extname(safePath).toLowerCase();
         const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? "image/jpeg";
         const result = await send(request.raw, basename(safePath), {
@@ -351,10 +349,8 @@ export async function publicRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Not found" });
       }
       try {
-        const safePath = assertPathUnder(
-          row.artwork_path,
-          artworkDir(podcastId),
-        );
+        const resolved = resolveDataPath(row.artwork_path);
+        const safePath = assertPathUnder(resolved, artworkDir(podcastId));
         const ext = extname(safePath).toLowerCase();
         const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? "image/jpeg";
         const result = await send(request.raw, basename(safePath), {
@@ -435,7 +431,8 @@ export async function publicRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Not found" });
       }
       try {
-        const safePath = assertPathUnder(row.photo_path, castPhotoDir(podcastId));
+        const resolved = resolveDataPath(row.photo_path);
+        const safePath = assertPathUnder(resolved, castPhotoDir(podcastId));
         const ext = extname(safePath).toLowerCase();
         const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? "image/jpeg";
         const result = await send(request.raw, basename(safePath), {
@@ -780,8 +777,9 @@ export async function publicRoutes(app: FastifyInstance) {
     let photo_url = row.photo_url as string | null | undefined;
     if (path && typeof path === "string") {
       try {
+        const resolved = resolveDataPath(path);
         const dir = castPhotoDir(podcastId);
-        assertPathUnder(path, dir);
+        assertPathUnder(resolved, dir);
         const fn = basename(path);
         photo_url = `/${API_PREFIX}/public/artwork/${podcastId}/cast/${row.id}/${fn}`;
       } catch {
@@ -1515,10 +1513,8 @@ export async function publicRoutes(app: FastifyInstance) {
       if (!row?.artwork_path || basename(row.artwork_path) !== filename)
         return reply.status(404).send({ error: "Not found" });
       try {
-        const safePath = assertPathUnder(
-          row.artwork_path,
-          artworkDir(podcastId),
-        );
+        const resolved = resolveDataPath(row.artwork_path);
+        const safePath = assertPathUnder(resolved, artworkDir(podcastId));
         const ext = extname(safePath).toLowerCase();
         const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? "image/jpeg";
         const result = await send(request.raw, basename(safePath), {
@@ -1600,10 +1596,8 @@ export async function publicRoutes(app: FastifyInstance) {
       if (!row?.artwork_path || basename(row.artwork_path) !== filename)
         return reply.status(404).send({ error: "Not found" });
       try {
-        const safePath = assertPathUnder(
-          row.artwork_path,
-          artworkDir(podcastId),
-        );
+        const resolved = resolveDataPath(row.artwork_path);
+        const safePath = assertPathUnder(resolved, artworkDir(podcastId));
         const ext = extname(safePath).toLowerCase();
         const contentType = EXT_DOT_TO_MIMETYPE[ext] ?? "image/jpeg";
         const result = await send(request.raw, basename(safePath), {

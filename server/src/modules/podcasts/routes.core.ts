@@ -23,7 +23,7 @@ import {
   podcastUpdateSchema,
   podcastsListQuerySchema,
 } from "@harborfm/shared";
-import { assertPathUnder, artworkDir } from "../../services/paths.js";
+import { assertPathUnder, artworkDir, resolveDataPath } from "../../services/paths.js";
 import { readSettings } from "../settings/index.js";
 import { encryptSecret } from "../../services/secrets.js";
 import { getCanonicalFeedUrl } from "../../services/dns/custom-domain-resolver.js";
@@ -1091,7 +1091,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
       if (oldArtworkPath) {
         try {
-          const safeOld = assertPathUnder(oldArtworkPath, artworkDir(id));
+          const resolved = resolveDataPath(oldArtworkPath);
+          const safeOld = assertPathUnder(resolved, artworkDir(id));
           if (existsSync(safeOld)) unlinkSync(safeOld);
         } catch {
           // ignore
