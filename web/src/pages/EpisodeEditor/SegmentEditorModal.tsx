@@ -315,7 +315,7 @@ export function SegmentEditorModal({
         >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>
-              {segment.name ?? 'Segment'} — {formatDuration(effectiveDuration)}
+              {segment.name ?? 'Segment'} - {formatDuration(effectiveDuration)}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button type="button" className={styles.dialogClose} aria-label="Close">

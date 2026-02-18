@@ -2,7 +2,6 @@
 
 ## v1.3 - 2026-02-17
 
-
 - **Segment editor:** Trim ranges and markers (non-destructive); "Add Silence Trims" to auto-detect 1s+ silence and add trim ranges with buffer; marker type (None/Chapter) and color picker; "Server Remove Silence" and noise suppression in Functions tab; waveform shows trimmed regions collapsed and hides trimmed sections.
 - **Episode chapters:** View Chapters card below Generate Final bar; add, edit, delete chapters with color picker; play from chapter time (seeks and starts playback when paused); chapter markers on final episode waveform (editor, feed, embed).
 - **Podcast 2.0 chapters:** `chapters.json` generated when chapters exist; `<podcast:chapters>` in RSS; regenerated on render and chapter edit/delete; same access control as episode MP3; included in S3/deploy exports.
@@ -15,8 +14,8 @@
 - **Title trim:** Episode and podcast titles trimmed on create/edit.
 - **Delete podcast:** "Delete podcast" in More tab of podcast details (owner/admin only); confirm dialog; background deletion with polling (removes all episodes, audio, transcripts, waveforms, RSS, artwork); navigates to dashboard when done.
 - **Ollama API:** Fixed endpoints to use `/api/generate` and `/api/tags` (Ollama expects the `/api/` prefix).
-- **LLM Ask:** Richer context—segment name, markers, duration; improved prompt for speaking-pattern feedback and follow-up questions for future segments.
-- **Transcript editor:** Updated to support trim feature—soft delete adds entry to trim ranges, trimmed entries show collapsed with restore; Save persists trim ranges; Ask tab excludes trimmed text from LLM context.
+- **LLM Ask:** Richer context-segment name, markers, duration; improved prompt for speaking-pattern feedback and follow-up questions for future segments.
+- **Transcript editor:** Updated to support trim feature-soft delete adds entry to trim ranges, trimmed entries show collapsed with restore; Save persists trim ranges; Ask tab excludes trimmed text from LLM context.
 - **2FA extensibility:** Enabled methods are now a list (TOTP, email) in settings.
 - **Login 2FA (email):** Code is sent automatically when 2FA method is email; "Send code" is a gray secondary button below Verify with 30s cooldown.
 - **Caddy:** Fixed Caddy failing when not using WebRTC.
