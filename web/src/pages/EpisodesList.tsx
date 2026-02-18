@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Lock, Plus } from 'lucide-react';
 import { getPodcast } from '../api/podcasts';
 import { listEpisodes } from '../api/episodes';
+import { formatDateShort } from '../utils/format';
 import { me, isReadOnly } from '../api/auth';
 import { FullPageLoading, InlineLoading } from '../components/Loading';
 import { Breadcrumb } from '../components/Breadcrumb';
@@ -123,41 +124,56 @@ export function EpisodesList() {
           </div>
         )}
         {!episodesLoading && episodes.length > 0 && (
-          <ul className={styles.list}>
-            {episodes.map((ep) => {
-              const isSubscriberOnly = ep.subscriber_only === 1;
-              
+          <div className={styles.episodesByStatus}>
+            {(['draft', 'scheduled', 'published'] as const).map((status) => {
+              const statusEpisodes = episodes.filter((e) => e.status === status);
+              if (statusEpisodes.length === 0) return null;
+              const sectionLabel = status.charAt(0).toUpperCase() + status.slice(1);
               return (
-                <li
-                  key={ep.id}
-                  className={isSubscriberOnly ? `${styles.item} ${styles.itemSubscriberOnly}` : styles.item}
-                >
-                  <Link to={`/episodes/${ep.id}`} className={styles.itemLink} aria-label={`Open ${ep.title}`}>
-                    <div className={styles.itemContent}>
-                      <div className={styles.itemTitleRow}>
-                        {isSubscriberOnly && (
-                          <Lock size={14} strokeWidth={2.5} className={styles.itemTitleLockGold} aria-label="Subscriber only" />
-                        )}
-                        <span className={styles.itemTitle}>{ep.title}</span>
-                      </div>
-                      <div className={styles.itemMeta}>
-                        <span className={styles.itemStatus}>{ep.status}</span>
-                        {(ep.season_number != null || ep.episode_number != null) && (
-                          <span className={styles.itemMetaItem}>
-                            S{ep.season_number ?? '?'} E{ep.episode_number ?? '?'}
-                          </span>
-                        )}
-                        {ep.audio_final_path && (
-                          <span className={styles.itemMetaItem}>✓ Audio</span>
-                        )}
-                      </div>
-                    </div>
-                    <ChevronRight className={styles.itemChevron} size={20} strokeWidth={2} aria-hidden />
-                  </Link>
-                </li>
+                <div key={status} className={styles.statusSection}>
+                  <h2 className={styles.statusSectionTitle}>{sectionLabel}</h2>
+                  <ul className={styles.list}>
+                    {statusEpisodes.map((ep) => {
+                      const isSubscriberOnly = ep.subscriber_only === 1;
+                      const statusBadgeText =
+                        ep.publish_at && ep.publish_at.trim()
+                          ? formatDateShort(ep.publish_at)
+                          : sectionLabel;
+                      return (
+                        <li
+                          key={ep.id}
+                          className={isSubscriberOnly ? `${styles.item} ${styles.itemSubscriberOnly}` : styles.item}
+                        >
+                          <Link to={`/episodes/${ep.id}`} className={styles.itemLink} aria-label={`Open ${ep.title}`}>
+                            <div className={styles.itemContent}>
+                              <div className={styles.itemTitleRow}>
+                                {isSubscriberOnly && (
+                                  <Lock size={14} strokeWidth={2.5} className={styles.itemTitleLockGold} aria-label="Subscriber only" />
+                                )}
+                                <span className={styles.itemTitle}>{ep.title}</span>
+                              </div>
+                              <div className={styles.itemMeta}>
+                                <span className={styles.itemStatus}>{statusBadgeText}</span>
+                                {(ep.season_number != null || ep.episode_number != null) && (
+                                  <span className={styles.itemMetaItem}>
+                                    S{ep.season_number ?? '?'} E{ep.episode_number ?? '?'}
+                                  </span>
+                                )}
+                                {ep.audio_final_path && (
+                                  <span className={styles.itemMetaItem}>✓ Audio</span>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight className={styles.itemChevron} size={20} strokeWidth={2} aria-hidden />
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
     </div>

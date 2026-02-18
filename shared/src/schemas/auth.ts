@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IMPLEMENTED_METHOD_IDS } from '../constants/twoFactor.js';
 
 export const registerBodySchema = z.object({
   email: z.string().email(),
@@ -20,6 +21,7 @@ export const forgotPasswordBodySchema = z.object({
 export const resetPasswordBodySchema = z.object({
   token: z.string().min(1, { error: 'Token is required' }),
   password: z.string().min(8, { error: 'Password must be at least 8 characters' }),
+  totpCode: z.string().optional(), // Required when user has TOTP enabled
 });
 
 /** Query for GET verify-email and GET reset-password/check (token in query). */
@@ -60,6 +62,30 @@ export const authApiKeyListQuerySchema = z.object({
   sort: z.enum(['newest', 'oldest']).optional(),
 });
 
+/** Body for POST auth/2fa/verify (TOTP or email code). */
+export const verify2FABodySchema = z.object({
+  challengeToken: z.string().min(1, { message: 'Challenge token is required' }),
+  code: z.string().min(1, { message: 'Code is required' }),
+});
+
+/** Body for POST auth/2fa/send-email-code. */
+export const send2FAEmailCodeBodySchema = z.object({
+  challengeToken: z.string().min(1, { message: 'Challenge token is required' }),
+});
+
+/** Body for POST auth/2fa/setup (start 2FA setup). */
+export const setup2FABodySchema = z.object({
+  challengeToken: z.string().min(1, { message: 'Challenge token is required' }),
+  method: z.enum(IMPLEMENTED_METHOD_IDS as [string, ...string[]]),
+});
+
+/** Body for POST auth/2fa/confirm-setup (confirm TOTP or email). */
+export const confirm2FASetupBodySchema = z.object({
+  challengeToken: z.string().min(1, { message: 'Challenge token is required' }),
+  code: z.string().min(1, { message: 'Code is required' }),
+  secret: z.string().optional(), // Required for TOTP setup (client received from /setup)
+});
+
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 export type LoginBody = z.infer<typeof loginBodySchema>;
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordBodySchema>;
@@ -70,3 +96,7 @@ export type AuthApiKeyCreateBody = z.infer<typeof authApiKeyCreateBodySchema>;
 export type AuthApiKeyUpdateBody = z.infer<typeof authApiKeyUpdateBodySchema>;
 export type AuthApiKeyIdParam = z.infer<typeof authApiKeyIdParamSchema>;
 export type AuthApiKeyListQuery = z.infer<typeof authApiKeyListQuerySchema>;
+export type Verify2FABody = z.infer<typeof verify2FABodySchema>;
+export type Send2FAEmailCodeBody = z.infer<typeof send2FAEmailCodeBodySchema>;
+export type Setup2FABody = z.infer<typeof setup2FABodySchema>;
+export type Confirm2FASetupBody = z.infer<typeof confirm2FASetupBodySchema>;

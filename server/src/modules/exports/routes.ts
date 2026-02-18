@@ -3,7 +3,7 @@ import { existsSync } from "fs";
 import { nanoid } from "nanoid";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { db } from "../../db/index.js";
-import { transcriptSrtPath } from "../../services/paths.js";
+import { chaptersJsonPath, transcriptSrtPath } from "../../services/paths.js";
 import {
   getPodcastRole,
   canEditEpisodeOrPodcastMetadata,
@@ -332,6 +332,9 @@ export async function exportRoutes(app: FastifyInstance) {
         ...ep,
         transcript_srt_path: existsSync(transcriptSrtPath(podcastId, ep.id))
           ? transcriptSrtPath(podcastId, ep.id)
+          : null,
+        chapters_json_path: existsSync(chaptersJsonPath(podcastId, ep.id))
+          ? chaptersJsonPath(podcastId, ep.id)
           : null,
       }));
       const results: {
@@ -670,6 +673,9 @@ export async function exportRoutes(app: FastifyInstance) {
           ...ep,
           transcript_srt_path: existsSync(transcriptSrtPath(podcastId, ep.id))
             ? transcriptSrtPath(podcastId, ep.id)
+            : null,
+          chapters_json_path: existsSync(chaptersJsonPath(podcastId, ep.id))
+            ? chaptersJsonPath(podcastId, ep.id)
             : null,
         }));
         const result = await runDeploy(mode, config, {

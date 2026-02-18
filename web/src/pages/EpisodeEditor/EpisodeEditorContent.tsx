@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb } from '../../components/Breadcrumb';
 import { useAuthStore } from '../../store/auth';
 import { me, canRecordNewSection, isReadOnly, RECORD_BLOCKED_STORAGE_MESSAGE, START_CALL_BLOCKED_STORAGE_MESSAGE } from '../../api/auth';
-import { updateEpisode, uploadEpisodeArtwork } from '../../api/episodes';
+import { deleteEpisode, updateEpisode, uploadEpisodeArtwork } from '../../api/episodes';
 import {
   addRecordedSegment,
   addReusableSegment,
@@ -23,14 +24,13 @@ import { EpisodeCastCard } from './EpisodeCastCard';
 import { EpisodeSectionsPanel } from './EpisodeSectionsPanel';
 import { RecordModal } from './RecordModal';
 import { LibraryModal } from './LibraryModal';
+import { DeleteEpisodeConfirmDialog } from './DeleteEpisodeConfirmDialog';
 import { DeleteSegmentDialog } from './DeleteSegmentDialog';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { DeleteTranscriptSegmentDialog } from './DeleteTranscriptSegmentDialog';
-import { TranscriptModal } from './TranscriptModal';
+import { SegmentModal } from '../../components/SegmentModal';
 import { EpisodeTranscriptModal } from './EpisodeTranscriptModal';
 import {
-  deleteSegmentTranscript,
   startGenerateEpisodeTranscript,
   getTranscriptStatus,
 } from '../../api/segments';
@@ -42,6 +42,7 @@ import { getPublicConfig } from '../../api/public';
 import { startCall, getActiveSession } from '../../api/call';
 import { CallPanel } from '../../components/GroupCall/CallPanel';
 import { useEpisodeWebSocket } from '../../hooks/useEpisodeWebSocket';
+import { useBatchedSegmentWaveforms } from '../../hooks/useBatchedSegmentWaveforms';
 import { EndCallConfirmDialog } from '../../components/GroupCall/EndCallConfirmDialog';
 
 export interface EpisodeEditorContentProps {
@@ -62,6 +63,7 @@ export function EpisodeEditorContent({
   const id = episode.id;
   const podcastId = episode.podcast_id;
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
   const host = typeof window !== 'undefined' ? window.location.host : '';
@@ -75,6 +77,7 @@ export function EpisodeEditorContent({
   const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
   const canEditMetadata = myRole === 'owner' || myRole === 'manager';
   const canEditSegments = myRole === 'owner' || myRole === 'manager' || myRole === 'editor';
+  const canDeleteEpisode = myRole === 'owner' || meData?.user?.role === 'admin';
   const segmentReadOnly = readOnly || !canEditSegments;
   const metadataReadOnly = readOnly || !canEditMetadata;
 
@@ -86,11 +89,7 @@ export function EpisodeEditorContent({
   const [episodeDetailsActiveTab, setEpisodeDetailsActiveTab] = useState<EpisodeDetailsTab>('overview');
   const [segmentToDelete, setSegmentToDelete] = useState<string | null>(null);
   const [segmentIdForInfo, setSegmentIdForInfo] = useState<string | null>(null);
-  const [transcriptEntryToDelete, setTranscriptEntryToDelete] = useState<{
-    episodeId: string;
-    segmentId: string;
-    entryIndex: number;
-  } | null>(null);
+  const [segmentModalInitialTab, setSegmentModalInitialTab] = useState<'edit' | 'transcript' | 'ask'>('transcript');
   const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
   const [pendingArtworkFile, setPendingArtworkFile] = useState<File | null>(null);
   const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
@@ -100,6 +99,7 @@ export function EpisodeEditorContent({
   const [showEpisodeTranscript, setShowEpisodeTranscript] = useState(false);
   const [startCallError, setStartCallError] = useState<string | null>(null);
   const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
+  const [deleteEpisodeConfirmOpen, setDeleteEpisodeConfirmOpen] = useState(false);
   /** Pending segment IDs from WebSocket; refetch overwrites cache too early so we keep this. */
   const [wsPendingSegmentIds, setWsPendingSegmentIds] = useState<string[] | null>(null);
   const [wsRecordingActive, setWsRecordingActive] = useState<boolean | null>(null);
@@ -107,6 +107,7 @@ export function EpisodeEditorContent({
   const [callPanelOpenInThisTab, setCallPanelOpenInThisTab] = useState(false);
 
   useEpisodeWebSocket(id, podcastId);
+  const segmentWaveforms = useBatchedSegmentWaveforms(id, segments);
 
   const { data: activeSession } = useQuery({
     queryKey: ['call-session', id],
@@ -274,12 +275,24 @@ export function EpisodeEditorContent({
 
   const updateMutation = useMutation({
     mutationFn: (payload: Parameters<typeof updateEpisode>[1]) => updateEpisode(id, payload),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['episode', id] });
       queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
+      if (!('final_markers' in (variables ?? {}))) {
+        setDetailsDialogOpen(false);
+        setPendingArtworkFile(null);
+        setCoverUploadKey((k) => k + 1);
+      }
+    },
+  });
+
+  const deleteEpisodeMutation = useMutation({
+    mutationFn: () => deleteEpisode(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
+      void queryClient.invalidateQueries({ queryKey: ['podcast', podcastId] });
       setDetailsDialogOpen(false);
-      setPendingArtworkFile(null);
-      setCoverUploadKey((k) => k + 1);
+      navigate(`/podcasts/${podcastId}/episodes`);
     },
   });
 
@@ -512,8 +525,9 @@ export function EpisodeEditorContent({
               isDeletingSegment={deleteSegmentMutation.isPending}
               deletingSegmentId={deleteSegmentMutation.variables ?? null}
               onSegmentPlayRequest={handleSegmentPlayRequest}
-              onSegmentMoreInfo={(segmentId) => {
+              onSegmentEdit={segmentReadOnly ? undefined : (segmentId) => {
                 pauseCurrentSegment();
+                setSegmentModalInitialTab('edit');
                 setSegmentIdForInfo(segmentId);
               }}
           registerSegmentPause={registerSegmentPause}
@@ -530,13 +544,23 @@ export function EpisodeEditorContent({
         hasFinalAudio={Boolean(episode.audio_final_path)}
         finalDurationSec={episode.audio_duration_sec ?? 0}
         finalUpdatedAt={episode.updated_at}
+        finalMarkers={episode.final_markers ?? []}
+        onMarkersChange={
+          !segmentReadOnly && canEditSegments
+            ? (markers) => updateMutation.mutate({ final_markers: markers } as EpisodeUpdate)
+            : undefined
+        }
         readOnly={segmentReadOnly}
         onFinalPlayStart={pauseCurrentSegment}
         pauseAndResetRef={finalPauseRef}
         hasTranscript={episode.has_transcript === true}
         onOpenTranscript={() => setShowEpisodeTranscript(true)}
-        onGenerateTranscript={episode.has_transcript !== true ? async () => { await generateTranscriptMutation.mutateAsync(); } : undefined}
-        canGenerateTranscript={meData?.user?.can_transcribe === 1}
+        onGenerateTranscript={
+          asrAvail?.available && episode.has_transcript !== true
+            ? async () => { await generateTranscriptMutation.mutateAsync(); }
+            : undefined
+        }
+        canGenerateTranscript={asrAvail?.available === true && meData?.user?.can_transcribe === 1}
         error={
           (renderStatus?.status === 'failed' ? (renderStatus.error ?? 'Build failed') : null) ??
           (renderMutation.isError ? renderMutation.error?.message : null) ??
@@ -670,6 +694,10 @@ export function EpisodeEditorContent({
                       : null
                 }
                 saveSuccess={updateMutation.isSuccess}
+                canDeleteEpisode={canDeleteEpisode}
+                isDeleting={deleteEpisodeMutation.isPending}
+                deleteError={deleteEpisodeMutation.isError ? (deleteEpisodeMutation.error as Error)?.message ?? 'Delete failed' : null}
+                onRequestDeleteEpisode={() => setDeleteEpisodeConfirmOpen(true)}
                 coverImageConfig={{
                   podcastId,
                   episodeId: id,
@@ -707,6 +735,12 @@ export function EpisodeEditorContent({
         open={endCallConfirmOpen}
         onOpenChange={setEndCallConfirmOpen}
         onConfirm={handleEndGroupCallConfirmed}
+      />
+      <DeleteEpisodeConfirmDialog
+        open={deleteEpisodeConfirmOpen}
+        onOpenChange={setDeleteEpisodeConfirmOpen}
+        onConfirm={() => deleteEpisodeMutation.mutate()}
+        isDeleting={deleteEpisodeMutation.isPending}
       />
       {activeCall?.hostToken && callPanelOpenInThisTab && (
         <CallPanel
@@ -752,62 +786,25 @@ export function EpisodeEditorContent({
         />
       )}
 
-      {segmentIdForInfo && (
-        <TranscriptModal
+      {segmentIdForInfo && (() => {
+        const seg = segments.find((s) => s.id === segmentIdForInfo);
+        if (!seg) return null;
+        return (
+        <SegmentModal
+          key={segmentIdForInfo}
           episodeId={id}
+          segment={seg}
           segmentId={segmentIdForInfo}
-          segmentName={
-            segments.find((s) => s.id === segmentIdForInfo)?.name?.trim() ||
-            'Section'
-          }
-          segmentDuration={
-            segments.find((s) => s.id === segmentIdForInfo)?.duration_sec ?? 0
-          }
-          segmentAudioPath={
-            segments.find((s) => s.id === segmentIdForInfo)?.audio_path
-          }
+          segmentName={seg.name?.trim() || 'Section'}
+          segmentAudioPath={seg.audio_path}
+          segmentWaveformData={segmentWaveforms.get(seg.id)}
           asrAvailable={Boolean(asrAvail?.available)}
           ownerCanTranscribe={podcast?.owner_can_transcribe === 1}
+          initialTab={segmentModalInitialTab}
           onClose={() => setSegmentIdForInfo(null)}
-          onDeleteEntry={(entryIndex) => {
-            setTranscriptEntryToDelete({
-              episodeId: id,
-              segmentId: segmentIdForInfo,
-              entryIndex,
-            });
-          }}
         />
-      )}
-
-      <DeleteTranscriptSegmentDialog
-        open={transcriptEntryToDelete !== null}
-        onOpenChange={(open) => !open && setTranscriptEntryToDelete(null)}
-        onConfirm={async () => {
-          if (transcriptEntryToDelete) {
-            try {
-              await deleteSegmentTranscript(
-                transcriptEntryToDelete.episodeId,
-                transcriptEntryToDelete.segmentId,
-                transcriptEntryToDelete.entryIndex
-              );
-              queryClient.invalidateQueries({
-                queryKey: ['segments', transcriptEntryToDelete.episodeId],
-              });
-              setTranscriptEntryToDelete(null);
-              if (segmentIdForInfo === transcriptEntryToDelete.segmentId) {
-                const currentSegmentId = segmentIdForInfo;
-                setSegmentIdForInfo(null);
-                setTimeout(() => {
-                  setSegmentIdForInfo(currentSegmentId);
-                }, 100);
-              }
-            } catch (err) {
-              console.error('Failed to delete transcript entry:', err);
-            }
-          }
-        }}
-        isDeleting={false}
-      />
+        );
+      })()}
 
       <DeleteSegmentDialog
         open={!!segmentToDelete}

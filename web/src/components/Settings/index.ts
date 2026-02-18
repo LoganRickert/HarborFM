@@ -10,5 +10,6 @@ export { LLMSection } from './LLMSection';
 export { CaptchaSection } from './CaptchaSection';
 export { WebRTCSection } from './WebRTCSection';
 export { EmailSection } from './EmailSection';
+export { TwoFactorSection } from './TwoFactorSection';
 export { DnsConfigurationSection } from './DnsConfigurationSection';
 export { CustomLegalSection } from './CustomLegalSection';

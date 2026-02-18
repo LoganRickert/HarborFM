@@ -487,7 +487,7 @@ export function CallJoin() {
       <>
         <div className={`${styles.card} ${recordingInProgress ? styles.cardRecording : ''}`}>
           {joinInfo?.artworkUrl && (
-            <img src={joinInfo.artworkUrl} alt="" className={styles.artwork} />
+            <img src={joinInfo.artworkUrl} alt={joinInfo ? `${joinInfo.episode.title} artwork` : 'Call artwork'} className={styles.artwork} />
           )}
           {joinInfo && (
             <p className={`${styles.sub} ${styles.podcastEpisode}`}>
@@ -669,7 +669,7 @@ export function CallJoin() {
     <>
       <div className={styles.card}>
         {joinInfo?.artworkUrl && (
-          <img src={joinInfo.artworkUrl} alt="" className={styles.artwork} />
+          <img src={joinInfo.artworkUrl} alt={joinInfo ? `${joinInfo.episode.title} artwork` : 'Call artwork'} className={styles.artwork} />
         )}
         {joinInfo && (
         <>
@@ -806,8 +806,9 @@ export function CallJoin() {
               </div>
               {!autoGainControl && (
                 <div className={styles.volumeRow}>
-                  <label className={styles.label}>Volume</label>
+                  <label className={styles.label} htmlFor="call-join-mic-volume">Volume</label>
                   <input
+                    id="call-join-mic-volume"
                     type="range"
                     min={0}
                     max={800}

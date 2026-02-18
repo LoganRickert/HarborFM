@@ -160,6 +160,7 @@ export function FeedEpisode({
                       data={waveformData!}
                       durationSec={durationSec}
                       currentTime={currentTime}
+                      markers={episode.markers ?? []}
                       onSeek={seek}
                       className={styles.waveform}
                     />
@@ -179,7 +180,7 @@ export function FeedEpisode({
             )}
 
             {!audioUrl && (
-              episode.subscriber_only === 1 || podcast.subscriber_only_feed_enabled === 1 ? (
+              episode.subscriber_only === 1 ? (
                 <FeedSubscriberOnlyMessage />
               ) : (
                 <p className={styles.noAudioText}>Audio not available.</p>

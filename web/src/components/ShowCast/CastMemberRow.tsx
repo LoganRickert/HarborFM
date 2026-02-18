@@ -51,10 +51,10 @@ export function CastMemberRow({
       : '') || safeImageSrc(member.photo_url));
 
   const avatarNode = photoSrc ? (
-    <img src={photoSrc} alt="" className={variant === 'chip' ? styles.castChipAvatar : styles.castAvatar} />
+    <img src={photoSrc} alt={`${member.name} photo`} className={variant === 'chip' ? styles.castChipAvatar : styles.castAvatar} />
   ) : (
     <div className={variant === 'chip' ? styles.castChipAvatarPlaceholder : styles.castAvatarPlaceholder}>
-      <User size={variant === 'chip' ? 12 : 18} />
+      <User size={variant === 'chip' ? 12 : 18} aria-hidden />
     </div>
   );
 

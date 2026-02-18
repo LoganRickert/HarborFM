@@ -17,6 +17,7 @@ import {
   CaptchaSection,
   WebRTCSection,
   EmailSection,
+  TwoFactorSection,
   DnsConfigurationSection,
   CustomLegalSection,
 } from '../components/Settings';
@@ -170,6 +171,9 @@ export function Settings() {
         webrtc_public_ws_url: form.webrtc_public_ws_url?.trim() ?? '',
         recording_callback_secret:
           form.recording_callback_secret === '(set)' ? undefined : form.recording_callback_secret,
+        two_factor_enabled: form.two_factor_enabled,
+        two_factor_methods: form.two_factor_methods,
+        two_factor_enforced: form.two_factor_enforced,
       } as unknown as Parameters<typeof updateSettings>[0]),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -343,6 +347,8 @@ export function Settings() {
           onSmtpTest={() => smtpTestMutation.mutate()}
           onSendGridTest={() => sendgridTestMutation.mutate()}
         />
+
+        <TwoFactorSection form={form} onFormChange={updateForm} />
 
         <DnsConfigurationSection form={form} onFormChange={updateForm} />
 

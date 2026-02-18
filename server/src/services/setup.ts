@@ -8,9 +8,18 @@ import {
 import { join } from "path";
 import { nanoid } from "nanoid";
 import { db } from "../db/index.js";
-import { SETUP_ID } from "../config.js";
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD_HASH,
+  ADMIN_PASSWORD_HASH_FILE,
+  ADMIN_PUBLIC_FEEDS_ENABLED,
+  ADMIN_REGISTRATION_ENABLED,
+  getAdminHostnameFromEnv,
+  SETUP_ID,
+} from "../config.js";
 import { ensureDir, getDataDir } from "./paths.js";
 import { normalizeHostname } from "../utils/url.js";
+import { timingSafeEqualStrings } from "../utils/secretCompare.js";
 
 const SETUP_TOKEN_FILENAME = "setup-token.txt";
 
@@ -25,7 +34,7 @@ function writeSetting(key: string, value: string): void {
  * Prefers file when ADMIN_PASSWORD_HASH_FILE is set and file exists.
  */
 function getAdminPasswordHash(): string | null {
-  const filePath = process.env.ADMIN_PASSWORD_HASH_FILE?.trim();
+  const filePath = ADMIN_PASSWORD_HASH_FILE;
   if (filePath) {
     try {
       if (existsSync(filePath)) {
@@ -36,24 +45,26 @@ function getAdminPasswordHash(): string | null {
       /* fall through to env */
     }
   }
-  return process.env.ADMIN_PASSWORD_HASH?.trim() || null;
+  return ADMIN_PASSWORD_HASH;
 }
 
 /**
  * Bootstrap admin from ADMIN_EMAIL + ADMIN_PASSWORD_HASH when set.
  * Used by Terraform/user-data to avoid passing the plaintext password.
  * Hash must be argon2 format (from Terraform external data source or similar).
- * Reads from ADMIN_PASSWORD_HASH_FILE (preferred) or process.env.ADMIN_PASSWORD_HASH.
+ * Reads from ADMIN_PASSWORD_HASH_FILE (preferred) or ADMIN_PASSWORD_HASH from config.
  */
 export function bootstrapIfNeeded(): boolean {
   if (isSetupComplete()) return false;
 
-  const email = process.env.ADMIN_EMAIL?.trim() || null;
+  const email = ADMIN_EMAIL;
   const passwordHash = getAdminPasswordHash();
 
   if (!email || !email.includes("@") || !passwordHash) {
-    const hasEmail = Boolean(email || process.env.ADMIN_EMAIL?.trim());
-    const hasHash = Boolean(passwordHash || process.env.ADMIN_PASSWORD_HASH?.trim() || process.env.ADMIN_PASSWORD_HASH_FILE?.trim());
+    const hasEmail = Boolean(email || ADMIN_EMAIL);
+    const hasHash = Boolean(
+      passwordHash || ADMIN_PASSWORD_HASH || ADMIN_PASSWORD_HASH_FILE,
+    );
     if (hasEmail || hasHash) {
       console.warn(
         `[setup] Bootstrap skipped: ADMIN_EMAIL (set=${hasEmail}) and ADMIN_PASSWORD_HASH (set=${hasHash}) both required`,
@@ -75,22 +86,16 @@ export function bootstrapIfNeeded(): boolean {
     "INSERT INTO users (id, email, password_hash, role, can_transcribe) VALUES (?, ?, ?, ?, 1)",
   ).run(id, email.toLowerCase(), passwordHash, "admin");
 
-  const hostnameRaw =
-    process.env.ADMIN_HOSTNAME?.trim() ||
-    (process.env.DOMAIN &&
-    process.env.DOMAIN !== "localhost" &&
-    process.env.DOMAIN !== "_"
-      ? `https://${process.env.DOMAIN}`
-      : "");
+  const hostnameRaw = getAdminHostnameFromEnv();
   const hostname = hostnameRaw ? normalizeHostname(hostnameRaw) : "";
   writeSetting("hostname", hostname);
   writeSetting(
     "registration_enabled",
-    process.env.ADMIN_REGISTRATION_ENABLED === "1" ? "true" : "false",
+    ADMIN_REGISTRATION_ENABLED ? "true" : "false",
   );
   writeSetting(
     "public_feeds_enabled",
-    process.env.ADMIN_PUBLIC_FEEDS_ENABLED === "1" ? "true" : "false",
+    ADMIN_PUBLIC_FEEDS_ENABLED ? "true" : "false",
   );
   writeSetting("setup_completed", "true");
 
@@ -159,7 +164,7 @@ export function getOrCreateSetupToken(): string {
 export function consumeSetupToken(token: string): boolean {
   const existing = readSetupToken();
   if (!existing) return false;
-  if (token !== existing) return false;
+  if (!timingSafeEqualStrings(token, existing)) return false;
   try {
     unlinkSync(getSetupTokenPath());
   } catch {

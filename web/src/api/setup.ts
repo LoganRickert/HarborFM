@@ -11,6 +11,9 @@ export function setupStatus() {
     captchaSiteKey: string;
     emailConfigured: boolean;
     welcomeBanner: string;
+    twoFactorEnabled: boolean;
+    twoFactorEnforced: boolean;
+    twoFactorMethods: string;
   }>('/setup/status');
 }
 

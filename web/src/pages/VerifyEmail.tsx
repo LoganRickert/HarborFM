@@ -46,7 +46,7 @@ export function VerifyEmail() {
           )}
           {status === 'error' && (
             <>
-              <div className={styles.verificationCardError}>
+              <div className={styles.verificationCardError} role="alert">
                 <p className={styles.verificationCardErrorText}>{errorMessage}</p>
               </div>
               <p className={styles.footerBelowCard} style={{ marginTop: '1rem' }}>

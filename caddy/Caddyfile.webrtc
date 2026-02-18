@@ -1,0 +1,71 @@
+# Harbor FM reverse proxy. Accept any hostname (on-demand TLS).
+# WebRTC enabled: proxies /webrtc-ws/ to webrtc service.
+# Use this when docker compose --profile webrtc is used.
+
+{
+	# Access log to file for fail2ban (caddy-scanner jail)
+	log {
+		output file /var/log/caddy/access.log
+		format json
+	}
+	# Required for on-demand TLS in Caddy 2.10+: permission module prevents abuse.
+	# HarborFM returns 200 only for allowed domains (primary, link, managed, subdomains).
+	on_demand_tls {
+		permission http http://harborfm:3001/api/caddy-tls-check/{$CADDY_TLS_CHECK_SECRET}
+	}
+}
+
+# Accept any hostname: cert is obtained on first request (on_demand).
+:443 {
+	tls {
+		on_demand
+	}
+
+	# Health check for container/orchestration
+	respond /caddy-health 200
+
+	# WebRTC WebSocket (proxies to webrtc when --profile webrtc is used)
+	handle_path /webrtc-ws/* {
+		reverse_proxy webrtc:3002 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up Upgrade {http.request.header.Upgrade}
+			header_up Connection {http.request.header.Connection}
+			transport http {
+				read_timeout 86400s
+				write_timeout 86400s
+			}
+		}
+	}
+
+	@auth path /api/auth/login /api/auth/register /api/auth/forgot-password /api/auth/reset-password /api/auth/verify-email /api/auth/validate-reset-token
+	handle @auth {
+		reverse_proxy harborfm:3001 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy harborfm:3001 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up Upgrade {http.request.header.Upgrade}
+			header_up Connection {http.request.header.Connection}
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+			}
+		}
+	}
+}

@@ -2,15 +2,33 @@
 # Harbor FM - one-line install (no clone required)
 # Usage: curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/install.sh | bash
 #    or: curl -fsSL ... | bash -s -- /path/to/install-dir
+#    or: curl -fsSL ... | bash -s -- --no-interaction /path/to/install-dir
+# Non-interaction: use --no-interaction, -y, -n, or env CI=1 / NON_INTERACTIVE=1
 set -e
+
+# Non-interaction: skip all prompts, use defaults
+NON_INTERACTIVE=false
+for arg in "$@"; do
+  case "$arg" in
+    --no-interaction|-y|-n) NON_INTERACTIVE=true; break ;;
+  esac
+done
+[ "${CI:-0}" = "1" ] || [ "${NON_INTERACTIVE:-0}" = "1" ] && NON_INTERACTIVE=true
 
 # Where to fetch configs from (override with env if you mirror the repo)
 HARBORFM_REPO="${HARBORFM_REPO:-loganrickert/harborfm}"
 HARBORFM_BRANCH="${HARBORFM_BRANCH:-main}"
 BASE_URL="https://raw.githubusercontent.com/${HARBORFM_REPO}/${HARBORFM_BRANCH}"
 
-# Install directory: first argument or default
-INSTALL_DIR="${1:-./harborfm-docker}"
+# Install directory: first non-flag argument or default
+INSTALL_DIR=""
+for arg in "$@"; do
+  case "$arg" in
+    --no-interaction|-y|-n) ;;
+    *) INSTALL_DIR="${arg:-./harborfm-docker}"; break ;;
+  esac
+done
+INSTALL_DIR="${INSTALL_DIR:-./harborfm-docker}"
 INSTALL_DIR="$(cd -P "$(dirname "$INSTALL_DIR")" && pwd)/$(basename "$INSTALL_DIR")"
 
 echo "=== Harbor FM Docker install ==="
@@ -50,6 +68,7 @@ download "$BASE_URL/nginx/entrypoint.sh"       "$INSTALL_DIR/nginx/entrypoint.sh
 download "$BASE_URL/nginx/nginx-80-only.conf.template"  "$INSTALL_DIR/nginx/nginx-80-only.conf.template"
 download "$BASE_URL/nginx/nginx-full.conf.template"   "$INSTALL_DIR/nginx/nginx-full.conf.template"
 download "$BASE_URL/caddy/Caddyfile"           "$INSTALL_DIR/caddy/Caddyfile"
+download "$BASE_URL/caddy/Caddyfile.webrtc"    "$INSTALL_DIR/caddy/Caddyfile.webrtc"
 download "$BASE_URL/fail2ban/filter.d/nginx-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/nginx-scanner.conf"
 download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/nginx-scanner.local"
 download "$BASE_URL/fail2ban/filter.d/caddy-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/caddy-scanner.conf"
@@ -67,7 +86,11 @@ cd "$INSTALL_DIR"
 # .env (read from /dev/tty so prompts work when script is piped: curl ... | bash)
 if [ -f .env ]; then
   echo "Existing .env found."
-  read -r -p "Overwrite with new values? [y/N] " overwrite </dev/tty
+  if [ "$NON_INTERACTIVE" = true ]; then
+    overwrite="n"
+  else
+    read -r -p "Overwrite with new values? [y/N] " overwrite </dev/tty
+  fi
   if [[ ! "$overwrite" =~ ^[yY] ]]; then
     echo "Using existing .env. Skipping prompts."
     set -a
@@ -76,6 +99,7 @@ if [ -f .env ]; then
     set +a
     DOMAIN="${DOMAIN:-localhost}"
     CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+    SELF_SIGNED_CERT="${SELF_SIGNED_CERT:-0}"
     TZ="${TZ:-}"
     REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
   else
@@ -87,36 +111,57 @@ fi
 
 if [ "${overwrite_env:-false}" = true ]; then
   echo ""
-  read -r -p "Domain name (e.g. harborfm.example.com) [localhost]: " DOMAIN </dev/tty
-  DOMAIN="${DOMAIN:-localhost}"
-
-  echo "Reverse proxy: nginx = single domain, certbot for SSL; Caddy = automatic HTTPS, better for multiple/dynamic hostnames."
-  read -r -p "Use nginx or Caddy? [nginx]: " REVERSE_PROXY </dev/tty
-  REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
-  if [[ ! "$REVERSE_PROXY" =~ ^[cC]addy ]]; then
-    REVERSE_PROXY=nginx
-  else
-    REVERSE_PROXY=caddy
-  fi
-
-  read -r -p "Email for Let's Encrypt (required for real SSL with nginx, empty to skip certbot): " CERTBOT_EMAIL </dev/tty
-  CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
-
-  # Insecure cookies: only relevant when using HTTP (localhost or nginx without certbot)
-  COOKIE_SECURE=""
-  if [ "$DOMAIN" = "localhost" ] || { [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ]; }; then
-    read -r -p "Allow insecure cookies? Required for login over HTTP-only. [y/N] " INSECURE_COOKIES </dev/tty
-    if [[ "$INSECURE_COOKIES" =~ ^[yY] ]]; then
+  if [ "$NON_INTERACTIVE" = true ]; then
+    DOMAIN="${DOMAIN:-localhost}"
+    REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+    CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+    SELF_SIGNED_CERT="${SELF_SIGNED_CERT:-0}"
+    COOKIE_SECURE=""
+    if [ "$DOMAIN" = "localhost" ] || { [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ] && [ "${SELF_SIGNED_CERT:-0}" != "1" ]; }; then
       COOKIE_SECURE="false"
     fi
-  fi
+    WEBRTC_CHOICE="y"
+  else
+    read -r -p "Domain name (e.g. harborfm.example.com) [localhost]: " DOMAIN </dev/tty
+    DOMAIN="${DOMAIN:-localhost}"
 
-  read -r -p "Enable WebRTC (group calls, remote recording)? [Y/n] " WEBRTC_CHOICE </dev/tty
+    echo "Reverse proxy: nginx = single domain, certbot for SSL; Caddy = automatic HTTPS, better for multiple/dynamic hostnames."
+    read -r -p "Use nginx or Caddy? [nginx]: " REVERSE_PROXY </dev/tty
+    REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+    if [[ ! "$REVERSE_PROXY" =~ ^[cC]addy ]]; then
+      REVERSE_PROXY=nginx
+    else
+      REVERSE_PROXY=caddy
+    fi
+
+    read -r -p "Email for Let's Encrypt (required for real SSL with nginx, empty to skip certbot): " CERTBOT_EMAIL </dev/tty
+    CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
+
+    # Self-signed cert: when not using Let's Encrypt and domain is not localhost
+    SELF_SIGNED_CERT=0
+    if [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ] && [ "$DOMAIN" != "localhost" ]; then
+      read -r -p "Use self-signed certificate for HTTPS? (browsers will show a warning) [y/N] " SELF_SIGNED_CHOICE </dev/tty
+      if [[ "$SELF_SIGNED_CHOICE" =~ ^[yY] ]]; then
+        SELF_SIGNED_CERT=1
+      fi
+    fi
+
+    # Insecure cookies: only relevant when using HTTP (localhost or nginx without cert/self-signed)
+    COOKIE_SECURE=""
+    if [ "$DOMAIN" = "localhost" ] || { [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ] && [ "${SELF_SIGNED_CERT:-0}" != "1" ]; }; then
+      read -r -p "Allow insecure cookies? Required for login over HTTP-only. [y/N] " INSECURE_COOKIES </dev/tty
+      if [[ "$INSECURE_COOKIES" =~ ^[yY] ]]; then
+        COOKIE_SECURE="false"
+      fi
+    fi
+
+    read -r -p "Enable WebRTC (group calls, remote recording)? [Y/n] " WEBRTC_CHOICE </dev/tty
+  fi
   if [[ ! "$WEBRTC_CHOICE" =~ ^[nN] ]]; then
     WEBRTC_ENABLED=1
     WEBRTC_SERVICE_SECRET="$(openssl rand -base64 32)"
     RECORDING_CALLBACK_SECRET="$(openssl rand -base64 32)"
-    if [ "$DOMAIN" = "localhost" ] || { [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ]; }; then
+    if [ "$DOMAIN" = "localhost" ] || { [ "$REVERSE_PROXY" = "nginx" ] && [ -z "$CERTBOT_EMAIL" ] && [ "${SELF_SIGNED_CERT:-0}" != "1" ]; }; then
       WEBRTC_PUBLIC_WS_URL="ws://${DOMAIN}/webrtc-ws"
     else
       WEBRTC_PUBLIC_WS_URL="wss://${DOMAIN}/webrtc-ws"
@@ -125,16 +170,25 @@ if [ "${overwrite_env:-false}" = true ]; then
     WEBRTC_ENABLED=0
   fi
 
-  read -r -p "Optional timezone for fail2ban (e.g. America/New_York, Enter to skip): " TZ </dev/tty
-  TZ="${TZ:-}"
+  if [ "$NON_INTERACTIVE" = true ]; then
+    TZ="${TZ:-}"
+  else
+    read -r -p "Optional timezone for fail2ban (e.g. America/New_York, Enter to skip): " TZ </dev/tty
+    TZ="${TZ:-}"
+  fi
 
+  if [ "$REVERSE_PROXY" = "caddy" ] && [ -z "${CADDY_TLS_CHECK_SECRET:-}" ]; then
+    CADDY_TLS_CHECK_SECRET="$(openssl rand -hex 32)"
+  fi
   {
     echo "# Generated by install.sh"
     echo "INSTALL_DIR=$INSTALL_DIR"
     echo "DOMAIN=$DOMAIN"
     echo "REVERSE_PROXY=$REVERSE_PROXY"
     echo "CERTBOT_EMAIL=$CERTBOT_EMAIL"
+    [ "${SELF_SIGNED_CERT:-0}" = "1" ] && echo "SELF_SIGNED_CERT=1"
     [ -n "$COOKIE_SECURE" ] && echo "COOKIE_SECURE=$COOKIE_SECURE"
+    [ "$REVERSE_PROXY" = "caddy" ] && [ -n "${CADDY_TLS_CHECK_SECRET:-}" ] && echo "CADDY_TLS_CHECK_SECRET=$CADDY_TLS_CHECK_SECRET"
     echo "WEBRTC_ENABLED=${WEBRTC_ENABLED:-0}"
     if [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
       echo "WEBRTC_SERVICE_URL=http://webrtc:3002"
@@ -164,6 +218,10 @@ fi
 if ! grep -q '^REVERSE_PROXY=' .env 2>/dev/null; then
   echo "REVERSE_PROXY=${REVERSE_PROXY:-nginx}" >> .env
 fi
+if [ "$REVERSE_PROXY" = "caddy" ] && ! grep -q '^CADDY_TLS_CHECK_SECRET=' .env 2>/dev/null; then
+  echo "CADDY_TLS_CHECK_SECRET=$(openssl rand -hex 32)" >> .env
+  echo "Added CADDY_TLS_CHECK_SECRET to .env for Caddy on-demand TLS."
+fi
 # Export so docker compose sees it when run from this script
 export INSTALL_DIR
 
@@ -190,6 +248,11 @@ fi
 # Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
 touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || true
 touch "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
+
+# Caddy: use WebRTC-enabled Caddyfile when webrtc profile is used
+if [ "$REVERSE_PROXY" = "caddy" ] && [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
+  cp "$INSTALL_DIR/caddy/Caddyfile.webrtc" "$INSTALL_DIR/caddy/Caddyfile"
+fi
 
 COMPOSE_PROFILES="$REVERSE_PROXY"
 [ "${WEBRTC_ENABLED:-0}" = "1" ] && COMPOSE_PROFILES="$COMPOSE_PROFILES webrtc"
@@ -229,9 +292,28 @@ for i in {1..30}; do
   sleep 1
 done
 
-if [ "$REVERSE_PROXY" = "nginx" ] && [ -n "$CERTBOT_EMAIL" ] && [ "$DOMAIN" != "localhost" ]; then
+if [ "$REVERSE_PROXY" = "nginx" ] && [ "${SELF_SIGNED_CERT:-0}" = "1" ] && [ "$DOMAIN" != "localhost" ]; then
   echo ""
-  read -r -p "Obtain Let's Encrypt certificate for $DOMAIN now? [Y/n] " run_certbot </dev/tty
+  echo "Generating self-signed certificate for $DOMAIN..."
+  if docker compose run --rm --entrypoint /bin/sh nginx -c "
+    mkdir -p /etc/letsencrypt/live/${DOMAIN}
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+      -keyout /etc/letsencrypt/live/${DOMAIN}/privkey.pem \
+      -out /etc/letsencrypt/live/${DOMAIN}/fullchain.pem \
+      -subj \"/CN=${DOMAIN}\"
+  " 2>/dev/null; then
+    echo "Self-signed certificate created. Nginx will reload within ~60 seconds to use it."
+    echo "Browsers will show a security warning; accept it for this domain or add an exception."
+  else
+    echo "Failed to generate self-signed certificate. Check docker compose logs."
+  fi
+elif [ "$REVERSE_PROXY" = "nginx" ] && [ -n "$CERTBOT_EMAIL" ] && [ "$DOMAIN" != "localhost" ]; then
+  echo ""
+  if [ "$NON_INTERACTIVE" = true ]; then
+    run_certbot="n"
+  else
+    read -r -p "Obtain Let's Encrypt certificate for $DOMAIN now? [Y/n] " run_certbot </dev/tty
+  fi
   if [[ ! "$run_certbot" =~ ^[nN] ]]; then
     echo "Running certbot..."
     if docker compose run --rm certbot; then
@@ -244,9 +326,11 @@ if [ "$REVERSE_PROXY" = "nginx" ] && [ -n "$CERTBOT_EMAIL" ] && [ "$DOMAIN" != "
   fi
 elif [ "$REVERSE_PROXY" = "nginx" ]; then
   echo ""
-  if [ "$DOMAIN" = "localhost" ] || [ -z "$CERTBOT_EMAIL" ]; then
-    echo "Domain is localhost or email not set - skipping certbot."
-    echo "Edit .env (DOMAIN, CERTBOT_EMAIL), then run: docker compose run --rm certbot"
+  if [ "$DOMAIN" = "localhost" ]; then
+    echo "Domain is localhost - using HTTP only."
+  elif [ -z "$CERTBOT_EMAIL" ] && [ "${SELF_SIGNED_CERT:-0}" != "1" ]; then
+    echo "Email not set and self-signed not chosen - using HTTP only."
+    echo "Edit .env (CERTBOT_EMAIL for Let's Encrypt, or SELF_SIGNED_CERT=1), then run certbot or regenerate."
   fi
 fi
 
@@ -258,7 +342,11 @@ if [ -n "$SETUP_PATH" ]; then
 fi
 echo "  App:     https://${DOMAIN}/ (or http:// if no cert yet)"
 if [ "$REVERSE_PROXY" = "nginx" ]; then
-  echo "  Renew:   docker compose run --rm certbot renew"
+  if [ "${SELF_SIGNED_CERT:-0}" = "1" ]; then
+    echo "  SSL:     Self-signed cert (1 year). Regenerate manually when expired."
+  elif [ -n "$CERTBOT_EMAIL" ]; then
+    echo "  Renew:   docker compose run --rm certbot renew"
+  fi
 else
   echo "  SSL:     Caddy auto-renews certificates (no certbot)."
 fi

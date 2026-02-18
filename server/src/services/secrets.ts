@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { HARBORFM_SECRETS_KEY } from "../config.js";
 import { ensureSecretsDir, getSecretsDir } from "./paths.js";
 
 const SECRETS_KEY_ENV = "HARBORFM_SECRETS_KEY";
@@ -21,7 +22,7 @@ function getSecretsKeyPath(): string {
 export function getSecretsKey(): Buffer {
   if (cachedKey) return cachedKey;
 
-  const fromEnv = process.env[SECRETS_KEY_ENV]?.trim();
+  const fromEnv = HARBORFM_SECRETS_KEY;
   if (fromEnv) {
     const b64 = fromEnv.replace(/-/g, "+").replace(/_/g, "/");
     const raw = Buffer.from(b64, "base64");

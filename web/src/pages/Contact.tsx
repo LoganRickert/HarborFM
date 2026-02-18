@@ -175,7 +175,7 @@ export function Contact() {
                 />
               )}
               {mutation.isError && (
-                <div className={styles.verificationCardError}>
+                <div className={styles.verificationCardError} role="alert">
                   <p className={styles.verificationCardErrorText}>{mutation.error?.message}</p>
                 </div>
               )}

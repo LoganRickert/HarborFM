@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
+import { X, Upload } from 'lucide-react';
 import { getEpisodeTranscript, updateEpisodeTranscript } from '../../api/segments';
 import styles from '../EpisodeEditor.module.css';
 
@@ -22,9 +21,23 @@ export function EpisodeTranscriptModal({
   const [editValue, setEditValue] = useState('');
   const [loading, setLoading] = useState(true);
   const transcriptRef = useRef<HTMLTextAreaElement>(null);
-  useAutoResizeTextarea(transcriptRef, editValue, { minHeight: 200 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const handleUploadFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        setEditValue(result);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -39,9 +52,15 @@ export function EpisodeTranscriptModal({
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load transcript');
-          setText(null);
-          setEditValue('');
+          const msg = err instanceof Error ? err.message : 'Failed to load transcript';
+          if (msg.includes('not found') || msg.includes('Not found') || (err as { status?: number })?.status === 404) {
+            setText('');
+            setEditValue('');
+          } else {
+            setError(msg);
+            setText(null);
+            setEditValue('');
+          }
         }
       })
       .finally(() => {
@@ -99,17 +118,36 @@ export function EpisodeTranscriptModal({
             {!loading && !error && (
               <>
                 {canEdit ? (
-                  <textarea
-                    ref={transcriptRef}
-                    className={styles.transcriptText}
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    placeholder="Transcript (SRT format)"
-                    spellCheck={false}
-                    aria-label="Transcript text"
-                    rows={4}
-                    style={{ overflow: 'hidden', resize: 'none' }}
-                  />
+                  <>
+                    <div className={styles.episodeTranscriptUploadRow}>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".srt,text/plain,application/x-subrip"
+                        style={{ display: 'none' }}
+                        onChange={handleUploadFile}
+                      />
+                      <button
+                        type="button"
+                        className={styles.episodeTranscriptUploadBtn}
+                        onClick={() => fileInputRef.current?.click()}
+                        aria-label="Upload SRT file"
+                      >
+                        <Upload size={18} strokeWidth={2} aria-hidden />
+                        Upload SRT file
+                      </button>
+                    </div>
+                    <textarea
+                      ref={transcriptRef}
+                      className={styles.transcriptText}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      placeholder="Transcript (SRT format). Paste here or upload an SRT file above."
+                      spellCheck={false}
+                      aria-label="Transcript text"
+                      rows={4}
+                    />
+                  </>
                 ) : (
                   <pre className={styles.transcriptText}>{text ?? '(empty)'}</pre>
                 )}

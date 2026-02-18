@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, FileAudio, FileText, FilePlus2, TriangleAlert } from 'lucide-react';
 import { downloadEpisodeUrl, finalEpisodeWaveformUrl } from '../../api/audio';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
+import { formatDuration } from './utils';
+import { ChaptersCard } from './ChaptersCard';
 import styles from '../EpisodeEditor.module.css';
 
 export interface GenerateFinalBarProps {
@@ -30,6 +32,10 @@ export interface GenerateFinalBarProps {
   error?: string | null;
   /** When false, the Generate Transcript button is disabled (grayed out). */
   canGenerateTranscript?: boolean;
+  /** Chapter markers for the final waveform (from episode.final_markers). */
+  finalMarkers?: Array<{ time: number; title?: string; color?: string }>;
+  /** Called when user edits chapters (add/edit/delete). Parent should PATCH episode with final_markers. */
+  onMarkersChange?: (markers: Array<{ time: number; title?: string; color?: string }>) => void;
 }
 
 export function GenerateFinalBar({
@@ -49,8 +55,11 @@ export function GenerateFinalBar({
   onGenerateTranscript,
   error,
   canGenerateTranscript = true,
+  finalMarkers,
+  onMarkersChange,
 }: GenerateFinalBarProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const lastLoadedUrlRef = useRef<string | null>(null);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -64,6 +73,10 @@ export function GenerateFinalBar({
     hasFinalAudio && episodeId
       ? `${downloadEpisodeUrl(episodeId, 'final')}${finalUpdatedAt ? `&v=${encodeURIComponent(finalUpdatedAt)}` : ''}`
       : '';
+
+  useEffect(() => {
+    lastLoadedUrlRef.current = null;
+  }, [downloadUrl]);
 
   useEffect(() => {
     if (!hasFinalAudio || !episodeId || finalDurationSec <= 0) {
@@ -134,9 +147,25 @@ export function GenerateFinalBar({
       setIsPlaying(false);
     } else {
       onFinalPlayStart?.();
-      el.src = downloadUrl;
+      const urlChanged = downloadUrl !== lastLoadedUrlRef.current;
+      const needsLoad = !el.src || el.ended || urlChanged;
+      if (needsLoad) {
+        lastLoadedUrlRef.current = downloadUrl;
+        el.src = downloadUrl;
+        const seekTo = currentTime;
+        el.addEventListener(
+          'canplay',
+          () => {
+            el.currentTime = seekTo;
+            setCurrentTime(seekTo);
+            el.play().catch(() => setIsPlaying(false));
+          },
+          { once: true }
+        );
+      } else {
+        el.play().catch(() => setIsPlaying(false));
+      }
       setIsPlaying(true);
-      el.play().catch(() => setIsPlaying(false));
     }
   }
 
@@ -155,6 +184,10 @@ export function GenerateFinalBar({
       )}
       {hasFinalAudio && durationSec > 0 && (
         <div className={styles.generateBarPlayback}>
+          <div />
+          <div className={styles.generateBarTime} aria-live="polite">
+            {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(durationSec))}
+          </div>
           <button
             type="button"
             className={styles.segmentBtn}
@@ -169,6 +202,7 @@ export function GenerateFinalBar({
               data={waveformData}
               durationSec={durationSec}
               currentTime={currentTime}
+              markers={finalMarkers ?? []}
               onSeek={(time) => {
                 const el = audioRef.current;
                 if (el) {
@@ -204,22 +238,45 @@ export function GenerateFinalBar({
             <FileAudio size={20} strokeWidth={2} aria-hidden />
             <span>{isBuilding ? 'Building...' : 'Make Final Episode'}</span>
           </button>
-          {(hasTranscript || (hasFinalAudio && !isBuilding)) && (onOpenTranscript || onGenerateTranscript) && (
+          {((hasTranscript && onOpenTranscript) || (!hasTranscript && (hasFinalAudio && !isBuilding) && (onGenerateTranscript || onOpenTranscript))) && (
             <button
               type="button"
               className={hasTranscript ? styles.generateBarTranscriptBtn : styles.generateBarGenerateTranscriptBtn}
               onClick={hasTranscript ? onOpenTranscript : async () => {
-                if (!onGenerateTranscript || !canGenerateTranscript) return;
-                setIsGeneratingTranscript(true);
-                try {
-                  await onGenerateTranscript();
-                } finally {
-                  setIsGeneratingTranscript(false);
+                if (onGenerateTranscript && canGenerateTranscript) {
+                  setIsGeneratingTranscript(true);
+                  try {
+                    await onGenerateTranscript();
+                  } finally {
+                    setIsGeneratingTranscript(false);
+                  }
+                } else if (onOpenTranscript) {
+                  onOpenTranscript();
                 }
               }}
-              disabled={isBuilding || (!hasTranscript && (isGeneratingTranscript || !canGenerateTranscript))}
-              title={isBuilding ? 'Transcript available after build finishes' : hasTranscript ? 'View Episode Transcript' : isGeneratingTranscript ? 'Generating transcript…' : 'Generate transcript from final audio'}
-              aria-label={isBuilding ? 'Transcript (disabled while building)' : hasTranscript ? 'View Episode Transcript' : isGeneratingTranscript ? 'Generating transcript' : 'Generate Transcript'}
+              disabled={isBuilding || (!hasTranscript && onGenerateTranscript && (isGeneratingTranscript || !canGenerateTranscript))}
+              title={
+                isBuilding
+                  ? 'Transcript available after build finishes'
+                  : hasTranscript
+                    ? 'View Episode Transcript'
+                    : isGeneratingTranscript
+                      ? 'Generating transcript…'
+                      : onGenerateTranscript
+                        ? 'Generate transcript from final audio'
+                        : 'Upload your own SRT transcript'
+              }
+              aria-label={
+                isBuilding
+                  ? 'Transcript (disabled while building)'
+                  : hasTranscript
+                    ? 'View Episode Transcript'
+                    : isGeneratingTranscript
+                      ? 'Generating transcript'
+                      : onGenerateTranscript
+                        ? 'Generate Transcript'
+                        : 'Upload Transcript'
+              }
             >
               {hasTranscript ? (
                 <>
@@ -229,7 +286,9 @@ export function GenerateFinalBar({
               ) : (
                 <>
                   <FilePlus2 size={18} strokeWidth={2} aria-hidden />
-                  <span>{isGeneratingTranscript ? 'Generating…' : 'Generate Transcript'}</span>
+                  <span>
+                    {isGeneratingTranscript ? 'Generating…' : onGenerateTranscript ? 'Generate Transcript' : 'Upload Transcript'}
+                  </span>
                 </>
               )}
             </button>
@@ -242,6 +301,37 @@ export function GenerateFinalBar({
           </div>
         </div>
       </div>
+      <ChaptersCard
+        markers={finalMarkers ?? []}
+        onMarkersChange={(m) => onMarkersChange?.(m)}
+        onSeekTo={(time) => {
+          const el = audioRef.current;
+          if (!el || !downloadUrl) return;
+          onFinalPlayStart?.();
+          const urlChanged = downloadUrl !== lastLoadedUrlRef.current;
+          const needsLoad = !el.src || el.ended || urlChanged;
+          if (needsLoad) {
+            lastLoadedUrlRef.current = downloadUrl;
+            el.src = downloadUrl;
+            el.addEventListener(
+              'canplay',
+              () => {
+                el.currentTime = time;
+                setCurrentTime(time);
+                el.play().catch(() => setIsPlaying(false));
+              },
+              { once: true }
+            );
+          } else {
+            el.currentTime = time;
+            setCurrentTime(time);
+            el.play().catch(() => setIsPlaying(false));
+          }
+        }}
+        canEdit={!readOnly && !!onMarkersChange}
+        hasFinalAudio={hasFinalAudio}
+        finalDurationSec={finalDurationSec}
+      />
     </div>
   );
 }

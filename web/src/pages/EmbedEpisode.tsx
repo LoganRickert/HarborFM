@@ -180,8 +180,7 @@ export function EmbedEpisode() {
   const seasonEpisodeLong = formatSeasonEpisodeLong(episode.season_number, episode.episode_number);
   const seasonEpisodeShort = formatSeasonEpisode(episode.season_number, episode.episode_number);
 
-  const isSubscriberOnly =
-    !audioUrl && (episode.subscriber_only === 1 || podcast.subscriber_only_feed_enabled === 1);
+  const isSubscriberOnly = !audioUrl && episode.subscriber_only === 1;
 
   let artworkSrc: string | null = null;
   if (episode.artwork_url) {
@@ -264,6 +263,7 @@ export function EmbedEpisode() {
                       data={waveformData!}
                       durationSec={durationSec}
                       currentTime={currentTime}
+                      markers={episode.markers ?? []}
                       onSeek={seek}
                       className={styles.waveform}
                     />

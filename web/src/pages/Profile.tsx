@@ -10,6 +10,7 @@ import { FailedToLoadCard } from '../components/FailedToLoadCard';
 import { FullPageLoading } from '../components/Loading';
 import { SubscriberTokenControls } from '../components/SubscriberTokens/SubscriberTokenControls';
 import { SubscriberTokenPagination } from '../components/SubscriberTokens/SubscriberTokenPagination';
+import { TwoFactorProfileSection } from '../components/TwoFactorProfile/TwoFactorProfileSection';
 import { Key } from 'lucide-react';
 import { TokenListRow, type TokenStatus } from '../components/TokenListRow';
 import { formatDate as formatDateUtil, formatDateTime as formatDateTimeUtil } from '../utils/format';
@@ -280,6 +281,10 @@ export function Profile() {
           <p className={styles.cardNote}>You don’t have any limits set on your account.</p>
         )}
       </section>
+
+      {!user.read_only && (
+        <TwoFactorProfileSection twoFactor={data.twoFactor} />
+      )}
 
       <section className={`${apiKeySectionStyles.card} ${styles.apiKeysSection}`}>
         <div className={apiKeySectionStyles.exportHeader}>

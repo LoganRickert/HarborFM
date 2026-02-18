@@ -259,10 +259,10 @@ export function CastMemberDialog({
                   Photo
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.375rem' }}>
                     {photoSrc ? (
-                      <img src={photoSrc} alt="" className={styles.castPhotoPreview} />
+                      <img src={photoSrc} alt={`${name || 'Cast member'} photo`} className={styles.castPhotoPreview} />
                     ) : (
                       <div className={styles.castPhotoPreviewPlaceholder}>
-                        <User size={24} />
+                        <User size={24} aria-hidden />
                       </div>
                     )}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: 0 }}>

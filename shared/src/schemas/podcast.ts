@@ -7,7 +7,7 @@ const nullableOptionalString = emptyStringToNull(z.string().nullable().optional(
 const nullableOptionalUrl = emptyStringToNull(z.string().url().nullable().optional());
 
 export const podcastCreateSchema = z.object({
-  title: z.string().min(1, { error: 'Title is required' }),
+  title: z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string().min(1, { error: 'Title is required' })),
   slug: z.string().min(1).regex(/^[a-z0-9-]+$/, { error: 'Slug: lowercase letters, numbers, hyphens only' }),
   description: z.string().default(''),
   subtitle: nullableOptionalString,

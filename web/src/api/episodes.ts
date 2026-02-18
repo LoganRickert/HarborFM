@@ -1,5 +1,5 @@
 import type { EpisodeCreate, EpisodeResponse, EpisodeUpdate, EpisodesResponse } from '@harborfm/shared';
-import { apiGet, apiPost, apiPatch, apiPut, csrfHeaders } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, csrfHeaders } from './client';
 
 const BASE = '/api';
 
@@ -20,6 +20,10 @@ export function createEpisode(podcastId: string, body: EpisodeCreate) {
 
 export function updateEpisode(id: string, body: EpisodeUpdate) {
   return apiPatch<EpisodeResponse>(`/episodes/${id}`, body);
+}
+
+export function deleteEpisode(id: string) {
+  return apiDelete<void>(`/episodes/${id}`);
 }
 
 export async function uploadEpisodeArtwork(podcastId: string, episodeId: string, file: File): Promise<Episode> {

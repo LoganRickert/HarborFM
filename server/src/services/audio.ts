@@ -272,8 +272,6 @@ export async function getAudioMetaAfterProcess(
   };
 }
 
-const DATA_DIR = getDataDir();
-
 /**
  * Extract a time range from an audio file to an MP3 chunk.
  * @param sourcePath - Full path to source audio (must be under allowedBaseDir)
@@ -281,6 +279,7 @@ const DATA_DIR = getDataDir();
  * @param startSec - Start time in seconds
  * @param durationSec - Duration in seconds
  * @param outputPath - Full path for output MP3 (must be under allowedBaseDir)
+ * @param opts - Optional; bitrateKbps should match final episode settings when used for rendering
  */
 export async function extractSegment(
   sourcePath: string,
@@ -288,9 +287,12 @@ export async function extractSegment(
   startSec: number,
   durationSec: number,
   outputPath: string,
+  opts?: { bitrateKbps?: number },
 ): Promise<string> {
   const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
   const safeOut = assertPathUnder(outputPath, allowedBaseDir);
+  const bitrateKbps = opts?.bitrateKbps ?? 128;
+  const bitrate = `${Math.max(16, bitrateKbps)}k`;
   await exec(
     FFMPEG_PATH,
     [
@@ -303,7 +305,7 @@ export async function extractSegment(
       "-acodec",
       "libmp3lame",
       "-b:a",
-      "64k",
+      bitrate,
       "-y",
       safeOut,
     ],
@@ -312,7 +314,7 @@ export async function extractSegment(
   return safeOut;
 }
 
-/** Concatenate multiple audio files into final output format. Paths must be under DATA_DIR. */
+/** Concatenate multiple audio files into final output format. Paths must be under DATA_DIR or tmpdir(). */
 export async function concatToFinal(
   segmentPaths: string[],
   outputPath: string,
@@ -324,8 +326,21 @@ export async function concatToFinal(
 ): Promise<string> {
   if (segmentPaths.length === 0)
     throw new Error("At least one segment required");
+  const resolvedTmp = resolve(tmpdir());
+  const resolvedData = resolve(getDataDir());
   for (const p of segmentPaths) {
-    assertPathUnder(p, DATA_DIR);
+    const resolved = resolve(p);
+    const underData = resolved === resolvedData || resolved.startsWith(resolvedData + sep);
+    const underTmp = resolved === resolvedTmp || resolved.startsWith(resolvedTmp + sep);
+    if (!underData && !underTmp) {
+      console.error("[concatToFinal] Path escapes allowed directories", {
+        path: p,
+        resolved,
+        dataDir: resolvedData,
+        tmpDir: resolvedTmp,
+      });
+      assertPathUnder(p, getDataDir());
+    }
   }
   const n = segmentPaths.length;
   const loudnormFilter = `loudnorm=I=${DEFAULT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=14`;
@@ -483,6 +498,138 @@ export async function removeSegmentAndExportToWav(
   }
 
   return safeOut;
+}
+
+/**
+ * Remove multiple ranges from audio and export to WAV.
+ * Ranges are excluded (trimmed); keeps everything outside those ranges.
+ * @param sourcePath - Full path to source audio (must be under allowedBaseDir)
+ * @param allowedBaseDir - Base directory for source
+ * @param excludeRanges - Array of [start, end] in seconds to exclude (must be non-overlapping, sorted)
+ * @param outputPath - Full path for output WAV (must be under allowedBaseDir)
+ */
+export async function removeRangesAndExportToWav(
+  sourcePath: string,
+  allowedBaseDir: string,
+  excludeRanges: Array<[number, number]>,
+  outputPath: string,
+): Promise<string> {
+  const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
+  prepareOutputPath(outputPath, allowedBaseDir);
+
+  const probe = await probeAudio(safeSource, allowedBaseDir);
+  const totalDurationSec = probe.durationSec;
+
+  if (excludeRanges.length === 0) {
+    // No ranges to exclude - copy/convert full file
+    await exec(
+      FFMPEG_PATH,
+      [
+        "-i",
+        safeSource,
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "44100",
+        "-y",
+        outputPath,
+      ],
+      { maxBuffer: 1024 * 1024 },
+    );
+    return outputPath;
+  }
+
+  // Sort and merge overlapping ranges
+  const sorted = [...excludeRanges].sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of sorted) {
+    if (start >= totalDurationSec || end <= 0) continue;
+    const clampedStart = Math.max(0, start);
+    const clampedEnd = Math.min(totalDurationSec, end);
+    if (clampedStart >= clampedEnd) continue;
+    const last = merged[merged.length - 1];
+    if (last && clampedStart <= last[1]) {
+      last[1] = Math.max(last[1], clampedEnd);
+    } else {
+      merged.push([clampedStart, clampedEnd]);
+    }
+  }
+
+  // Invert to "keep" segments
+  const segments: Array<{ start: number; end: number }> = [];
+  let pos = 0;
+  for (const [rStart, rEnd] of merged) {
+    if (rStart > pos) {
+      segments.push({ start: pos, end: rStart });
+    }
+    pos = rEnd;
+  }
+  if (pos < totalDurationSec) {
+    segments.push({ start: pos, end: totalDurationSec });
+  }
+
+  if (segments.length === 0) {
+    throw new Error("Cannot remove entire audio file");
+  }
+
+  const { nanoid } = await import("nanoid");
+  const tempDir = dirname(outputPath);
+  const tempFiles: string[] = [];
+
+  try {
+    for (const seg of segments) {
+      const tempPath = join(tempDir, `temp_${nanoid()}.wav`);
+      tempFiles.push(tempPath);
+      await exec(
+        FFMPEG_PATH,
+        [
+          "-ss",
+          String(seg.start),
+          "-i",
+          safeSource,
+          "-t",
+          String(seg.end - seg.start),
+          "-acodec",
+          "pcm_s16le",
+          "-ar",
+          "44100",
+          "-y",
+          tempPath,
+        ],
+        { maxBuffer: 1024 * 1024 },
+      );
+    }
+
+    const n = tempFiles.length;
+    const filter =
+      tempFiles.map((_, i) => `[${i}:a]`).join("") +
+      `concat=n=${n}:v=0:a=1[out]`;
+    const args = tempFiles
+      .flatMap((p) => ["-i", p])
+      .concat([
+        "-filter_complex",
+        filter,
+        "-map",
+        "[out]",
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "44100",
+        "-y",
+        outputPath,
+      ]);
+    await exec(FFMPEG_PATH, args, { maxBuffer: 1024 * 1024 });
+  } finally {
+    for (const tempFile of tempFiles) {
+      try {
+        unlinkSync(tempFile);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  return outputPath;
 }
 
 /**

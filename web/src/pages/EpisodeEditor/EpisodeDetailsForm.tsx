@@ -36,6 +36,14 @@ export interface EpisodeDetailsFormProps {
   isSaving: boolean;
   saveError: string | null;
   saveSuccess: boolean;
+  /** When true, Delete Episode button is enabled. When false, button is disabled. */
+  canDeleteEpisode?: boolean;
+  /** True while delete is in progress (button disabled). */
+  isDeleting?: boolean;
+  /** Error message if delete failed. */
+  deleteError?: string | null;
+  /** Called when user clicks Delete Episode (opens confirm dialog). */
+  onRequestDeleteEpisode?: () => void;
   /** When set, show URL vs Upload cover image options and preview. */
   coverImageConfig?: {
     podcastId: string;
@@ -62,6 +70,10 @@ export function EpisodeDetailsForm({
   isSaving,
   saveError,
   saveSuccess,
+  canDeleteEpisode,
+  isDeleting,
+  deleteError,
+  onRequestDeleteEpisode,
   coverImageConfig,
 }: EpisodeDetailsFormProps) {
   const cover = coverImageConfig;
@@ -424,6 +436,22 @@ export function EpisodeDetailsForm({
             <span>GUID is permalink</span>
           </label>
         </div>
+        {onRequestDeleteEpisode && (
+          <div className={styles.deleteEpisodeSection}>
+            <h3 className={styles.deleteSectionTitle}>Danger zone</h3>
+            {deleteError && (
+              <p className={styles.error} style={{ marginBottom: '0.75rem' }}>{deleteError}</p>
+            )}
+            <button
+              type="button"
+              className={styles.deleteEpisodeButton}
+              disabled={!canDeleteEpisode || isDeleting}
+              onClick={onRequestDeleteEpisode}
+            >
+              Delete Episode
+            </button>
+          </div>
+        )}
       </div>
     </form>
   );

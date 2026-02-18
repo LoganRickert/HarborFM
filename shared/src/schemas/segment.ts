@@ -36,9 +36,45 @@ export const segmentReorderBodySchema = z.object({
   segment_ids: z.array(z.string().min(1), { message: 'segment_ids must be a non-empty array' }).min(1, { message: 'segment_ids array required' }),
 });
 
-/** Body for PATCH /episodes/:episodeId/segments/:segmentId (update name). */
+/** Trim range: [start, end] in absolute seconds (2 decimal places). */
+export const trimRangeSchema = z.tuple([
+  z.number().min(0),
+  z.number().min(0),
+]).refine(([start, end]) => start < end, { message: 'start must be less than end' });
+
+/** Array of trim ranges (excluded sections). Non-overlapping, sorted. */
+export const trimRangesSchema = z.array(trimRangeSchema);
+
+/** Single marker: point in time with optional title, color (hex), and marker_type. */
+export const markerSchema = z.object({
+  time: z.number().min(0),
+  title: z.string().optional(),
+  color: z.string().optional(),
+  /** '' | undefined = None, 'chapter' = Chapter */
+  marker_type: z.union([z.literal(''), z.literal('chapter')]).optional(),
+});
+
+/** Array of markers. */
+export const markersSchema = z.array(markerSchema);
+
+/** Marker type for use in TS  */
+export interface Marker {
+  time: number;
+  title?: string;
+  color?: string;
+  marker_type?: '' | 'chapter';
+}
+
+/** Body for PATCH /episodes/:episodeId/segments/:segmentId (update name, trim_ranges, markers). */
 export const segmentUpdateNameBodySchema = z.object({
-  name: z.union([z.string(), z.null()]),
+  name: z.union([z.string(), z.null()]).optional(),
+});
+
+/** Body for PATCH /episodes/:episodeId/segments/:segmentId (full update). */
+export const segmentUpdateBodySchema = z.object({
+  name: z.union([z.string(), z.null()]).optional(),
+  trim_ranges: trimRangesSchema.optional().nullable(),
+  markers: markersSchema.optional().nullable(),
 });
 
 /** Body for POST /episodes/:episodeId/segments/:segmentId/trim. */
@@ -103,6 +139,10 @@ export const segmentResponseSchema = z.object({
   in_progress: z.boolean().optional(),
   /** True when recording failed (ffmpeg error, server crash, etc). */
   record_failed: z.boolean().optional(),
+  /** Excluded ranges [[start, end], ...] in absolute seconds. */
+  trim_ranges: z.array(z.tuple([z.number(), z.number()])).optional().nullable(),
+  /** Markers [{time, title?, color?}, ...]. */
+  markers: markersSchema.optional().nullable(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */
@@ -133,6 +173,8 @@ export type SegmentEpisodeIdOnlyParam = z.infer<typeof segmentEpisodeIdOnlyParam
 export type SegmentCreateReusableBody = z.infer<typeof segmentCreateReusableBodySchema>;
 export type SegmentReorderBody = z.infer<typeof segmentReorderBodySchema>;
 export type SegmentUpdateNameBody = z.infer<typeof segmentUpdateNameBodySchema>;
+export type SegmentUpdateBody = z.infer<typeof segmentUpdateBodySchema>;
+export type TrimRange = z.infer<typeof trimRangeSchema>;
 export type SegmentTrimBody = z.infer<typeof segmentTrimBodySchema>;
 export type SegmentRemoveSilenceBody = z.infer<typeof segmentRemoveSilenceBodySchema>;
 export type SegmentNoiseSuppressionBody = z.infer<typeof segmentNoiseSuppressionBodySchema>;

@@ -11,6 +11,7 @@ import { getExportPathPrefix } from "./export-config.js";
 import {
   assertPathUnder,
   assertResolvedPathUnder,
+  chaptersJsonPath,
   getDataDir,
   rssDir,
 } from "./paths.js";
@@ -549,6 +550,19 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       }
       if (transcriptUrl)
         out += `      <podcast:transcript url="${escapeXml(transcriptUrl)}" type="application/srt"/>\n`;
+    }
+    const episodeChaptersPath = chaptersJsonPath(podcastId, String(ep.id));
+    if (existsSync(episodeChaptersPath) && publicBaseNoSlash && epSlugRaw) {
+      let chaptersUrl = "";
+      if (tokenIdPlaceholder && slugRaw) {
+        chaptersUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/episodes/${encodeURIComponent(epSlugRaw)}/chapters.json`;
+      } else if (exportPrefix != null) {
+        chaptersUrl = `${publicBaseNoSlash}/${exportPrefix}/episodes/${String(ep.id)}.json`;
+      } else {
+        chaptersUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/episodes/${encodeURIComponent(epSlugRaw)}/chapters.json`;
+      }
+      if (chaptersUrl)
+        out += `      <podcast:chapters url="${escapeXml(chaptersUrl)}" type="application/json+chapters"/>\n`;
     }
     out += `      <itunes:explicit>${epExplicit}</itunes:explicit>
       <pubDate>${pubDate}</pubDate>

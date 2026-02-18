@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAutoResizeTextarea } from '../hooks/useAutoResizeTextarea';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Image } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useAuthStore } from '../store/auth';
 import type { PodcastUpdate } from '@harborfm/shared';
-import { getPodcast, updatePodcast, uploadPodcastArtwork, type Podcast } from '../api/podcasts';
+import {
+  getPodcast,
+  updatePodcast,
+  uploadPodcastArtwork,
+  startDeletePodcast,
+  getDeletePodcastStatus,
+  type Podcast,
+} from '../api/podcasts';
 import styles from '../components/PodcastDetail/shared.module.css';
 
 export interface EditShowDetailsDialogProps {
@@ -36,8 +44,11 @@ function safeImageSrc(url: string | null | undefined): string {
   return '';
 }
 
+const DELETE_POLL_INTERVAL_MS = 3000;
+
 export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDetailsDialogProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { data: podcast, isLoading } = useQuery({
     queryKey: ['podcast', podcastId],
@@ -57,6 +68,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
   const [activeTab, setActiveTab] = useState<DetailsTab>('overview');
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletePhase, setDeletePhase] = useState<'idle' | 'submitting' | 'polling'>('idle');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteStatusMessage, setDeleteStatusMessage] = useState<string | null>(null);
+  const deletePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useAutoResizeTextarea(descriptionRef, form.description ?? '', { minHeight: 80 });
   useAutoResizeTextarea(summaryRef, form.summary ?? '', { minHeight: 60 });
@@ -97,6 +113,58 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       setPendingArtworkFile(null);
     }
   }, [open, podcast]);
+
+  useEffect(() => {
+    if (!open) {
+      setDeleteConfirmOpen(false);
+      setDeletePhase('idle');
+      setDeleteError(null);
+      setDeleteStatusMessage(null);
+      if (deletePollRef.current) {
+        clearInterval(deletePollRef.current);
+        deletePollRef.current = null;
+      }
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (deletePhase !== 'polling' || !podcastId) return;
+    const poll = () => {
+      getDeletePodcastStatus(podcastId)
+        .then((data) => {
+          setDeleteStatusMessage(data.message ?? null);
+          if (data.status === 'done') {
+            if (deletePollRef.current) {
+              clearInterval(deletePollRef.current);
+              deletePollRef.current = null;
+            }
+            queryClient.invalidateQueries({ queryKey: ['podcasts'] });
+            setDeletePhase('idle');
+            setDeleteConfirmOpen(false);
+            onClose();
+            navigate('/');
+          } else if (data.status === 'failed') {
+            if (deletePollRef.current) {
+              clearInterval(deletePollRef.current);
+              deletePollRef.current = null;
+            }
+            setDeleteError(data.error ?? 'Delete failed');
+            setDeletePhase('idle');
+          }
+        })
+        .catch(() => {
+          // keep polling on network error
+        });
+    };
+    poll();
+    deletePollRef.current = setInterval(poll, DELETE_POLL_INTERVAL_MS);
+    return () => {
+      if (deletePollRef.current) {
+        clearInterval(deletePollRef.current);
+        deletePollRef.current = null;
+      }
+    };
+  }, [deletePhase, podcastId, onClose, queryClient, navigate]);
 
   useEffect(() => {
     if (!pendingArtworkFile) {
@@ -957,6 +1025,24 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                           placeholder="From Apple Podcasts Connect"
                         />
                       </label>
+
+                      {podcast?.my_role === 'owner' && (
+                        <div className={styles.deletePodcastSection}>
+                          <h3 className={styles.dialogSectionTitle}>Danger zone</h3>
+                          <button
+                            type="button"
+                            className={styles.deletePodcastButton}
+                            onClick={() => {
+                              setDeleteError(null);
+                              setDeleteConfirmOpen(true);
+                            }}
+                            disabled={deletePhase !== 'idle'}
+                            aria-label="Delete podcast"
+                          >
+                            Delete podcast
+                          </button>
+                        </div>
+                      )}
                 </div>
                 </div>
 
@@ -985,6 +1071,69 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
           )}
         </Dialog.Content>
       </Dialog.Portal>
+
+      <Dialog.Root open={deleteConfirmOpen} onOpenChange={(o) => !o && deletePhase === 'idle' && setDeleteConfirmOpen(false)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className={`${styles.dialogOverlay} ${styles.dialogOverlayOnModal}`} />
+          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentOnModal}`}>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>Delete podcast?</Dialog.Title>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.dialogClose} aria-label="Close" disabled={deletePhase !== 'idle'}>
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className={styles.dialogDescription}>
+              This will permanently delete &quot;{podcast?.title ?? 'this podcast'}&quot; and all its episodes, audio, transcripts, waveforms, RSS, and artwork. This cannot be undone.
+            </Dialog.Description>
+            {deleteError && (
+              <p className={styles.error} style={{ marginTop: '0.5rem' }} role="alert">
+                {deleteError}
+              </p>
+            )}
+            {(deletePhase === 'submitting' || deletePhase === 'polling') && deleteStatusMessage && (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                {deleteStatusMessage}
+              </p>
+            )}
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
+              <Dialog.Close asChild>
+                <button type="button" className={styles.cancel} aria-label="Cancel" disabled={deletePhase !== 'idle'}>
+                  Cancel
+                </button>
+              </Dialog.Close>
+              <button
+                type="button"
+                className={styles.dialogConfirmRemove}
+                disabled={deletePhase !== 'idle'}
+                onClick={async () => {
+                  if (!podcastId) return;
+                  setDeleteError(null);
+                  setDeletePhase('submitting');
+                  setDeleteStatusMessage('Starting deletion…');
+                  try {
+                    await startDeletePodcast(podcastId);
+                    setDeletePhase('polling');
+                  } catch (err: unknown) {
+                    const message =
+                      err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 409
+                        ? 'You already have a podcast deletion in progress.'
+                        : err instanceof Error
+                          ? err.message
+                          : 'Delete failed';
+                    setDeleteError(message);
+                    setDeletePhase('idle');
+                  }
+                }}
+                aria-label="Confirm delete podcast"
+              >
+                {deletePhase !== 'idle' ? 'Deleting…' : 'Delete podcast'}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </Dialog.Root>
   );
 }

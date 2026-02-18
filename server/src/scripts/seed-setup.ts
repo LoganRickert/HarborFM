@@ -16,6 +16,17 @@ import { existsSync, unlinkSync } from "fs";
 import { join } from "path";
 // Run migrations first so DB and tables exist
 import "../db/migrate.js";
+import {
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
+  ADMIN_PASSWORD_HASH_B64,
+  ADMIN_PUBLIC_FEEDS_ENABLED,
+  ADMIN_REGISTRATION_ENABLED,
+  EMAIL_PROVIDER,
+  EMAIL_WEBHOOK_FIELD_KEY,
+  EMAIL_WEBHOOK_URL,
+  getAdminHostnameFromEnv,
+} from "../config.js";
 import { db } from "../db/index.js";
 import { getDataDir } from "../services/paths.js";
 import { normalizeHostname } from "../utils/url.js";
@@ -45,9 +56,9 @@ function isSetupComplete(): boolean {
 }
 
 async function main(): Promise<void> {
-  const email = process.env.ADMIN_EMAIL?.trim();
-  const hashB64 = process.env.ADMIN_PASSWORD_HASH_B64?.trim();
-  const password = process.env.ADMIN_PASSWORD?.trim();
+  const email = ADMIN_EMAIL;
+  const hashB64 = ADMIN_PASSWORD_HASH_B64;
+  const password = ADMIN_PASSWORD;
 
   if (!email || !email.includes("@")) {
     console.warn("[seed-setup] Skipped: ADMIN_EMAIL (valid email) required.");
@@ -91,28 +102,20 @@ async function main(): Promise<void> {
             existing.id,
           );
         }
-        const hostnameRaw =
-          process.env.ADMIN_HOSTNAME?.trim() ||
-          (process.env.DOMAIN &&
-          process.env.DOMAIN !== "localhost" &&
-          process.env.DOMAIN !== "_"
-            ? `https://${process.env.DOMAIN}`
-            : "");
+        const hostnameRaw = getAdminHostnameFromEnv();
         const hostname = hostnameRaw ? normalizeHostname(hostnameRaw) : "";
         writeSetting("hostname", hostname);
         writeSetting(
           "registration_enabled",
-          process.env.ADMIN_REGISTRATION_ENABLED === "1" ? "true" : "false",
+          ADMIN_REGISTRATION_ENABLED ? "true" : "false",
         );
         writeSetting(
           "public_feeds_enabled",
-          process.env.ADMIN_PUBLIC_FEEDS_ENABLED === "1" ? "true" : "false",
+          ADMIN_PUBLIC_FEEDS_ENABLED ? "true" : "false",
         );
-        const emailProvider =
-          process.env.EMAIL_PROVIDER?.trim()?.toLowerCase();
-        const emailWebhookUrl = process.env.EMAIL_WEBHOOK_URL?.trim();
-        const emailWebhookFieldKey =
-          process.env.EMAIL_WEBHOOK_FIELD_KEY?.trim() || "content";
+        const emailProvider = EMAIL_PROVIDER;
+        const emailWebhookUrl = EMAIL_WEBHOOK_URL;
+        const emailWebhookFieldKey = EMAIL_WEBHOOK_FIELD_KEY;
         if (emailProvider === "webhook" && emailWebhookUrl) {
           writeSetting("email_provider", "webhook");
           writeSetting("email_webhook_url", emailWebhookUrl);
@@ -153,29 +156,22 @@ async function main(): Promise<void> {
     "INSERT INTO users (id, email, password_hash, role, can_transcribe) VALUES (?, ?, ?, ?, 1)",
   ).run(id, email.toLowerCase(), passwordHash, "admin");
 
-  const hostnameRaw =
-    process.env.ADMIN_HOSTNAME?.trim() ||
-    (process.env.DOMAIN &&
-    process.env.DOMAIN !== "localhost" &&
-    process.env.DOMAIN !== "_"
-      ? `https://${process.env.DOMAIN}`
-      : "");
+  const hostnameRaw = getAdminHostnameFromEnv();
   const hostname = hostnameRaw ? normalizeHostname(hostnameRaw) : "";
   writeSetting("hostname", hostname);
   writeSetting(
     "registration_enabled",
-    process.env.ADMIN_REGISTRATION_ENABLED === "1" ? "true" : "false",
+    ADMIN_REGISTRATION_ENABLED ? "true" : "false",
   );
   writeSetting(
     "public_feeds_enabled",
-    process.env.ADMIN_PUBLIC_FEEDS_ENABLED === "1" ? "true" : "false",
+    ADMIN_PUBLIC_FEEDS_ENABLED ? "true" : "false",
   );
   writeSetting("setup_completed", "true");
 
-  const emailProvider = process.env.EMAIL_PROVIDER?.trim()?.toLowerCase();
-  const emailWebhookUrl = process.env.EMAIL_WEBHOOK_URL?.trim();
-  const emailWebhookFieldKey =
-    process.env.EMAIL_WEBHOOK_FIELD_KEY?.trim() || "content";
+  const emailProvider = EMAIL_PROVIDER;
+  const emailWebhookUrl = EMAIL_WEBHOOK_URL;
+  const emailWebhookFieldKey = EMAIL_WEBHOOK_FIELD_KEY;
   if (emailProvider === "webhook" && emailWebhookUrl) {
     writeSetting("email_provider", "webhook");
     writeSetting("email_webhook_url", emailWebhookUrl);

@@ -768,8 +768,9 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
                 {!autoGainControl && (
                   <>
                     <div className={styles.recordSettingsVolume}>
-                      <label className={styles.recordSettingsLabel}>Volume</label>
+                      <label className={styles.recordSettingsLabel} htmlFor="record-modal-volume">Volume</label>
                       <input
+                        id="record-modal-volume"
                         type="range"
                         min={0}
                         max={800}

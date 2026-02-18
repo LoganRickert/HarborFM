@@ -1,4 +1,4 @@
-import type { SegmentResponse, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse } from '@harborfm/shared';
+import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
@@ -52,7 +52,7 @@ export function reorderSegments(episodeId: string, segmentIds: string[]): Promis
   });
 }
 
-export function updateSegment(episodeId: string, segmentId: string, payload: { name: string | null }): Promise<SegmentResponse> {
+export function updateSegment(episodeId: string, segmentId: string, payload: SegmentUpdateBody): Promise<SegmentResponse> {
   return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}`, {
     method: 'PATCH',
     credentials: 'include',
@@ -242,6 +242,7 @@ export function startRenderEpisode(episodeId: string): Promise<{ status: 'buildi
     const body = await r.json().catch(() => ({}));
     if (r.status === 202) return { status: 'building' as const };
     if (r.status === 409) return { status: 'already_building' as const, message: (body as { message?: string }).message ?? 'A build is already in progress.' };
+    if (r.status === 429) throw new Error('You can only run Make Final Episode once per minute. Please try again later.');
     if (!r.ok) throw new Error((body as { error?: string }).error ?? r.statusText);
     return body;
   });

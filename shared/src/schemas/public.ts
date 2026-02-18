@@ -78,6 +78,8 @@ export const publicEpisodeSchema = z.object({
   private_audio_url: z.string().nullish(),
   private_waveform_url: z.string().nullish(),
   private_srt_url: z.string().nullish(),
+  /** Chapter markers; time in seconds of final audio. */
+  markers: z.array(z.object({ time: z.number(), title: z.string().optional(), color: z.string().optional() })).optional().nullable(),
 });
 
 /** Response for GET /public/podcasts/:slug/episodes. */
