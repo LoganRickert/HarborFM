@@ -301,6 +301,7 @@ MOUNT_SVC
       OS="$OS" DEPLOY_TYPE="$DEPLOY_TYPE" HARBORFM_REPO="$HARBORFM_REPO" HARBORFM_BRANCH="$HARBORFM_BRANCH" \
       INSTALL_DIR="$INSTALL_DIR" DOMAIN="$DOMAIN" CERTBOT_EMAIL="$CERTBOT_EMAIL" TZ="$TZ" \
       SETUP_ID="$SETUP_ID" WEBRTC_ENABLED="$WEBRTC_ENABLED" COOKIE_SECURE="$COOKIE_SECURE" \
+      MEDIASOUP_ANNOUNCED_IP="${MEDIASOUP_ANNOUNCED_IP:-}" \
       ADMIN_EMAIL="${ADMIN_EMAIL:-}" ADMIN_PASSWORD_HASH="${ADMIN_PASSWORD_HASH:-}" \
       ADMIN_REGISTRATION_ENABLED="${ADMIN_REGISTRATION_ENABLED:-}" ADMIN_PUBLIC_FEEDS_ENABLED="${ADMIN_PUBLIC_FEEDS_ENABLED:-}" ADMIN_HOSTNAME="${ADMIN_HOSTNAME:-}" \
       DEBIAN_FRONTEND=noninteractive \
@@ -369,6 +370,7 @@ MOUNT_SVC
   download "$BASE_URL/nginx/nginx-80-only.conf.template" "$INSTALL_DIR/nginx/nginx-80-only.conf.template"
   download "$BASE_URL/nginx/nginx-full.conf.template" "$INSTALL_DIR/nginx/nginx-full.conf.template"
   download "$BASE_URL/caddy/Caddyfile" "$INSTALL_DIR/caddy/Caddyfile"
+  download "$BASE_URL/caddy/Caddyfile.webrtc" "$INSTALL_DIR/caddy/Caddyfile.webrtc"
   download "$BASE_URL/fail2ban/filter.d/nginx-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/nginx-scanner.conf"
   download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/nginx-scanner.local"
   download "$BASE_URL/fail2ban/filter.d/caddy-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/caddy-scanner.conf"
@@ -382,6 +384,11 @@ MOUNT_SVC
     mkdir -p "$INSTALL_DIR/harborfm-data/secrets"
     printf '%s' "$ADMIN_PASSWORD_HASH" > "$INSTALL_DIR/harborfm-data/secrets/admin_password_hash"
     chmod 600 "$INSTALL_DIR/harborfm-data/secrets/admin_password_hash" 2>/dev/null || true
+  fi
+  # mediasoup needs public IP when behind NAT; use MEDIASOUP_ANNOUNCED_IP from env (Terraform) or auto-detect
+  if [ "$WEBRTC_ENABLED" = "1" ] && [ -z "${MEDIASOUP_ANNOUNCED_IP:-}" ]; then
+    MEDIASOUP_ANNOUNCED_IP="$(curl -s --connect-timeout 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)"  # AWS
+    [ -z "$MEDIASOUP_ANNOUNCED_IP" ] && MEDIASOUP_ANNOUNCED_IP="$(curl -s --connect-timeout 2 ifconfig.me 2>/dev/null)"
   fi
   # .env
   {
@@ -404,6 +411,7 @@ MOUNT_SVC
       echo "WEBRTC_PUBLIC_WS_URL=${SCHEME}://${DOMAIN}/webrtc-ws"
       echo "WEBRTC_SERVICE_SECRET=${WEBRTC_SERVICE_SECRET:-$(openssl rand -base64 32)}"
       echo "RECORDING_CALLBACK_SECRET=${RECORDING_CALLBACK_SECRET:-$(openssl rand -base64 32)}"
+      [ -n "${MEDIASOUP_ANNOUNCED_IP:-}" ] && echo "MEDIASOUP_ANNOUNCED_IP=$MEDIASOUP_ANNOUNCED_IP"
     fi
     [ "$REVERSE_PROXY" = "caddy" ] && echo "CADDY_TLS_CHECK_SECRET=${CADDY_TLS_CHECK_SECRET:-$(openssl rand -hex 32)}"
   } > "$INSTALL_DIR/.env"
@@ -427,6 +435,9 @@ MOUNT_SVC
     "$INSTALL_DIR/harborfm-data/whisper/cache"
   [ -f "$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled/00-placeholder.conf" ] || echo '# Placeholder' > "$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled/00-placeholder.conf"
   touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
+
+  # Caddy: use WebRTC-enabled Caddyfile when webrtc profile is used; else default (respond 503 for /webrtc-ws)
+  [ "$REVERSE_PROXY" = "caddy" ] && [ "$WEBRTC_ENABLED" = "1" ] && cp "$INSTALL_DIR/caddy/Caddyfile.webrtc" "$INSTALL_DIR/caddy/Caddyfile"
 
   cd "$INSTALL_DIR"
   export INSTALL_DIR
