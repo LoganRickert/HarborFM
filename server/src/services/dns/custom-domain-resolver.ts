@@ -83,6 +83,9 @@ export function isDomainAllowed(domain: string): boolean {
   const raw = (domain || "").trim().toLowerCase();
   if (!raw) return false;
 
+  // Allow localhost/127.0.0.1 so Caddy can serve healthchecks and internal requests (uses self-signed cert, not public CA)
+  if (raw === "127.0.0.1" || raw === "localhost" || raw === "::1") return true;
+
   const settings = readSettings();
 
   // Primary domain from env (not localhost or wildcard)
@@ -91,9 +94,20 @@ export function isDomainAllowed(domain: string): boolean {
     return true;
   }
 
-  // Admin-configured hostname
-  const hostname = (settings.hostname ?? "").trim().toLowerCase();
-  if (hostname && raw === hostname) return true;
+  // Admin-configured hostname (may be URL like https://example.com)
+  const hostnameRaw = (settings.hostname ?? "").trim().toLowerCase();
+  if (hostnameRaw) {
+    let hostFromHostname = hostnameRaw;
+    try {
+      if (hostnameRaw.startsWith("http://") || hostnameRaw.startsWith("https://")) {
+        const u = new URL(hostnameRaw);
+        hostFromHostname = u.hostname;
+      }
+    } catch {
+      /* ignore parse errors */
+    }
+    if (raw === hostFromHostname) return true;
+  }
 
   // Base domain for subdomains
   const defaultDomain = (settings.dns_default_domain ?? "").trim().toLowerCase();

@@ -405,6 +405,7 @@ MOUNT_SVC
       echo "WEBRTC_SERVICE_SECRET=${WEBRTC_SERVICE_SECRET:-$(openssl rand -base64 32)}"
       echo "RECORDING_CALLBACK_SECRET=${RECORDING_CALLBACK_SECRET:-$(openssl rand -base64 32)}"
     fi
+    [ "$REVERSE_PROXY" = "caddy" ] && echo "CADDY_TLS_CHECK_SECRET=${CADDY_TLS_CHECK_SECRET:-$(openssl rand -hex 32)}"
   } > "$INSTALL_DIR/.env"
   chmod 600 "$INSTALL_DIR/.env"
   chmod 750 "$INSTALL_DIR" 2>/dev/null || true

@@ -15,6 +15,11 @@
 	}
 }
 
+# Port 80: health check (no TLS). Must respond on 80 for docker healthcheck.
+:80 {
+	respond /caddy-health 200
+}
+
 # Accept any hostname: cert is obtained on first request (on_demand).
 :443 {
 	tls {
