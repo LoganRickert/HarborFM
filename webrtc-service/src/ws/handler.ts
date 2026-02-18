@@ -103,6 +103,11 @@ export const wsHandler = async (socket: any, req: any) => {
     if (!roomState) return;
 
     try {
+      if (type === "ping") {
+        socket.send(JSON.stringify({ type: "pong" }));
+        return;
+      }
+
       if (type === "setHostToken") {
         const { hostToken: token } = msg as { hostToken?: string };
         const roomHostToken = roomState.hostToken;

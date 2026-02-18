@@ -66,7 +66,7 @@ export function FeedEpisodeCard({
           onPlay={() => onPlay(episode.id)}
           onPause={onPause}
         />
-      ) : isSubscriberOnly && !hasAudio ? (
+      ) : episode.subscriber_only === 1 && !hasAudio ? (
         <div className={styles.lockedCard} aria-label="Subscriber only">
           <Lock size={20} strokeWidth={2} className={styles.lockedIcon} aria-hidden />
           <span className={styles.lockedLabel}>Subscriber Only - Subscribe to Listen</span>

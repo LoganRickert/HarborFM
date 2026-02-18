@@ -68,6 +68,9 @@ const DEFAULT_FORM_STATE: AppSettings = {
   webrtc_service_url: '',
   webrtc_public_ws_url: '',
   recording_callback_secret: '',
+  two_factor_enabled: false,
+  two_factor_methods: 'totp',
+  two_factor_enforced: false,
 };
 
 export function useSettingsForm(initialSettings?: AppSettings) {

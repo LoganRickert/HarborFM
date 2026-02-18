@@ -39,12 +39,12 @@ export function PodcastCard({
                     )}`
                   : '')
               }
-              alt=""
+              alt={podcast.title}
               className={styles.cardArtwork}
             />
           ) : (
             <div className={styles.cardArtworkPlaceholder}>
-              <Radio size={32} strokeWidth={1.5} />
+              <Radio size={32} strokeWidth={1.5} aria-hidden />
             </div>
           )}
         </div>

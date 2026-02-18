@@ -8,6 +8,7 @@ import { getPublicConfig } from './api/public';
 import { Layout } from './components/Layout';
 import { ServerDown } from './components/ServerDown';
 import { Login } from './pages/Login';
+import { Login2FASetup } from './pages/Login2FASetup';
 import { Register } from './pages/Register';
 import { Setup } from './pages/Setup';
 import { ResetPassword } from './pages/ResetPassword';
@@ -300,6 +301,7 @@ export default function App() {
           <Route path="/call/join/:token" element={<CallJoin />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
+          <Route path="/login/2fa-setup" element={<SetupGuard><RequireGuest><Login2FASetup /></RequireGuest></SetupGuard>} />
           <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />
           <Route path="/reset-password" element={<SetupGuard><RequireGuest><ResetPassword /></RequireGuest></SetupGuard>} />
           <Route path="/verify-email" element={<SetupGuard><VerifyEmail /></SetupGuard>} />

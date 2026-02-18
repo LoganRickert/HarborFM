@@ -16,6 +16,7 @@ export PORT
 export NODE_ENV="${NODE_ENV:-development}"
 export RATE_LIMIT_MAX="${RATE_LIMIT_MAX:-2000}"
 export RATE_LIMIT_TIME_WINDOW="${RATE_LIMIT_TIME_WINDOW:-1 minute}"
+export RENDER_RATE_LIMIT_WINDOW_MS="${RENDER_RATE_LIMIT_WINDOW_MS:-1000}"
 
 echo "" > "$E2E_DIR/server.log"
 

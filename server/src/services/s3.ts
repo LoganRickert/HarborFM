@@ -156,6 +156,7 @@ export async function deployPodcastToS3(
     audio_mime?: string | null;
     artwork_path?: string | null;
     transcript_srt_path?: string | null;
+    chapters_json_path?: string | null;
   }[],
   artworkPath?: string | null,
 ): Promise<{ uploaded: number; skipped: number; errors: string[] }> {
@@ -254,6 +255,26 @@ export async function deployPodcastToS3(
       } catch (e) {
         errors.push(
           `Episode ${ep.id} transcript: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+    if (ep.chapters_json_path) {
+      try {
+        const processedBase = join(getDataDir(), "processed");
+        const safePath = assertPathUnder(ep.chapters_json_path, processedBase);
+        const body = readFileSync(safePath);
+        const key = `episodes/${ep.id}.json`;
+        const contentHash = md5Hex(body);
+        const existingETag = await getObjectETag(config, key);
+        if (existingETag === contentHash) {
+          skipped += 1;
+        } else {
+          await uploadFile(config, key, body, "application/json+chapters");
+          uploaded += 1;
+        }
+      } catch (e) {
+        errors.push(
+          `Episode ${ep.id} chapters: ${e instanceof Error ? e.message : String(e)}`,
         );
       }
     }

@@ -10,6 +10,7 @@ import { db } from "../../db/index.js";
 import { readSettings } from "../settings/index.js";
 import { sendMail, buildWelcomeSetPasswordEmail } from "../../services/email.js";
 import { normalizeHostname } from "../../utils/url.js";
+import { sha256Hex } from "../../utils/hash.js";
 
 export interface User {
   id: string;
@@ -62,13 +63,13 @@ export async function usersRoutes(app: FastifyInstance) {
       const offset = (page - 1) * limit;
       const search = query?.search?.trim() ?? "";
 
-      // Build WHERE clause for search
-      let whereClause = "";
-      let searchParam: string | undefined;
-      if (search) {
-        whereClause = "WHERE email LIKE ?";
-        searchParam = `%${search}%`;
-      }
+      // Build WHERE clause for search (LIKE escape: % and _ match literally)
+      const likeEscape = (s: string) =>
+        s.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const searchParam = search ? `%${likeEscape(search)}%` : undefined;
+      const whereClause = search
+        ? "WHERE email LIKE ? ESCAPE '\\'"
+        : "";
 
       // Get total count with search filter
       const countQuery = search
@@ -193,12 +194,13 @@ export async function usersRoutes(app: FastifyInstance) {
         settings.email_enable_admin_welcome
       ) {
         const token = randomBytes(32).toString("base64url");
+        const tokenHash = sha256Hex(token);
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + RESET_TOKEN_EXPIRY_HOURS);
         const now = new Date().toISOString();
         db.prepare(
-          "INSERT INTO password_reset_tokens (email, token, expires_at, created_at) VALUES (?, ?, ?, ?)",
-        ).run(email, token, expiresAt.toISOString(), now);
+          "INSERT INTO password_reset_tokens (email, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?)",
+        ).run(email, tokenHash, expiresAt.toISOString(), now);
         const baseUrl =
           normalizeHostname(settings.hostname || "") || "http://localhost";
         const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;

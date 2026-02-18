@@ -10,7 +10,7 @@ export const episodeTypeSchema = z.enum(['full', 'trailer', 'bonus']).nullable()
 export const episodeStatusSchema = z.enum(['draft', 'scheduled', 'published']);
 
 export const episodeCreateSchema = z.object({
-  title: z.string().min(1, { error: 'Title is required' }),
+  title: z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string().min(1, { error: 'Title is required' })),
   description: z.string().default(''),
   subtitle: nullableOptionalString,
   summary: nullableOptionalString,
@@ -32,10 +32,18 @@ const subscriberOnlySchema = z.preprocess(
   z.union([z.literal(0), z.literal(1)]).optional()
 );
 
+const finalMarkerSchema = z.object({
+  time: z.number(),
+  title: z.string().optional(),
+  color: z.string().optional(),
+});
+
 export const episodeUpdateSchema = episodeCreateSchema.partial().extend({
   slug: z.string().regex(/^[a-z0-9-]+$/, { error: 'Slug: lowercase letters, numbers, hyphens only' }).optional(),
   guid: z.string().min(1, { message: 'GUID cannot be empty' }).optional(),
   subscriber_only: subscriberOnlySchema,
+  /** Chapter markers for the final audio. Overwrites markers from render. */
+  final_markers: z.array(finalMarkerSchema).optional().nullable(),
 });
 
 /** Episode as returned by GET /episodes/:id and list endpoints. Includes server-computed fields. */
@@ -71,6 +79,8 @@ export const episodeResponseSchema = z.object({
   has_transcript: z.boolean().optional(),
   /** 1 = omitted from public RSS and episode list; only in tokenized subscriber feed. */
   subscriber_only: z.union([z.literal(0), z.literal(1)]).optional(),
+  /** Chapter markers from segments (marker_type === 'chapter'); time in seconds of final audio. */
+  final_markers: z.array(z.object({ time: z.number(), title: z.string().optional(), color: z.string().optional() })).optional().nullable(),
 });
 
 /** Response for GET /podcasts/:podcastId/episodes (list). */

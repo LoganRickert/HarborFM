@@ -9,6 +9,7 @@ import { db } from "../db/index.js";
 
 export type AttemptContext =
   | "auth_login"
+  | "auth_totp"
   | "setup"
   | "auth_apikey"
   | "auth_subscriber_token"

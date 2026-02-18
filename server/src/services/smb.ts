@@ -225,6 +225,21 @@ export async function deployPodcastToSmb(
           );
         }
       }
+      if (ep.chapters_json_path) {
+        try {
+          const processedBase = join(getDataDir(), "processed");
+          const safePath = assertPathUnder(
+            ep.chapters_json_path,
+            processedBase,
+          );
+          const body = readFileSync(safePath);
+          await upload(`episodes/${ep.id}.json`, body);
+        } catch (e) {
+          errors.push(
+            `Episode ${ep.id} chapters: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
     }
   } catch (err) {
     errors.push(err instanceof Error ? err.message : String(err));

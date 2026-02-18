@@ -2,10 +2,28 @@
 # Harbor FM - update configs from main and refresh containers
 # Run from the install directory (where docker-compose.yml lives), or pass path as first argument.
 # Usage: ./update.sh [install-dir]
+#    or: ./update.sh --no-interaction [install-dir]
+# Non-interaction: use --no-interaction, -y, -n, or env CI=1 / NON_INTERACTIVE=1
 set -e
 
-# Install directory: first argument or directory containing this script
-INSTALL_DIR="${1:-$(cd -P "$(dirname "$0")" && pwd)}"
+# Non-interaction: skip all prompts, use defaults (overwrite configs)
+NON_INTERACTIVE=false
+for arg in "$@"; do
+  case "$arg" in
+    --no-interaction|-y|-n) NON_INTERACTIVE=true; break ;;
+  esac
+done
+[ "${CI:-0}" = "1" ] || [ "${NON_INTERACTIVE:-0}" = "1" ] && NON_INTERACTIVE=true
+
+# Install directory: first non-flag argument or directory containing this script
+INSTALL_DIR=""
+for arg in "$@"; do
+  case "$arg" in
+    --no-interaction|-y|-n) ;;
+    *) INSTALL_DIR="${arg:-}"; [ -n "$INSTALL_DIR" ] && break ;;
+  esac
+done
+INSTALL_DIR="${INSTALL_DIR:-$(cd -P "$(dirname "$0")" && pwd)}"
 INSTALL_DIR="$(cd -P "$(dirname "$INSTALL_DIR")" && pwd)/$(basename "$INSTALL_DIR")"
 
 HARBORFM_REPO="${HARBORFM_REPO:-loganrickert/harborfm}"
@@ -62,7 +80,11 @@ echo "Stopping containers..."
 docker compose down
 
 echo "Downloading latest configs from GitHub (main)..."
-read -r -p "Overwrite docker-compose.yml with version from GitHub? [y/N] " overwrite_compose </dev/tty || true
+if [ "$NON_INTERACTIVE" = true ]; then
+  overwrite_compose="y"
+else
+  read -r -p "Overwrite docker-compose.yml with version from GitHub? [y/N] " overwrite_compose </dev/tty || true
+fi
 if [[ "$overwrite_compose" =~ ^[yY] ]]; then
   download "$BASE_URL/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
 else
@@ -72,6 +94,7 @@ download "$BASE_URL/nginx/entrypoint.sh" "$INSTALL_DIR/nginx/entrypoint.sh"
 download "$BASE_URL/nginx/nginx-80-only.conf.template" "$INSTALL_DIR/nginx/nginx-80-only.conf.template"
 download "$BASE_URL/nginx/nginx-full.conf.template" "$INSTALL_DIR/nginx/nginx-full.conf.template"
 download "$BASE_URL/caddy/Caddyfile" "$INSTALL_DIR/caddy/Caddyfile"
+download "$BASE_URL/caddy/Caddyfile.webrtc" "$INSTALL_DIR/caddy/Caddyfile.webrtc"
 download "$BASE_URL/fail2ban/filter.d/nginx-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/nginx-scanner.conf"
 download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/nginx-scanner.local"
 download "$BASE_URL/fail2ban/filter.d/caddy-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/caddy-scanner.conf"
@@ -96,6 +119,17 @@ fi
 mkdir -p "$INSTALL_DIR/harborfm-data/proxy/caddy/logs"
 touch "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
 touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || true
+
+# Caddy on-demand TLS: ensure CADDY_TLS_CHECK_SECRET exists
+if [ "$REVERSE_PROXY" = "caddy" ] && ! grep -q '^CADDY_TLS_CHECK_SECRET=' "$INSTALL_DIR/.env" 2>/dev/null; then
+  echo "CADDY_TLS_CHECK_SECRET=$(openssl rand -hex 32)" >> "$INSTALL_DIR/.env"
+  echo "Added CADDY_TLS_CHECK_SECRET to .env for Caddy on-demand TLS."
+fi
+
+# Caddy: use WebRTC-enabled Caddyfile when webrtc profile is used; else default (respond 503 for /webrtc-ws)
+if [ "$REVERSE_PROXY" = "caddy" ] && [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
+  cp "$INSTALL_DIR/caddy/Caddyfile.webrtc" "$INSTALL_DIR/caddy/Caddyfile"
+fi
 
 echo "Pulling images..."
 docker compose pull

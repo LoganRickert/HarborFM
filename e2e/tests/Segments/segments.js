@@ -16,6 +16,153 @@ export async function run({ runOne }) {
   );
 
   results.push(
+    await runOne('PATCH segment trim_ranges and markers persists', async () => {
+      const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Patch Seg Ep', status: 'draft' });
+      const seg = await addRecordedSegment(jar, patchEp.id);
+      const durationSec = seg.duration_sec ?? 60;
+      const trimRanges = [[1, Math.min(5, durationSec - 0.1)]];
+      const markers = [{ time: Math.min(2, durationSec), title: 'Intro' }];
+
+      const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trim_ranges: trimRanges, markers }),
+      }, jar);
+      if (res.status !== 200) throw new Error(`PATCH segment failed: ${res.status} ${await res.text()}`);
+      const patched = await res.json();
+      if (JSON.stringify(patched.trim_ranges) !== JSON.stringify(trimRanges)) {
+        throw new Error(`trim_ranges: expected ${JSON.stringify(trimRanges)}, got ${JSON.stringify(patched.trim_ranges)}`);
+      }
+      if (!patched.markers?.length || patched.markers[0].title !== 'Intro') {
+        throw new Error(`markers: expected [{ time: 2, title: 'Intro' }], got ${JSON.stringify(patched.markers)}`);
+      }
+
+      const listRes = await apiFetch(`/episodes/${patchEp.id}/segments`, {}, jar);
+      if (listRes.status !== 200) throw new Error(`GET segments failed: ${listRes.status}`);
+      const list = await listRes.json();
+      const found = list.segments?.find((s) => s.id === seg.id);
+      if (!found) throw new Error('Segment not found after PATCH');
+      if (JSON.stringify(found.trim_ranges) !== JSON.stringify(trimRanges)) {
+        throw new Error(`Persisted trim_ranges: expected ${JSON.stringify(trimRanges)}, got ${JSON.stringify(found.trim_ranges)}`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('PATCH segment invalid trim_ranges returns 400', async () => {
+      const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Invalid Trim Ep', status: 'draft' });
+      const seg = await addRecordedSegment(jar, patchEp.id);
+      const durationSec = seg.duration_sec ?? 60;
+
+      const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trim_ranges: [[0, durationSec + 10]] }),
+      }, jar);
+      if (res.status !== 400) throw new Error(`Expected 400 for invalid trim_ranges, got ${res.status}`);
+      const data = await res.json();
+      if (!data.error) throw new Error('Expected error message in response');
+    })
+  );
+
+  results.push(
+    await runOne('PATCH segment invalid markers returns 400', async () => {
+      const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Invalid Marker Ep', status: 'draft' });
+      const seg = await addRecordedSegment(jar, patchEp.id);
+      const durationSec = seg.duration_sec ?? 60;
+
+      const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markers: [{ time: durationSec + 10, title: 'Out of range' }] }),
+      }, jar);
+      if (res.status !== 400) throw new Error(`Expected 400 for invalid markers, got ${res.status}`);
+      const data = await res.json();
+      if (!data.error) throw new Error('Expected error message in response');
+    })
+  );
+
+  results.push(
+    await runOne('PATCH episode final_markers persists', async () => {
+      const markersEp = await createEpisode(jar, podcast.id, { title: 'E2E Final Markers Ep', status: 'draft' });
+      const markers = [{ time: 0, title: 'Start', color: '#ff0000' }];
+
+      const res = await apiFetch(`/episodes/${markersEp.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ final_markers: markers }),
+      }, jar);
+      if (res.status !== 200) throw new Error(`PATCH episode failed: ${res.status} ${await res.text()}`);
+
+      const getRes = await apiFetch(`/episodes/${markersEp.id}`, {}, jar);
+      if (getRes.status !== 200) throw new Error(`GET episode failed: ${getRes.status}`);
+      const ep = await getRes.json();
+      if (!ep.final_markers?.length || ep.final_markers[0].title !== 'Start') {
+        throw new Error(`final_markers: expected [{ time: 0, title: 'Start', color: '#ff0000' }], got ${JSON.stringify(ep.final_markers)}`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('POST render returns 202 and completes', async () => {
+      const renderEp = await createEpisode(jar, podcast.id, { title: 'E2E Render Ep', status: 'draft' });
+      await addRecordedSegment(jar, renderEp.id);
+
+      let res = await apiFetch(`/episodes/${renderEp.id}/render`, { method: 'POST' }, jar);
+      if (res.status !== 202) throw new Error(`Expected 202, got ${res.status}`);
+      const startData = await res.json();
+      if (startData.status !== 'building') throw new Error(`Expected status building, got ${startData.status}`);
+
+      const timeoutMs = 120_000;
+      const pollIntervalMs = 2000;
+      const start = Date.now();
+      let statusData;
+      while (Date.now() - start < timeoutMs) {
+        res = await apiFetch(`/episodes/${renderEp.id}/render-status`, {}, jar);
+        statusData = await res.json();
+        if (statusData.status === 'done') break;
+        if (statusData.status === 'failed') {
+          throw new Error(`Render failed: ${statusData.error || 'unknown'}`);
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+      }
+      if (statusData?.status !== 'done') throw new Error('Render timeout');
+
+      res = await apiFetch(`/episodes/${renderEp.id}/final-waveform`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected final-waveform 200 after render, got ${res.status}`);
+    })
+  );
+
+  results.push(
+    await runOne('Render rate limit returns 429', async () => {
+      const ep1 = await createEpisode(jar, podcast.id, { title: 'E2E Rate Limit Ep 1', status: 'draft' });
+      const ep2 = await createEpisode(jar, podcast.id, { title: 'E2E Rate Limit Ep 2', status: 'draft' });
+      await addRecordedSegment(jar, ep1.id);
+      await addRecordedSegment(jar, ep2.id);
+
+      const res1 = await apiFetch(`/episodes/${ep1.id}/render`, { method: 'POST' }, jar);
+      if (res1.status !== 202) throw new Error(`First render expected 202, got ${res1.status}`);
+
+      const res2 = await apiFetch(`/episodes/${ep2.id}/render`, { method: 'POST' }, jar);
+      if (res2.status !== 429) throw new Error(`Second render expected 429 (rate limited), got ${res2.status}`);
+    })
+  );
+
+  results.push(
+    await runOne('POST render with no segments returns 400', async () => {
+      await new Promise((r) => setTimeout(r, 1100));
+      const noSegEp = await createEpisode(jar, podcast.id, { title: 'E2E No Seg Ep', status: 'draft' });
+
+      const res = await apiFetch(`/episodes/${noSegEp.id}/render`, { method: 'POST' }, jar);
+      if (res.status !== 400) throw new Error(`Expected 400 when no segments, got ${res.status}`);
+      const data = await res.json();
+      if (!data.error || !data.error.includes('one section')) {
+        throw new Error(`Expected error about adding section, got ${data.error || 'no error'}`);
+      }
+    })
+  );
+
+  results.push(
     await runOne('PUT /episodes/:id/segments/reorder reorders segments and persists new order', async () => {
       const reorderEp = await createEpisode(jar, podcast.id, { title: 'E2E Reorder Ep', status: 'draft' });
       await addRecordedSegment(jar, reorderEp.id);

@@ -74,8 +74,9 @@ export function CallSettingsPanel({
           {!autoGainControl && onMicVolumeChange && (
             <>
               <div className={styles.volumeRow}>
-                <label className={styles.label}>Volume</label>
+                <label className={styles.label} htmlFor="call-settings-mic-volume">Volume</label>
                 <input
+                  id="call-settings-mic-volume"
                   type="range"
                   min={0}
                   max={800}

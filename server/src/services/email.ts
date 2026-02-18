@@ -294,6 +294,171 @@ export function buildResetPasswordEmail(
 }
 
 /**
+ * Build 2FA email code (one-time code for email-based 2FA).
+ */
+export function build2FAEmailCodeEmail(
+  baseUrl: string,
+  code: string,
+): { subject: string; text: string; html: string } {
+  const subject = `Your ${APP_NAME} sign-in code`;
+  const origin = new URL(baseUrl).origin;
+  const text = [
+    `Your sign-in code is: ${code}`,
+    "",
+    "Enter this code to complete sign-in. This code expires in 10 minutes.",
+    "",
+    `If you didn't request this, you can ignore this email.`,
+    "",
+    `${APP_NAME}`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>${subject}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      ${emailHeaderWithFavicon(baseUrl)}
+      <p style="margin: 0 0 24px; font-size: 0.875rem; color: ${STYLE.textMuted};">Your sign-in code</p>
+      <p style="margin: 0 0 24px; font-size: 1.5rem; font-weight: 700; letter-spacing: 0.2em; color: ${STYLE.accent}; text-align: center;">${code}</p>
+      <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+        Enter this code to complete sign-in. It expires in 10 minutes.
+      </p>
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      <a href="${origin}" style="color: inherit; text-decoration: none;">${APP_NAME}</a>
+    </p>
+  </div>
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+/**
+ * Build 2FA added notification email.
+ */
+export function build2FAAddedEmail(
+  baseUrl: string,
+  method: "totp" | "email",
+): { subject: string; text: string; html: string } {
+  const methodLabel = method === "totp" ? "authenticator app (TOTP)" : "email codes";
+  const subject = `Two-factor authentication enabled on your ${APP_NAME} account`;
+  const origin = new URL(baseUrl).origin;
+  const dashboardUrl = `${origin}/`;
+  const text = [
+    "Two-factor authentication has been enabled on your account.",
+    "",
+    `Method: ${methodLabel}`,
+    "",
+    "If you didn't make this change, please secure your account immediately by signing in and disabling 2FA, then changing your password.",
+    "",
+    `Sign in: ${dashboardUrl}`,
+    "",
+    APP_NAME,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>${subject}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      ${emailHeaderWithFavicon(baseUrl)}
+      <p style="margin: 0 0 24px; font-size: 0.875rem; color: ${STYLE.textMuted};">Two-factor authentication enabled</p>
+      <p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">
+        Two-factor authentication has been enabled on your account.
+      </p>
+      <p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">
+        Method: <strong>${method === "totp" ? "Authenticator app (TOTP)" : "Email codes"}</strong>
+      </p>
+      <p style="margin: 0 0 24px; font-size: 0.9375rem; color: ${STYLE.textMuted};">
+        If you didn't make this change, please secure your account by signing in and disabling 2FA, then changing your password.
+      </p>
+      <p style="margin: 0 0 24px; text-align: center;">
+        <a href="${dashboardUrl}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Sign in</a>
+      </p>
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      <a href="${origin}" style="color: inherit; text-decoration: none;">${APP_NAME}</a>
+    </p>
+  </div>
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+/**
+ * Build 2FA removed notification email.
+ */
+export function build2FARemovedEmail(baseUrl: string): { subject: string; text: string; html: string } {
+  const subject = `Two-factor authentication disabled on your ${APP_NAME} account`;
+  const origin = new URL(baseUrl).origin;
+  const dashboardUrl = `${origin}/`;
+  const text = [
+    "Two-factor authentication has been disabled on your account.",
+    "",
+    "If you didn't make this change, please secure your account immediately by signing in and changing your password, then re-enabling 2FA.",
+    "",
+    `Sign in: ${dashboardUrl}`,
+    "",
+    APP_NAME,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>${subject}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      ${emailHeaderWithFavicon(baseUrl)}
+      <p style="margin: 0 0 24px; font-size: 0.875rem; color: ${STYLE.textMuted};">Two-factor authentication disabled</p>
+      <p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">
+        Two-factor authentication has been disabled on your account.
+      </p>
+      <p style="margin: 0 0 24px; font-size: 0.9375rem; color: ${STYLE.textMuted};">
+        If you didn't make this change, please secure your account by signing in, changing your password, and re-enabling 2FA.
+      </p>
+      <p style="margin: 0 0 24px; text-align: center;">
+        <a href="${dashboardUrl}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Sign in</a>
+      </p>
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      <a href="${origin}" style="color: inherit; text-decoration: none;">${APP_NAME}</a>
+    </p>
+  </div>
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+/**
  * Build welcome email for admin-created users. Does not include the password; includes a link to the dashboard and a link to set or change password.
  */
 export function buildWelcomeSetPasswordEmail(

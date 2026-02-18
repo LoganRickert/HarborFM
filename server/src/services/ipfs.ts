@@ -203,6 +203,21 @@ export async function deployPodcastToIpfs(
           );
         }
       }
+      if (ep.chapters_json_path) {
+        try {
+          const processedBase = join(getDataDir(), "processed");
+          const safePath = assertPathUnder(
+            ep.chapters_json_path,
+            processedBase,
+          );
+          const body = readFileSync(safePath);
+          await writeFile(`/episodes/${ep.id}.json`, body);
+        } catch (e) {
+          errors.push(
+            `Episode ${ep.id} chapters: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
     }
 
     const stat = await client.files.stat(mfsRoot);

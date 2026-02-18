@@ -80,7 +80,7 @@ export function EpisodeDetailsSummaryCard({
         {artworkUrl ? (
           <img
             src={artworkUrl}
-            alt=""
+            alt={title ? `${title} cover` : 'Episode cover'}
             className={styles.detailsSummaryArtwork}
           />
         ) : null}

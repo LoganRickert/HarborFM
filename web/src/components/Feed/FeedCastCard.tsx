@@ -27,10 +27,10 @@ export function FeedCastMember({ member }: { member: PublicCastMember }) {
   return (
     <li className={styles.castRow}>
       {member.photo_url ? (
-        <img src={member.photo_url} alt="" className={styles.castAvatar} />
+        <img src={member.photo_url} alt={`${member.name} photo`} className={styles.castAvatar} />
       ) : (
         <div className={styles.castAvatarPlaceholder}>
-          <User size={24} />
+          <User size={24} aria-hidden />
         </div>
       )}
       <div className={styles.castMeta}>

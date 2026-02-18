@@ -63,6 +63,7 @@ export function FeedPodcastHeader({
                         ? `${styles.lockIcon} ${styles.lockIconGold}`
                         : styles.lockIcon
                     }
+                    aria-hidden
                   />
                 </button>
               )}
@@ -83,7 +84,7 @@ export function FeedPodcastHeader({
                   title="Subscriber-only feed. Authenticate to access."
                   aria-label="RSS Feed (Requires subscription)"
                 >
-                  <Rss size={18} strokeWidth={2.5} />
+                  <Rss size={18} strokeWidth={2.5} aria-hidden />
                 </button>
               ) : (
                 <a
@@ -92,7 +93,7 @@ export function FeedPodcastHeader({
                   title={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
                   aria-label={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
                 >
-                  <Rss size={18} strokeWidth={2.5} />
+                  <Rss size={18} strokeWidth={2.5} aria-hidden />
                 </a>
               )}
               {shareUrl != null && (

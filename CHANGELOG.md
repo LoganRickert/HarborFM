@@ -1,15 +1,25 @@
 # Changelog
 
-## v1.1 - 2026-02-13
+## v1.3 - 2026-02-17
 
-- **Cast (hosts & guests):** Add cast members to podcasts and episodes; assign hosts and guests per episode; episode cast shown on public feed; cast list filters out already-assigned members.
-- **Listen on & Follow links:** Per-podcast links for Apple Podcasts, Spotify, Amazon Music, and other platforms; social links (X, Facebook, Instagram, TikTok, YouTube).
-- **Share & embed:** Share button on episode page with share dialog and embed options.
-- **Analytics:** Improved analytics view page.
-- **Public feed:** Episode list supports pagination, server-side search, and sort (newest/oldest).
-- **Dashboard sort:** Podcast list now sorts by `created_at` instead of `updated_at` for newest/oldest.
-- **Seed script:** `pnpm run db:seed-podcast-episodes` to create a podcast with 100 episodes and cast assignments.
-- **Docs & install:** Updated documentation; note for `COOKIE_SECURE=false` when using HTTP; install and update script fixes.
+
+- **Segment editor:** Trim ranges and markers (non-destructive); "Add Silence Trims" to auto-detect 1s+ silence and add trim ranges with buffer; marker type (None/Chapter) and color picker; "Server Remove Silence" and noise suppression in Functions tab; waveform shows trimmed regions collapsed and hides trimmed sections.
+- **Episode chapters:** View Chapters card below Generate Final bar; add, edit, delete chapters with color picker; play from chapter time (seeks and starts playback when paused); chapter markers on final episode waveform (editor, feed, embed).
+- **Podcast 2.0 chapters:** `chapters.json` generated when chapters exist; `<podcast:chapters>` in RSS; regenerated on render and chapter edit/delete; same access control as episode MP3; included in S3/deploy exports.
+- **Episode transcript:** Generate Transcript only shown when transcript provider is configured; upload SRT when generate is unavailable; scrollable transcript box; PATCH transcript with size/validity checks.
+- **Delete episode:** Red "Delete Episode" button at bottom of More tab (owner/admin only); confirm dialog; on confirm deletes episode and navigates to episodes list.
+- **Backend episodes list:** Sorted by publish date (created_at fallback); grouped into Draft, Scheduled, Published sections; status badge shows date when `publish_at` set, else status label.
+- **Publish transition:** When changing status from draft/scheduled to published, `publish_at` auto-set to now if null or empty.
+- **Subscriber only fix:** Episodes with no audio and `subscriber_only` 0 now show "Audio not available" instead of "Subscriber Only" (FeedEpisode, EmbedEpisode, FeedEpisodeCard).
+- **Feed page episodes:** Episodes list sorts by publish date.
+- **Title trim:** Episode and podcast titles trimmed on create/edit.
+- **Delete podcast:** "Delete podcast" in More tab of podcast details (owner/admin only); confirm dialog; background deletion with polling (removes all episodes, audio, transcripts, waveforms, RSS, artwork); navigates to dashboard when done.
+- **Ollama API:** Fixed endpoints to use `/api/generate` and `/api/tags` (Ollama expects the `/api/` prefix).
+- **LLM Ask:** Richer context—segment name, markers, duration; improved prompt for speaking-pattern feedback and follow-up questions for future segments.
+- **Transcript editor:** Updated to support trim feature—soft delete adds entry to trim ranges, trimmed entries show collapsed with restore; Save persists trim ranges; Ask tab excludes trimmed text from LLM context.
+- **2FA extensibility:** Enabled methods are now a list (TOTP, email) in settings.
+- **Login 2FA (email):** Code is sent automatically when 2FA method is email; "Send code" is a gray secondary button below Verify with 30s cooldown.
+- **Caddy:** Fixed Caddy failing when not using WebRTC.
 
 ## v1.2 - 2026-02-16
 
@@ -20,6 +30,17 @@
 - **Terraform deployment:** AWS and Vultr Terraform scripts to provision VMs; user-data script for PM2, nginx, Let's Encrypt, optional WebRTC; Cloudflare DNS integration.
 - **Setup from scripts:** Seed script for automated initial setup (`ADMIN_EMAIL`, `ADMIN_PASSWORD` or `ADMIN_PASSWORD_HASH_B64`); supports Terraform user-data and headless install.
 - **Install & docs:** Updated install and update script paths; Terraform quick start and README; optional `WEBRTC_ENABLED` flag.
+
+## v1.1 - 2026-02-13
+
+- **Cast (hosts & guests):** Add cast members to podcasts and episodes; assign hosts and guests per episode; episode cast shown on public feed; cast list filters out already-assigned members.
+- **Listen on & Follow links:** Per-podcast links for Apple Podcasts, Spotify, Amazon Music, and other platforms; social links (X, Facebook, Instagram, TikTok, YouTube).
+- **Share & embed:** Share button on episode page with share dialog and embed options.
+- **Analytics:** Improved analytics view page.
+- **Public feed:** Episode list supports pagination, server-side search, and sort (newest/oldest).
+- **Dashboard sort:** Podcast list now sorts by `created_at` instead of `updated_at` for newest/oldest.
+- **Seed script:** `pnpm run db:seed-podcast-episodes` to create a podcast with 100 episodes and cast assignments.
+- **Docs & install:** Updated documentation; note for `COOKIE_SECURE=false` when using HTTP; install and update script fixes.
 
 ## v1.0 - 2026-02-13
 

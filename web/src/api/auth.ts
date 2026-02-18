@@ -45,10 +45,17 @@ export function canRecordNewSectionFromUser(user: User | null | undefined): bool
 export const RECORD_BLOCKED_STORAGE_MESSAGE = 'Less than 5 MB storage free. Free up space to record.';
 export const START_CALL_BLOCKED_STORAGE_MESSAGE = 'You are out of disk space';
 
+export interface TwoFactorStatus {
+  hasTOTP: boolean;
+  hasEmail: boolean;
+  methods: string | null;
+}
+
 export interface MeResponse {
   user: User;
   podcast_count: number;
   episode_count: number;
+  twoFactor?: TwoFactorStatus | null;
 }
 
 export function me() {
@@ -63,8 +70,32 @@ export function register(email: string, password: string, captchaToken?: string)
   return apiPost<RegisterResponse>('/auth/register', { email, password, ...(captchaToken ? { captchaToken } : {}) });
 }
 
+export type LoginResponse =
+  | { user: User }
+  | { requires2FA: true; challengeToken: string; method: 'totp' | 'email' }
+  | { requires2FASetup: true; challengeToken: string; methods: ('totp' | 'email')[] };
+
 export function login(email: string, password: string, captchaToken?: string) {
-  return apiPost<{ user: User }>('/auth/login', { email, password, ...(captchaToken ? { captchaToken } : {}) });
+  return apiPost<LoginResponse>('/auth/login', { email, password, ...(captchaToken ? { captchaToken } : {}) });
+}
+
+export function verify2FA(challengeToken: string, code: string) {
+  return apiPost<{ user: User }>('/auth/2fa/verify', { challengeToken, code });
+}
+
+export function send2FAEmailCode(challengeToken: string) {
+  return apiPost<{ ok: boolean }>('/auth/2fa/send-email-code', { challengeToken });
+}
+
+export function setup2FA(challengeToken: string, method: 'totp' | 'email') {
+  return apiPost<{ qrDataUrl?: string; secret?: string; challengeToken?: string; ok?: boolean }>(
+    '/auth/2fa/setup',
+    { challengeToken, method }
+  );
+}
+
+export function confirm2FASetup(challengeToken: string, code: string, secret?: string) {
+  return apiPost<{ user: User }>('/auth/2fa/confirm-setup', { challengeToken, code, ...(secret ? { secret } : {}) });
 }
 
 export function logout() {
@@ -76,7 +107,9 @@ export function verifyEmail(token: string) {
 }
 
 export function validateResetToken(token: string) {
-  return apiGet<{ ok: boolean }>(`/auth/validate-reset-token?token=${encodeURIComponent(token)}`);
+  return apiGet<{ ok: boolean; requiresTOTP?: boolean }>(
+    `/auth/validate-reset-token?token=${encodeURIComponent(token)}`
+  );
 }
 
 export function forgotPassword(email: string, captchaToken?: string) {
@@ -86,6 +119,41 @@ export function forgotPassword(email: string, captchaToken?: string) {
   });
 }
 
-export function resetPassword(token: string, password: string) {
-  return apiPost<{ ok: boolean }>('/auth/reset-password', { token, password });
+export function resetPassword(
+  token: string,
+  password: string,
+  totpCode?: string
+) {
+  return apiPost<{ ok: boolean }>('/auth/reset-password', {
+    token,
+    password,
+    ...(totpCode ? { totpCode } : {}),
+  });
+}
+
+export function startTOTPSetup(password: string) {
+  return apiPost<{ qrDataUrl: string; secret: string; setupToken: string }>(
+    '/auth/me/2fa/totp/start',
+    { password }
+  );
+}
+
+export function confirmTOTPSetup(setupToken: string, code: string, secret: string) {
+  return apiPost<{ ok: boolean }>('/auth/me/2fa/totp/confirm', {
+    setupToken,
+    code,
+    secret,
+  });
+}
+
+export function startEmail2FA() {
+  return apiPost<{ ok: boolean }>('/auth/me/2fa/email/start');
+}
+
+export function confirmEmail2FA(code: string) {
+  return apiPost<{ ok: boolean }>('/auth/me/2fa/email/confirm', { code });
+}
+
+export function disable2FA(password: string) {
+  return apiPost<{ ok: boolean }>('/auth/me/2fa/disable', { password });
 }

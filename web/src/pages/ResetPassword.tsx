@@ -12,6 +12,7 @@ export function ResetPassword() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
   const captchaRef = useRef<CaptchaHandle>(null);
 
   const { data: setup } = useQuery({
@@ -33,6 +34,7 @@ export function ResetPassword() {
   });
 
   const tokenValid = tokenValidation.isSuccess && tokenValidation.data?.ok === true;
+  const requiresTOTP = tokenValidation.data?.requiresTOTP === true;
   const tokenInvalid = isResetMode && !tokenValidation.isLoading && (tokenValidation.isError || !tokenValid);
 
   const forgotMutation = useMutation({
@@ -49,7 +51,8 @@ export function ResetPassword() {
   });
 
   const resetMutation = useMutation({
-    mutationFn: () => resetPassword(rawToken, password),
+    mutationFn: () =>
+      resetPassword(rawToken, password, requiresTOTP ? totpCode : undefined),
   });
 
   const emailConfigured = setup?.emailConfigured === true;
@@ -83,7 +86,7 @@ export function ResetPassword() {
           </div>
 
           {!emailConfigured && !isResetMode && (
-            <div className={styles.verificationCardError}>
+            <div className={styles.verificationCardError} role="alert">
               <p className={styles.verificationCardErrorText}>
                 Password reset is not available because no email service is configured. Ask an administrator to set up SMTP or SendGrid in Settings.
               </p>
@@ -120,7 +123,7 @@ export function ResetPassword() {
                     />
                   )}
                   {forgotMutation.isError && (
-                    <div className={styles.verificationCardError}>
+                    <div className={styles.verificationCardError} role="alert">
                       <p className={styles.verificationCardErrorText}>
                         {forgotMutation.error?.message}
                       </p>
@@ -149,7 +152,7 @@ export function ResetPassword() {
                 <p className={styles.verificationCardText}>Checking reset link...</p>
               )}
               {tokenInvalid && (
-                <div className={styles.verificationCardError}>
+                <div className={styles.verificationCardError} role="alert">
                   <p className={styles.verificationCardErrorText}>
                     {tokenValidation.error?.message ?? 'Invalid or expired reset link. Request a new one from the reset password page.'}
                   </p>
@@ -163,6 +166,27 @@ export function ResetPassword() {
                 </div>
               ) : tokenValid ? (
                 <form onSubmit={handleResetSubmit} className={styles.form}>
+                  {requiresTOTP && (
+                    <label className={styles.label}>
+                      Authenticator code
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={totpCode}
+                        onChange={(e) =>
+                          setTotpCode(e.target.value.replace(/\D/g, ''))
+                        }
+                        className={styles.input}
+                        placeholder="000000"
+                        required={requiresTOTP}
+                      />
+                      <p className={styles.toggleHelp} style={{ marginTop: 4, fontSize: 12 }}>
+                        Enter the 6-digit code from your authenticator app.
+                      </p>
+                    </label>
+                  )}
                   <label className={styles.label}>
                     New password
                     <input
@@ -191,7 +215,7 @@ export function ResetPassword() {
                     <p className={styles.error}>Passwords do not match.</p>
                   )}
                   {resetMutation.isError && (
-                    <div className={styles.verificationCardError}>
+                    <div className={styles.verificationCardError} role="alert">
                       <p className={styles.verificationCardErrorText}>
                         {resetMutation.error?.message}
                       </p>
@@ -200,7 +224,12 @@ export function ResetPassword() {
                   <button
                     type="submit"
                     className={styles.submit}
-                    disabled={resetMutation.isPending || password !== confirmPassword || password.length < 8}
+                    disabled={
+                      resetMutation.isPending ||
+                      password !== confirmPassword ||
+                      password.length < 8 ||
+                      (requiresTOTP && totpCode.length < 6)
+                    }
                     aria-label="Set New Password"
                   >
                     {resetMutation.isPending ? 'Saving...' : 'Set New Password'}

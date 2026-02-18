@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import send from "@fastify/send";
-import { existsSync, unlinkSync, writeFileSync } from "fs";
-import { basename, dirname, join, extname } from "path";
+import { existsSync, unlinkSync, writeFileSync, rmSync, statSync } from "fs";
+import { basename, dirname, extname, join } from "path";
 import { nanoid } from "nanoid";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { db } from "../../db/index.js";
@@ -12,17 +12,22 @@ import {
   canAccessEpisode,
   canEditEpisodeOrPodcastMetadata,
   canAssignCastToEpisode,
+  getPodcastOwnerId,
 } from "../../services/access.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { episodeCreateSchema, episodeUpdateSchema, episodeCastAssignBodySchema } from "@harborfm/shared";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
+import { writeEpisodeChaptersJson } from "../../services/episodeChapters.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import {
   assertPathUnder,
   assertResolvedPathUnder,
+  assertSafeId,
   artworkDir,
+  getDataDir,
   processedDir,
   transcriptSrtPath,
+  uploadsDir,
 } from "../../services/paths.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { APP_NAME, ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
@@ -51,7 +56,16 @@ function episodeRowWithFilename(
       // path invalid or outside allowed dir: don't expose filename
     }
   }
-  return { ...row, artwork_filename };
+  const out: Record<string, unknown> = { ...row, artwork_filename };
+  const raw = row.final_markers as string | null | undefined;
+  if (raw != null && typeof raw === "string" && raw.trim()) {
+    try {
+      out.final_markers = JSON.parse(raw) as Record<string, unknown>[];
+    } catch {
+      out.final_markers = null;
+    }
+  }
+  return out;
 }
 
 export async function episodeRoutes(app: FastifyInstance) {
@@ -82,7 +96,9 @@ export async function episodeRoutes(app: FastifyInstance) {
       }
       const rows = db
         .prepare(
-          `SELECT * FROM episodes WHERE podcast_id = ? ORDER BY created_at DESC`,
+          `SELECT * FROM episodes WHERE podcast_id = ?
+           ORDER BY CASE status WHEN 'draft' THEN 1 WHEN 'scheduled' THEN 2 WHEN 'published' THEN 3 ELSE 4 END,
+                    COALESCE(publish_at, created_at) DESC`,
         )
         .all(podcastId) as Record<string, unknown>[];
       return { episodes: rows.map((r) => episodeRowWithFilename(r)) };
@@ -308,14 +324,41 @@ export async function episodeRoutes(app: FastifyInstance) {
       const values: unknown[] = [];
       const updateData = data as { slug?: string; title?: string };
 
-      // Get current episode to ensure we have podcast_id and current title
+      // Get current episode to ensure we have podcast_id, title, slug, status, publish_at
       const currentEpisode = db
-        .prepare("SELECT podcast_id, title, slug FROM episodes WHERE id = ?")
+        .prepare(
+          "SELECT podcast_id, title, slug, status, publish_at FROM episodes WHERE id = ?",
+        )
         .get(id) as
-        | { podcast_id: string; title: string; slug: string }
+        | {
+            podcast_id: string;
+            title: string;
+            slug: string;
+            status: string;
+            publish_at: string | null;
+          }
         | undefined;
       if (!currentEpisode)
         return reply.status(404).send({ error: "Episode not found" });
+
+      // When changing from draft/scheduled to published, set publish_at to now if null/empty
+      const isTransitioningToPublished =
+        data.status === "published" &&
+        (currentEpisode.status === "draft" ||
+          currentEpisode.status === "scheduled");
+      const publishAtEmpty =
+        data.publish_at == null ||
+        (typeof data.publish_at === "string" && data.publish_at.trim() === "");
+      const currentPublishAtEmpty =
+        currentEpisode.publish_at == null ||
+        String(currentEpisode.publish_at).trim() === "";
+      if (
+        isTransitioningToPublished &&
+        publishAtEmpty &&
+        currentPublishAtEmpty
+      ) {
+        data.publish_at = new Date().toISOString();
+      }
 
       // Only admins can explicitly edit slugs after creation
       // Allow auto-generation from title if slug is empty, but block explicit slug changes
@@ -394,6 +437,15 @@ export async function episodeRoutes(app: FastifyInstance) {
           .guid_is_permalink,
         subscriber_only: data.subscriber_only,
       };
+      const finalMarkersPayload = (data as { final_markers?: unknown[] | null }).final_markers;
+      if (finalMarkersPayload !== undefined) {
+        fields.push("final_markers = ?");
+        values.push(
+          finalMarkersPayload == null || finalMarkersPayload.length === 0
+            ? null
+            : JSON.stringify(finalMarkersPayload),
+        );
+      }
       for (const [k, v] of Object.entries(map)) {
         if (v !== undefined) {
           fields.push(`${k} = ?`);
@@ -437,8 +489,149 @@ export async function episodeRoutes(app: FastifyInstance) {
       } catch (_) {
         // non-fatal
       }
+      if (finalMarkersPayload !== undefined) {
+        try {
+          writeEpisodeChaptersJson(
+            currentEpisode.podcast_id,
+            id,
+            finalMarkersPayload as { time: number; title?: string; color?: string }[] | null,
+          );
+        } catch (_) {
+          // non-fatal
+        }
+      }
       broadcastToEpisode(id, { type: "episodeUpdated" });
       return episodeRowWithFilename(row);
+    },
+  );
+
+  app.delete(
+    "/episodes/:id",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Episodes"],
+        summary: "Delete episode",
+        description:
+          "Permanently delete an episode and all associated data. Only podcast owners and administrators can delete. Requires read-write access.",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        response: {
+          204: { description: "Deleted" },
+          403: { description: "Permission denied" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: episodeId } = request.params as { id: string };
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      if (access.role !== "owner") {
+        return reply
+          .status(403)
+          .send({
+            error: "Only podcast owners and administrators can delete episodes.",
+          });
+      }
+      const episodeRow = db
+        .prepare(
+          "SELECT podcast_id, artwork_path, audio_source_path FROM episodes WHERE id = ?",
+        )
+        .get(episodeId) as
+        | {
+            podcast_id: string;
+            artwork_path: string | null;
+            audio_source_path: string | null;
+          }
+        | undefined;
+      if (!episodeRow)
+        return reply.status(404).send({ error: "Episode not found" });
+      const podcastId = episodeRow.podcast_id;
+      assertSafeId(podcastId, "podcastId");
+      assertSafeId(episodeId, "episodeId");
+      const segmentBase = uploadsDir(podcastId, episodeId);
+
+      let bytesFreed = 0;
+      const segments = db
+        .prepare(
+          "SELECT audio_path FROM episode_segments WHERE episode_id = ? AND audio_path IS NOT NULL",
+        )
+        .all(episodeId) as { audio_path: string }[];
+      for (const seg of segments) {
+        const path = seg.audio_path;
+        if (!path) continue;
+        try {
+          assertPathUnder(path, segmentBase);
+          bytesFreed += statSync(path).size;
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (episodeRow.audio_source_path && existsSync(episodeRow.audio_source_path)) {
+        try {
+          assertPathUnder(episodeRow.audio_source_path, segmentBase);
+          bytesFreed += statSync(episodeRow.audio_source_path).size;
+        } catch {
+          /* best-effort */
+        }
+      }
+
+      const procDir = join(getDataDir(), "processed", podcastId, episodeId);
+      assertResolvedPathUnder(procDir, getDataDir());
+      if (existsSync(procDir)) {
+        try {
+          rmSync(procDir, { recursive: true });
+        } catch {
+          /* best-effort */
+        }
+      }
+      const uploadsEpisodeDir = join(getDataDir(), "uploads", podcastId, episodeId);
+      assertResolvedPathUnder(uploadsEpisodeDir, getDataDir());
+      if (existsSync(uploadsEpisodeDir)) {
+        try {
+          rmSync(uploadsEpisodeDir, { recursive: true });
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (episodeRow.artwork_path && existsSync(episodeRow.artwork_path)) {
+        try {
+          const artDir = artworkDir(podcastId);
+          assertPathUnder(episodeRow.artwork_path, artDir);
+          unlinkSync(episodeRow.artwork_path);
+        } catch {
+          /* best-effort */
+        }
+      }
+
+      const storageUserId = getPodcastOwnerId(podcastId) ?? request.userId;
+      if (bytesFreed > 0) {
+        db.prepare(
+          `UPDATE users
+           SET disk_bytes_used =
+             CASE
+               WHEN COALESCE(disk_bytes_used, 0) - ? < 0 THEN 0
+               ELSE COALESCE(disk_bytes_used, 0) - ?
+             END
+           WHERE id = ?`,
+        ).run(bytesFreed, bytesFreed, storageUserId);
+      }
+
+      db.prepare("DELETE FROM episodes WHERE id = ?").run(episodeId);
+
+      try {
+        writeRssFile(podcastId, null);
+        deleteTokenFeedTemplateFile(podcastId);
+        notifyWebSubHub(podcastId, null);
+      } catch (_) {
+        /* non-fatal */
+      }
+
+      return reply.status(204).send();
     },
   );
 

@@ -73,6 +73,10 @@ export const settingsPatchBodySchema = z.object({
   webrtc_service_url: z.string().optional(),
   webrtc_public_ws_url: z.string().optional(),
   recording_callback_secret: z.string().optional(),
+  // 2FA
+  two_factor_enabled: z.boolean().optional(),
+  two_factor_methods: z.string().optional(),
+  two_factor_enforced: z.boolean().optional(),
 });
 
 export type SettingsPatchBody = z.infer<typeof settingsPatchBodySchema>;

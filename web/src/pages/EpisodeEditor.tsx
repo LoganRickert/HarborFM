@@ -38,7 +38,6 @@ export function EpisodeEditor() {
     staleTime: 30_000,
     retry: false,
   });
-
   if (!id) return null;
   if (isLoading || (!episode && isFetching)) return <FullPageLoading />;
   if (isError || !episode) return <p className={styles.error}>Episode not found.</p>;

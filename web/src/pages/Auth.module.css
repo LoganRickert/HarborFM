@@ -268,6 +268,33 @@
   cursor: not-allowed;
 }
 
+.sendCodeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-muted, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 0.25rem;
+  cursor: pointer;
+}
+.sendCodeBtn:not(:disabled) {
+  color: white;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+.sendCodeBtn:hover:not(:disabled) {
+  background: var(--bg, rgba(255, 255, 255, 0.12));
+  border-color: white;
+}
+.sendCodeBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .footerActions {
   margin: 1.5rem 0 0;
   display: flex;
@@ -316,6 +343,13 @@
 }
 .footerActionLink:hover {
   color: var(--accent-dim);
+}
+button.footerActionLink {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
 .footer {

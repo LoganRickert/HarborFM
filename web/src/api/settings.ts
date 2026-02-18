@@ -67,6 +67,9 @@ export interface AppSettings {
   webrtc_service_url: string;
   webrtc_public_ws_url: string;
   recording_callback_secret: string;
+  two_factor_enabled: boolean;
+  two_factor_methods: string;
+  two_factor_enforced: boolean;
 }
 
 export function getSettings(): Promise<AppSettings> {

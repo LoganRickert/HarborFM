@@ -150,7 +150,7 @@ To run the full stack on a fresh machine (app, nginx, Let's Encrypt, Whisper, Fa
 curl -fsSL https://raw.githubusercontent.com/loganrickert/harborfm/main/install.sh | bash
 ```
 
-The script downloads the compose file and configs, prompts for domain and cert email, then starts the stack. This script assumes you have docker and docker compose installed.
+The script downloads the compose file and configs, prompts for domain and cert email (unless non-interactive), then starts the stack. When not using Let's Encrypt, you can optionally use a self-signed certificate for HTTPS (browsers will show a warning). This script assumes you have docker and docker compose installed.
 
 To auto-renew Let's Encrypt certificates, add a cron job (run `crontab -e` and add a line like the following, adjusting the path to your install directory):
 
@@ -422,6 +422,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | **Rate limits** | | |
 | `RATE_LIMIT_MAX` | `100` | Global rate limit: max requests per time window |
 | `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
+| `RENDER_RATE_LIMIT_WINDOW_MS` | `60000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |
 | **Podcast stats** | | |
 | `STATS_FLUSH_INTERVAL_MS` | `60000` | Podcast stats flush interval (ms) |
 | `LISTEN_THRESHOLD_BYTES` | `256000` | Min bytes requested in one range to count as a listen (250 KB) |

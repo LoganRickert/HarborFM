@@ -95,13 +95,14 @@ export function Layout() {
                     className={isAdminPath(location.pathname) ? styles.navLinkActive : styles.navLink}
                     aria-haspopup="true"
                     aria-expanded={desktopAdminOpen}
+                    aria-controls="admin-dropdown"
                     aria-label="Admin menu"
                     onClick={() => setDesktopAdminOpen((o) => !o)}
                   >
                     Admin
                     <ChevronDown size={16} strokeWidth={2} className={styles.adminChevron} aria-hidden />
                   </button>
-                  <div className={styles.adminDropdown} role="menu">
+                  <div id="admin-dropdown" className={styles.adminDropdown} role="menu">
                     <NavLink
                       to="/users"
                       className={({ isActive }) => isActive ? styles.adminDropdownLinkActive : styles.adminDropdownLink}
@@ -137,7 +138,7 @@ export function Layout() {
               onClick={() => setMenuOpen(!menuOpen)}
               aria-label="Toggle menu"
             >
-              {menuOpen ? <X size={24} strokeWidth={2} /> : <Menu size={24} strokeWidth={2} />}
+              {menuOpen ? <X size={24} strokeWidth={2} aria-hidden /> : <Menu size={24} strokeWidth={2} aria-hidden />}
             </button>
           </div>
         </div>
@@ -160,7 +161,7 @@ export function Layout() {
             onClick={() => setMenuOpen(false)}
             aria-label="Close menu"
           >
-            <X size={24} strokeWidth={2} />
+            <X size={24} strokeWidth={2} aria-hidden />
           </button>
         </div>
         <nav className={styles.mobileNav}>
@@ -201,12 +202,13 @@ export function Layout() {
                 className={styles.mobileAdminTrigger}
                 onClick={() => setAdminSubmenuOpen((o) => !o)}
                 aria-expanded={adminSubmenuOpen}
+                aria-controls="mobile-admin-submenu"
               >
                 Admin
                 <ChevronDown size={18} strokeWidth={2} className={adminSubmenuOpen ? styles.adminChevronOpen : ''} aria-hidden />
               </button>
               {adminSubmenuOpen && (
-                <div className={styles.mobileAdminSubmenu}>
+                <div id="mobile-admin-submenu" className={styles.mobileAdminSubmenu}>
                   <NavLink
                     to="/users"
                     className={({ isActive }) => isActive ? styles.mobileNavLinkActive : styles.mobileNavLink}

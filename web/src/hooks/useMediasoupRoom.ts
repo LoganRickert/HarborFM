@@ -57,6 +57,7 @@ export function useMediasoupRoom(
     const rid = roomId;
     let closed = false;
     let webrtcWs: WebSocket | null = null;
+    let heartbeatIntervalId: ReturnType<typeof setInterval> | undefined;
     let device: mediasoupClient.types.Device | null = null;
     let sendTransport: mediasoupClient.types.Transport | null = null;
     let recvTransport: mediasoupClient.types.Transport | null = null;
@@ -106,7 +107,16 @@ export function useMediasoupRoom(
           safeSend(webrtcWs, { type: 'setHostToken', hostToken });
         }
 
+        // Keep connection alive; many proxies (e.g. nginx, Caddy) close WebSockets after ~10 min idle
+        heartbeatIntervalId = setInterval(() => {
+          safeSend(webrtcWs, { type: 'ping' });
+        }, 60 * 1000);
+
         webrtcWs.onclose = () => {
+          if (heartbeatIntervalId) {
+            clearInterval(heartbeatIntervalId);
+            heartbeatIntervalId = undefined;
+          }
           if (!closed) {
             setError('Audio connection lost - WebRTC service may have stopped. Please refresh or try again.');
           }
@@ -407,6 +417,10 @@ export function useMediasoupRoom(
       window.removeEventListener('beforeunload', handlePageUnload);
       window.removeEventListener('pagehide', handlePageUnload);
       closed = true;
+      if (heartbeatIntervalId) {
+        clearInterval(heartbeatIntervalId);
+        heartbeatIntervalId = undefined;
+      }
       stopMediaTracks();
       webrtcWsRef.current = null;
       setRemoteMicLevels(new Map());

@@ -265,6 +265,37 @@ export function getActiveImport() {
   return apiGet<ActiveImportStatus>('/podcasts/import-status');
 }
 
+export interface DeletePodcastStatus {
+  status: 'idle' | 'pending' | 'deleting' | 'done' | 'failed';
+  message?: string;
+  error?: string;
+  current_episode?: number;
+  total_episodes?: number;
+}
+
+/** Start deleting a podcast. Returns 202; poll getDeletePodcastStatus for progress. */
+export function startDeletePodcast(podcastId: string) {
+  return apiPost<{ message: string }>(`/podcasts/${podcastId}/delete`, {});
+}
+
+export function getDeletePodcastStatus(podcastId: string) {
+  return apiGet<DeletePodcastStatus>(`/podcasts/${podcastId}/delete-status`);
+}
+
+export interface ActiveDeleteStatus {
+  status: 'idle' | 'pending' | 'deleting' | 'done' | 'failed';
+  podcast_id?: string;
+  message?: string;
+  error?: string;
+  current_episode?: number;
+  total_episodes?: number;
+}
+
+/** Get the current user's in-progress delete, if any. */
+export function getActiveDelete() {
+  return apiGet<ActiveDeleteStatus>('/podcasts/delete-status');
+}
+
 export function updatePodcast(id: string, body: PodcastUpdate) {
   return apiPatch<Podcast>(`/podcasts/${id}`, body);
 }

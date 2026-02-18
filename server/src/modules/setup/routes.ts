@@ -20,6 +20,7 @@ import {
 } from "../../services/loginAttempts.js";
 import { setupTokenQuerySchema, setupCompleteBodySchema } from "@harborfm/shared";
 import { normalizeHostname } from "../../utils/url.js";
+import { timingSafeEqualStrings } from "../../utils/secretCompare.js";
 import { libraryDir, libraryAssetPath } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import { existsSync, statSync } from "fs";
@@ -55,6 +56,9 @@ export async function setupRoutes(app: FastifyInstance) {
               captchaSiteKey: { type: "string" },
               emailConfigured: { type: "boolean" },
               welcomeBanner: { type: "string" },
+              twoFactorEnabled: { type: "boolean" },
+              twoFactorEnforced: { type: "boolean" },
+              twoFactorMethods: { type: "string" },
             },
           },
         },
@@ -71,6 +75,9 @@ export async function setupRoutes(app: FastifyInstance) {
           captchaSiteKey: "",
           emailConfigured: false,
           welcomeBanner: "",
+          twoFactorEnabled: false,
+          twoFactorEnforced: false,
+          twoFactorMethods: "totp",
         };
       }
       try {
@@ -90,6 +97,9 @@ export async function setupRoutes(app: FastifyInstance) {
           captchaSiteKey,
           emailConfigured,
           welcomeBanner: String(settings.welcome_banner ?? ""),
+          twoFactorEnabled: Boolean(settings.two_factor_enabled),
+          twoFactorEnforced: Boolean(settings.two_factor_enabled && settings.two_factor_enforced),
+          twoFactorMethods: String(settings.two_factor_methods ?? "totp"),
         };
       } catch {
         // Best-effort: if settings can't be read for any reason, default to allowing registration.
@@ -101,6 +111,9 @@ export async function setupRoutes(app: FastifyInstance) {
           captchaSiteKey: "",
           emailConfigured: false,
           welcomeBanner: "",
+          twoFactorEnabled: false,
+          twoFactorEnforced: false,
+          twoFactorMethods: "totp",
         };
       }
     },
@@ -162,7 +175,7 @@ export async function setupRoutes(app: FastifyInstance) {
       const token = parsed.data.id.trim();
 
       const currentToken = readSetupToken();
-      if (!currentToken || token !== currentToken) {
+      if (!currentToken || !timingSafeEqualStrings(token, currentToken)) {
         const after = recordFailureAndMaybeBan(ip, "setup", { userAgent });
         if (after.bannedNow) {
           return reply
@@ -310,7 +323,7 @@ export async function setupRoutes(app: FastifyInstance) {
 
       // Validate token before doing any writes (do not consume yet)
       const currentToken = readSetupToken();
-      if (!currentToken || token !== currentToken) {
+      if (!currentToken || !timingSafeEqualStrings(token, currentToken)) {
         // Record failed setup token attempt unless banned (checked above).
         const after = recordFailureAndMaybeBan(ip, "setup", { userAgent });
         if (after.bannedNow) {

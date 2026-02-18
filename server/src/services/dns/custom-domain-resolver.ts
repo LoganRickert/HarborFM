@@ -72,3 +72,42 @@ export function getPodcastByHost(host: string): { id: string; slug: string } | n
     .get(sub) as { id: string; slug: string } | undefined;
   return subMatch ?? null;
 }
+
+/**
+ * Check if a domain is allowed for TLS (e.g. Caddy on-demand cert issuance).
+ * Returns true for: primary domain, hostname, dns_default_domain, dns_default_allow_domains,
+ * and any domain that resolves via getPodcastByHost (link_domain, managed_domain, sub.dns_default_domain).
+ */
+export function isDomainAllowed(domain: string): boolean {
+  const raw = (domain || "").trim().toLowerCase();
+  if (!raw) return false;
+
+  const settings = readSettings();
+
+  // Primary domain from env (not localhost or wildcard)
+  const envDomain = (process.env.DOMAIN ?? "").trim().toLowerCase();
+  if (envDomain && envDomain !== "localhost" && envDomain !== "_" && raw === envDomain) {
+    return true;
+  }
+
+  // Admin-configured hostname
+  const hostname = (settings.hostname ?? "").trim().toLowerCase();
+  if (hostname && raw === hostname) return true;
+
+  // Base domain for subdomains
+  const defaultDomain = (settings.dns_default_domain ?? "").trim().toLowerCase();
+  if (defaultDomain && raw === defaultDomain) return true;
+
+  // Allowlist of extra domains
+  const allowDomainsRaw = settings.dns_default_allow_domains ?? "[]";
+  try {
+    const parsed = JSON.parse(allowDomainsRaw) as unknown;
+    const arr = Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
+    if (arr.some((d) => (d || "").trim().toLowerCase() === raw)) return true;
+  } catch {
+    // ignore invalid JSON
+  }
+
+  // Link domain, managed domain, or subdomain of dns_default_domain
+  return getPodcastByHost(raw) !== null;
+}

@@ -42,6 +42,13 @@ export function assertPathUnder(
   const base = resolve(realpathSync(allowedBase));
   const resolved = resolve(realpathSync(pathToCheck));
   if (resolved !== base && !resolved.startsWith(base + sep)) {
+    console.error("[assertPathUnder] Path escapes allowed directory", {
+      pathToCheck,
+      allowedBase,
+      resolved,
+      base,
+      startsWith: resolved.startsWith(base + sep),
+    });
     throw new Error("Path escapes allowed directory");
   }
   return resolved;
@@ -113,6 +120,16 @@ export function transcriptSrtPath(
   assertSafeId(podcastId, "podcastId");
   assertSafeId(episodeId, "episodeId");
   return join(DATA_DIR, "processed", podcastId, episodeId, "transcript.srt");
+}
+
+/** Path to episode chapters JSON (Podcast 2.0 format). Does not create dir. */
+export function chaptersJsonPath(
+  podcastId: string,
+  episodeId: string,
+): string {
+  assertSafeId(podcastId, "podcastId");
+  assertSafeId(episodeId, "episodeId");
+  return join(DATA_DIR, "processed", podcastId, episodeId, "chapters.json");
 }
 
 export function rssDir(podcastId: string): string {

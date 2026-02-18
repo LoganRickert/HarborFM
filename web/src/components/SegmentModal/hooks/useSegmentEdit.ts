@@ -1,0 +1,319 @@
+import { useState, useEffect, useRef } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { segmentStreamUrl, updateSegment, fetchSegmentWaveformsBulk } from '../../../api/segments';
+import type { EpisodeSegment } from '../../../api/segments';
+import type { Marker } from '@harborfm/shared';
+import type { WaveformData } from '../../../pages/EpisodeEditor/WaveformCanvas';
+import type { TimelineMode } from '../../../pages/EpisodeEditor/TimelineWaveform';
+import { useSegmentAudio } from './useSegmentAudio';
+import { mergeTrimRanges } from '../utils/transcriptTrimUtils';
+
+export function useSegmentEdit(
+  episodeId: string,
+  segment: EpisodeSegment,
+  segmentWaveformData?: WaveformData | null,
+  options?: { initialTimelineMode?: TimelineMode; isEditTabVisible?: boolean }
+) {
+  const queryClient = useQueryClient();
+  const segmentEditAudioRef = useRef<HTMLAudioElement>(null);
+  const initialMode = options?.initialTimelineMode ?? 'drag';
+  const isEditTabVisible = options?.isEditTabVisible ?? true;
+
+  const [waveformData, setWaveformData] = useState<WaveformData | null>(segmentWaveformData ?? null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [trimRanges, setTrimRanges] = useState<Array<[number, number]>>(segment.trim_ranges ?? []);
+  const [markers, setMarkers] = useState<Marker[]>(segment.markers ?? []);
+  const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
+  const [timelineMode, setTimelineMode] = useState<TimelineMode>(initialMode);
+  const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<number | null>(null);
+  /** Draft edits for selected marker; applied when user clicks Done. */
+  const [markerDraft, setMarkerDraft] = useState<{ title: string; color: string; marker_type: '' | 'chapter' } | null>(null);
+  const [viewStartSec, setViewStartSec] = useState(0);
+  const [viewEndSec, setViewEndSec] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  const durationSec = segment.duration_sec ?? 0;
+  useSegmentAudio(segmentEditAudioRef, trimRanges, setCurrentTime, setIsPlaying, isEditTabVisible);
+
+  useEffect(() => {
+    const el = segmentEditAudioRef.current;
+    if (el) el.playbackRate = playbackRate;
+  }, [playbackRate, isEditTabVisible]);
+
+  // Scroll view when playhead nears right edge during playback (separate from play logic)
+  useEffect(() => {
+    if (!isPlaying) return;
+    const win = viewEndSec - viewStartSec;
+    if (win <= 0.01) return;
+    if (currentTime < viewStartSec + 0.9 * win) return;
+    let newStart = currentTime - 0.1 * win;
+    let newEnd = newStart + win;
+    if (newStart < 0) {
+      newStart = 0;
+      newEnd = Math.min(win, durationSec);
+    }
+    if (newEnd > durationSec) {
+      newEnd = durationSec;
+      newStart = Math.max(0, durationSec - win);
+    }
+    setViewStartSec(newStart);
+    setViewEndSec(newEnd);
+  }, [isPlaying, currentTime, viewStartSec, viewEndSec, durationSec]);
+
+  // Preload audio - use rAF to run after paint so audio element exists when Edit tab mounts
+  useEffect(() => {
+    if (!isEditTabVisible) return;
+    const id = requestAnimationFrame(() => {
+      const el = segmentEditAudioRef.current;
+      if (!el || !segment.audio_path || durationSec <= 0) return;
+      el.src = segmentStreamUrl(episodeId, segment.id, segment.audio_path);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [episodeId, segment.id, segment.audio_path, durationSec, isEditTabVisible]);
+
+  useEffect(() => {
+    setTrimRanges(segment.trim_ranges ?? []);
+    setMarkers(segment.markers ?? []);
+    const dur = segment.duration_sec ?? 0;
+    const initialWindow = Math.min(60, Math.max(0.01, dur));
+    setViewStartSec(0);
+    setViewEndSec(initialWindow);
+  }, [segment.id, segment.trim_ranges, segment.markers, segment.duration_sec]);
+
+  useEffect(() => {
+    if (segmentWaveformData) {
+      setWaveformData(segmentWaveformData);
+      return;
+    }
+    const dur = segment.duration_sec ?? 0;
+    if (!segment.waveform_exists || dur <= 0) return;
+    fetchSegmentWaveformsBulk(episodeId, [segment.id])
+      .then(({ waveforms }) => {
+        const wf = waveforms[segment.id];
+        setWaveformData(wf?.data?.length ? (wf as WaveformData) : null);
+      })
+      .catch(() => setWaveformData(null));
+  }, [episodeId, segment.id, segment.waveform_exists, segment.duration_sec, segmentWaveformData]);
+
+  const MARKER_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899'] as const;
+
+  useEffect(() => {
+    if (selectedMarkerIndex == null || !markers[selectedMarkerIndex]) {
+      setMarkerDraft(null);
+      return;
+    }
+    const m = markers[selectedMarkerIndex]!;
+    setMarkerDraft({
+      title: m.title ?? '',
+      color: m.color ?? MARKER_COLORS[0],
+      marker_type: (m.marker_type ?? '') as '' | 'chapter',
+    });
+    // Only re-init when selection changes, not when markers change (preserve user's draft until Done)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMarkerIndex]);
+
+  const trimRangesEqual = (a: Array<[number, number]>, b: Array<[number, number]>) =>
+    a.length === b.length && a.every((r, i) => r[0] === b[i]![0] && r[1] === b[i]![1]);
+  const markersEqual = (a: Marker[], b: Marker[]) =>
+    a.length === b.length && a.every((m, i) =>
+      m.time === b[i]!.time &&
+      (m.title ?? '') === (b[i]!.title ?? '') &&
+      (m.color ?? '') === (b[i]!.color ?? '') &&
+      (m.marker_type ?? '') === (b[i]!.marker_type ?? ''));
+  const hasEditUnsavedChanges =
+    !trimRangesEqual(trimRanges, segment.trim_ranges ?? []) ||
+    !markersEqual(markers, segment.markers ?? []);
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: { trim_ranges?: Array<[number, number]>; markers?: Marker[] }) =>
+      updateSegment(episodeId, segment.id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
+    },
+    onError: () => {},
+  });
+
+  function handleSave() {
+    if (!hasEditUnsavedChanges) return;
+    updateMutation.mutate({ trim_ranges: mergeTrimRanges(trimRanges), markers });
+  }
+
+  function toggleSegmentPlay() {
+    if (segment.record_failed) return;
+    const el = segmentEditAudioRef.current;
+    if (!el) return;
+    if (isPlaying) {
+      el.pause();
+      setIsPlaying(false);
+    } else {
+      const startAt = currentTime;
+      const url = segmentStreamUrl(episodeId, segment.id, segment.audio_path);
+      const applySeekAndPlay = () => {
+        const seekTo = Math.min(startAt, el.duration || durationSec);
+        setIsPlaying(true);
+        el.currentTime = seekTo;
+        setCurrentTime(el.currentTime);
+        el.play().catch(() => setIsPlaying(false));
+      };
+      const absUrl = new URL(url, window.location.origin).href;
+      if (el.src === absUrl && el.readyState >= 2) {
+        applySeekAndPlay();
+        return;
+      }
+      const onCanPlay = () => {
+        el.removeEventListener('canplay', onCanPlay);
+        applySeekAndPlay();
+      };
+      el.addEventListener('canplay', onCanPlay, { once: true });
+      el.src = url;
+    }
+  }
+
+  function handleSeek(time: number) {
+    const el = segmentEditAudioRef.current;
+    if (el) {
+      el.currentTime = time;
+      setCurrentTime(time);
+    }
+  }
+
+  function handleAddMarker(time: number) {
+    const newMarkers = [...markers, { time }].sort((a, b) => a.time - b.time);
+    setMarkers(newMarkers);
+  }
+
+  function handleRemoveTrimRange(index: number) {
+    setTrimRanges(trimRanges.filter((_, i) => i !== index));
+  }
+
+  function handleMarkerTitleChange(_index: number, title: string) {
+    setMarkerDraft((d) => (d ? { ...d, title } : null));
+  }
+
+  function handleMarkerColorChange(_index: number, color: string) {
+    setMarkerDraft((d) => (d ? { ...d, color } : null));
+  }
+
+  function handleMarkerTypeChange(_index: number, markerType: '' | 'chapter') {
+    setMarkerDraft((d) => (d ? { ...d, marker_type: markerType } : null));
+  }
+
+  function handleMarkerDone() {
+    if (selectedMarkerIndex == null || !markerDraft) {
+      setSelectedMarkerIndex(null);
+      setMarkerDraft(null);
+      return;
+    }
+    const next = [...markers];
+    const m = next[selectedMarkerIndex]!;
+    next[selectedMarkerIndex] = {
+      ...m,
+      title: markerDraft.title || undefined,
+      color: markerDraft.color || undefined,
+      marker_type: markerDraft.marker_type || undefined,
+    };
+    setMarkers(next);
+    setSelectedMarkerIndex(null);
+    setMarkerDraft(null);
+  }
+
+  function handleRemoveMarker(index: number) {
+    setMarkers(markers.filter((_, i) => i !== index));
+    if (selectedMarkerIndex === index) {
+      setSelectedMarkerIndex(null);
+      setMarkerDraft(null);
+    } else if (selectedMarkerIndex != null && selectedMarkerIndex > index) {
+      setSelectedMarkerIndex(selectedMarkerIndex - 1);
+    }
+  }
+
+  function handleViewChange(start: number, end: number) {
+    setViewStartSec(start);
+    setViewEndSec(end);
+  }
+
+  function handleZoomIn() {
+    const playhead = currentTime;
+    const win = viewEndSec - viewStartSec;
+    const newWin = Math.max(1, win / 2);
+    let newStart = playhead - newWin / 2;
+    let newEnd = playhead + newWin / 2;
+    if (newStart < 0) {
+      newStart = 0;
+      newEnd = Math.min(newWin, durationSec);
+    }
+    if (newEnd > durationSec) {
+      newEnd = durationSec;
+      newStart = Math.max(0, durationSec - newWin);
+    }
+    setViewStartSec(newStart);
+    setViewEndSec(newEnd);
+  }
+
+  function handleBackToStart() {
+    handleSeek(0);
+  }
+
+  function handleFastForwardToggle() {
+    setPlaybackRate((r) => (r === 1 ? 2 : 1));
+  }
+
+  function handleZoomOut() {
+    const playhead = currentTime;
+    const win = viewEndSec - viewStartSec;
+    const newWin = Math.min(durationSec, win * 2);
+    let newStart = playhead - newWin / 2;
+    let newEnd = playhead + newWin / 2;
+    if (newStart < 0) {
+      newStart = 0;
+      newEnd = Math.min(newWin, durationSec);
+    }
+    if (newEnd > durationSec) {
+      newEnd = durationSec;
+      newStart = Math.max(0, durationSec - newWin);
+    }
+    setViewStartSec(newStart);
+    setViewEndSec(newEnd);
+  }
+
+  return {
+    segmentEditAudioRef,
+    waveformData,
+    isPlaying,
+    currentTime,
+    trimRanges,
+    setTrimRanges,
+    markers,
+    setMarkers,
+    selection,
+    setSelection,
+    timelineMode,
+    setTimelineMode,
+    selectedMarkerIndex,
+    setSelectedMarkerIndex,
+    viewStartSec,
+    viewEndSec,
+    durationSec,
+    mergeTrimRanges,
+    hasEditUnsavedChanges,
+    handleSave,
+    toggleSegmentPlay,
+    handleSeek,
+    handleAddMarker,
+    handleRemoveTrimRange,
+    handleMarkerTitleChange,
+    handleMarkerColorChange,
+    handleMarkerTypeChange,
+    handleMarkerDone,
+    handleRemoveMarker,
+    markerDraft,
+    handleViewChange,
+    handleZoomIn,
+    handleZoomOut,
+    handleBackToStart,
+    handleFastForwardToggle,
+    playbackRate,
+    updateMutation,
+  };
+}

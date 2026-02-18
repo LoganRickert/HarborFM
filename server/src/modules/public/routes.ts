@@ -17,6 +17,7 @@ import {
   assertSafeId,
   artworkDir,
   castPhotoDir,
+  chaptersJsonPath,
   processedDir,
   rssDir,
   transcriptSrtPath,
@@ -158,6 +159,23 @@ export async function publicRoutes(app: FastifyInstance) {
     const hasSrt = srtPath && existsSync(srtPath);
     const allowPublicSrt =
       hasSrt && !opts.subscriberOnlyFeed && !subscriberOnly;
+    const chaptersPath =
+      opts.podcastSlug && row.slug
+        ? chaptersJsonPath(podcastId, String(row.id))
+        : null;
+    const hasChapters = chaptersPath && existsSync(chaptersPath);
+    const allowPublicChapters =
+      hasChapters && !opts.subscriberOnlyFeed && !subscriberOnly;
+
+    const rawMarkers = row.final_markers as string | null | undefined;
+    let markers: Array<{ time: number; title?: string; color?: string }> | null = null;
+    if (rawMarkers != null && typeof rawMarkers === "string" && rawMarkers.trim()) {
+      try {
+        markers = JSON.parse(rawMarkers) as Array<{ time: number; title?: string; color?: string }>;
+      } catch {
+        markers = null;
+      }
+    }
 
     return {
       id: row.id,
@@ -184,9 +202,14 @@ export async function publicRoutes(app: FastifyInstance) {
         opts.podcastSlug && allowPublicSrt
           ? `/${API_PREFIX}/public/podcasts/${encodeURIComponent(opts.podcastSlug)}/episodes/${encodeURIComponent(String(row.slug))}/transcript.srt`
           : null,
+      chapters_url:
+        opts.podcastSlug && allowPublicChapters
+          ? `/${API_PREFIX}/public/podcasts/${encodeURIComponent(opts.podcastSlug)}/episodes/${encodeURIComponent(String(row.slug))}/chapters.json`
+          : null,
       subscriber_only: subscriberOnly ? 1 : 0,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      markers,
     };
   }
 
@@ -864,7 +887,7 @@ export async function publicRoutes(app: FastifyInstance) {
           `SELECT id, podcast_id, title, slug, description, description_copyright_snapshot, guid,
                 season_number, episode_number, episode_type, explicit, publish_at,
                 artwork_url, artwork_path, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
-                COALESCE(subscriber_only, 0) AS subscriber_only, created_at, updated_at
+                final_markers, COALESCE(subscriber_only, 0) AS subscriber_only, created_at, updated_at
          FROM episodes 
          WHERE podcast_id = ? AND status = 'published'
          AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))${episodeFilter}${searchFilterEp}
@@ -893,6 +916,7 @@ export async function publicRoutes(app: FastifyInstance) {
                   private_audio_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.id))}`,
                   private_waveform_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/waveform`,
                   private_srt_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/transcript.srt`,
+                  private_chapters_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/chapters.json`,
                 }));
               }
             }
@@ -966,7 +990,7 @@ export async function publicRoutes(app: FastifyInstance) {
           `SELECT id, podcast_id, title, slug, description, description_copyright_snapshot, guid,
                 season_number, episode_number, episode_type, explicit, publish_at,
                 artwork_url, artwork_path, audio_mime, audio_bytes, audio_duration_sec, audio_final_path,
-                COALESCE(subscriber_only, 0) AS subscriber_only, created_at, updated_at
+                final_markers, COALESCE(subscriber_only, 0) AS subscriber_only, created_at, updated_at
          FROM episodes 
          WHERE podcast_id = ? AND slug = ? AND status = 'published'
          AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))`,
@@ -993,6 +1017,7 @@ export async function publicRoutes(app: FastifyInstance) {
                 episode.private_audio_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(row.id))}`;
                 episode.private_waveform_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/waveform`;
                 episode.private_srt_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/transcript.srt`;
+                episode.private_chapters_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/chapters.json`;
               }
             }
           }
@@ -1232,6 +1257,84 @@ export async function publicRoutes(app: FastifyInstance) {
       const body = readFileSync(srtPath) as Buffer;
       return reply
         .header("Content-Type", "application/srt; charset=utf-8")
+        .header("Cache-Control", "public, max-age=3600")
+        .header("Content-Length", String(body.length))
+        .send(body);
+    },
+  );
+
+  // Get episode chapters JSON (Podcast 2.0 format). Same access as transcript - only when not subscriber_only.
+  app.get(
+    "/public/podcasts/:podcastSlug/episodes/:episodeSlug/chapters.json",
+    {
+      schema: {
+        tags: ["Public"],
+        summary: "Get episode chapters (JSON)",
+        description:
+          "Returns chapter markers in Podcast 2.0 JSON format if available. Same access as transcript.",
+        security: [],
+        params: {
+          type: "object",
+          properties: {
+            podcastSlug: { type: "string" },
+            episodeSlug: { type: "string" },
+          },
+          required: ["podcastSlug", "episodeSlug"],
+        },
+        response: {
+          200: { description: "Chapters JSON" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!ensurePublicFeedsEnabled(reply)) return;
+      const { podcastSlug, episodeSlug } = request.params as {
+        podcastSlug: string;
+        episodeSlug: string;
+      };
+      const podcast = db
+        .prepare(
+          "SELECT id, COALESCE(public_feed_disabled, 0) AS public_feed_disabled, COALESCE(subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled FROM podcasts WHERE slug = ?",
+        )
+        .get(podcastSlug) as
+        | {
+            id: string;
+            public_feed_disabled: number;
+            subscriber_only_feed_enabled: number;
+          }
+        | undefined;
+      if (!podcast)
+        return reply.status(404).send({ error: "Chapters not found" });
+      if (
+        podcast.public_feed_disabled === 1 &&
+        podcast.subscriber_only_feed_enabled !== 1
+      )
+        return reply.status(404).send({ error: "Chapters not found" });
+
+      const row = db
+        .prepare(
+          `SELECT id, COALESCE(subscriber_only, 0) AS subscriber_only FROM episodes
+         WHERE podcast_id = ? AND slug = ? AND status = 'published'
+         AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))`,
+        )
+        .get(podcast.id, episodeSlug) as
+        | { id: string; subscriber_only: number }
+        | undefined;
+      if (!row || row.subscriber_only === 1)
+        return reply.status(404).send({ error: "Chapters not found" });
+
+      const chaptersPath = chaptersJsonPath(podcast.id, row.id);
+      if (!existsSync(chaptersPath))
+        return reply.status(404).send({ error: "Chapters not found" });
+      try {
+        assertPathUnder(chaptersPath, processedDir(podcast.id, row.id));
+      } catch {
+        return reply.status(404).send({ error: "Chapters not found" });
+      }
+      const body = readFileSync(chaptersPath) as Buffer;
+      return reply
+        .header("Content-Type", "application/json+chapters; charset=utf-8")
         .header("Cache-Control", "public, max-age=3600")
         .header("Content-Length", String(body.length))
         .send(body);
@@ -1583,6 +1686,72 @@ export async function publicRoutes(app: FastifyInstance) {
       const body = readFileSync(srtPath) as Buffer;
       return reply
         .header("Content-Type", "application/srt; charset=utf-8")
+        .header("Cache-Control", "public, max-age=3600")
+        .header("Content-Length", String(body.length))
+        .send(body);
+    },
+  );
+
+  app.get(
+    "/public/podcasts/:podcastSlug/private/:token/episodes/:episodeIdOrSlug/chapters.json",
+    {
+      schema: {
+        tags: ["Public"],
+        summary: "Get episode chapters (token)",
+        description:
+          "Returns chapters JSON when valid subscriber token provided. 404 if invalid.",
+        security: [],
+        params: {
+          type: "object",
+          properties: {
+            podcastSlug: { type: "string" },
+            token: { type: "string" },
+            episodeIdOrSlug: { type: "string" },
+          },
+          required: ["podcastSlug", "token", "episodeIdOrSlug"],
+        },
+        response: {
+          200: { description: "Chapters JSON" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!ensurePublicFeedsEnabled(reply)) return;
+      const { podcastSlug, token, episodeIdOrSlug } = request.params as {
+        podcastSlug: string;
+        token: string;
+        episodeIdOrSlug: string;
+      };
+      const resolved = resolvePodcastAndToken(
+        request,
+        podcastSlug,
+        token,
+        reply,
+      );
+      if (!resolved) return;
+      const { podcastId } = resolved;
+      const row = db
+        .prepare(
+          `SELECT id FROM episodes WHERE podcast_id = ? AND status = 'published'
+         AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))
+         AND (id = ? OR slug = ?)`,
+        )
+        .get(podcastId, episodeIdOrSlug, episodeIdOrSlug) as
+        | { id: string }
+        | undefined;
+      if (!row) return reply.status(404).send({ error: "Not found" });
+      const chaptersPath = chaptersJsonPath(podcastId, row.id);
+      if (!existsSync(chaptersPath))
+        return reply.status(404).send({ error: "Not found" });
+      try {
+        assertPathUnder(chaptersPath, processedDir(podcastId, row.id));
+      } catch {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const body = readFileSync(chaptersPath) as Buffer;
+      return reply
+        .header("Content-Type", "application/json+chapters; charset=utf-8")
         .header("Cache-Control", "public, max-age=3600")
         .header("Content-Length", String(body.length))
         .send(body);

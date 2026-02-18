@@ -2,6 +2,12 @@
 # Copy to /etc/caddy/Caddyfile. Accepts any hostname (on-demand TLS).
 # Caddy will obtain and renew TLS automatically per hostname.
 
+{
+	on_demand_tls {
+		permission http http://127.0.0.1:3001/api/caddy-tls-check/{$CADDY_TLS_CHECK_SECRET}
+	}
+}
+
 :443 {
 	tls {
 		on_demand

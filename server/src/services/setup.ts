@@ -11,6 +11,7 @@ import { db } from "../db/index.js";
 import { SETUP_ID } from "../config.js";
 import { ensureDir, getDataDir } from "./paths.js";
 import { normalizeHostname } from "../utils/url.js";
+import { timingSafeEqualStrings } from "../utils/secretCompare.js";
 
 const SETUP_TOKEN_FILENAME = "setup-token.txt";
 
@@ -159,7 +160,7 @@ export function getOrCreateSetupToken(): string {
 export function consumeSetupToken(token: string): boolean {
   const existing = readSetupToken();
   if (!existing) return false;
-  if (token !== existing) return false;
+  if (!timingSafeEqualStrings(token, existing)) return false;
   try {
     unlinkSync(getSetupTokenPath());
   } catch {

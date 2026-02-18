@@ -186,6 +186,12 @@ export interface AppSettings {
   webrtc_public_ws_url: string;
   /** Secret for webrtc service to call back when a recording is ready. Env RECORDING_CALLBACK_SECRET can override. */
   recording_callback_secret: string;
+  /** When true, 2FA is available for users. */
+  two_factor_enabled: boolean;
+  /** Allowed 2FA methods: "totp", "email", or "totp,email". */
+  two_factor_methods: string;
+  /** When true and 2FA enabled, users without 2FA must add it after password login. */
+  two_factor_enforced: boolean;
 }
 
 const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -257,6 +263,9 @@ const DEFAULTS: AppSettings = {
   webrtc_service_url: "",
   webrtc_public_ws_url: "",
   recording_callback_secret: "",
+  two_factor_enabled: false,
+  two_factor_methods: "totp",
+  two_factor_enforced: false,
 };
 
 const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -649,6 +658,12 @@ export function readSettings(): AppSettings {
       (settings as Partial<AppSettings>).webrtc_public_ws_url = row.value;
     else if (row.key === "recording_callback_secret")
       (settings as Partial<AppSettings>).recording_callback_secret = row.value;
+    else if (row.key === "two_factor_enabled")
+      (settings as Partial<AppSettings>).two_factor_enabled = row.value === "true";
+    else if (row.key === "two_factor_methods")
+      (settings as Partial<AppSettings>).two_factor_methods = row.value;
+    else if (row.key === "two_factor_enforced")
+      (settings as Partial<AppSettings>).two_factor_enforced = row.value === "true";
   }
 
   return {
@@ -768,6 +783,15 @@ export function readSettings(): AppSettings {
     recording_callback_secret:
       (settings as Partial<AppSettings>).recording_callback_secret ??
       DEFAULTS.recording_callback_secret,
+    two_factor_enabled:
+      (settings as Partial<AppSettings>).two_factor_enabled ??
+      DEFAULTS.two_factor_enabled,
+    two_factor_methods:
+      (settings as Partial<AppSettings>).two_factor_methods ??
+      DEFAULTS.two_factor_methods,
+    two_factor_enforced:
+      (settings as Partial<AppSettings>).two_factor_enforced ??
+      DEFAULTS.two_factor_enforced,
   };
 }
 
@@ -885,6 +909,9 @@ function writeSettings(settings: AppSettings): void {
   stmt.run("webrtc_service_url", settings.webrtc_service_url ?? "");
   stmt.run("webrtc_public_ws_url", settings.webrtc_public_ws_url ?? "");
   stmt.run("recording_callback_secret", settings.recording_callback_secret ?? "");
+  stmt.run("two_factor_enabled", String(settings.two_factor_enabled));
+  stmt.run("two_factor_methods", settings.two_factor_methods ?? DEFAULTS.two_factor_methods);
+  stmt.run("two_factor_enforced", String(settings.two_factor_enforced));
 }
 
 /** Whether a transcription provider is configured and usable. */
@@ -1375,6 +1402,18 @@ export async function settingsRoutes(app: FastifyInstance) {
         const v = String(body.recording_callback_secret).trim();
         recording_callback_secret = v === "(set)" ? current.recording_callback_secret : v;
       }
+      const two_factor_enabled =
+        body.two_factor_enabled !== undefined
+          ? Boolean(body.two_factor_enabled)
+          : current.two_factor_enabled;
+      const two_factor_methods =
+        body.two_factor_methods !== undefined
+          ? String(body.two_factor_methods).trim() || "totp"
+          : current.two_factor_methods;
+      const two_factor_enforced =
+        body.two_factor_enforced !== undefined
+          ? Boolean(body.two_factor_enforced)
+          : current.two_factor_enforced;
 
       const next: AppSettings = {
         whisper_asr_url,
@@ -1447,6 +1486,9 @@ export async function settingsRoutes(app: FastifyInstance) {
         webrtc_service_url,
         webrtc_public_ws_url,
         recording_callback_secret,
+        two_factor_enabled,
+        two_factor_methods,
+        two_factor_enforced,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||
@@ -1484,6 +1526,9 @@ export async function settingsRoutes(app: FastifyInstance) {
         smtp_password: next.smtp_password ? "(set)" : "",
         sendgrid_api_key: next.sendgrid_api_key ? "(set)" : "",
         recording_callback_secret: next.recording_callback_secret ? "(set)" : "",
+        two_factor_enabled: next.two_factor_enabled,
+        two_factor_methods: next.two_factor_methods,
+        two_factor_enforced: next.two_factor_enforced,
         custom_terms: next.custom_terms ?? "",
         custom_privacy: next.custom_privacy ?? "",
         dns_provider_api_token_enc: "",
@@ -1551,7 +1596,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         }
         try {
           const base = validateOllamaBaseUrl(ollama_url);
-          const res = await fetch(`${base}/tags`, { method: "GET" });
+          const res = await fetch(`${base}/api/tags`, { method: "GET" });
           if (!res.ok) {
             const text = await res.text();
             return reply.send({

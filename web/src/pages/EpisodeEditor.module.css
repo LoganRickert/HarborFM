@@ -385,6 +385,173 @@
   width: 100%;
   min-width: 0;
 }
+.segmentTimelineSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  min-width: 0;
+}
+.segmentAudioRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+}
+.segmentTimelineGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto auto;
+  column-gap: 0.75rem;
+  row-gap: 0;
+  width: 100%;
+  min-width: 0;
+}
+.segmentTimelinePlayBtnWrap {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+}
+.segmentTimelineGrid > .segmentTimelineTimeRow {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.segmentTimelineGrid .segmentTimelineWrap {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+}
+.segmentTimelineGrid .markerHandlesRow {
+  grid-column: 2;
+  grid-row: 3;
+  min-width: 0;
+}
+.segmentTimelineWrap {
+  flex: 1;
+  min-width: 0;
+}
+.segmentWaveformAndZoom {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.timelineZoomControls {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.timelineToolbarRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+.timelineToolbarGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+.timelineToolbarSeparator {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+.timelineToolbarBtnActive {
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.15);
+}
+.timelineWaveformWithHandles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+.markerHandlesRow {
+  position: relative;
+  height: 16px;
+  min-height: 16px;
+}
+.markerHandle {
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  padding: 0;
+  border: 1px solid #3b82f6;
+  background: #3b82f6;
+  border-radius: 2px;
+  cursor: pointer;
+  transform: translateY(50%);
+  transition: background 0.15s, border-color 0.15s;
+}
+.markerHandle:hover {
+  border-color: var(--text-muted);
+  background: var(--bg);
+}
+.markerHandleSelected {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+.markerTitleEditRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 120px;
+}
+.markerTitleEditRow .input {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+.markerColorRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+}
+.markerTypeRow {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 0.75rem;
+  flex-basis: 100%;
+}
+.markerColorBtn {
+  flex: 1;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.15s, transform 0.1s;
+}
+.markerColorBtn:hover {
+  transform: scale(1.1);
+}
+.markerColorBtnSelected {
+  box-shadow: 0 0 0 1px var(--bg);
+}
 
 .segmentWaveformTrack {
   flex: 1;
@@ -520,6 +687,12 @@
   margin-top: 0;
 }
 
+.segmentWaveformWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
 .waveformTrack {
   margin-top: 0;
   height: 32px;
@@ -585,6 +758,30 @@
   color: var(--success);
 }
 
+/* Timeline toolbar: override segmentBtn green; neutral by default */
+.segmentBtn.timelineToolbarModeBtn {
+  color: var(--text-muted);
+}
+.segmentBtn.timelineToolbarModeBtn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.segmentBtn.timelineToolbarModeBtn.timelineToolbarBtnActive {
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.15);
+}
+.segmentBtn.timelineToolbarActionBtn {
+  color: var(--text-muted);
+}
+.segmentBtn.timelineToolbarActionBtn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+.segmentBtn.timelineToolbarActionBtn.timelineToolbarBtnActive {
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.15);
+}
+
 .segmentBtnDanger {
   color: #d48989;
 }
@@ -641,11 +838,22 @@
 }
 
 .generateBarPlayback {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto 1fr;
   gap: 0.75rem;
   margin-bottom: 1rem;
-  min-height: 32px;
+  min-width: 0;
+}
+
+.generateBarPlayback > .segmentBtn {
+  align-self: center;
+}
+
+.generateBarTime {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .generateBarWaveform {
@@ -699,6 +907,283 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+/* Chapters card - dark subsection below generate bar actions */
+.chaptersCard {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.chaptersCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  position: relative;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.chaptersCardHeader:hover {
+  background: rgba(0, 0, 0, 0.45);
+  border-color: var(--accent);
+}
+
+.chaptersCardHeaderText {
+  flex: 1;
+  text-align: center;
+}
+
+.chaptersCardHeaderIcon {
+  position: absolute;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+}
+
+.chaptersCardBody {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.chaptersEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.chaptersAddFirstBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.chaptersAddFirstBtn:hover {
+  background: color-mix(in srgb, var(--accent) 90%, white);
+}
+
+.chaptersEmptyHint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.chaptersTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.chaptersTable th,
+.chaptersTable td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.chaptersTable th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.chaptersTablePlayCol {
+  width: 40px;
+  text-align: center;
+}
+
+.chaptersTableColorCol {
+  width: 28px;
+  text-align: center;
+  padding-right: 0.25rem;
+}
+
+.chapterColorSwatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.chaptersTableNameCol {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chaptersTableTimeCol {
+  width: 5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.chaptersTableActionsCol {
+  width: 80px;
+  text-align: right;
+}
+
+.chaptersTableActionsWrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+.chapterPlayBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chapterPlayBtn:hover {
+  background: var(--accent-glow);
+  color: var(--text);
+}
+
+.chapterPlayPlaceholder {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+}
+
+.chaptersTableActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chaptersTableActionBtn:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.chaptersTableActionBtnDelete {
+  color: var(--error, #e57373);
+}
+
+.chaptersTableActionBtnDelete:hover {
+  color: var(--error, #e57373);
+  background: color-mix(in srgb, var(--error, #e57373) 15%, transparent);
+}
+
+.chaptersAddBtnWrap {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.chaptersAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: 0 0 16px var(--accent-glow);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.chaptersAddBtn:hover {
+  background: color-mix(in srgb, var(--accent) 90%, white);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.chapterEditLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.chapterEditInput {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.chapterEditInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chapterColorRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.chapterColorBtn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  transition: transform 0.15s;
+}
+
+.chapterColorBtn:hover {
+  transform: scale(1.1);
+}
+
+.chapterColorBtnSelected {
+  box-shadow: 0 0 0 1px var(--bg);
 }
 
 .renderRow {
@@ -887,6 +1372,9 @@
 }
 
 .cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
   padding: 0.5rem 1rem;
   font-size: 0.9375rem;
   color: var(--text-muted);
@@ -1769,6 +2257,13 @@
   z-index: 1100;
   animation: fadeIn 0.15s ease;
 }
+/* Overlay/content for confirm dialogs shown on top of another modal (e.g. Remove marker) */
+.dialogOverlayOnModal {
+  z-index: 1200 !important;
+}
+.dialogContentOnModal {
+  z-index: 1201 !important;
+}
 .dialogContent {
   position: fixed;
   top: 50%;
@@ -1837,9 +2332,32 @@
   border-top: 1px solid var(--border);
 }
 
-/* Segment more-info (TranscriptModal): same max height as episode details */
+/* Segment more-info (SegmentModal): size to content, cap at viewport */
 .segmentTranscriptDialog {
-  max-height: min(75vh, 720px);
+  max-height: min(90vh, 720px);
+}
+/* Body: shrink and scroll when content overflows; hide scrollbar but allow scroll (avoids clipping markers) */
+.segmentModalBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.segmentModalBody::-webkit-scrollbar {
+  display: none;
+}
+/* Edit tab: no overflow so marker handles aren't clipped */
+.segmentModalBody.segmentModalBodyEdit {
+  overflow-y: visible;
+  overflow-x: visible;
+}
+/* Edit tab: compact waveform, natural content height */
+.segmentModalEditWrap .segmentTimelineSection {
+  flex: 0 0 auto;
+}
+.segmentModalEditWrap .segmentTimelineGrid {
+  flex: 0 0 auto;
 }
 
 .formSectionTitle {
@@ -1881,6 +2399,53 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.deleteEpisodeSection {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.deleteEpisodeSection .deleteSectionTitle {
+  width: 100%;
+  text-align: left;
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.deleteEpisodeSection .deleteEpisodeButton {
+  align-self: center;
+  margin-top: 1rem;
+}
+
+.deleteEpisodeButton {
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #fff;
+  background: #dc2626;
+  border: 1px solid #dc2626;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.deleteEpisodeButton:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+.deleteEpisodeButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #6b7280;
+  border-color: #6b7280;
 }
 
 .dialogHeaderRow {
@@ -1963,6 +2528,16 @@
   font-size: 0.9375rem;
   color: var(--text-muted);
   line-height: 1.5;
+}
+.removeSilenceNote {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 .statusToggle {
   display: flex;
@@ -2188,6 +2763,26 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
+.transcriptCardTrimmed {
+  border-color: #e57373;
+}
+.transcriptCardInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.transcriptCardActions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-right: 1rem;
+}
+.transcriptCardInner .transcriptCardText {
+  flex: 1;
+  min-width: 0;
+}
 .transcriptCardText {
   padding: 0.75rem;
   font-size: 0.9375rem;
@@ -2195,6 +2790,11 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.transcriptCardTextTrimmed {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .transcriptCardFooter {
   display: flex;
@@ -2276,6 +2876,36 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.transcriptCardBtnDelete {
+  color: #dc2626;
+}
+.transcriptCardBtnDelete:hover:not(:disabled) {
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.14);
+}
+.transcriptCardRestoreBtn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.transcriptCardRestoreBtn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+.transcriptCardRestoreBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .transcriptText {
   margin: 0;
   padding: 0.75rem;
@@ -2317,6 +2947,7 @@
 .episodeTranscriptBody .transcriptText {
   flex: 1;
   min-height: 12rem;
+  overflow-y: auto;
   resize: vertical;
 }
 .episodeTranscriptStatus {
@@ -2340,6 +2971,27 @@
   max-width: 100%;
   text-align: center;
   flex-grow: 1;
+}
+.episodeTranscriptUploadRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.episodeTranscriptUploadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text);
+}
+.episodeTranscriptUploadBtn:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
 }
 .dialogActions {
   display: flex;
@@ -2613,6 +3265,39 @@
     padding: 1.25rem 2rem;
   }
 
+  .chaptersCardHeader {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .chaptersCardBody {
+    padding: 1rem 0.5rem;
+  }
+
+  .chaptersEmpty {
+    padding: 1.5rem 0.5rem;
+  }
+
+  .chaptersTable th,
+  .chaptersTable td {
+    padding: 0.5rem 0.5rem;
+  }
+
+  .chaptersTablePlayCol {
+    width: 36px;
+  }
+
+  .chaptersTableColorCol {
+    display: none;
+  }
+
+  .chaptersTableTimeCol {
+    width: 4rem;
+  }
+
+  .chaptersTableActionsCol {
+    width: 72px;
+  }
+
   .generateBarInner {
     flex-direction: column;
     align-items: stretch;
@@ -2621,4 +3306,174 @@
   .generateBarActions {
     justify-content: center;
   }
+}
+
+/* Segment Editor Timeline */
+.timelineWaveformWrap {
+  position: relative;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
+.timelineWaveformBase {
+  position: relative;
+  z-index: 0;
+  flex: 1;
+  min-width: 0;
+}
+.timelineTrimOverlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(239, 68, 68, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+.timelineTrimOverlay {
+  pointer-events: auto;
+}
+.timelineTrimRemoveBtn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  z-index: 3;
+  transition: background 0.15s;
+}
+.timelineTrimRemoveBtn:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+.timelineTrimRemoveBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.timelineTrimHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  min-width: 8px;
+  background: rgba(239, 68, 68, 0.8);
+  cursor: ew-resize;
+  z-index: 2;
+}
+.timelineSelectionOverlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(14, 165, 233, 0.25);
+  pointer-events: none;
+  z-index: 1;
+}
+.timelineMarker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #3b82f6;
+  pointer-events: none;
+  z-index: 2;
+}
+.timelinePendingTrim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(239, 68, 68, 0.9);
+  pointer-events: none;
+  z-index: 2;
+}
+.segmentEditorDialog {
+  max-width: min(95vw, 720px);
+  max-height: min(90vh, 640px);
+}
+.segmentEditorToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+.segmentEditorToolbarBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.segmentEditorToolbarBtn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+.segmentEditorToolbarBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.segmentEditorToolbarBtn.markerDoneBtn {
+  padding: 0.5rem;
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.segmentEditorToolbarBtn.markerDoneBtn:hover:not(:disabled) {
+  color: #fff;
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+.markerDoneCheck {
+  color: #000;
+}
+.segmentEditorToolbarBtn.markerDeleteBtn {
+  padding: 0.5rem;
+  color: #dc2626;
+  border-color: #dc2626;
+  background: transparent;
+}
+.segmentEditorToolbarBtn.markerDeleteBtn:hover:not(:disabled) {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+.segmentEditorSaveBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.segmentEditorSaveBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+.segmentEditorSaveBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }

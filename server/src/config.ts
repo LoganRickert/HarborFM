@@ -180,6 +180,12 @@ export const JWT_COOKIE_SIGNED =
   process.env.JWT_COOKIE_SIGNED === "true" ||
   process.env.JWT_COOKIE_SIGNED === "1";
 
+/** Render rate limit: min ms between "Make Final Episode" requests per user. 0 = no limit (e.g. for e2e). Env: RENDER_RATE_LIMIT_WINDOW_MS. Default 60000 (1 min). */
+export const RENDER_RATE_LIMIT_WINDOW_MS =
+  process.env.RENDER_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.RENDER_RATE_LIMIT_WINDOW_MS)
+    : 60_000;
+
 /** Forgot-password request cooldown (minutes). Env: FORGOT_PASSWORD_RATE_MINUTES. Default 5. */
 export const FORGOT_PASSWORD_RATE_MINUTES =
   Number(process.env.FORGOT_PASSWORD_RATE_MINUTES) || 5;

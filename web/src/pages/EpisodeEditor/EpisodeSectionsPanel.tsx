@@ -30,7 +30,8 @@ export interface EpisodeSectionsPanelProps {
   deletingSegmentId: string | null;
   recoveringSegmentId?: string | null;
   onSegmentPlayRequest: (segmentId: string) => void;
-  onSegmentMoreInfo: (segmentId: string) => void;
+  onSegmentMoreInfo?: (segmentId: string) => void;
+  onSegmentEdit?: (segmentId: string) => void;
   registerSegmentPause: (id: string, pause: () => void) => void;
   unregisterSegmentPause: (id: string) => void;
 }
@@ -56,6 +57,7 @@ export function EpisodeSectionsPanel({
   recoveringSegmentId = null,
   onSegmentPlayRequest,
   onSegmentMoreInfo,
+  onSegmentEdit,
   registerSegmentPause,
   unregisterSegmentPause,
 }: EpisodeSectionsPanelProps) {
@@ -130,7 +132,8 @@ export function EpisodeSectionsPanel({
               isDeleting={isDeletingSegment && deletingSegmentId === seg.id}
               isRecovering={recoveringSegmentId === seg.id}
               onPlayRequest={onSegmentPlayRequest}
-              onMoreInfo={() => onSegmentMoreInfo(seg.id)}
+              onMoreInfo={onSegmentMoreInfo ? () => onSegmentMoreInfo(seg.id) : undefined}
+              onEdit={onSegmentEdit ? () => onSegmentEdit(seg.id) : undefined}
               registerPause={registerSegmentPause}
               unregisterPause={unregisterSegmentPause}
               readOnly={readOnly}

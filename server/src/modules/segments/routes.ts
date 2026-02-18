@@ -48,6 +48,7 @@ import {
   FFMPEG_PATH,
   WAVEFORM_EXTENSION,
   OPENAI_TRANSCRIPTION_DEFAULT_URL,
+  RENDER_RATE_LIMIT_WINDOW_MS,
 } from "../../config.js";
 import {
   segmentEpisodeIdParamSchema,
@@ -55,7 +56,7 @@ import {
   segmentEpisodeIdOnlyParamSchema,
   segmentCreateReusableBodySchema,
   segmentReorderBodySchema,
-  segmentUpdateNameBodySchema,
+  segmentUpdateBodySchema,
   segmentTrimBodySchema,
   segmentRemoveSilenceBodySchema,
   segmentNoiseSuppressionBodySchema,
@@ -65,6 +66,7 @@ import {
   segmentTranscriptDeleteQuerySchema,
 } from "@harborfm/shared";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
+import { writeEpisodeChaptersJson } from "../../services/episodeChapters.js";
 import { recoverRecordedSegment } from "../../services/segmentFromRecording.js";
 import { redactSegmentForClient } from "../../utils/segment.js";
 
@@ -82,6 +84,9 @@ function transcriptPath(audioPath: string): string {
   return audioPath.replace(/\.[^.]+$/, ".txt");
 }
 
+/** Max transcript size: 2MB. */
+const TRANSCRIPT_MAX_BYTES = 2 * 1024 * 1024;
+
 /** Strip HTML/XML tags and dangerous control chars from transcript text before saving. Keeps newlines and tabs. */
 function sanitizeTranscriptText(s: string): string {
   let out = s.replace(/<[^>]*>/g, "");
@@ -89,8 +94,59 @@ function sanitizeTranscriptText(s: string): string {
   return out;
 }
 
+/** Validate transcript content before saving. Returns error message or null. */
+function validateTranscriptContent(text: string): string | null {
+  const sizeBytes = Buffer.byteLength(text, "utf8");
+  if (sizeBytes > TRANSCRIPT_MAX_BYTES) {
+    return `Transcript too large (max ${TRANSCRIPT_MAX_BYTES / 1024 / 1024}MB)`;
+  }
+  if (text.includes("\0")) {
+    return "Transcript contains invalid characters";
+  }
+  const trimmedStart = text.trimStart();
+  const firstLine = trimmedStart.split("\n")[0] ?? "";
+  if (firstLine.startsWith("#!")) {
+    return "Transcript appears to be a script file, not SRT content";
+  }
+  const lowerStart = trimmedStart.toLowerCase().slice(0, 100);
+  if (lowerStart.startsWith("<?php") || lowerStart.startsWith("<script")) {
+    return "Transcript contains invalid content";
+  }
+  return null;
+}
+
 function waveformPath(audioPath: string): string {
   return audioPath.replace(/\.[^.]+$/, WAVEFORM_EXTENSION);
+}
+
+/** Merge overlapping or adjacent trim ranges so effective duration and toEffectiveTime match removeRangesAndExportToWav output. */
+function mergeTrimRanges(ranges: Array<[number, number]>, durationSec: number): Array<[number, number]> {
+  if (ranges.length <= 1) return ranges;
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [];
+  for (const [start, end] of sorted) {
+    if (start >= durationSec || end <= 0) continue;
+    const clampedStart = Math.max(0, start);
+    const clampedEnd = Math.min(durationSec, end);
+    if (clampedStart >= clampedEnd) continue;
+    const last = merged[merged.length - 1];
+    if (last && clampedStart <= last[1]) {
+      last[1] = Math.max(last[1], clampedEnd);
+    } else {
+      merged.push([clampedStart, clampedEnd]);
+    }
+  }
+  return merged;
+}
+
+/** Map actual time to effective (playable) time when trim ranges exclude sections. */
+function toEffectiveTime(actualTime: number, trimRanges: Array<[number, number]>): number {
+  let trimmed = 0;
+  for (const [start, end] of trimRanges) {
+    if (end <= actualTime) trimmed += end - start;
+    else if (start < actualTime) trimmed += actualTime - start;
+  }
+  return actualTime - trimmed;
 }
 
 function formatSrtTime(seconds: number): string {
@@ -513,7 +569,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       const rows = db
         .prepare(
           `SELECT s.id, s.episode_id, s.position, s.type, s.name, s.reusable_asset_id, s.audio_path, s.duration_sec, s.created_at,
-                  s.in_progress, s.record_failed,
+                  s.in_progress, s.record_failed, s.trim_ranges, s.markers,
                   a.name AS asset_name
            FROM episode_segments s
            LEFT JOIN reusable_assets a ON a.id = s.reusable_asset_id
@@ -842,7 +898,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       schema: {
         tags: ["Segments"],
         summary: "Update segment",
-        description: "Update segment name.",
+        description: "Update segment name, trim_ranges, and/or markers. Partial update supported.",
         params: {
           type: "object",
           properties: {
@@ -853,12 +909,15 @@ export async function segmentRoutes(app: FastifyInstance) {
         },
         body: {
           type: "object",
-          properties: { name: { type: "string" } },
-          required: ["name"],
+          properties: {
+            name: { type: ["string", "null"] },
+            trim_ranges: { type: "array", items: { type: "array", items: { type: "number" } } },
+            markers: { type: "array", items: { type: "object", properties: { time: { type: "number" }, title: { type: "string" } } } },
+          },
         },
         response: {
           200: { description: "Updated segment" },
-          400: { description: "name required" },
+          400: { description: "Validation failed" },
           403: { description: "Permission denied" },
           404: { description: "Not found" },
         },
@@ -879,25 +938,74 @@ export async function segmentRoutes(app: FastifyInstance) {
         return reply
           .status(403)
           .send({ error: "You do not have permission to edit segments." });
-      const bodyParsed = segmentUpdateNameBodySchema.safeParse(request.body);
+      const bodyParsed = segmentUpdateBodySchema.safeParse(request.body);
       if (!bodyParsed.success) {
         return reply
           .status(400)
           .send({ error: bodyParsed.error.issues[0]?.message ?? "Validation failed", details: bodyParsed.error.flatten() });
       }
-      const name =
-        bodyParsed.data.name === null || bodyParsed.data.name === ""
-          ? null
-          : String(bodyParsed.data.name).trim();
+      const body = bodyParsed.data;
+      const hasUpdates = body.name !== undefined || body.trim_ranges !== undefined || body.markers !== undefined;
+      if (!hasUpdates) {
+        return reply.status(400).send({ error: "At least one of name, trim_ranges, or markers must be provided" });
+      }
       const row = db
         .prepare(
-          "SELECT id FROM episode_segments WHERE id = ? AND episode_id = ?",
+          "SELECT id, duration_sec FROM episode_segments WHERE id = ? AND episode_id = ?",
         )
-        .get(segmentId, episodeId);
+        .get(segmentId, episodeId) as { id: string; duration_sec: number } | undefined;
       if (!row) return reply.status(404).send({ error: "Segment not found" });
-      db.prepare(
-        "UPDATE episode_segments SET name = ? WHERE id = ? AND episode_id = ?",
-      ).run(name, segmentId, episodeId);
+      const durationSec = row.duration_sec;
+
+      let trimRangesJson: string | null = null;
+      if (body.trim_ranges !== undefined) {
+        const ranges = body.trim_ranges;
+        if (ranges) {
+          for (const [start, end] of ranges) {
+            if (start < 0 || end > durationSec || start >= end) {
+              return reply.status(400).send({ error: "Invalid trim_ranges: each [start, end] must satisfy 0 <= start < end <= duration_sec" });
+            }
+          }
+          trimRangesJson = JSON.stringify(ranges);
+        }
+      }
+
+      let markersJson: string | null = null;
+      if (body.markers !== undefined) {
+        const markers = body.markers;
+        if (markers) {
+          for (const m of markers) {
+            if (m.time < 0 || m.time > durationSec) {
+              return reply.status(400).send({ error: "Invalid markers: each time must satisfy 0 <= time <= duration_sec" });
+            }
+          }
+          markersJson = JSON.stringify(markers);
+        }
+      }
+
+      const name =
+        body.name === undefined
+          ? undefined
+          : body.name === null || body.name === ""
+            ? null
+            : String(body.name).trim();
+
+      if (name !== undefined) {
+        db.prepare(
+          "UPDATE episode_segments SET name = ? WHERE id = ? AND episode_id = ?",
+        ).run(name, segmentId, episodeId);
+      }
+      if (trimRangesJson !== null) {
+        db.prepare(
+          "UPDATE episode_segments SET trim_ranges = ? WHERE id = ? AND episode_id = ?",
+        ).run(trimRangesJson, segmentId, episodeId);
+      }
+      if (markersJson !== null) {
+        db.prepare(
+          "UPDATE episode_segments SET markers = ? WHERE id = ? AND episode_id = ?",
+        ).run(markersJson, segmentId, episodeId);
+      }
+
       broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
       const updated = db
         .prepare("SELECT * FROM episode_segments WHERE id = ?")
@@ -1781,7 +1889,7 @@ export async function segmentRoutes(app: FastifyInstance) {
         }
 
         db.prepare(
-          "UPDATE episode_segments SET audio_path = ?, duration_sec = ? WHERE id = ? AND episode_id = ?",
+          "UPDATE episode_segments SET audio_path = ?, duration_sec = ?, trim_ranges = '[]', markers = '[]' WHERE id = ? AND episode_id = ?",
         ).run(finalPath, newDurationSec, segmentId, episodeId);
 
         if (audio.path !== finalPath) unlinkSync(audio.path);
@@ -2404,6 +2512,10 @@ export async function segmentRoutes(app: FastifyInstance) {
           .send({ error: bodyParsed.error.issues[0]?.message ?? "Validation failed", details: bodyParsed.error.flatten() });
       }
       const transcriptText = sanitizeTranscriptText(bodyParsed.data.text);
+      const validationError = validateTranscriptContent(transcriptText);
+      if (validationError) {
+        return reply.status(400).send({ error: validationError });
+      }
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access)
         return reply.status(404).send({ error: "Episode not found" });
@@ -2422,10 +2534,9 @@ export async function segmentRoutes(app: FastifyInstance) {
         | undefined;
       if (!row || !row.audio_final_path)
         return reply.status(404).send({ error: "Episode has no final audio" });
+      const procDir = processedDir(row.podcast_id, episodeId);
       const srtPath = transcriptSrtPath(row.podcast_id, episodeId);
-      if (!existsSync(srtPath))
-        return reply.status(404).send({ error: "Transcript not found" });
-      assertPathUnder(srtPath, processedDir(row.podcast_id, episodeId));
+      assertResolvedPathUnder(srtPath, procDir);
       writeFileSync(srtPath, transcriptText, "utf-8");
       return reply.send({ text: transcriptText });
     },
@@ -2676,7 +2787,7 @@ export async function segmentRoutes(app: FastifyInstance) {
       preHandler: [
         requireAuth,
         requireNotReadOnly,
-        userRateLimitPreHandler({ bucket: "ffmpeg", windowMs: 1000 }),
+        userRateLimitPreHandler({ bucket: "render", windowMs: RENDER_RATE_LIMIT_WINDOW_MS }),
       ],
       schema: {
         tags: ["Segments"],
@@ -2706,6 +2817,7 @@ export async function segmentRoutes(app: FastifyInstance) {
           400: { description: "No segments or validation failed" },
           403: { description: "Permission denied" },
           404: { description: "Episode not found" },
+          429: { description: "Rate limited; try again after Retry-After seconds" },
         },
       },
     },
@@ -2746,30 +2858,6 @@ export async function segmentRoutes(app: FastifyInstance) {
           .send({ error: "Add at least one section before rendering." });
       }
       const DATA_DIR = getDataDir();
-      const paths: string[] = [];
-      for (const s of segments) {
-        if ((s.in_progress as number) === 1 || (s.record_failed as number) === 1) continue;
-        if (
-          s.type === "recorded" &&
-          s.audio_path &&
-          existsSync(s.audio_path as string)
-        ) {
-          assertPathUnder(s.audio_path as string, DATA_DIR);
-          paths.push(s.audio_path as string);
-        } else if (s.type === "reusable" && s.reusable_asset_id) {
-          const asset = db
-            .prepare("SELECT audio_path FROM reusable_assets WHERE id = ?")
-            .get(s.reusable_asset_id) as { audio_path: string } | undefined;
-          if (asset?.audio_path && existsSync(asset.audio_path)) {
-            assertPathUnder(asset.audio_path, DATA_DIR);
-            paths.push(asset.audio_path);
-          }
-        }
-      }
-      if (paths.length === 0)
-        return reply
-          .status(400)
-          .send({ error: "No valid segment audio found." });
       const copyrightLines: string[] = [];
       for (const s of segments) {
         if ((s.in_progress as number) === 1 || (s.record_failed as number) === 1) continue;
@@ -2816,7 +2904,107 @@ export async function segmentRoutes(app: FastifyInstance) {
       const log = request.log;
       setImmediate(() => {
         (async () => {
+          const tempPathsToClean: string[] = [];
           try {
+            const paths: string[] = [];
+            const finalMarkers: Array<{ time: number; title?: string; color?: string }> = [];
+            let offsetSec = 0;
+            for (const s of segments) {
+              if ((s.in_progress as number) === 1 || (s.record_failed as number) === 1) continue;
+              let sourcePath: string | null = null;
+              let baseDir: string = uploadsDir(podcastId, episodeId);
+              if (
+                s.type === "recorded" &&
+                s.audio_path &&
+                existsSync(s.audio_path as string)
+              ) {
+                assertPathUnder(s.audio_path as string, DATA_DIR);
+                sourcePath = s.audio_path as string;
+                baseDir = uploadsDir(podcastId, episodeId);
+              } else if (s.type === "reusable" && s.reusable_asset_id) {
+                const asset = db
+                  .prepare("SELECT audio_path, owner_user_id FROM reusable_assets WHERE id = ?")
+                  .get(s.reusable_asset_id) as { audio_path: string; owner_user_id: string } | undefined;
+                if (asset?.audio_path && existsSync(asset.audio_path)) {
+                  assertPathUnder(asset.audio_path, DATA_DIR);
+                  sourcePath = asset.audio_path;
+                  baseDir = libraryDir(asset.owner_user_id);
+                }
+              }
+              if (!sourcePath) continue;
+
+              const trimRangesRaw = s.trim_ranges;
+              let trimRanges: Array<[number, number]> | null = null;
+              if (typeof trimRangesRaw === "string" && trimRangesRaw) {
+                try {
+                  const parsed = JSON.parse(trimRangesRaw) as unknown;
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    const raw = parsed.filter(
+                      (r): r is [number, number] =>
+                        Array.isArray(r) && r.length === 2 && typeof r[0] === "number" && typeof r[1] === "number"
+                    );
+                    trimRanges = raw.length > 0 ? raw : null;
+                  }
+                } catch {
+                  /* ignore invalid JSON */
+                }
+              }
+
+              const durationSec = Number(s.duration_sec) || 0;
+              const rawRanges = trimRanges ?? [];
+              const ranges = rawRanges.length > 0 ? mergeTrimRanges(rawRanges, durationSec) : [];
+              const effectiveDuration =
+                ranges.length > 0
+                  ? durationSec - ranges.reduce((sum, [a, b]) => sum + (b - a), 0)
+                  : durationSec;
+
+              const markersRaw = s.markers;
+              let markers: Array<{ time: number; title?: string; color?: string; marker_type?: string }> = [];
+              if (typeof markersRaw === "string" && markersRaw) {
+                try {
+                  const parsed = JSON.parse(markersRaw) as unknown;
+                  if (Array.isArray(parsed)) {
+                    markers = parsed.filter(
+                      (m): m is { time: number; title?: string; color?: string; marker_type?: string } =>
+                        typeof m === "object" && m != null && typeof (m as { time?: number }).time === "number"
+                    );
+                  }
+                } catch {
+                  /* ignore invalid JSON */
+                }
+              }
+              for (const m of markers) {
+                if (m.marker_type === "chapter") {
+                  const effTime = ranges.length > 0 ? toEffectiveTime(m.time, ranges) : m.time;
+                  finalMarkers.push({
+                    time: offsetSec + effTime,
+                    title: m.title,
+                    color: m.color,
+                  });
+                }
+              }
+              offsetSec += effectiveDuration;
+
+              if (ranges.length > 0) {
+                const tempPath = join(tmpdir(), `render_trim_${nanoid()}.wav`);
+                tempPathsToClean.push(tempPath);
+                await audioService.removeRangesAndExportToWav(
+                  sourcePath,
+                  baseDir,
+                  ranges,
+                  tempPath,
+                );
+                paths.push(tempPath);
+              } else {
+                paths.push(sourcePath);
+              }
+            }
+            if (paths.length === 0) {
+              renderStatusByEpisode.set(episodeId, "failed");
+              renderErrorByEpisode.set(episodeId, "No valid segment audio found.");
+              broadcastToEpisode(episodeId, { type: "renderFailed" });
+              return;
+            }
             await audioService.concatToFinal(paths, outPath, {
               format: settings.final_format,
               bitrateKbps: settings.final_bitrate_kbps,
@@ -2827,6 +3015,7 @@ export async function segmentRoutes(app: FastifyInstance) {
               episodeId,
               settings.final_format,
             );
+            const finalMarkersJson = JSON.stringify(finalMarkers);
             db.prepare(
               `UPDATE episodes SET
                 audio_final_path = ?,
@@ -2835,6 +3024,7 @@ export async function segmentRoutes(app: FastifyInstance) {
                 audio_bytes = ?,
                 audio_duration_sec = ?,
                 description_copyright_snapshot = ?,
+                final_markers = ?,
                 updated_at = datetime('now')
                WHERE id = ?`,
             ).run(
@@ -2844,6 +3034,7 @@ export async function segmentRoutes(app: FastifyInstance) {
               meta.sizeBytes,
               meta.durationSec,
               descriptionCopyrightSnapshot,
+              finalMarkersJson,
               episodeId,
             );
             const epRow = db
@@ -2878,6 +3069,14 @@ export async function segmentRoutes(app: FastifyInstance) {
                 "Waveform generation failed after render",
               );
             }
+            try {
+              writeEpisodeChaptersJson(podcastId, episodeId, finalMarkers);
+            } catch (err) {
+              log.warn(
+                { err, episodeId },
+                "Chapters JSON generation failed after render",
+              );
+            }
             renderStatusByEpisode.set(episodeId, "done");
             broadcastToEpisode(episodeId, { type: "renderCompleted", status: "done" });
           } catch (err) {
@@ -2890,6 +3089,14 @@ export async function segmentRoutes(app: FastifyInstance) {
               status: "failed",
               error: errMsg,
             });
+          } finally {
+            for (const p of tempPathsToClean) {
+              try {
+                if (existsSync(p)) unlinkSync(p);
+              } catch {
+                /* ignore */
+              }
+            }
           }
         })();
       });
