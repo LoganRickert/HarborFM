@@ -205,7 +205,7 @@ export async function run({ runOne }) {
       await apiFetch(`/episodes/${episode.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publish_at: future, subscriber_only: 0 }),
+        body: JSON.stringify({ publishAt: future, subscriberOnly: 0 }),
       }, jar);
       const res = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}/episodes`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
@@ -235,7 +235,7 @@ export async function run({ runOne }) {
       await apiFetch(`/episodes/${episode.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publish_at: null, status: 'published' }),
+        body: JSON.stringify({ publishAt: null, status: 'published' }),
       }, jar);
       const res = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}/episodes/${encodeURIComponent(episodeSlug)}`);
       if (res.status !== 200) throw new Error(`Expected 200 for episode by slug, got ${res.status}`);

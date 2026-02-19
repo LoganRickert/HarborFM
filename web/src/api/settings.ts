@@ -3,6 +3,11 @@ import { api, apiGet, apiPatch } from './client';
 
 export type { SettingsResponse as AppSettings };
 
+/** PATCH payload: like Partial<SettingsResponse> but dnsDefaultAllowDomains is string[] (server accepts array). */
+export type SettingsUpdatePayload = Omit<Partial<SettingsResponse>, 'dnsDefaultAllowDomains'> & {
+  dnsDefaultAllowDomains?: string[];
+};
+
 export function getSettings(): Promise<SettingsResponse> {
   return apiGet<SettingsResponse>('/settings');
 }
@@ -20,7 +25,7 @@ export function getPublicLegal(): Promise<{ terms: string | null; privacy: strin
   });
 }
 
-export function updateSettings(settings: Partial<SettingsResponse>): Promise<SettingsResponse> {
+export function updateSettings(settings: SettingsUpdatePayload): Promise<SettingsResponse> {
   return apiPatch<SettingsResponse>('/settings', settings as Record<string, unknown>);
 }
 
