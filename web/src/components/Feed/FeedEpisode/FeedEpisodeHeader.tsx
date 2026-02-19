@@ -15,43 +15,43 @@ export function FeedEpisodeHeader({
   embedCode,
 }: FeedEpisodeHeaderProps) {
   const [shareOpen, setShareOpen] = useState(false);
-  const hasSubscriberFeatures = podcast.subscriber_only_feed_enabled === 1;
-  const isPodcastSubscriberOnly = podcast.public_feed_disabled === 1;
-  const isEpisodeSubscriberOnly = episode.subscriber_only === 1;
+  const hasSubscriberFeatures = Boolean(podcast.subscriberOnlyFeedEnabled);
+  const isPodcastSubscriberOnly = Boolean(podcast.publicFeedDisabled);
+  const isEpisodeSubscriberOnly = Boolean(episode.subscriberOnly);
   const shouldShowGoldLock = isPodcastSubscriberOnly || isEpisodeSubscriberOnly;
 
   return (
     <div className={styles.header}>
-      {episode.artwork_url ? (
-        <img src={episode.artwork_url} alt={episode.title} className={styles.artwork} />
-      ) : episode.artwork_filename ? (
+      {episode.artworkUrl ? (
+        <img src={episode.artworkUrl} alt={episode.title} className={styles.artwork} />
+      ) : episode.artworkFilename ? (
         <img
-          src={`/api/public/artwork/${episode.podcast_id}/episodes/${episode.id}/${encodeURIComponent(episode.artwork_filename)}`}
+          src={`/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`}
           alt={episode.title}
           className={styles.artwork}
         />
-      ) : podcast.artwork_url || podcast.artwork_filename ? (
+      ) : podcast.artworkUrl || podcast.artworkFilename ? (
         <img
-          src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}` : '')}
+          src={podcast.artworkUrl ?? (podcast.artworkFilename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}` : '')}
           alt={podcast.title}
           className={styles.artwork}
         />
       ) : null}
       <div className={styles.content}>
-        {(episode.season_number != null || episode.episode_number != null || episode.audio_duration_sec) ? (
+        {(episode.seasonNumber != null || episode.episodeNumber != null || episode.audioDurationSec) ? (
           <div className={styles.badgeWrap}>
-            {(episode.season_number != null || episode.episode_number != null) && (
+            {(episode.seasonNumber != null || episode.episodeNumber != null) && (
               <span className={styles.seasonEpisode}>
-                {formatSeasonEpisode(episode.season_number, episode.episode_number)}
+                {formatSeasonEpisode(episode.seasonNumber, episode.episodeNumber)}
               </span>
             )}
-            {episode.audio_duration_sec && (
+            {episode.audioDurationSec && (
               <>
-                {(episode.season_number != null || episode.episode_number != null) && (
+                {(episode.seasonNumber != null || episode.episodeNumber != null) && (
                   <span className={styles.badgeSep} aria-hidden />
                 )}
                 <span className={styles.duration}>
-                  {formatDuration(episode.audio_duration_sec)}
+                  {formatDuration(episode.audioDurationSec)}
                 </span>
               </>
             )}
@@ -110,8 +110,8 @@ export function FeedEpisodeHeader({
           />
         )}
         <div className={styles.metaRow}>
-          {episode.publish_at && (
-            <span className={styles.date}>{formatDate(episode.publish_at)}</span>
+          {episode.publishAt && (
+            <span className={styles.date}>{formatDate(episode.publishAt)}</span>
           )}
         </div>
       </div>

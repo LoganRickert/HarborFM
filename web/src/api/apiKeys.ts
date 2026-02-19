@@ -3,15 +3,15 @@ import { apiGet, apiPost, apiPatch, apiDelete } from './client';
 export interface ApiKeyRecord {
   id: string;
   name: string | null;
-  valid_until: string | null;
-  valid_from: string | null;
+  validUntil: string | null;
+  validFrom: string | null;
   disabled: number;
-  created_at: string;
-  last_used_at: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
 }
 
 export interface ApiKeysListResponse {
-  api_keys: ApiKeyRecord[];
+  apiKeys: ApiKeyRecord[];
   total: number;
 }
 
@@ -19,10 +19,10 @@ export interface ApiKeyCreateResponse {
   id: string;
   key: string;
   name: string | null;
-  valid_until: string | null;
-  valid_from: string | null;
+  validUntil: string | null;
+  validFrom: string | null;
   disabled: number;
-  created_at: string;
+  createdAt: string;
 }
 
 export function listApiKeys(params?: {
@@ -43,8 +43,8 @@ export function listApiKeys(params?: {
 
 export function createApiKey(body?: {
   name?: string;
-  valid_until?: string;
-  valid_from?: string;
+  validUntil?: string;
+  validFrom?: string;
 }): Promise<ApiKeyCreateResponse> {
   return apiPost<ApiKeyCreateResponse>('/auth/api-keys', body ?? {});
 }
@@ -53,8 +53,8 @@ export function updateApiKey(
   id: string,
   body: {
     name?: string;
-    valid_until?: string;
-    valid_from?: string;
+    validUntil?: string;
+    validFrom?: string;
     disabled?: boolean;
   }
 ): Promise<ApiKeyRecord> {

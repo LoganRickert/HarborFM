@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { setupStatus } from '../api/setup';
 import { forgotPassword, resetPassword, validateResetToken } from '../api/auth';
 import { Captcha, type CaptchaHandle } from '../components/Captcha';
+import { OtpInput } from '../components/OtpInput/OtpInput';
 import styles from './Auth.module.css';
 
 export function ResetPassword() {
@@ -167,25 +168,22 @@ export function ResetPassword() {
               ) : tokenValid ? (
                 <form onSubmit={handleResetSubmit} className={styles.form}>
                   {requiresTOTP && (
-                    <label className={styles.label}>
-                      Authenticator code
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        maxLength={6}
+                    <>
+                      <OtpInput
                         value={totpCode}
-                        onChange={(e) =>
-                          setTotpCode(e.target.value.replace(/\D/g, ''))
-                        }
-                        className={styles.input}
-                        placeholder="000000"
-                        required={requiresTOTP}
+                        onChange={setTotpCode}
+                        length={6}
+                        disabled={resetMutation.isPending}
+                        label="Authenticator code"
+                        error={!!resetMutation.isError}
+                        autoComplete="one-time-code"
+                        ariaLabel="6-digit authenticator code"
+                        ariaDescribedBy={resetMutation.isError ? 'reset-password-error' : undefined}
                       />
                       <p className={styles.toggleHelp} style={{ marginTop: 4, fontSize: 12 }}>
                         Enter the 6-digit code from your authenticator app.
                       </p>
-                    </label>
+                    </>
                   )}
                   <label className={styles.label}>
                     New password
@@ -215,7 +213,7 @@ export function ResetPassword() {
                     <p className={styles.error}>Passwords do not match.</p>
                   )}
                   {resetMutation.isError && (
-                    <div className={styles.verificationCardError} role="alert">
+                    <div id="reset-password-error" className={styles.verificationCardError} role="alert">
                       <p className={styles.verificationCardErrorText}>
                         {resetMutation.error?.message}
                       </p>

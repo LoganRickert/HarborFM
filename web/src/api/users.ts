@@ -3,23 +3,31 @@ import { csrfHeaders } from './client';
 
 const BASE = '/api';
 
+export interface FederatedIdentity {
+  providerType: string;
+  issuer: string;
+  providerName?: string;
+}
+
 export interface User {
   id: string;
-  email: string;
-  created_at: string;
+  email: string | null;
+  username?: string | null;
+  createdAt: string;
   role: 'user' | 'admin';
   disabled: number; // 0 = false, 1 = true
-  read_only?: number; // 0 = false, 1 = true
-  disk_bytes_used: number; // bytes
-  last_login_at?: string | null;
-  last_login_ip?: string | null;
-  last_login_location?: string | null;
-  max_podcasts?: number | null;
-  max_episodes?: number | null;
-  max_storage_mb?: number | null;
-  max_collaborators?: number | null;
-  max_subscriber_tokens?: number | null;
-  can_transcribe?: number; // 0 = false, 1 = true
+  readOnly?: number; // 0 = false, 1 = true
+  diskBytesUsed: number; // bytes
+  lastLoginAt?: string | null;
+  lastLoginIp?: string | null;
+  lastLoginLocation?: string | null;
+  maxPodcasts?: number | null;
+  maxEpisodes?: number | null;
+  maxStorageMb?: number | null;
+  maxCollaborators?: number | null;
+  maxSubscriberTokens?: number | null;
+  canTranscribe?: number; // 0 = false, 1 = true
+  federatedIdentities?: FederatedIdentity[];
 }
 
 export interface UsersResponse {

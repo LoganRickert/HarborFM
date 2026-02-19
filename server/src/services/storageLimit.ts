@@ -1,21 +1,27 @@
-import type { Database } from "better-sqlite3";
+import { eq, sql } from "drizzle-orm";
+import type { DrizzleDb } from "../db/drizzle.js";
+import { users } from "../db/schema.js";
 
 /**
  * Returns true if adding additionalBytes would exceed the user's storage limit.
  * Null or 0 max_storage_mb means no limit (returns false).
  */
 export function wouldExceedStorageLimit(
-  db: Database,
+  drizzleDb: DrizzleDb,
   userId: string,
   additionalBytes: number,
 ): boolean {
-  const row = db
-    .prepare(
-      "SELECT COALESCE(disk_bytes_used, 0) AS used, max_storage_mb FROM users WHERE id = ?",
-    )
-    .get(userId) as { used: number; max_storage_mb: number | null } | undefined;
+  const row = drizzleDb
+    .select({
+      used: sql<number>`COALESCE(${users.diskBytesUsed}, 0)`.as("used"),
+      maxStorageMb: users.maxStorageMb,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+    .get();
   if (!row) return false;
-  const maxMb = row.max_storage_mb;
+  const maxMb = row.maxStorageMb;
   if (maxMb == null || maxMb <= 0) return false;
   const limitBytes = maxMb * 1024 * 1024;
   return row.used + additionalBytes > limitBytes;

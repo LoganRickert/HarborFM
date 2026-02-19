@@ -25,7 +25,7 @@ export function ApiKeyForm({ atLimit, limitValue, readOnly, onSuccess }: ApiKeyF
   });
 
   const createMutation = useMutation({
-    mutationFn: (body: { name?: string; valid_until?: string }) => createApiKey(body),
+    mutationFn: (body: { name?: string; validUntil?: string }) => createApiKey(body),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['api-keys'] });
       void queryClient.invalidateQueries({ queryKey: ['api-keys-count'] });
@@ -46,7 +46,7 @@ export function ApiKeyForm({ atLimit, limitValue, readOnly, onSuccess }: ApiKeyF
         : undefined;
     createMutation.mutate({
       name: createName.trim(),
-      ...(validUntilUtc ? { valid_until: validUntilUtc } : {}),
+      ...(validUntilUtc ? { validUntil: validUntilUtc } : {}),
     });
   };
 

@@ -5,7 +5,7 @@ import sharedStyles from '../PodcastDetail/shared.module.css';
 const styles = sharedStyles;
 
 interface CollaboratorRemoveDialogProps {
-  collaborator: { user_id: string; email: string } | null;
+  collaborator: { userId: string; username: string } | null;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (userId: string) => void;
@@ -34,7 +34,7 @@ export function CollaboratorRemoveDialog({
           </div>
           <Dialog.Description className={styles.dialogDescription}>
             {collaborator
-              ? `This will remove ${collaborator.email} from this show. They will lose access.`
+              ? `This will remove ${collaborator.username || 'this collaborator'} from this show. They will lose access.`
               : 'This will remove this collaborator from this show.'}
           </Dialog.Description>
           <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
@@ -44,7 +44,7 @@ export function CollaboratorRemoveDialog({
             <button
               type="button"
               className={styles.dialogConfirmRemove}
-              onClick={() => collaborator && onConfirm(collaborator.user_id)}
+              onClick={() => collaborator && onConfirm(collaborator.userId)}
               disabled={isPending}
               aria-label="Confirm remove collaborator"
             >

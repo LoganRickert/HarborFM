@@ -296,12 +296,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingProcessing(false);
           onRecordingStateChange?.({ pendingSegmentIds: msg.pendingSegmentIds ?? [], recordingActive: true });
         } else if (msg.type === 'recordingStopped') {
+          const pendingSegmentIds = msg.pendingSegmentIds ?? [];
+          console.log('[CallPanel] recordingStopped', { pendingSegmentIds, hasOnRecordingStateChange: !!onRecordingStateChange });
           setRecording(false);
           setRecordingPending(false);
           setRecordingError(null);
           setRecordingProcessing(true);
           setRecordingProgressMessage(null);
-          onRecordingStateChange?.({ pendingSegmentIds: msg.pendingSegmentIds ?? [], recordingActive: false });
+          onRecordingStateChange?.({ pendingSegmentIds, recordingActive: false });
         } else if (msg.type === 'recordingProgress') {
           setRecordingProgressMessage(msg.message ?? msg.stage ?? 'Processing…');
         } else if (msg.type === 'recordingError') {
@@ -319,13 +321,19 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           setRecordingError(msg.error ?? 'Failed to stop recording');
           onRecordingStateChange?.({ recordingActive: false });
         } else if (msg.type === 'segmentRecorded') {
+          const pendingSegmentIds = (msg as { pendingSegmentIds?: string[] }).pendingSegmentIds ?? [];
+          console.log('[CallPanel] segmentRecorded', {
+            pendingSegmentIds,
+            hasOnRecordingStateChange: !!onRecordingStateChange,
+            hasOnSegmentRecorded: !!onSegmentRecorded,
+          });
           setRecording(false);
           setRecordingPending(false);
           setRecordingError(null);
           setRecordingProcessing(true);
           setRecordingProgressMessage('Segment added successfully');
           onSegmentRecorded?.();
-          onRecordingStateChange?.({ recordingActive: false });
+          onRecordingStateChange?.({ pendingSegmentIds, recordingActive: false });
           setTimeout(() => {
             setRecordingProcessing(false);
             setRecordingProgressMessage(null);

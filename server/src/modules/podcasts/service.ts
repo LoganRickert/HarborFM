@@ -4,7 +4,9 @@ import { notifyWebSubHub } from "../../services/websub.js";
 import { sendMail, buildNewShowEmail } from "../../services/email.js";
 import { readSettings } from "../settings/index.js";
 import { normalizeHostname } from "../../utils/url.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
+import { users } from "../../db/schema.js";
+import { eq } from "drizzle-orm";
 
 export function afterCreatePodcast(
   podcastId: string,
@@ -26,9 +28,12 @@ export function afterCreatePodcast(
       settings.email_provider === "webhook") &&
     settings.email_enable_new_show
   ) {
-    const owner = db
-      .prepare("SELECT email FROM users WHERE id = ?")
-      .get(userId) as { email: string | null } | undefined;
+    const owner = drizzleDb
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+      .get();
     const to = owner?.email?.trim();
     if (to) {
       const baseUrl =

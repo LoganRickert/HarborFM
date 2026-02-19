@@ -43,6 +43,7 @@ export function FeedEpisode({
   const isCustomFeed = !!(podcastSlugOverride && episodeSlugOverride);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [showLockInfo, setShowLockInfo] = useState(false);
+  const [audioLoadFailed, setAudioLoadFailed] = useState(false);
 
   // Cancel any active import polling when on feed pages
   useEffect(() => {
@@ -68,8 +69,10 @@ export function FeedEpisode({
   const episodeGuests = episodeCast?.cast?.filter((c) => c.role === 'guest') ?? [];
 
   // Use private URLs if available, otherwise fallback to public
-  const audioUrl = episode?.private_audio_url || episode?.audio_url || null;
-  const durationSec = episode?.audio_duration_sec ?? 0;
+  const audioUrl = episode?.privateAudioUrl || episode?.audioUrl || null;
+  const durationSec = episode?.audioDurationSec ?? 0;
+
+  useEffect(() => setAudioLoadFailed(false), [audioUrl]);
 
   const {
     audioRef,
@@ -85,12 +88,12 @@ export function FeedEpisode({
     episodeSlug,
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
-    privateWaveformUrl: episode?.private_waveform_url,
+    privateWaveformUrl: episode?.privateWaveformUrl,
   });
 
   useMeta({
     title: episode && podcast ? `${episode.title} - ${podcast.title} - HarborFM` : undefined,
-    description: episode?.description || (episode && podcast ? `Listen to ${episode.title} from ${podcast.title}${podcast.author_name ? ` by ${podcast.author_name}` : ''} on HarborFM.` : undefined),
+    description: episode?.description || (episode && podcast ? `Listen to ${episode.title} from ${podcast.title}${podcast.authorName ? ` by ${podcast.authorName}` : ''} on HarborFM.` : undefined),
   });
 
   if (!podcastSlug || !episodeSlug) return null;
@@ -143,7 +146,7 @@ export function FeedEpisode({
               embedCode={embedCode}
             />
 
-            {audioUrl && (
+            {audioUrl && !audioLoadFailed && (
               <div className={styles.player}>
                 {hasWaveform && (
                   <div className={styles.playbackRow}>
@@ -167,23 +170,23 @@ export function FeedEpisode({
                   </div>
                 )}
                 {hasWaveform ? (
-                  <audio ref={audioRef} preload="metadata" style={{ display: 'none' }}>
-                    <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+                  <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} onError={() => setAudioLoadFailed(true)}>
+                    <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                   </audio>
                 ) : (
-                  <audio ref={audioRef} controls className={styles.audio} preload="metadata">
-                    <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+                  <audio ref={audioRef} controls className={styles.audio} preload="metadata" onError={() => setAudioLoadFailed(true)}>
+                    <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                     Your browser does not support the audio element.
                   </audio>
                 )}
               </div>
             )}
 
-            {!audioUrl && (
-              episode.subscriber_only === 1 ? (
-                <FeedSubscriberOnlyMessage />
-              ) : (
+            {(!audioUrl || audioLoadFailed) && (
+              audioLoadFailed || !episode.subscriberOnly ? (
                 <p className={styles.noAudioText}>Audio not available.</p>
+              ) : (
+                <FeedSubscriberOnlyMessage />
               )
             )}
 
@@ -235,7 +238,7 @@ export function FeedEpisode({
         <SubscriptionInfoDialog
           open={showLockInfo}
           onClose={() => setShowLockInfo(false)}
-          isSubscriberOnly={podcast.subscriber_only_feed_enabled === 1 && podcast.public_feed_disabled === 1}
+          isSubscriberOnly={Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled)}
           podcastSlug={podcastSlug}
         />
       )}

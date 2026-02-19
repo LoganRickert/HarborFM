@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
+import { and, asc, desc, eq, like, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { randomBytes } from "crypto";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
+import { podcasts, subscriberTokens, users } from "../../db/schema.js";
 import { getPodcastRole, canManageCollaborators } from "../../services/access.js";
 import { SUBSCRIBER_TOKEN_PREFIX } from "../../config.js";
 import { sha256Hex } from "../../utils/hash.js";
@@ -59,37 +61,51 @@ export async function registerTokenRoutes(app: FastifyInstance) {
       const role = getPodcastRole(request.userId, podcastId);
       if (!canManageCollaborators(role))
         return reply.status(404).send({ error: "Podcast not found" });
-      let whereClause = "podcast_id = ?";
-      const params: (string | number)[] = [podcastId];
-      if (q && q.trim()) {
-        whereClause += " AND name LIKE ?";
-        params.push(`%${q.trim()}%`);
+      const conditions = [eq(subscriberTokens.podcastId, podcastId)];
+      if (q?.trim()) {
+        conditions.push(like(subscriberTokens.name, `%${q.trim()}%`));
       }
-      const countResult = db
-        .prepare(
-          `SELECT COUNT(*) as count FROM subscriber_tokens WHERE ${whereClause}`,
-        )
-        .get(...params) as { count: number };
-      const total = countResult.count;
-      const orderBy = sort === "oldest" ? "created_at ASC" : "created_at DESC";
-      const rows = db
-        .prepare(
-          `SELECT id, name, created_at, valid_from, valid_until, COALESCE(disabled, 0) AS disabled, last_used_at 
-         FROM subscriber_tokens 
-         WHERE ${whereClause} 
-         ORDER BY ${orderBy} 
-         LIMIT ? OFFSET ?`,
-        )
-        .all(...params, limit, offset) as Array<{
-        id: string;
-        name: string;
-        created_at: string;
-        valid_from: string | null;
-        valid_until: string | null;
-        disabled: number;
-        last_used_at: string | null;
-      }>;
-      return { tokens: rows, total };
+      const whereClause = and(...conditions);
+
+      const countResult = drizzleDb
+        .select({ count: sql<number>`COUNT(*)`.as("count") })
+        .from(subscriberTokens)
+        .where(whereClause)
+        .get();
+      const total = countResult?.count ?? 0;
+
+      const orderBy =
+        sort === "oldest"
+          ? asc(subscriberTokens.createdAt)
+          : desc(subscriberTokens.createdAt);
+      const rows = drizzleDb
+        .select({
+          id: subscriberTokens.id,
+          name: subscriberTokens.name,
+          createdAt: subscriberTokens.createdAt,
+          validFrom: subscriberTokens.validFrom,
+          validUntil: subscriberTokens.validUntil,
+          disabled: sql<number>`COALESCE(${subscriberTokens.disabled}, 0)`.as("disabled"),
+          lastUsedAt: subscriberTokens.lastUsedAt,
+        })
+        .from(subscriberTokens)
+        .where(whereClause)
+        .orderBy(orderBy)
+        .limit(limit)
+        .offset(offset)
+        .all();
+      return {
+        tokens: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          createdAt: r.createdAt,
+          validFrom: r.validFrom,
+          validUntil: r.validUntil,
+          disabled: r.disabled,
+          lastUsedAt: r.lastUsedAt,
+        })),
+        total,
+      };
     },
   );
 
@@ -111,8 +127,8 @@ export async function registerTokenRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             name: { type: "string" },
-            valid_from: { type: "string" },
-            valid_until: { type: "string" },
+            validFrom: { type: "string" },
+            validUntil: { type: "string" },
           },
           required: ["name"],
         },
@@ -128,20 +144,21 @@ export async function registerTokenRoutes(app: FastifyInstance) {
       const role = getPodcastRole(request.userId, podcastId);
       if (!canManageCollaborators(role))
         return reply.status(404).send({ error: "Podcast not found" });
-      const podcast = db
-        .prepare(
-          "SELECT owner_user_id, COALESCE(subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled, max_subscriber_tokens FROM podcasts WHERE id = ?",
-        )
-        .get(podcastId) as
-        | {
-            owner_user_id: string;
-            subscriber_only_feed_enabled: number;
-            max_subscriber_tokens: number | null;
-          }
-        | undefined;
+      const podcast = drizzleDb
+        .select({
+          ownerUserId: podcasts.ownerUserId,
+          subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as(
+            "subscriberOnlyFeedEnabled",
+          ),
+          maxSubscriberTokens: podcasts.maxSubscriberTokens,
+        })
+        .from(podcasts)
+        .where(eq(podcasts.id, podcastId))
+        .limit(1)
+        .get();
       if (!podcast)
         return reply.status(404).send({ error: "Podcast not found" });
-      if (podcast.subscriber_only_feed_enabled !== 1) {
+      if (!podcast.subscriberOnlyFeedEnabled) {
         return reply
           .status(400)
           .send({
@@ -150,23 +167,25 @@ export async function registerTokenRoutes(app: FastifyInstance) {
           });
       }
       const settings = readSettings();
-      const ownerLimits = db
-        .prepare("SELECT max_subscriber_tokens FROM users WHERE id = ?")
-        .get(podcast.owner_user_id) as
-        | { max_subscriber_tokens: number | null }
-        | undefined;
+      const ownerLimits = drizzleDb
+        .select({ maxSubscriberTokens: users.maxSubscriberTokens })
+        .from(users)
+        .where(eq(users.id, podcast.ownerUserId))
+        .limit(1)
+        .get();
       const effectiveMax =
-        podcast.max_subscriber_tokens ??
-        ownerLimits?.max_subscriber_tokens ??
+        podcast.maxSubscriberTokens ??
+        ownerLimits?.maxSubscriberTokens ??
         settings.default_max_subscriber_tokens ??
         null;
       if (effectiveMax != null && effectiveMax > 0) {
-        const count = db
-          .prepare(
-            "SELECT COUNT(*) as count FROM subscriber_tokens WHERE podcast_id = ?",
-          )
-          .get(podcastId) as { count: number };
-        if (count.count >= effectiveMax) {
+        const countRow = drizzleDb
+          .select({ count: sql<number>`COUNT(*)`.as("count") })
+          .from(subscriberTokens)
+          .where(eq(subscriberTokens.podcastId, podcastId))
+          .get();
+        const count = countRow?.count ?? 0;
+        if (count >= effectiveMax) {
           return reply.status(400).send({
             error: `This show has reached its limit of ${effectiveMax} subscriber token${effectiveMax === 1 ? "" : "s"}. Delete one to create a new one.`,
           });
@@ -174,18 +193,18 @@ export async function registerTokenRoutes(app: FastifyInstance) {
       }
       const body = request.body as {
         name?: string;
-        valid_from?: string;
-        valid_until?: string;
+        validFrom?: string;
+        validUntil?: string;
       };
       const name = typeof body?.name === "string" ? body.name.trim() : "";
       if (!name) return reply.status(400).send({ error: "name is required" });
       const validFrom =
-        typeof body?.valid_from === "string" && body.valid_from.trim()
-          ? body.valid_from.trim()
+        typeof body?.validFrom === "string" && body.validFrom.trim()
+          ? body.validFrom.trim()
           : null;
       const validUntil =
-        typeof body?.valid_until === "string" && body.valid_until.trim()
-          ? body.valid_until.trim()
+        typeof body?.validUntil === "string" && body.validUntil.trim()
+          ? body.validUntil.trim()
           : null;
       if (validUntil) {
         const now = new Date().toISOString();
@@ -199,21 +218,39 @@ export async function registerTokenRoutes(app: FastifyInstance) {
       const rawToken =
         SUBSCRIBER_TOKEN_PREFIX + randomBytes(32).toString("hex");
       const tokenHash = sha256Hex(rawToken);
-      db.prepare(
-        "INSERT INTO subscriber_tokens (id, podcast_id, name, token_hash, valid_from, valid_until) VALUES (?, ?, ?, ?, ?, ?)",
-      ).run(id, podcastId, name, tokenHash, validFrom, validUntil);
-      const row = db
-        .prepare(
-          "SELECT id, name, created_at, valid_from, valid_until FROM subscriber_tokens WHERE id = ?",
-        )
-        .get(id) as {
-        id: string;
-        name: string;
-        created_at: string;
-        valid_from: string | null;
-        valid_until: string | null;
-      };
-      return reply.status(201).send({ ...row, token: rawToken });
+      drizzleDb
+        .insert(subscriberTokens)
+        .values({
+          id,
+          podcastId,
+          name,
+          tokenHash,
+          validFrom,
+          validUntil,
+        })
+        .run();
+      const row = drizzleDb
+        .select({
+          id: subscriberTokens.id,
+          name: subscriberTokens.name,
+          createdAt: subscriberTokens.createdAt,
+          validFrom: subscriberTokens.validFrom,
+          validUntil: subscriberTokens.validUntil,
+        })
+        .from(subscriberTokens)
+        .where(eq(subscriberTokens.id, id))
+        .limit(1)
+        .get();
+      if (!row)
+        return reply.status(404).send({ error: "Token not found" });
+      return reply.status(201).send({
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        validFrom: row.validFrom,
+        validUntil: row.validUntil,
+        token: rawToken,
+      });
     },
   );
 
@@ -235,8 +272,8 @@ export async function registerTokenRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             disabled: { type: "boolean" },
-            valid_until: { type: "string" },
-            valid_from: { type: "string" },
+            validUntil: { type: "string" },
+            validFrom: { type: "string" },
           },
         },
         response: {
@@ -254,24 +291,32 @@ export async function registerTokenRoutes(app: FastifyInstance) {
       const role = getPodcastRole(request.userId, podcastId);
       if (!canManageCollaborators(role))
         return reply.status(404).send({ error: "Podcast not found" });
-      const existing = db
-        .prepare(
-          "SELECT id FROM subscriber_tokens WHERE id = ? AND podcast_id = ?",
+      const existing = drizzleDb
+        .select({ id: subscriberTokens.id })
+        .from(subscriberTokens)
+        .where(
+          and(
+            eq(subscriberTokens.id, tokenId),
+            eq(subscriberTokens.podcastId, podcastId),
+          ),
         )
-        .get(tokenId, podcastId);
+        .limit(1)
+        .get();
       if (!existing)
         return reply.status(404).send({ error: "Token not found" });
       const body = subscriberTokenUpdateSchema.parse(request.body);
-      const updates: string[] = [];
-      const values: (string | number | boolean | null)[] = [];
+      const set: Partial<{
+        disabled: boolean;
+        validUntil: string | null;
+        validFrom: string | null;
+      }> = {};
       if (body.disabled !== undefined) {
-        updates.push("disabled = ?");
-        values.push(body.disabled ? 1 : 0);
+        set.disabled = body.disabled;
       }
-      if (body.valid_until !== undefined) {
+      if (body.validUntil !== undefined) {
         const validUntil =
-          typeof body.valid_until === "string" && body.valid_until.trim()
-            ? body.valid_until.trim()
+          typeof body.validUntil === "string" && body.validUntil.trim()
+            ? body.validUntil.trim()
             : null;
         if (validUntil) {
           const now = new Date().toISOString();
@@ -281,37 +326,51 @@ export async function registerTokenRoutes(app: FastifyInstance) {
               .send({ error: "Expiration date cannot be in the past" });
           }
         }
-        updates.push("valid_until = ?");
-        values.push(validUntil);
+        set.validUntil = validUntil;
       }
-      if (body.valid_from !== undefined) {
-        updates.push("valid_from = ?");
-        values.push(
-          typeof body.valid_from === "string" && body.valid_from.trim()
-            ? body.valid_from.trim()
-            : null,
-        );
+      if (body.validFrom !== undefined) {
+        set.validFrom =
+          typeof body.validFrom === "string" && body.validFrom.trim()
+            ? body.validFrom.trim()
+            : null;
       }
-      if (updates.length === 0)
+      if (Object.keys(set).length === 0)
         return reply.status(400).send({ error: "No fields to update" });
-      values.push(tokenId);
-      db.prepare(
-        `UPDATE subscriber_tokens SET ${updates.join(", ")} WHERE id = ?`,
-      ).run(...values);
-      const row = db
-        .prepare(
-          "SELECT id, name, created_at, valid_from, valid_until, COALESCE(disabled, 0) AS disabled, last_used_at FROM subscriber_tokens WHERE id = ?",
+      drizzleDb
+        .update(subscriberTokens)
+        .set(set)
+        .where(
+          and(
+            eq(subscriberTokens.id, tokenId),
+            eq(subscriberTokens.podcastId, podcastId),
+          ),
         )
-        .get(tokenId) as {
-        id: string;
-        name: string;
-        created_at: string;
-        valid_from: string | null;
-        valid_until: string | null;
-        disabled: number;
-        last_used_at: string | null;
+        .run();
+      const row = drizzleDb
+        .select({
+          id: subscriberTokens.id,
+          name: subscriberTokens.name,
+          createdAt: subscriberTokens.createdAt,
+          validFrom: subscriberTokens.validFrom,
+          validUntil: subscriberTokens.validUntil,
+          disabled: sql<number>`COALESCE(${subscriberTokens.disabled}, 0)`.as("disabled"),
+          lastUsedAt: subscriberTokens.lastUsedAt,
+        })
+        .from(subscriberTokens)
+        .where(eq(subscriberTokens.id, tokenId))
+        .limit(1)
+        .get();
+      if (!row)
+        return reply.status(404).send({ error: "Token not found" });
+      return {
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        validFrom: row.validFrom,
+        validUntil: row.validUntil,
+        disabled: row.disabled,
+        lastUsedAt: row.lastUsedAt,
       };
-      return row;
     },
   );
 
@@ -343,14 +402,28 @@ export async function registerTokenRoutes(app: FastifyInstance) {
       const role = getPodcastRole(request.userId, podcastId);
       if (!canManageCollaborators(role))
         return reply.status(404).send({ error: "Podcast not found" });
-      const existing = db
-        .prepare(
-          "SELECT id FROM subscriber_tokens WHERE id = ? AND podcast_id = ?",
+      const existing = drizzleDb
+        .select({ id: subscriberTokens.id })
+        .from(subscriberTokens)
+        .where(
+          and(
+            eq(subscriberTokens.id, tokenId),
+            eq(subscriberTokens.podcastId, podcastId),
+          ),
         )
-        .get(tokenId, podcastId);
+        .limit(1)
+        .get();
       if (!existing)
         return reply.status(404).send({ error: "Token not found" });
-      db.prepare("DELETE FROM subscriber_tokens WHERE id = ?").run(tokenId);
+      drizzleDb
+        .delete(subscriberTokens)
+        .where(
+          and(
+            eq(subscriberTokens.id, tokenId),
+            eq(subscriberTokens.podcastId, podcastId),
+          ),
+        )
+        .run();
       return reply.status(204).send();
     },
   );

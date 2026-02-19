@@ -7,7 +7,7 @@ export function getLlmAvailable(): Promise<{ available: boolean }> {
 export type AskLlmContext = {
   segmentName?: string;
   durationSec?: number;
-  markers?: Array<{ time: number; title?: string; color?: string; marker_type?: string }>;
+  markers?: Array<{ time: number; title?: string; color?: string; markerType?: string }>;
 };
 
 export function askLlm(
@@ -20,8 +20,8 @@ export function askLlm(
     json: {
       transcript,
       question,
-      segment_name: context?.segmentName,
-      duration_sec: context?.durationSec,
+      segmentName: context?.segmentName,
+      durationSec: context?.durationSec,
       markers: context?.markers,
     },
   });

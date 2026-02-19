@@ -349,7 +349,7 @@ export async function run({ runOne }) {
       await apiFetch(`/users/${u.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ read_only: true }),
+        body: JSON.stringify({ readOnly: true }),
       }, adminJar);
       const res = await apiFetch(`/podcasts/${podcast.id}/collaborators`, {
         method: 'POST',

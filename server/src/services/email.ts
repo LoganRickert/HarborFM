@@ -624,7 +624,7 @@ export function buildInviteToPlatformEmail(signupUrl: string): {
         Someone invited you to collaborate on a podcast. Create your account to get started.
       </p>
       <p style="margin: 0 0 24px; text-align: center;">
-        <a href="${signupUrl}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Create account</a>
+        <a href="${signupUrl}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Create Account</a>
       </p>
       <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
         If you weren't expecting this, you can ignore this email.

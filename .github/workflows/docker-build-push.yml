@@ -2,7 +2,7 @@ name: Docker build and push
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
 
 env:
   REGISTRY: ghcr.io
@@ -38,6 +38,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/staging' }}
             type=sha,prefix=
 
       - name: Build and push

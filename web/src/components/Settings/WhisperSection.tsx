@@ -5,7 +5,7 @@ import { TestBlock } from './TestBlock';
 import { AppSettings } from '../../api/settings';
 import styles from '../../pages/Settings.module.css';
 
-const TRANSCRIPTION_PROVIDER_OPTIONS: ProviderOption<AppSettings['transcription_provider']>[] = [
+const TRANSCRIPTION_PROVIDER_OPTIONS: ProviderOption<AppSettings['transcriptionProvider']>[] = [
   { value: 'none', label: 'None' },
   { value: 'self_hosted', label: 'Self-Hosted' },
   { value: 'openai', label: 'OpenAI' },
@@ -27,14 +27,14 @@ export function WhisperSection({
       <div className={styles.label}>
         Transcription Provider
         <ProviderToggle
-          value={form.transcription_provider}
+          value={form.transcriptionProvider}
           options={TRANSCRIPTION_PROVIDER_OPTIONS}
-          onChange={(value) => onFormChange({ transcription_provider: value })}
+          onChange={(value) => onFormChange({ transcriptionProvider: value })}
           ariaLabel="Transcription provider"
         />
       </div>
 
-      {form.transcription_provider === 'self_hosted' && (
+      {form.transcriptionProvider === 'self_hosted' && (
         <>
           <label className={styles.label}>
             Whisper ASR URL
@@ -42,8 +42,8 @@ export function WhisperSection({
               type="url"
               className={styles.input}
               placeholder="http://whisper:9000"
-              value={form.whisper_asr_url}
-              onChange={(e) => onFormChange({ whisper_asr_url: e.target.value })}
+              value={form.whisperAsrUrl}
+              onChange={(e) => onFormChange({ whisperAsrUrl: e.target.value })}
             />
           </label>
           <TestBlock
@@ -54,7 +54,7 @@ export function WhisperSection({
         </>
       )}
 
-      {form.transcription_provider === 'openai' && (
+      {form.transcriptionProvider === 'openai' && (
         <>
           <label className={styles.label}>
             OpenAI transcription API URL (optional)
@@ -62,8 +62,8 @@ export function WhisperSection({
               type="url"
               className={styles.input}
               placeholder="https://api.openai.com/v1/audio/transcriptions"
-              value={form.openai_transcription_url}
-              onChange={(e) => onFormChange({ openai_transcription_url: e.target.value })}
+              value={form.openaiTranscriptionUrl}
+              onChange={(e) => onFormChange({ openaiTranscriptionUrl: e.target.value })}
             />
           </label>
           <label className={styles.label}>
@@ -71,9 +71,9 @@ export function WhisperSection({
             <input
               type="password"
               className={styles.input}
-              placeholder={form.openai_transcription_api_key === '(set)' ? '(set)' : 'sk-...'}
-              value={form.openai_transcription_api_key === '(set)' ? '' : form.openai_transcription_api_key}
-              onChange={(e) => onFormChange({ openai_transcription_api_key: e.target.value })}
+              placeholder={form.openaiTranscriptionApiKey === '(set)' ? '(set)' : 'sk-...'}
+              value={form.openaiTranscriptionApiKey === '(set)' ? '' : form.openaiTranscriptionApiKey}
+              onChange={(e) => onFormChange({ openaiTranscriptionApiKey: e.target.value })}
               autoComplete="off"
             />
           </label>
@@ -83,8 +83,8 @@ export function WhisperSection({
               type="text"
               className={styles.input}
               placeholder="whisper-1"
-              value={form.transcription_model}
-              onChange={(e) => onFormChange({ transcription_model: e.target.value })}
+              value={form.transcriptionModel}
+              onChange={(e) => onFormChange({ transcriptionModel: e.target.value })}
             />
             <span className={styles.inputHelp}>
               <span className={styles.modelName}>whisper-1</span> is $0.06/min and provides timestamps.{' '}

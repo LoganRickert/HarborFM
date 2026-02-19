@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 export const libraryAssetSchema = z.object({
   id: z.string(),
-  owner_user_id: z.string().optional(),
+  ownerUserId: z.string().optional(),
   name: z.string(),
   tag: z.string().nullable(),
-  duration_sec: z.number(),
-  created_at: z.string(),
-  global_asset: z.union([z.literal(0), z.literal(1), z.boolean()]).optional(),
+  durationSec: z.number(),
+  createdAt: z.string(),
+  globalAsset: z.union([z.literal(0), z.literal(1), z.boolean()]).optional(),
   copyright: z.string().nullable().optional(),
   license: z.string().nullable().optional(),
 });
@@ -15,7 +15,7 @@ export const libraryAssetSchema = z.object({
 export const libraryUpdateSchema = z.object({
   name: z.string().min(1, { error: 'Name is required' }).optional(),
   tag: z.string().nullable().optional(),
-  global_asset: z.boolean().optional(),
+  globalAsset: z.boolean().optional(),
   copyright: z.string().nullable().optional(),
   license: z.string().nullable().optional(),
 });

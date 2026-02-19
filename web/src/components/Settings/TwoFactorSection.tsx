@@ -9,11 +9,11 @@ import styles from '../../pages/Settings.module.css';
 
 export function TwoFactorSection({ form, onFormChange }: SettingsFormProps) {
   const emailConfigured =
-    form.email_provider === 'smtp' ||
-    form.email_provider === 'sendgrid' ||
-    form.email_provider === 'webhook';
+    form.emailProvider === 'smtp' ||
+    form.emailProvider === 'sendgrid' ||
+    form.emailProvider === 'webhook';
 
-  const currentMethods = parseTwoFactorMethods(form.two_factor_methods);
+  const currentMethods = parseTwoFactorMethods(form.twoFactorMethods);
 
   const handleMethodChange = (methodId: string, checked: boolean) => {
     let next = [...currentMethods];
@@ -23,7 +23,7 @@ export function TwoFactorSection({ form, onFormChange }: SettingsFormProps) {
       next = next.filter((m) => m !== methodId);
     }
     onFormChange({
-      two_factor_methods: serializeTwoFactorMethods(next),
+      twoFactorMethods: serializeTwoFactorMethods(next),
     });
   };
 
@@ -35,8 +35,8 @@ export function TwoFactorSection({ form, onFormChange }: SettingsFormProps) {
       <label className="toggle">
         <input
           type="checkbox"
-          checked={form.two_factor_enabled}
-          onChange={(e) => onFormChange({ two_factor_enabled: e.target.checked })}
+          checked={form.twoFactorEnabled}
+          onChange={(e) => onFormChange({ twoFactorEnabled: e.target.checked })}
         />
         <span className="toggle__track" aria-hidden="true" />
         <span>Enable 2FA</span>
@@ -45,7 +45,7 @@ export function TwoFactorSection({ form, onFormChange }: SettingsFormProps) {
         When enabled, users can add 2FA from their Profile using any allowed method below.
       </p>
 
-      {form.two_factor_enabled && (
+      {form.twoFactorEnabled && (
         <>
           <div className={styles.label}>
             Allowed methods
@@ -81,8 +81,8 @@ export function TwoFactorSection({ form, onFormChange }: SettingsFormProps) {
           <label className="toggle">
             <input
               type="checkbox"
-              checked={form.two_factor_enforced}
-              onChange={(e) => onFormChange({ two_factor_enforced: e.target.checked })}
+              checked={form.twoFactorEnforced}
+              onChange={(e) => onFormChange({ twoFactorEnforced: e.target.checked })}
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Enforce 2FA</span>

@@ -3,13 +3,15 @@ import send from "@fastify/send";
 import { nanoid } from "nanoid";
 import { basename, dirname, join, extname } from "path";
 import { existsSync, unlinkSync, writeFileSync } from "fs";
+import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
 import {
   castCreateSchema,
   castUpdateSchema,
   castListQuerySchema,
 } from "@harborfm/shared";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
+import { episodeCast, episodes, podcastCast, podcasts } from "../../db/schema.js";
 import {
   getPodcastRole,
   canAccessPodcast,
@@ -28,36 +30,37 @@ import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { ARTWORK_FILENAME_REGEX } from "./utils.js";
 
+/** Cast row from DB (camelCase). isPublic is 0/1 for API. */
 type CastRow = {
   id: string;
-  podcast_id: string;
+  podcastId: string;
   name: string;
   role: "host" | "guest";
   description: string | null;
-  photo_path: string | null;
-  photo_url: string | null;
-  social_link_text: string | null;
-  is_public: number;
-  created_at: string;
+  photoPath: string | null;
+  photoUrl: string | null;
+  socialLinkText: string | null;
+  isPublic: number;
+  createdAt: string;
 };
 
 function castRowToResponse(row: CastRow): Record<string, unknown> {
   const photoFilename =
-    row.photo_path && row.podcast_id
-      ? basename(row.photo_path)
+    row.photoPath && row.podcastId
+      ? basename(row.photoPath)
       : null;
   return {
     id: row.id,
-    podcast_id: row.podcast_id,
+    podcastId: row.podcastId,
     name: row.name,
     role: row.role,
     description: row.description,
-    photo_path: row.photo_path,
-    photo_url: row.photo_url,
-    photo_filename: photoFilename,
-    social_link_text: row.social_link_text,
-    is_public: row.is_public,
-    created_at: row.created_at,
+    photoPath: row.photoPath,
+    photoUrl: row.photoUrl,
+    photoFilename,
+    socialLinkText: row.socialLinkText,
+    isPublic: row.isPublic,
+    createdAt: row.createdAt,
   };
 }
 
@@ -106,10 +109,18 @@ export async function registerCastRoutes(app: FastifyInstance) {
       if (!ARTWORK_FILENAME_REGEX.test(filename)) {
         return reply.status(404).send({ error: "Not found" });
       }
-      const row = db
-        .prepare("SELECT photo_path FROM podcast_cast WHERE id = ? AND podcast_id = ?")
-        .get(castId, podcastId) as { photo_path: string | null } | undefined;
-      const photoPath = row?.photo_path ? resolveDataPath(row.photo_path) : "";
+      const row = drizzleDb
+        .select({ photoPath: podcastCast.photoPath })
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get();
+      const photoPath = row?.photoPath ? resolveDataPath(row.photoPath) : "";
       if (!photoPath || basename(photoPath) !== filename) {
         return reply.status(404).send({ error: "Not found" });
       }
@@ -160,7 +171,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
             offset: { type: "integer" },
             q: { type: "string" },
             sort: { type: "string", enum: ["newest", "oldest"] },
-            episode_id: { type: "string" },
+            episodeId: { type: "string" },
           },
         },
         response: {
@@ -175,48 +186,74 @@ export async function registerCastRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Podcast not found" });
       }
       const query = castListQuerySchema.safeParse(request.query);
-      const queryData = (query.success ? query.data : {}) as Record<string, unknown>;
-      const limit = (queryData.limit as number | undefined) ?? 10;
-      const offset = (queryData.offset as number | undefined) ?? 0;
-      const q = (queryData.q as string | undefined) ?? "";
-      const sort = (queryData.sort === "oldest" ? "oldest" : "newest") as "newest" | "oldest";
-      const episode_id = (
-        (queryData.episode_id as string | undefined) ??
-        (request.query as { episode_id?: string }).episode_id ??
-        ""
-      ).trim();
+      const queryData = query.success ? query.data : undefined;
+      const limit = queryData?.limit ?? 10;
+      const offset = queryData?.offset ?? 0;
+      const q = queryData?.q ?? "";
+      const sort = (queryData?.sort === "oldest" ? "oldest" : "newest") as "newest" | "oldest";
+      const episodeId = (queryData?.episodeId ?? "").trim();
 
-      let whereClause = `podcast_id = ?`;
-      const whereParams: (string | number)[] = [podcastId];
-
+      const conditions = [eq(podcastCast.podcastId, podcastId)];
       if (q?.trim()) {
-        whereClause += ` AND (name LIKE ? OR COALESCE(description, '') LIKE ?)`;
         const search = `%${q.trim()}%`;
-        whereParams.push(search, search);
+        conditions.push(
+          sql`(${podcastCast.name} LIKE ${search} OR COALESCE(${podcastCast.description}, '') LIKE ${search})`,
+        );
       }
-
-      // Exclude cast already assigned to this episode
-      if (episode_id) {
-        const episodeExists = db
-          .prepare("SELECT id FROM episodes WHERE id = ? AND podcast_id = ?")
-          .get(episode_id, podcastId);
+      if (episodeId) {
+        const episodeExists = drizzleDb
+          .select({ id: episodes.id })
+          .from(episodes)
+          .where(
+            and(
+              eq(episodes.id, episodeId),
+              eq(episodes.podcastId, podcastId),
+            ),
+          )
+          .limit(1)
+          .get();
         if (episodeExists) {
-          whereClause += ` AND id NOT IN (SELECT cast_id FROM episode_cast WHERE episode_id = ?)`;
-          whereParams.push(episode_id);
+          const assignedCastSubquery = drizzleDb
+            .select({ castId: episodeCast.castId })
+            .from(episodeCast)
+            .where(eq(episodeCast.episodeId, episodeId));
+          conditions.push(
+            notInArray(podcastCast.id, assignedCastSubquery),
+          );
         }
       }
+      const whereClause = and(...conditions);
 
-      const countRow = db
-        .prepare(`SELECT COUNT(*) as count FROM podcast_cast WHERE ${whereClause}`)
-        .get(...whereParams) as { count: number } | undefined;
+      const countRow = drizzleDb
+        .select({ count: sql<number>`COUNT(*)`.as("count") })
+        .from(podcastCast)
+        .where(whereClause)
+        .get();
       const total = countRow?.count ?? 0;
 
-      const orderDir = sort === "oldest" ? "ASC" : "DESC";
-      const rows = db
-        .prepare(
-          `SELECT * FROM podcast_cast WHERE ${whereClause} ORDER BY created_at ${orderDir} LIMIT ? OFFSET ?`,
-        )
-        .all(...whereParams, limit, offset) as CastRow[];
+      const orderBy =
+        sort === "oldest"
+          ? asc(podcastCast.createdAt)
+          : desc(podcastCast.createdAt);
+      const rows = drizzleDb
+        .select({
+          id: podcastCast.id,
+          podcastId: podcastCast.podcastId,
+          name: podcastCast.name,
+          role: podcastCast.role,
+          description: podcastCast.description,
+          photoPath: podcastCast.photoPath,
+          photoUrl: podcastCast.photoUrl,
+          socialLinkText: podcastCast.socialLinkText,
+          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
+          createdAt: podcastCast.createdAt,
+        })
+        .from(podcastCast)
+        .where(whereClause)
+        .orderBy(orderBy)
+        .limit(limit)
+        .offset(offset)
+        .all() as CastRow[];
       return { cast: rows.map(castRowToResponse), total };
     },
   );
@@ -260,34 +297,53 @@ export async function registerCastRoutes(app: FastifyInstance) {
             : "You do not have permission to add cast members.",
         });
       }
-      const existing = db
-        .prepare("SELECT id FROM podcasts WHERE id = ?")
-        .get(podcastId);
+      const existing = drizzleDb
+        .select({ id: podcasts.id })
+        .from(podcasts)
+        .where(eq(podcasts.id, podcastId))
+        .limit(1)
+        .get();
       if (!existing) {
         return reply.status(404).send({ error: "Podcast not found" });
       }
 
       const id = nanoid();
       const description = parsed.data.description?.trim() || null;
-      const photoUrl = parsed.data.photo_url?.trim() || null;
-      const socialLinkText = parsed.data.social_link_text?.trim() || null;
-      const isPublic = parsed.data.is_public ?? 1;
+      const photoUrl = parsed.data.photoUrl?.trim() || null;
+      const socialLinkText = parsed.data.socialLinkText?.trim() || null;
+      const isPublic = parsed.data.isPublic ?? 1;
 
-      db.prepare(
-        `INSERT INTO podcast_cast (id, podcast_id, name, role, description, photo_url, social_link_text, is_public)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
-        id,
-        podcastId,
-        parsed.data.name.trim(),
-        castRole,
-        description,
-        photoUrl,
-        socialLinkText,
-        isPublic,
-      );
+      drizzleDb
+        .insert(podcastCast)
+        .values({
+          id,
+          podcastId,
+          name: parsed.data.name.trim(),
+          role: castRole,
+          description,
+          photoUrl,
+          socialLinkText,
+          isPublic: isPublic !== 0,
+        })
+        .run();
 
-      const row = db.prepare("SELECT * FROM podcast_cast WHERE id = ?").get(id) as CastRow;
+      const row = drizzleDb
+        .select({
+          id: podcastCast.id,
+          podcastId: podcastCast.podcastId,
+          name: podcastCast.name,
+          role: podcastCast.role,
+          description: podcastCast.description,
+          photoPath: podcastCast.photoPath,
+          photoUrl: podcastCast.photoUrl,
+          socialLinkText: podcastCast.socialLinkText,
+          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
+          createdAt: podcastCast.createdAt,
+        })
+        .from(podcastCast)
+        .where(eq(podcastCast.id, id))
+        .limit(1)
+        .get() as CastRow;
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
       return reply.status(201).send(castRowToResponse(row));
     },
@@ -320,9 +376,17 @@ export async function registerCastRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { podcastId, castId } = request.params as { podcastId: string; castId: string };
       const role = getPodcastRole(request.userId, podcastId);
-      const existing = db
-        .prepare("SELECT * FROM podcast_cast WHERE id = ? AND podcast_id = ?")
-        .get(castId, podcastId) as CastRow | undefined;
+      const existing = drizzleDb
+        .select()
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
       if (!existing) {
         return reply.status(404).send({ error: "Cast member not found" });
       }
@@ -343,12 +407,16 @@ export async function registerCastRoutes(app: FastifyInstance) {
         });
       }
 
-      const updates: string[] = [];
-      const values: unknown[] = [];
-
+      const set: Partial<{
+        name: string;
+        role: "host" | "guest";
+        description: string | null;
+        photoUrl: string | null;
+        socialLinkText: string | null;
+        isPublic: boolean;
+      }> = {};
       if (parsed.data.name !== undefined) {
-        updates.push("name = ?");
-        values.push(parsed.data.name.trim());
+        set.name = parsed.data.name.trim();
       }
       if (parsed.data.role !== undefined) {
         const newRole = parsed.data.role as "host" | "guest";
@@ -359,36 +427,53 @@ export async function registerCastRoutes(app: FastifyInstance) {
               : "Permission denied.",
           });
         }
-        updates.push("role = ?");
-        values.push(newRole);
+        set.role = newRole;
       }
       if (parsed.data.description !== undefined) {
-        updates.push("description = ?");
-        values.push(parsed.data.description?.trim() || null);
+        set.description = parsed.data.description?.trim() || null;
       }
-      if (parsed.data.photo_url !== undefined) {
-        updates.push("photo_url = ?");
-        values.push(parsed.data.photo_url?.trim() || null);
+      if (parsed.data.photoUrl !== undefined) {
+        set.photoUrl = parsed.data.photoUrl?.trim() || null;
       }
-      if (parsed.data.social_link_text !== undefined) {
-        updates.push("social_link_text = ?");
-        values.push(parsed.data.social_link_text?.trim() || null);
+      if (parsed.data.socialLinkText !== undefined) {
+        set.socialLinkText = parsed.data.socialLinkText?.trim() || null;
       }
-      if (parsed.data.is_public !== undefined) {
-        updates.push("is_public = ?");
-        values.push(parsed.data.is_public);
+      if (parsed.data.isPublic !== undefined) {
+        set.isPublic = parsed.data.isPublic !== 0;
       }
 
-      if (updates.length === 0) {
+      if (Object.keys(set).length === 0) {
         return castRowToResponse(existing);
       }
-      values.push(castId, podcastId);
-      db.prepare(
-        `UPDATE podcast_cast SET ${updates.join(", ")} WHERE id = ? AND podcast_id = ?`,
-      ).run(...values);
+      drizzleDb
+        .update(podcastCast)
+        .set(set)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .run();
 
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
-      const row = db.prepare("SELECT * FROM podcast_cast WHERE id = ?").get(castId) as CastRow;
+      const row = drizzleDb
+        .select({
+          id: podcastCast.id,
+          podcastId: podcastCast.podcastId,
+          name: podcastCast.name,
+          role: podcastCast.role,
+          description: podcastCast.description,
+          photoPath: podcastCast.photoPath,
+          photoUrl: podcastCast.photoUrl,
+          socialLinkText: podcastCast.socialLinkText,
+          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
+          createdAt: podcastCast.createdAt,
+        })
+        .from(podcastCast)
+        .where(eq(podcastCast.id, castId))
+        .limit(1)
+        .get() as CastRow;
       return castRowToResponse(row);
     },
   );
@@ -418,9 +503,17 @@ export async function registerCastRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { podcastId, castId } = request.params as { podcastId: string; castId: string };
       const role = getPodcastRole(request.userId, podcastId);
-      const existing = db
-        .prepare("SELECT * FROM podcast_cast WHERE id = ? AND podcast_id = ?")
-        .get(castId, podcastId) as CastRow | undefined;
+      const existing = drizzleDb
+        .select()
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
       if (!existing) {
         return reply.status(404).send({ error: "Cast member not found" });
       }
@@ -432,11 +525,11 @@ export async function registerCastRoutes(app: FastifyInstance) {
             : "You do not have permission to delete this cast member.",
         });
       }
-      if (existing.photo_path) {
+      if (existing.photoPath) {
         try {
           const dir = castPhotoDir(podcastId);
           const safePath = assertPathUnder(
-            resolveDataPath(existing.photo_path),
+            resolveDataPath(existing.photoPath),
             dir,
           );
           if (existsSync(safePath)) unlinkSync(safePath);
@@ -444,10 +537,14 @@ export async function registerCastRoutes(app: FastifyInstance) {
           // ignore
         }
       }
-      db.prepare("DELETE FROM podcast_cast WHERE id = ? AND podcast_id = ?").run(
-        castId,
-        podcastId,
-      );
+      drizzleDb
+        .delete(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        );
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
       return reply.status(204).send();
     },
@@ -478,9 +575,17 @@ export async function registerCastRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { podcastId, castId } = request.params as { podcastId: string; castId: string };
       const role = getPodcastRole(request.userId, podcastId);
-      const existing = db
-        .prepare("SELECT * FROM podcast_cast WHERE id = ? AND podcast_id = ?")
-        .get(castId, podcastId) as CastRow | undefined;
+      const existing = drizzleDb
+        .select()
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
       if (!existing) {
         return reply.status(404).send({ error: "Cast member not found" });
       }
@@ -506,12 +611,22 @@ export async function registerCastRoutes(app: FastifyInstance) {
       }
       assertResolvedPathUnder(destPath, dir);
       writeFileSync(destPath, buffer);
-      db.prepare(
-        "UPDATE podcast_cast SET photo_path = ?, photo_url = NULL WHERE id = ? AND podcast_id = ?",
-      ).run(pathRelativeToData(destPath), castId, podcastId);
+      drizzleDb
+        .update(podcastCast)
+        .set({
+          photoPath: pathRelativeToData(destPath),
+          photoUrl: null,
+        })
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .run();
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
-      const oldPath = existing.photo_path
-        ? resolveDataPath(existing.photo_path)
+      const oldPath = existing.photoPath
+        ? resolveDataPath(existing.photoPath)
         : "";
       if (oldPath && oldPath !== destPath) {
         try {
@@ -521,7 +636,23 @@ export async function registerCastRoutes(app: FastifyInstance) {
           // ignore
         }
       }
-      const row = db.prepare("SELECT * FROM podcast_cast WHERE id = ?").get(castId) as CastRow;
+      const row = drizzleDb
+        .select({
+          id: podcastCast.id,
+          podcastId: podcastCast.podcastId,
+          name: podcastCast.name,
+          role: podcastCast.role,
+          description: podcastCast.description,
+          photoPath: podcastCast.photoPath,
+          photoUrl: podcastCast.photoUrl,
+          socialLinkText: podcastCast.socialLinkText,
+          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
+          createdAt: podcastCast.createdAt,
+        })
+        .from(podcastCast)
+        .where(eq(podcastCast.id, castId))
+        .limit(1)
+        .get() as CastRow;
       return castRowToResponse(row);
     },
   );

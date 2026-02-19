@@ -127,7 +127,7 @@ export function EpisodeSectionsPanel({
               onMoveUp={() => onMoveUp(index)}
               onMoveDown={() => onMoveDown(index)}
               onDeleteRequest={() => onDeleteRequest(seg.id)}
-              onRecoverRequest={onRecoverRequest && seg.record_failed ? () => onRecoverRequest(seg.id) : undefined}
+              onRecoverRequest={onRecoverRequest && seg.recordFailed ? () => onRecoverRequest(seg.id) : undefined}
               onUpdateName={onUpdateSegmentName}
               isDeleting={isDeletingSegment && deletingSegmentId === seg.id}
               isRecovering={recoveringSegmentId === seg.id}

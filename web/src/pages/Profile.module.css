@@ -43,6 +43,14 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
 .cardTitle {
   margin: 0 0 0.25rem;
   font-size: 1.125rem;
@@ -55,6 +63,31 @@
   font-size: 0.875rem;
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+.cardHeader .cardSub {
+  margin-bottom: 0;
+}
+
+.editHeaderBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.editHeaderBtn:hover {
+  background: var(--accent-glow);
+  color: var(--text);
 }
 
 .docsLink {
@@ -111,6 +144,35 @@
   color: var(--text-muted);
 }
 
+.verifyEmailNotice {
+  padding: 1rem 1.25rem;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.verifyEmailNoticeText {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text);
+}
+
+.federatedCard {
+  padding: 1rem 1.25rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.federatedCardText {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+}
+
 /* 2FA section */
 .label {
   display: flex;
@@ -134,6 +196,15 @@
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.inputError {
+  border-color: var(--error);
+}
+
+.inputError:focus {
+  border-color: var(--error);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35);
 }
 
 .primaryBtn {
@@ -223,6 +294,20 @@
 .error {
   margin: 0;
   font-size: 0.9375rem;
+  color: var(--error);
+}
+
+.errorCard {
+  padding: 1rem 1.25rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid var(--error);
+  border-radius: 12px;
+}
+
+.errorCardText {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
   color: var(--error);
 }
 

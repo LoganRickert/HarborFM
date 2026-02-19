@@ -45,7 +45,7 @@ function LibraryItemWaveform({
   onPlayPause: () => void;
 }) {
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
-  const durationSec = asset.duration_sec ?? 0;
+  const durationSec = asset.durationSec ?? 0;
 
   useEffect(() => {
     if (durationSec <= 0) {
@@ -296,8 +296,8 @@ export function Library() {
       return true;
     });
     list = [...list].sort((a, b) => {
-      const ta = new Date(a.created_at).getTime();
-      const tb = new Date(b.created_at).getTime();
+      const ta = new Date(a.createdAt).getTime();
+      const tb = new Date(b.createdAt).getTime();
       return sortNewestFirst ? tb - ta : ta - tb;
     });
     return list;
@@ -365,7 +365,7 @@ export function Library() {
 
   function canEditAsset(asset: LibraryAsset): boolean {
     if (readOnly) return false;
-    const ownerId = asset.owner_user_id ?? (userId ?? currentUserId);
+    const ownerId = asset.ownerUserId ?? (userId ?? currentUserId);
     return (currentUserId != null && String(ownerId) === String(currentUserId)) || Boolean(isAdmin);
   }
 
@@ -378,7 +378,7 @@ export function Library() {
     setEditName(asset.name);
     setEditCopyright(asset.copyright ?? '');
     setEditLicense(asset.license ?? '');
-    setEditGlobalAsset(Boolean(asset.global_asset));
+    setEditGlobalAsset(Boolean(asset.globalAsset));
     if (!asset.tag) {
       setEditTag('');
       setEditCustomTag('');
@@ -695,10 +695,10 @@ export function Library() {
                       </p>
                     )}
                     <div className={styles.itemMeta}>
-                      {(asset.tag || asset.global_asset) && (
+                      {(asset.tag || asset.globalAsset) && (
                         <span className={styles.itemMetaLabels}>
                           {asset.tag && <span className={styles.itemTag}>{asset.tag}</span>}
-                          {Boolean(asset.global_asset) && (
+                          {Boolean(asset.globalAsset) && (
                             <span className={styles.itemTag} title="Visible to everyone in the library">
                               Global
                             </span>
@@ -706,9 +706,9 @@ export function Library() {
                         </span>
                       )}
                       <span className={styles.itemMetaRight}>
-                        <span>{formatDuration(asset.duration_sec)}</span>
+                        <span>{formatDuration(asset.durationSec)}</span>
                         <span className={styles.itemMetaDot} aria-hidden />
-                        <span>{formatDateShort(asset.created_at)}</span>
+                        <span>{formatDateShort(asset.createdAt)}</span>
                       </span>
                     </div>
                   </div>

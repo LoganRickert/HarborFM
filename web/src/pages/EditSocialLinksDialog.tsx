@@ -12,17 +12,17 @@ export interface EditSocialLinksDialogProps {
 }
 
 const LINK_FIELDS = [
-  { key: 'apple_podcasts_url' as const, label: 'Apple Podcasts' },
-  { key: 'spotify_url' as const, label: 'Spotify' },
-  { key: 'amazon_music_url' as const, label: 'Amazon Music' },
-  { key: 'podcast_index_url' as const, label: 'Podcast Index' },
-  { key: 'listen_notes_url' as const, label: 'Listen Notes' },
-  { key: 'castbox_url' as const, label: 'Castbox' },
-  { key: 'x_url' as const, label: 'X' },
-  { key: 'facebook_url' as const, label: 'Facebook' },
-  { key: 'instagram_url' as const, label: 'Instagram' },
-  { key: 'tiktok_url' as const, label: 'TikTok' },
-  { key: 'youtube_url' as const, label: 'YouTube' },
+  { key: 'applePodcastsUrl' as const, apiKey: 'apple_podcasts_url' as const, label: 'Apple Podcasts' },
+  { key: 'spotifyUrl' as const, apiKey: 'spotify_url' as const, label: 'Spotify' },
+  { key: 'amazonMusicUrl' as const, apiKey: 'amazon_music_url' as const, label: 'Amazon Music' },
+  { key: 'podcastIndexUrl' as const, apiKey: 'podcast_index_url' as const, label: 'Podcast Index' },
+  { key: 'listenNotesUrl' as const, apiKey: 'listen_notes_url' as const, label: 'Listen Notes' },
+  { key: 'castboxUrl' as const, apiKey: 'castbox_url' as const, label: 'Castbox' },
+  { key: 'xUrl' as const, apiKey: 'x_url' as const, label: 'X' },
+  { key: 'facebookUrl' as const, apiKey: 'facebook_url' as const, label: 'Facebook' },
+  { key: 'instagramUrl' as const, apiKey: 'instagram_url' as const, label: 'Instagram' },
+  { key: 'tiktokUrl' as const, apiKey: 'tiktok_url' as const, label: 'TikTok' },
+  { key: 'youtubeUrl' as const, apiKey: 'youtube_url' as const, label: 'YouTube' },
 ] as const;
 
 export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLinksDialogProps) {
@@ -33,13 +33,14 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
     enabled: open && !!podcastId,
   });
 
-  const [form, setForm] = useState<Partial<Pick<Podcast, (typeof LINK_FIELDS)[number]['key']>>>({});
+  const [form, setForm] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (open && podcast) {
-      const initial: Record<string, string | null> = {};
+      const initial: Record<string, string> = {};
       for (const { key } of LINK_FIELDS) {
-        initial[key] = podcast[key] ?? null;
+        const val = podcast[key as keyof Podcast];
+        initial[key] = val != null ? String(val) : '';
       }
       setForm(initial);
     }
@@ -58,9 +59,9 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const payload: Record<string, string | null> = {};
-    for (const { key } of LINK_FIELDS) {
+    for (const { key, apiKey } of LINK_FIELDS) {
       const val = form[key];
-      payload[key] = (val?.trim() || null) ?? null;
+      payload[apiKey] = (val?.trim() || null) ?? null;
     }
     mutation.mutate(payload);
   }

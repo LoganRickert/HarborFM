@@ -27,7 +27,7 @@ export function CollaboratorsSection({ podcastId, effectiveMaxCollaborators }: C
   const atCollaboratorLimit =
     effectiveMaxCollaborators != null && effectiveMaxCollaborators > 0 && collaborators.length >= effectiveMaxCollaborators;
 
-  const [collaboratorToRemove, setCollaboratorToRemove] = useState<{ user_id: string; email: string } | null>(null);
+  const [collaboratorToRemove, setCollaboratorToRemove] = useState<{ userId: string; username: string } | null>(null);
 
   const removeMutation = useMutation({
     mutationFn: (userId: string) => removeCollaborator(podcastId, userId),

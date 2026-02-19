@@ -50,7 +50,7 @@ export function EpisodeCastCard({
     queryKey: [
       'cast',
       podcastId,
-      { limit: PAGE_SIZE, offset, q: searchDebounced, sort, episode_id: episodeId },
+      { limit: PAGE_SIZE, offset, q: searchDebounced, sort, episodeId: episodeId },
     ],
     queryFn: () =>
       listCast(podcastId, {
@@ -58,7 +58,7 @@ export function EpisodeCastCard({
         offset,
         q: searchDebounced.trim() || undefined,
         sort,
-        episode_id: episodeId,
+        episodeId: episodeId,
       }),
     enabled: !!podcastId && !!episodeId,
   });
@@ -81,8 +81,8 @@ export function EpisodeCastCard({
       if (addedId) {
         queryClient.setQueriesData(
           { queryKey: ['cast', podcastId], predicate: (query) => {
-            const key = query.queryKey as [string, string, { episode_id?: string }];
-            return key[2]?.episode_id === episodeId;
+            const key = query.queryKey as [string, string, { episodeId?: string }];
+            return key[2]?.episodeId === episodeId;
           }},
           (old: { cast: CastMember[]; total: number } | undefined) => {
             if (!old) return old;
@@ -115,7 +115,7 @@ export function EpisodeCastCard({
       limit: 100,
       offset: 0,
       sort,
-      episode_id: episodeId,
+      episodeId: episodeId,
     }).then(({ cast }) => {
       const hostIds = cast.filter((c: CastMember) => c.role === 'host').map((c) => c.id);
       if (hostIds.length > 0) {
@@ -155,7 +155,7 @@ export function EpisodeCastCard({
             {assignedCast.map((c) => (
               <CastMemberRow
                 key={c.id}
-                member={c as EpisodeCastMember & { photo_filename?: string | null; photo_url?: string | null }}
+                member={c}
                 podcastId={podcastId}
                 variant="chip"
               >

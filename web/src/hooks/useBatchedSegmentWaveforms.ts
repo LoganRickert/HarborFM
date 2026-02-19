@@ -6,9 +6,9 @@ import type { WaveformData } from '../pages/EpisodeEditor/WaveformCanvas';
 /** In-memory cache: waveform key -> WaveformData. Survives re-renders; instant load on revisit. */
 const waveformCache = new Map<string, WaveformData>();
 
-/** Key for cache invalidation: segment id + audio_path (changes after trim, etc.) */
+/** Key for cache invalidation: segment id + audioPath (changes after trim, etc.) */
 function segmentWaveformKey(seg: EpisodeSegment): string {
-  return `${seg.id}:${seg.audio_path ?? ''}`;
+  return `${seg.id}:${seg.audioPath ?? ''}`;
 }
 
 const BULK_MAX = 10;
@@ -28,7 +28,7 @@ export function useBatchedSegmentWaveforms(
   // When undefined (old server), assume true to avoid breaking.
   const toFetch = segments.filter((s) => {
     const hasWaveform = (s as { waveform_exists?: boolean }).waveform_exists;
-    return (s.duration_sec ?? 0) > 0 && (hasWaveform === undefined || hasWaveform === true);
+    return (s.durationSec ?? 0) > 0 && (hasWaveform === undefined || hasWaveform === true);
   });
   const fetchKey = toFetch.map(segmentWaveformKey).join('|');
 

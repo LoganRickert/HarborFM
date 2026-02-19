@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Phone } from 'lucide-react';
+import { OtpInput } from '../components/OtpInput/OtpInput';
 import { useAuthStore } from '../store/auth';
-import { login, verify2FA, send2FAEmailCode } from '../api/auth';
+import { login, verify2FA, send2FAEmailCode, getSsoProviders } from '../api/auth';
 import { setupStatus } from '../api/setup';
 import { getPublicConfig } from '../api/public';
 import { JoinCallDialog } from '../components/JoinCallDialog/JoinCallDialog';
@@ -16,9 +17,14 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending2FA, setPending2FA] = useState<{
-    challengeToken: string;
     method: 'totp' | 'email';
-  } | null>(null);
+  } | null>(() => {
+    const method = searchParams.get('method')?.trim();
+    if (method === 'totp' || method === 'email') {
+      return { method: method as 'totp' | 'email' };
+    }
+    return null;
+  });
   const [code, setCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
   const setUser = useAuthStore((s) => s.setUser);
@@ -36,7 +42,13 @@ export function Login() {
     queryFn: getPublicConfig,
     staleTime: 60_000,
   });
-  const webrtcEnabled = publicConfig?.webrtc_enabled === true;
+  const { data: ssoData } = useQuery({
+    queryKey: ['ssoProviders'],
+    queryFn: getSsoProviders,
+    staleTime: 60_000,
+  });
+  const ssoProviders = ssoData?.providers ?? [];
+  const webrtcEnabled = publicConfig?.webrtcEnabled === true;
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
 
   const loginMutation = useMutation({
@@ -59,13 +71,15 @@ export function Login() {
         queryClient.invalidateQueries({ queryKey: ['me'] });
         navigate('/');
       } else if ('requires2FA' in data) {
-        setPending2FA({ challengeToken: data.challengeToken, method: data.method });
+        setPending2FA({ method: data.method });
         setCode('');
       } else if ('requires2FASetup' in data) {
-        try {
-          sessionStorage.setItem('harborfm-2fa-challenge-token', data.challengeToken);
-        } catch {
-          // sessionStorage may be unavailable (private browsing, etc.)
+        if (data.methods?.length) {
+          try {
+            sessionStorage.setItem('harborfm-2fa-methods', JSON.stringify(data.methods));
+          } catch {
+            /* ignore */
+          }
         }
         navigate('/login/2fa-setup', { replace: true });
       }
@@ -76,7 +90,7 @@ export function Login() {
   });
 
   const verify2FAMutation = useMutation({
-    mutationFn: () => verify2FA(pending2FA!.challengeToken, code),
+    mutationFn: () => verify2FA(code),
     onSuccess: (data) => {
       setUser(data.user);
       queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -89,7 +103,7 @@ export function Login() {
 
   const lastAutoSentTokenRef = useRef<string | null>(null);
   const sendEmailCodeMutation = useMutation({
-    mutationFn: () => send2FAEmailCode(pending2FA!.challengeToken),
+    mutationFn: () => send2FAEmailCode(),
     onSuccess: () => {
       setResendCooldown(30);
       const id = setInterval(() => {
@@ -102,13 +116,21 @@ export function Login() {
   useEffect(() => {
     if (
       pending2FA?.method === 'email' &&
-      pending2FA?.challengeToken &&
-      lastAutoSentTokenRef.current !== pending2FA.challengeToken
+      lastAutoSentTokenRef.current !== pending2FA.method
     ) {
-      lastAutoSentTokenRef.current = pending2FA.challengeToken;
+      lastAutoSentTokenRef.current = pending2FA.method;
       sendEmailCodeMutation.mutate();
     }
-  }, [pending2FA?.method, pending2FA?.challengeToken, sendEmailCodeMutation]);
+  }, [pending2FA?.method, sendEmailCodeMutation]);
+
+  // Clear method from URL when we have it (e.g. from SSO redirect)
+  useEffect(() => {
+    if (pending2FA && searchParams.get('method')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('method');
+      window.history.replaceState({}, '', url.pathname + url.search);
+    }
+  }, [pending2FA, searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -167,20 +189,18 @@ export function Login() {
           <p className={styles.toggleHelp} style={{ marginBottom: 12 }}>
             Enter the 6-digit code from your {pending2FA.method === 'totp' ? 'authenticator app' : 'email'}.
           </p>
-          <label className={styles.label}>
-            Code
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              className={styles.input}
-              placeholder="000000"
-              autoFocus
-            />
-          </label>
+          <OtpInput
+            value={code}
+            onChange={(v) => setCode(v)}
+            length={6}
+            disabled={verify2FAMutation.isPending}
+            error={!!(loginMutation.isError || verify2FAMutation.isError || sendEmailCodeMutation.isError)}
+            label="Code"
+            autoComplete="one-time-code"
+            autoFocus
+            ariaLabel="6-digit verification code"
+            ariaDescribedBy={loginMutation.isError || verify2FAMutation.isError || sendEmailCodeMutation.isError ? 'login-2fa-error' : undefined}
+          />
             </>
           )}
           {verified && (
@@ -189,7 +209,7 @@ export function Login() {
             </div>
           )}
           {(loginMutation.isError || verify2FAMutation.isError || sendEmailCodeMutation.isError) && (
-            <div className={styles.verificationCardError} role="alert">
+            <div id="login-2fa-error" className={styles.verificationCardError} role="alert">
               <p className={styles.verificationCardErrorText}>
                 {(loginMutation.error || verify2FAMutation.error || sendEmailCodeMutation.error)?.message}
               </p>
@@ -238,6 +258,26 @@ export function Login() {
             >
               Back to sign in
             </button>
+          )}
+          {!pending2FA && ssoProviders.length > 0 && (
+            <>
+              <div className={styles.ssoDivider}>
+                <span className={styles.ssoDividerLine} aria-hidden />
+                <span className={styles.ssoDividerText}>Or sign in with</span>
+                <span className={styles.ssoDividerLine} aria-hidden />
+              </div>
+              <div className={styles.ssoButtons}>
+                {ssoProviders.map((p) => (
+                  <a
+                    key={`${p.type}-${p.id}`}
+                    href={`/api/auth/sso/${p.type}/${p.id}`}
+                    className={styles.ssoButton}
+                  >
+                    Sign in with {p.name}
+                  </a>
+                ))}
+              </div>
+            </>
           )}
         </form>
         <div className={styles.footerActions}>

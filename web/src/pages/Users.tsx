@@ -28,6 +28,7 @@ export function Users() {
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
   const [editEmail, setEditEmail] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editRole, setEditRole] = useState<'user' | 'admin'>('user');
   const [editDisabled, setEditDisabled] = useState(false);
   const [editReadOnly, setEditReadOnly] = useState(false);
@@ -67,6 +68,7 @@ export function Users() {
       userId: string;
       data: {
         email?: string;
+        username?: string | null;
         role?: 'user' | 'admin';
         disabled?: boolean;
         read_only?: boolean;
@@ -103,38 +105,33 @@ export function Users() {
 
   function handleEditClick(user: User) {
     setUserToEdit(user);
-    setEditEmail(user.email);
+    setEditEmail(user.email ?? '');
+    setEditUsername(user.username ?? '');
     setEditRole(user.role);
     setEditDisabled(user.disabled === 1);
-    setEditReadOnly((user as { read_only?: number }).read_only === 1);
+    setEditReadOnly((user as { readOnly?: number }).readOnly === 1);
     setEditPassword('');
-    setEditMaxPodcasts(user.max_podcasts ?? null);
-    setEditMaxEpisodes(user.max_episodes ?? null);
-    setEditMaxStorageMb(user.max_storage_mb ?? null);
-    setEditMaxCollaborators(user.max_collaborators ?? null);
-    setEditMaxSubscriberTokens(user.max_subscriber_tokens ?? null);
-    setEditCanTranscribe((user as { can_transcribe?: number }).can_transcribe === 1);
+    setEditMaxPodcasts(user.maxPodcasts ?? null);
+    setEditMaxEpisodes(user.maxEpisodes ?? null);
+    setEditMaxStorageMb(user.maxStorageMb ?? null);
+    setEditMaxCollaborators(user.maxCollaborators ?? null);
+    setEditMaxSubscriberTokens(user.maxSubscriberTokens ?? null);
+    setEditCanTranscribe((user as { canTranscribe?: number }).canTranscribe === 1);
   }
 
   function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!userToEdit) return;
 
-    const updates: {
-      email?: string;
-      role?: 'user' | 'admin';
-      disabled?: boolean;
-      read_only?: boolean;
-      password?: string;
-      max_podcasts?: number | null;
-      max_episodes?: number | null;
-      max_storage_mb?: number | null;
-      max_collaborators?: number | null;
-      max_subscriber_tokens?: number | null;
-      can_transcribe?: boolean;
-    } = {};
-    if (editEmail !== userToEdit.email) {
-      updates.email = editEmail;
+    const updates: Partial<import('@harborfm/shared').UserUpdateBody> = {};
+    const currentEmail = userToEdit.email ?? '';
+    if (editEmail.trim() !== currentEmail.trim() && editEmail.trim() !== '') {
+      updates.email = editEmail.trim();
+    }
+    const currentUsername = userToEdit.username ?? '';
+    const trimmedUsername = editUsername.trim();
+    if (trimmedUsername !== currentUsername) {
+      updates.username = trimmedUsername === '' ? null : trimmedUsername;
     }
     if (editRole !== userToEdit.role) {
       updates.role = editRole;
@@ -142,30 +139,30 @@ export function Users() {
     if (editDisabled !== (userToEdit.disabled === 1)) {
       updates.disabled = editDisabled;
     }
-    if (editReadOnly !== ((userToEdit as { read_only?: number }).read_only === 1)) {
-      updates.read_only = editReadOnly;
+    if (editReadOnly !== ((userToEdit as { readOnly?: number }).readOnly === 1)) {
+      updates.readOnly = editReadOnly;
     }
     if (editPassword.trim() !== '') {
       updates.password = editPassword;
     }
-    if (editMaxPodcasts !== (userToEdit.max_podcasts ?? null)) {
-      updates.max_podcasts = editMaxPodcasts;
+    if (editMaxPodcasts !== (userToEdit.maxPodcasts ?? null)) {
+      updates.maxPodcasts = editMaxPodcasts;
     }
-    if (editMaxEpisodes !== (userToEdit.max_episodes ?? null)) {
-      updates.max_episodes = editMaxEpisodes;
+    if (editMaxEpisodes !== (userToEdit.maxEpisodes ?? null)) {
+      updates.maxEpisodes = editMaxEpisodes;
     }
-    if (editMaxStorageMb !== (userToEdit.max_storage_mb ?? null)) {
-      updates.max_storage_mb = editMaxStorageMb;
+    if (editMaxStorageMb !== (userToEdit.maxStorageMb ?? null)) {
+      updates.maxStorageMb = editMaxStorageMb;
     }
-    if (editMaxCollaborators !== (userToEdit.max_collaborators ?? null)) {
-      updates.max_collaborators = editMaxCollaborators;
+    if (editMaxCollaborators !== (userToEdit.maxCollaborators ?? null)) {
+      updates.maxCollaborators = editMaxCollaborators;
     }
-    if (editMaxSubscriberTokens !== (userToEdit.max_subscriber_tokens ?? null)) {
-      updates.max_subscriber_tokens = editMaxSubscriberTokens;
+    if (editMaxSubscriberTokens !== (userToEdit.maxSubscriberTokens ?? null)) {
+      updates.maxSubscriberTokens = editMaxSubscriberTokens;
     }
-    const currentCanTranscribe = (userToEdit as { can_transcribe?: number }).can_transcribe === 1;
+    const currentCanTranscribe = (userToEdit as { canTranscribe?: number }).canTranscribe === 1;
     if (editCanTranscribe !== currentCanTranscribe) {
-      updates.can_transcribe = editCanTranscribe;
+      updates.canTranscribe = editCanTranscribe;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -197,10 +194,10 @@ export function Users() {
         <input
           type="text"
           className={styles.searchInput}
-          placeholder="Search by email..."
+          placeholder="Search by email or username..."
           value={search}
           onChange={handleSearchChange}
-          aria-label="Search by email"
+          aria-label="Search by email or username"
         />
         <button
           type="button"
@@ -225,11 +222,24 @@ export function Users() {
             </div>
           ) : (
             <div className={styles.userList}>
-              {users.map((user) => (
+              {users.map((user) => {
+                const displayLabel = user.email ?? (user.username ? `@${user.username}` : null) ?? '—';
+                const hasBoth = user.email && user.username;
+                return (
                   <div key={user.id} className={styles.userCard}>
                     <div className={styles.userCardRow}>
                       <div className={styles.userCardLeft}>
-                        <h2 className={styles.userCardEmail}>{user.email}</h2>
+                        <div className={styles.userCardIdentity}>
+                          <h2 className={styles.userCardEmail}>{displayLabel}</h2>
+                          {hasBoth && <p className={styles.userCardSub}>@{user.username}</p>}
+                          {user.federatedIdentities && user.federatedIdentities.length > 0 && (
+                            <p className={styles.userCardFederated}>
+                              Federated ({user.federatedIdentities
+                                .map((fi) => fi.providerName ?? fi.providerType.toUpperCase())
+                                .join(', ')})
+                            </p>
+                          )}
+                        </div>
                       </div>
                       <div className={styles.userCardActions}>
                         <button
@@ -237,7 +247,7 @@ export function Users() {
                           className={styles.actionBtn}
                           onClick={() => navigate(`/dashboard/${user.id}`)}
                           title="View podcasts"
-                          aria-label={`View podcasts for ${user.email}`}
+                          aria-label={`View podcasts for ${displayLabel}`}
                         >
                           <Radio size={16} strokeWidth={2} aria-hidden />
                           <span>Podcasts</span>
@@ -247,7 +257,7 @@ export function Users() {
                           className={styles.actionBtn}
                           onClick={() => navigate(`/library/${user.id}`)}
                           title="View library"
-                          aria-label={`View library for ${user.email}`}
+                          aria-label={`View library for ${displayLabel}`}
                         >
                           <Library size={16} strokeWidth={2} aria-hidden />
                           <span>Library</span>
@@ -257,7 +267,7 @@ export function Users() {
                           className={styles.actionBtn}
                           onClick={() => handleEditClick(user)}
                           title="Edit User"
-                          aria-label={`Edit user ${user.email}`}
+                          aria-label={`Edit user ${displayLabel}`}
                         >
                           <Edit size={16} strokeWidth={2} aria-hidden />
                           <span>Edit</span>
@@ -267,7 +277,7 @@ export function Users() {
                           className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
                           onClick={() => handleDeleteClick(user.id)}
                           title="Delete user"
-                          aria-label={`Delete user ${user.email}`}
+                          aria-label={`Delete user ${displayLabel}`}
                         >
                           <Trash2 size={16} strokeWidth={2} aria-hidden />
                         </button>
@@ -279,22 +289,23 @@ export function Users() {
                           {user.role}
                         </span>
                         {' • '}
-                        Created {formatDate(user.created_at)}
+                        Created {formatDate(user.createdAt)}
                         {' • '}
-                        Storage {formatBytes(user.disk_bytes_used ?? 0)}
+                        Storage {formatBytes(user.diskBytesUsed ?? 0)}
                       </p>
-                      {(user.last_login_at != null || user.last_login_ip != null || user.last_login_location) && (
+                      {(user.lastLoginAt != null || user.lastLoginIp != null || user.lastLoginLocation) && (
                         <p className={styles.userCardLastLogin}>
-                          Last login: {user.last_login_at != null ? formatDateTime(user.last_login_at) : '-'}
-                          {user.last_login_ip != null && <> · {user.last_login_ip}</>}
-                          {user.last_login_location != null && user.last_login_location !== '' && (
-                            <> · {user.last_login_location}</>
+                          Last login: {user.lastLoginAt != null ? formatDateTime(user.lastLoginAt) : '-'}
+                          {user.lastLoginIp != null && <> · {user.lastLoginIp}</>}
+                          {user.lastLoginLocation != null && user.lastLoginLocation !== '' && (
+                            <> · {user.lastLoginLocation}</>
                           )}
                         </p>
                       )}
                     </div>
                   </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {pagination && (
@@ -344,7 +355,7 @@ export function Users() {
               </Dialog.Close>
             </div>
             <Dialog.Description className={styles.dialogDescription}>
-              Update the user email, password, role, and limits.
+              Update the user email, username, password, role, and limits.
             </Dialog.Description>
             <form onSubmit={handleEditSubmit} className={styles.dialogFormWrap}>
               <div className={styles.dialogBodyScroll}>
@@ -356,9 +367,28 @@ export function Users() {
                     className={styles.formInput}
                     value={editEmail}
                     onChange={(e) => setEditEmail(e.target.value)}
-                    required
+                    placeholder="Optional for federated users"
                   />
                 </label>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>
+                  Username
+                  <input
+                    type="text"
+                    className={styles.formInput}
+                    value={editUsername}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditUsername(v.replace(/[^a-zA-Z0-9_]/g, ''));
+                    }}
+                    placeholder="Letters, numbers, underscore (min 6)"
+                    minLength={6}
+                  />
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Letters, numbers, and underscores only. At least 6 characters. Leave blank to clear.
+                </p>
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>
@@ -672,9 +702,8 @@ export function Users() {
             <Dialog.Description className={styles.dialogDescription}>
               {userToDelete && (() => {
                 const user = users.find((u) => u.id === userToDelete);
-                return user
-                  ? `Are you sure you want to delete "${user.email}"? This action cannot be undone.`
-                  : 'Are you sure you want to delete this user? This action cannot be undone.';
+                const label = user ? (user.email ?? (user.username ? `@${user.username}` : null) ?? 'this user') : 'this user';
+                return `Are you sure you want to delete "${label}"? This action cannot be undone.`;
               })()}
             </Dialog.Description>
             <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>

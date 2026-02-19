@@ -27,8 +27,8 @@ export function PodcastNew() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
-  const maxPodcasts = meData?.user?.max_podcasts ?? null;
-  const podcastCount = meData?.podcast_count ?? 0;
+  const maxPodcasts = meData?.user?.maxPodcasts ?? null;
+  const podcastCount = meData?.podcastCount ?? 0;
   const atPodcastLimit = maxPodcasts != null && maxPodcasts > 0 && podcastCount >= maxPodcasts;
   const readOnly = isReadOnly(meData?.user);
   useEffect(() => {

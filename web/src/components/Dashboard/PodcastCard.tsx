@@ -12,30 +12,30 @@ export function PodcastCard({
   publicFeedsEnabled,
   onEditClick,
 }: PodcastCardProps) {
-  const myRole = podcast.my_role;
+  const myRole = podcast.myRole;
   const canManage = canManageShow(readOnly, myRole);
-  const maxEp = podcast.max_episodes ?? null;
-  const epCount = Number(podcast.episode_count ?? 0);
+  const maxEp = podcast.maxEpisodes ?? null;
+  const epCount = Number(podcast.episodeCount ?? 0);
   const atEpisodeLimit = maxEp != null && maxEp > 0 && epCount >= Number(maxEp);
 
   return (
     <article
       key={podcast.id}
       className={
-        podcast.public_feed_disabled === 1
+        podcast.publicFeedDisabled
           ? `${styles.card} ${styles.cardSubscriberOnly}`
           : styles.card
       }
     >
       <Link to={`/podcasts/${podcast.id}`} className={styles.cardLink}>
         <div className={styles.cardArtworkWrapper}>
-          {podcast.artwork_url || podcast.artwork_filename ? (
+          {podcast.artworkUrl || podcast.artworkFilename ? (
             <img
               src={
-                podcast.artwork_url ??
-                (podcast.artwork_filename
+                podcast.artworkUrl ??
+                (podcast.artworkFilename
                   ? `/api/podcasts/${podcast.id}/artwork/${encodeURIComponent(
-                      podcast.artwork_filename
+                      podcast.artworkFilename
                     )}`
                   : '')
               }
@@ -50,12 +50,12 @@ export function PodcastCard({
         </div>
         <div className={styles.cardBody}>
           <div className={styles.cardTitleRow}>
-            {podcast.subscriber_only_feed_enabled === 1 && (
+            {podcast.subscriberOnlyFeedEnabled && (
               <Lock
                 size={18}
                 strokeWidth={2}
                 className={
-                  podcast.public_feed_disabled === 1
+                  podcast.publicFeedDisabled
                     ? `${styles.cardTitleLock} ${styles.cardTitleLockGold}`
                     : styles.cardTitleLock
                 }
@@ -66,7 +66,7 @@ export function PodcastCard({
           </div>
           <p className={styles.cardSlug}>
             {podcast.slug}
-            {podcast.is_shared && (
+            {podcast.isShared && (
               <span className={styles.sharedBadge} title="Shared with you">
                 Shared
               </span>

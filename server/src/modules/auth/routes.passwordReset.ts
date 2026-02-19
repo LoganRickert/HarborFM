@@ -1,29 +1,45 @@
 import type { FastifyInstance } from "fastify";
 import argon2 from "argon2";
 import { randomBytes } from "crypto";
-import { db } from "../../db/index.js";
+import { and, eq, gt, sql } from "drizzle-orm";
+import { drizzleDb } from "../../db/index.js";
+import {
+  forgotPasswordAttempts,
+  passwordResetTokens,
+  passwordResetTotpAttempts,
+  users,
+} from "../../db/schema.js";
+import { sqlNow } from "../../db/utils.js";
 import {
   forgotPasswordBodySchema,
   resetPasswordBodySchema,
   authTokenQuerySchema,
 } from "@harborfm/shared";
-import { readSettings } from "../settings/index.js";
+import { readSettings, isEmailProviderConfigured } from "../settings/index.js";
 import { getClientIp, getUserAgent } from "../../services/loginAttempts.js";
 import { verifyCaptcha } from "../../services/captcha.js";
 import { sendMail, buildResetPasswordEmail } from "../../services/email.js";
-import { normalizeHostname } from "../../utils/url.js";
+import { getBaseUrl } from "./shared.js";
 import { sha256Hex } from "../../utils/hash.js";
 import {
   FORGOT_PASSWORD_RATE_MINUTES,
+  FORGOT_PASSWORD_IP_RATE_LIMIT_MAX,
   RESET_TOKEN_EXPIRY_HOURS,
 } from "../../config.js";
 import { decryptTotpSecret, verifyTotp } from "../../services/twoFactor.js";
+import { randomInt } from "crypto";
 import { redactEmail, RESET_TOKEN_BYTES } from "./shared.js";
 
 export async function registerPasswordResetRoutes(app: FastifyInstance) {
   app.post(
     "/auth/forgot-password",
     {
+      config: {
+        rateLimit: {
+          max: FORGOT_PASSWORD_IP_RATE_LIMIT_MAX,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         tags: ["Auth"],
         summary: "Forgot password",
@@ -49,9 +65,7 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const settings = readSettings();
       if (
-        settings.email_provider !== "smtp" &&
-        settings.email_provider !== "sendgrid" &&
-        settings.email_provider !== "webhook"
+        !isEmailProviderConfigured(settings)
       ) {
         return reply.status(503).send({
           error:
@@ -106,18 +120,22 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
 
       // Rate limit per email before checking if account exists, so response is identical
       // whether the email is registered or not (prevents email enumeration).
-      const lastAttempt = db
-        .prepare(
-          "SELECT attempted_at FROM forgot_password_attempts WHERE email = ?",
-        )
-        .get(email) as { attempted_at: string } | undefined;
+      const lastAttempt = drizzleDb
+        .select({ attempted_at: forgotPasswordAttempts.attemptedAt })
+        .from(forgotPasswordAttempts)
+        .where(eq(forgotPasswordAttempts.email, email))
+        .limit(1)
+        .get();
 
       const minIntervalMs = FORGOT_PASSWORD_RATE_MINUTES * 60 * 1000;
+      const lastAttemptMs = lastAttempt?.attempted_at
+        ? new Date(lastAttempt.attempted_at).getTime()
+        : NaN;
 
       if (
         lastAttempt &&
-        Date.now() - new Date(lastAttempt.attempted_at).getTime() <
-          minIntervalMs
+        !Number.isNaN(lastAttemptMs) &&
+        Date.now() - lastAttemptMs < minIntervalMs
       ) {
         return reply.status(429).send({
           error: `You can only request a password reset once every ${FORGOT_PASSWORD_RATE_MINUTES} minutes.`,
@@ -127,28 +145,51 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
       const now = new Date().toISOString();
       const ip = getClientIp(request);
       const userAgent = getUserAgent(request);
-      db.prepare(
-        "INSERT INTO forgot_password_attempts (email, attempted_at, ip, user_agent) VALUES (?, ?, ?, ?) ON CONFLICT (email) DO UPDATE SET attempted_at = excluded.attempted_at, ip = excluded.ip, user_agent = excluded.user_agent",
-      ).run(email, now, ip, userAgent ?? null);
+      drizzleDb
+        .insert(forgotPasswordAttempts)
+        .values({
+          email,
+          attemptedAt: now,
+          ip: ip,
+          userAgent: userAgent ?? null,
+        })
+        .onConflictDoUpdate({
+          target: forgotPasswordAttempts.email,
+          set: {
+            attemptedAt: now,
+            ip: ip,
+            userAgent: userAgent ?? null,
+          },
+        })
+        .run();
 
       // Prune attempts older than 24h to avoid unbounded growth
-      db.prepare(
-        "DELETE FROM forgot_password_attempts WHERE attempted_at < datetime('now', '-1 day')",
-      ).run();
-
-      const user = db
-        .prepare(
-          "SELECT id, COALESCE(disabled, 0) AS disabled, COALESCE(read_only, 0) AS read_only FROM users WHERE email = ?",
+      drizzleDb
+        .delete(forgotPasswordAttempts)
+        .where(
+          sql`${forgotPasswordAttempts.attemptedAt} < datetime('now', '-1 day')`,
         )
-        .get(email) as
-        | { id: string; disabled: number; read_only: number }
-        | undefined;
+        .run();
+
+      const user = drizzleDb
+        .select({
+          id: users.id,
+          password_hash: users.passwordHash,
+          disabled: sql<number>`COALESCE(${users.disabled}, 0)`.as("disabled"),
+          read_only: sql<number>`COALESCE(${users.readOnly}, 0)`.as("read_only"),
+        })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1)
+        .get();
       if (!user) {
         return reply.send({ ok: true });
       }
 
-      // Do not send reset email if account is disabled OR read-only
-      if (user.disabled === 1 || user.read_only === 1) {
+      // Do not send reset email if account is disabled, read-only, or federated (no password)
+      const isFederated =
+        !user.password_hash || user.password_hash.trim() === "";
+      if (user.disabled === 1 || user.read_only === 1 || isFederated) {
         return reply.send({ ok: true });
       }
 
@@ -156,12 +197,18 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
       const tokenHash = sha256Hex(token);
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + RESET_TOKEN_EXPIRY_HOURS);
-      db.prepare(
-        "INSERT INTO password_reset_tokens (email, token_hash, expires_at, created_at) VALUES (?, ?, ?, ?)",
-      ).run(email, tokenHash, expiresAt.toISOString(), now);
+      drizzleDb
+        .delete(passwordResetTokens)
+        .where(eq(passwordResetTokens.email, email))
+        .run();
+      drizzleDb.insert(passwordResetTokens).values({
+        email,
+        tokenHash,
+        expiresAt: expiresAt.toISOString(),
+        createdAt: now,
+      }).run();
 
-      const baseUrl =
-        normalizeHostname(settings.hostname || "") || "http://localhost";
+      const baseUrl = getBaseUrl(settings);
       const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
       const { subject, text, html } = buildResetPasswordEmail(
         resetUrl,
@@ -181,6 +228,12 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
   app.get(
     "/auth/validate-reset-token",
     {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         tags: ["Auth"],
         summary: "Validate reset token",
@@ -202,6 +255,7 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
             },
           },
           400: { description: "Invalid or expired" },
+          429: { description: "Rate limited" },
         },
       },
     },
@@ -218,14 +272,23 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
       }
       const token = parsed.data.token.trim();
       const tokenHash = sha256Hex(token);
-      const row = db
-        .prepare(
-          `SELECT prt.email, COALESCE(u.totp_secret_enc, '') AS totp_secret_enc
-           FROM password_reset_tokens prt
-           LEFT JOIN users u ON u.email = prt.email
-           WHERE prt.token_hash = ? AND prt.expires_at > datetime('now')`,
+      const row = drizzleDb
+        .select({
+          email: passwordResetTokens.email,
+          totp_secret_enc: sql<string>`COALESCE(${users.totpSecretEnc}, '')`.as(
+            "totp_secret_enc",
+          ),
+        })
+        .from(passwordResetTokens)
+        .leftJoin(users, eq(users.email, passwordResetTokens.email))
+        .where(
+          and(
+            eq(passwordResetTokens.tokenHash, tokenHash),
+            gt(passwordResetTokens.expiresAt, sqlNow()),
+          ),
         )
-        .get(tokenHash) as { email: string; totp_secret_enc: string } | undefined;
+        .limit(1)
+        .get();
       if (!row) {
         return reply
           .status(400)
@@ -261,6 +324,7 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
           200: { description: "Password updated" },
           400: { description: "Invalid token or password too short" },
           401: { description: "Invalid TOTP code" },
+          429: { description: "Too many failed TOTP attempts" },
         },
       },
     },
@@ -277,17 +341,21 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
       const { token, password, totpCode } = parsed.data;
 
       const tokenHash = sha256Hex(token);
-      const row = db
-        .prepare(
-          `SELECT prt.email, u.totp_secret_enc
-           FROM password_reset_tokens prt
-           LEFT JOIN users u ON u.email = prt.email
-           WHERE prt.token_hash = ? AND prt.expires_at > datetime('now')`,
+      const row = drizzleDb
+        .select({
+          email: passwordResetTokens.email,
+          totp_secret_enc: users.totpSecretEnc,
+        })
+        .from(passwordResetTokens)
+        .leftJoin(users, eq(users.email, passwordResetTokens.email))
+        .where(
+          and(
+            eq(passwordResetTokens.tokenHash, tokenHash),
+            gt(passwordResetTokens.expiresAt, sqlNow()),
+          ),
         )
-        .get(tokenHash) as {
-          email: string;
-          totp_secret_enc: string | null;
-        } | undefined;
+        .limit(1)
+        .get();
       if (!row) {
         return reply
           .status(400)
@@ -305,6 +373,29 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
             error: "Your account uses two-factor authentication. Enter the 6-digit code from your authenticator app.",
           });
         }
+        const failuresRow = drizzleDb
+          .select({
+            cnt: sql<number>`count(*)`.as("cnt"),
+          })
+          .from(passwordResetTotpAttempts)
+          .where(
+            and(
+              eq(passwordResetTotpAttempts.tokenHash, tokenHash),
+              sql`datetime(${passwordResetTotpAttempts.createdAt}) >= datetime('now', '-15 minutes')`,
+            ),
+          )
+          .get();
+        const failures = Number(failuresRow?.cnt ?? 0);
+        if (failures >= 5) {
+          drizzleDb
+            .delete(passwordResetTokens)
+            .where(eq(passwordResetTokens.tokenHash, tokenHash))
+            .run();
+          return reply.status(429).header("Retry-After", "900").send({
+            error:
+              "Too many failed attempts. Request a new password reset link from the forgot password page.",
+          });
+        }
         let secret: string;
         try {
           secret = decryptTotpSecret(row.totp_secret_enc!);
@@ -315,20 +406,32 @@ export async function registerPasswordResetRoutes(app: FastifyInstance) {
         }
         const valid = await verifyTotp(secret, code);
         if (!valid) {
+          const delayMs = randomInt(80, 181);
+          await new Promise((r) => setTimeout(r, delayMs));
+          drizzleDb.insert(passwordResetTotpAttempts).values({
+            tokenHash,
+            createdAt: new Date().toISOString(),
+          }).run();
           return reply.status(401).send({
             error: "Invalid two-factor code. Please try again.",
           });
         }
+        drizzleDb
+          .delete(passwordResetTotpAttempts)
+          .where(eq(passwordResetTotpAttempts.tokenHash, tokenHash))
+          .run();
       }
 
       const password_hash = await argon2.hash(password);
-      db.prepare("UPDATE users SET password_hash = ? WHERE email = ?").run(
-        password_hash,
-        row.email,
-      );
-      db.prepare("DELETE FROM password_reset_tokens WHERE token_hash = ?").run(
-        tokenHash,
-      );
+      drizzleDb
+        .update(users)
+        .set({ passwordHash: password_hash })
+        .where(eq(users.email, row.email))
+        .run();
+      drizzleDb
+        .delete(passwordResetTokens)
+        .where(eq(passwordResetTokens.tokenHash, tokenHash))
+        .run();
       return reply.send({ ok: true });
     },
   );

@@ -8,7 +8,9 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
-import { db } from "../db/index.js";
+import { and, desc, eq, lte, or, sql } from "drizzle-orm";
+import { drizzleDb } from "../db/drizzle.js";
+import { episodes, podcasts } from "../db/schema.js";
 import { SITEMAP_FILENAME, SITEMAP_INDEX_FILENAME } from "../config.js";
 import {
   assertPathUnder,
@@ -163,15 +165,22 @@ export function generatePodcastSitemapXml(
   podcastId: string,
   baseUrl: string,
 ): string {
-  const podcast = db
-    .prepare("SELECT id, slug, updated_at FROM podcasts WHERE id = ?")
-    .get(podcastId) as
-    | { id: string; slug: string; updated_at: string }
+  const podcast = drizzleDb
+    .select({
+      id: podcasts.id,
+      slug: podcasts.slug,
+      updatedAt: podcasts.updatedAt,
+    })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get() as
+    | { id: string; slug: string; updatedAt: string }
     | undefined;
   if (!podcast) throw new Error("Podcast not found");
   const slugEnc = encodeURIComponent(podcast.slug);
-  const feedLastmod = podcast.updated_at
-    ? toLastmod(new Date(podcast.updated_at))
+  const feedLastmod = podcast.updatedAt
+    ? toLastmod(new Date(podcast.updatedAt))
     : toLastmod(new Date());
   const entries: SitemapUrlEntry[] = [
     {
@@ -182,25 +191,33 @@ export function generatePodcastSitemapXml(
     },
   ];
 
-  const episodes = db
-    .prepare(
-      `SELECT slug, publish_at, updated_at FROM episodes WHERE podcast_id = ? AND status = 'published'
-       AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))
-       ORDER BY publish_at DESC, created_at DESC`,
+  const episodeRows = drizzleDb
+    .select({
+      slug: episodes.slug,
+      publishAt: episodes.publishAt,
+      updatedAt: episodes.updatedAt,
+    })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.podcastId, podcastId),
+        eq(episodes.status, "published"),
+        or(
+          sql`${episodes.publishAt} IS NULL`,
+          lte(sql`datetime(${episodes.publishAt})`, sql`datetime('now')`),
+        ),
+      ),
     )
-    .all(podcastId) as {
-    slug: string | null;
-    publish_at: string | null;
-    updated_at: string;
-  }[];
+    .orderBy(desc(episodes.publishAt), desc(episodes.createdAt))
+    .all();
 
-  for (const ep of episodes) {
+  for (const ep of episodeRows) {
     const epSlug = ep.slug ?? "";
     if (!epSlug) continue;
-    const lastmod = ep.publish_at
-      ? toLastmod(new Date(ep.publish_at))
-      : ep.updated_at
-        ? toLastmod(new Date(ep.updated_at))
+    const lastmod = ep.publishAt
+      ? toLastmod(new Date(ep.publishAt))
+      : ep.updatedAt
+        ? toLastmod(new Date(ep.updatedAt))
         : toLastmod(new Date());
     entries.push({
       loc: loc(baseUrl, `/feed/${slugEnc}/${encodeURIComponent(epSlug)}`),

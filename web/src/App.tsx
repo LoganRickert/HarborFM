@@ -13,6 +13,7 @@ import { Register } from './pages/Register';
 import { Setup } from './pages/Setup';
 import { ResetPassword } from './pages/ResetPassword';
 import { VerifyEmail } from './pages/VerifyEmail';
+import { CompleteAccount } from './pages/CompleteAccount';
 import { Privacy } from './pages/Privacy';
 import { Terms } from './pages/Terms';
 import { Contact } from './pages/Contact';
@@ -114,6 +115,7 @@ function RequireGuest({ children }: { children: React.ReactNode }) {
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const { user, setUser } = useAuthStore();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['me'],
@@ -142,6 +144,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
   if (!user && isError) {
     return <Navigate to="/login" replace />;
+  }
+  if (data?.needsCompleteAccount && location.pathname !== '/complete-account') {
+    return <Navigate to="/complete-account" replace />;
   }
   return <>{children}</>;
 }
@@ -207,7 +212,7 @@ function PublicFeedsGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (data && data.public_feeds_enabled === false) {
+  if (data && data.publicFeedsEnabled === false) {
     // Redirect to dashboard if authed, login if not (handled by RequireAuth on "/").
     return <Navigate to="/" replace />;
   }
@@ -237,10 +242,10 @@ function RootRoute() {
     );
   }
 
-  if (data?.custom_feed_slug) {
+  if (data?.customFeedSlug) {
     return (
       <PublicFeedsGuard>
-        <FeedPodcast podcastSlugOverride={data.custom_feed_slug} />
+        <FeedPodcast podcastSlugOverride={data.customFeedSlug} />
       </PublicFeedsGuard>
     );
   }
@@ -277,10 +282,10 @@ function CustomFeedEpisodeWrapper() {
     );
   }
 
-  if (data?.custom_feed_slug && episodeSlug) {
+  if (data?.customFeedSlug && episodeSlug) {
     return (
       <FeedEpisode
-        podcastSlugOverride={data.custom_feed_slug}
+        podcastSlugOverride={data.customFeedSlug}
         episodeSlugOverride={episodeSlug}
       />
     );
@@ -305,6 +310,7 @@ export default function App() {
           <Route path="/register" element={<SetupGuard><RequireGuest><Register /></RequireGuest></SetupGuard>} />
           <Route path="/reset-password" element={<SetupGuard><RequireGuest><ResetPassword /></RequireGuest></SetupGuard>} />
           <Route path="/verify-email" element={<SetupGuard><VerifyEmail /></SetupGuard>} />
+          <Route path="/complete-account" element={<SetupGuard><RequireAuth><CompleteAccount /></RequireAuth></SetupGuard>} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/contact" element={<SetupGuard><Contact /></SetupGuard>} />

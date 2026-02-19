@@ -1,5 +1,5 @@
 /**
- * API key with valid_until in 1s: works once, then after 2s wait returns 401.
+ * API key with validUntil in 1s: works once, then after 2s wait returns 401.
  */
 import { baseURL, loginAsAdmin, apiFetch } from '../../lib/helpers.js';
 
@@ -13,7 +13,7 @@ export async function run({ runOne }) {
       const createRes = await apiFetch('/auth/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: '1s Expiry E2E', valid_until: oneSecondLater }),
+        body: JSON.stringify({ name: '1s Expiry E2E', validUntil: oneSecondLater }),
       }, adminJar);
       if (createRes.status !== 201) {
         const t = await createRes.text();

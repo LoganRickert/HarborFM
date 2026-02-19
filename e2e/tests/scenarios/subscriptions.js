@@ -11,7 +11,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscriber_only_feed_enabled: 1 }),
+        body: JSON.stringify({ subscriberOnlyFeedEnabled: 1 }),
       }, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
     })
@@ -85,7 +85,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/subscriber-tokens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Past Expiry Token', valid_until: past }),
+        body: JSON.stringify({ name: 'Past Expiry Token', validUntil: past }),
       }, jar);
       if (res.status !== 400) throw new Error(`Expected 400, got ${res.status}`);
       const data = await res.json();
@@ -99,7 +99,7 @@ export async function run({ runOne }) {
       const createRes = await apiFetch(`/podcasts/${podcast.id}/subscriber-tokens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Expires Soon Token', valid_until: oneSecondLater }),
+        body: JSON.stringify({ name: 'Expires Soon Token', validUntil: oneSecondLater }),
       }, jar);
       if (createRes.status !== 201) throw new Error(`Expected 201, got ${createRes.status}`);
       const created = await createRes.json();

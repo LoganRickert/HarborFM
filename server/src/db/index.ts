@@ -22,3 +22,5 @@ db.pragma("foreign_keys = ON");
 export function closeDb() {
   db.close();
 }
+
+export { drizzleDb } from "./drizzle.js";

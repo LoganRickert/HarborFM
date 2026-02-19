@@ -3,8 +3,18 @@ import { statSync, unlinkSync, readFileSync } from "fs";
 import { extname, dirname, basename } from "path";
 import send from "@fastify/send";
 import { existsSync } from "fs";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
+import { isAllowedAudioMime } from "./utils.js";
+import {
+  addUserStorageDelta,
+  updateEpisodeAudio,
+  updateEpisodeAfterProcess,
+  getEpisodeById,
+  getEpisodeAudioFinalPath,
+  getPublicPodcastForStream,
+  getPublishedEpisodeForStream,
+} from "./repo.js";
 import {
   canAccessEpisode,
   canEditSegments,
@@ -22,6 +32,7 @@ import {
   uploadsDir,
   processedDir,
   assertPathUnder,
+  assertSafeId,
   pathRelativeToData,
   resolveDataPath,
 } from "../../services/paths.js";
@@ -40,14 +51,6 @@ import { readSettings } from "../settings/index.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { getSingleRangeRequestedLength } from "../../utils/parseRange.js";
 import { isHumanUserAgent } from "../../utils/isBot.js";
-
-const ALLOWED_MIME = [
-  "audio/wav",
-  "audio/wave",
-  "audio/x-wav",
-  "audio/mpeg",
-  "audio/mp3",
-];
 
 export async function audioRoutes(app: FastifyInstance) {
   app.post(
@@ -75,6 +78,11 @@ export async function audioRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
+      try {
+        assertSafeId(episodeId, "id");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access)
         return reply.status(404).send({ error: "Episode not found" });
@@ -89,7 +97,7 @@ export async function audioRoutes(app: FastifyInstance) {
       const data = await request.file();
       if (!data) return reply.status(400).send({ error: "No file uploaded" });
       const mimetype = data.mimetype || "";
-      if (!ALLOWED_MIME.includes(mimetype) && !mimetype.startsWith("audio/")) {
+      if (!isAllowedAudioMime(mimetype)) {
         return reply
           .status(400)
           .send({ error: "Invalid file type. Use WAV or MP3." });
@@ -144,7 +152,7 @@ export async function audioRoutes(app: FastifyInstance) {
       const potentialDelta = bytesWritten - oldDestBytes - bytesRemoved;
       if (
         potentialDelta > 0 &&
-        wouldExceedStorageLimit(db, storageUserId, potentialDelta)
+        wouldExceedStorageLimit(drizzleDb, storageUserId, potentialDelta)
       ) {
         try {
           unlinkSync(destPath);
@@ -169,34 +177,20 @@ export async function audioRoutes(app: FastifyInstance) {
         // keep defaults
       }
 
-      // Track disk usage delta against podcast owner (best-effort)
       const delta = (sizeBytes || 0) - oldDestBytes - bytesRemoved;
       if (delta !== 0) {
-        db.prepare(
-          `UPDATE users
-           SET disk_bytes_used =
-             CASE
-               WHEN COALESCE(disk_bytes_used, 0) + ? < 0 THEN 0
-               ELSE COALESCE(disk_bytes_used, 0) + ?
-             END
-           WHERE id = ?`,
-        ).run(delta, delta, storageUserId);
+        addUserStorageDelta(storageUserId, delta);
       }
 
-      db.prepare(
-        `UPDATE episodes SET
-          audio_source_path = ?,
-          audio_mime = ?,
-          audio_bytes = ?,
-          audio_duration_sec = ?,
-          updated_at = datetime('now')
-         WHERE id = ?`,
-      ).run(pathRelativeToData(destPath), audioMime, sizeBytes, durationSec, episodeId);
+      updateEpisodeAudio(episodeId, {
+        audioSourcePath: pathRelativeToData(destPath),
+        audioMime: audioMime,
+        audioBytes: sizeBytes,
+        audioDurationSec: durationSec,
+      });
 
-      const row = db
-        .prepare("SELECT * FROM episodes WHERE id = ?")
-        .get(episodeId) as Record<string, unknown>;
-      return row;
+      const row = getEpisodeById(episodeId);
+      return row as Record<string, unknown>;
     },
   );
 
@@ -229,6 +223,11 @@ export async function audioRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
+      try {
+        assertSafeId(episodeId, "id");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
       const access = canAccessEpisode(request.userId, episodeId, {
         includeEpisode: true,
       });
@@ -241,7 +240,7 @@ export async function audioRoutes(app: FastifyInstance) {
             error: "You do not have permission to process episode audio.",
           });
       const { podcastId, episode } = access;
-      const sourcePathRaw = episode!.audio_source_path as string | undefined;
+      const sourcePathRaw = episode!.audioSourcePath as string | undefined;
       const sourcePath = sourcePathRaw ? resolveDataPath(sourcePathRaw) : "";
       if (!sourcePath || !existsSync(sourcePath)) {
         return reply
@@ -265,25 +264,14 @@ export async function audioRoutes(app: FastifyInstance) {
           episodeId,
           settings.final_format,
         );
-        db.prepare(
-          `UPDATE episodes SET
-            audio_final_path = ?,
-            audio_mime = ?,
-            audio_bytes = ?,
-            audio_duration_sec = ?,
-            updated_at = datetime('now')
-           WHERE id = ?`,
-        ).run(
-          pathRelativeToData(finalPath),
-          meta.mime,
-          meta.sizeBytes,
-          meta.durationSec,
-          episodeId,
-        );
-        const row = db
-          .prepare("SELECT * FROM episodes WHERE id = ?")
-          .get(episodeId) as Record<string, unknown>;
-        return row;
+        updateEpisodeAfterProcess(episodeId, {
+          audioFinalPath: pathRelativeToData(finalPath),
+          audioMime: meta.mime,
+          audioBytes: meta.sizeBytes,
+          audioDurationSec: meta.durationSec,
+        });
+        const row = getEpisodeById(episodeId);
+        return row as Record<string, unknown>;
       } catch (err) {
         request.log.error(err);
         return reply.status(500).send({ error: "Audio processing failed" });
@@ -306,20 +294,24 @@ export async function audioRoutes(app: FastifyInstance) {
         },
         response: {
           200: { description: "Waveform JSON" },
+          400: { description: "Invalid id" },
           404: { description: "Not found" },
         },
       },
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
+      try {
+        assertSafeId(episodeId, "id");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access)
         return reply.status(404).send({ error: "Episode not found" });
-      const episode = db
-        .prepare("SELECT audio_final_path FROM episodes WHERE id = ?")
-        .get(episodeId) as { audio_final_path: string | null } | undefined;
-      const audioPath = episode?.audio_final_path
-        ? resolveDataPath(episode.audio_final_path)
+      const episode = getEpisodeAudioFinalPath(episodeId);
+      const audioPath = episode?.audioFinalPath
+        ? resolveDataPath(episode.audioFinalPath)
         : "";
       if (!audioPath || !existsSync(audioPath))
         return reply.status(404).send({ error: "Final audio not found" });
@@ -358,6 +350,7 @@ export async function audioRoutes(app: FastifyInstance) {
         response: {
           200: { description: "Audio file" },
           206: { description: "Partial content" },
+          400: { description: "Invalid id" },
           404: { description: "Not found" },
           500: { description: "Send error" },
         },
@@ -365,17 +358,20 @@ export async function audioRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { id: episodeId } = request.params as { id: string };
+      try {
+        assertSafeId(episodeId, "id");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
       const type = (request.query as { type?: string }).type ?? "final";
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access)
         return reply.status(404).send({ error: "Episode not found" });
-      const episode = db
-        .prepare("SELECT * FROM episodes WHERE id = ?")
-        .get(episodeId) as Record<string, unknown>;
+      const episode = getEpisodeById(episodeId);
       const pathRaw =
         type === "source"
-          ? (episode.audio_source_path as string | null)
-          : (episode.audio_final_path as string | null);
+          ? episode?.audioSourcePath ?? null
+          : episode?.audioFinalPath ?? null;
       const p = pathRaw ? resolveDataPath(pathRaw) : "";
       if (!p || !existsSync(p)) {
         return reply
@@ -398,9 +394,7 @@ export async function audioRoutes(app: FastifyInstance) {
           ? `episode-source-${episodeId}${ext}`
           : `episode-${episodeId}${ext}`;
       const mime =
-        type === "source"
-          ? (episode.audio_mime as string) || "audio/mpeg"
-          : (episode.audio_mime as string) || "audio/mpeg";
+        (episode?.audioMime as string) || "audio/mpeg";
 
       const result = await send(request.raw, basename(safePath), {
         root: dirname(safePath),
@@ -471,43 +465,33 @@ export async function audioRoutes(app: FastifyInstance) {
       const episodeId =
         rawEpisodeId.replace(/\.[a-zA-Z0-9]+$/, "") || rawEpisodeId;
 
-      // Validate IDs exist and are non-empty
+      try {
+        assertSafeId(podcastId.trim(), "podcastId");
+        assertSafeId(episodeId.trim(), "episodeId");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid podcast or episode ID" });
+      }
       if (!podcastId || !podcastId.trim() || !episodeId || !episodeId.trim()) {
         return reply
           .status(400)
           .send({ error: "Invalid podcast or episode ID" });
       }
 
-      // Same rules as public episode DTO and waveform: allow when feed is not subscriber-only (public_feed_disabled !== 1) and episode is not subscriber_only.
-      const podcast = db
-        .prepare(
-          "SELECT id, COALESCE(public_feed_disabled, 0) AS public_feed_disabled FROM podcasts WHERE id = ?",
-        )
-        .get(podcastId.trim()) as
-        | { id: string; public_feed_disabled: number }
-        | undefined;
-
-      if (!podcast || podcast.public_feed_disabled === 1) {
+      const podcast = getPublicPodcastForStream(podcastId.trim());
+      if (!podcast || podcast.publicFeedDisabled) {
         return reply.status(404).send({ error: "Not found" });
       }
 
-      // Verify episode exists, belongs to podcast, is published, and is not subscriber-only
-      const episode = db
-        .prepare(
-          `SELECT e.*, COALESCE(e.subscriber_only, 0) AS subscriber_only FROM episodes e
-           WHERE e.id = ? AND e.podcast_id = ? AND e.status = 'published'
-           AND (e.publish_at IS NULL OR datetime(e.publish_at) <= datetime('now'))`,
-        )
-        .get(episodeId.trim(), podcastId.trim()) as
-        | (Record<string, unknown> & { subscriber_only: number })
-        | undefined;
-
-      if (!episode || episode.subscriber_only === 1) {
+      const episode = getPublishedEpisodeForStream(
+        podcastId.trim(),
+        episodeId.trim(),
+      );
+      if (!episode || episode.subscriberOnly) {
         return reply.status(404).send({ error: "Not found" });
       }
 
-      const path = episode.audio_final_path
-        ? resolveDataPath(episode.audio_final_path as string)
+      const path = episode.audioFinalPath
+        ? resolveDataPath(episode.audioFinalPath)
         : "";
       if (!path || !existsSync(path)) {
         return reply.status(404).send({ error: "Audio file not found" });
@@ -515,7 +499,7 @@ export async function audioRoutes(app: FastifyInstance) {
 
       const allowedBase = processedDir(podcastId.trim(), episodeId.trim());
       const safePath = assertPathUnder(path, allowedBase);
-      const mime = (episode.audio_mime as string) || "audio/mpeg";
+      const mime = episode.audioMime || "audio/mpeg";
 
       // Stats: only for GET (not HEAD). Location lookup only for human requests.
       if (request.method === "GET") {

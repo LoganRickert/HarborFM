@@ -45,16 +45,16 @@ export async function uploadEpisodeArtwork(podcastId: string, episodeId: string,
 // Episode cast (assign hosts/guests to episode)
 export interface EpisodeCastMember {
   id: string;
-  podcast_id: string;
+  podcastId: string;
   name: string;
   role: 'host' | 'guest';
   description: string | null;
-  photo_path: string | null;
-  photo_url: string | null;
-  photo_filename?: string | null;
-  social_link_text: string | null;
-  is_public: number;
-  created_at: string;
+  photoPath: string | null;
+  photoUrl: string | null;
+  photoFilename?: string | null;
+  socialLinkText: string | null;
+  isPublic: boolean;
+  createdAt: string;
 }
 
 export function getEpisodeCast(podcastId: string, episodeId: string) {
@@ -63,6 +63,6 @@ export function getEpisodeCast(podcastId: string, episodeId: string) {
 
 export function assignEpisodeCast(podcastId: string, episodeId: string, castIds: string[]) {
   return apiPut<{ cast: EpisodeCastMember[] }>(`/podcasts/${podcastId}/episodes/${episodeId}/cast`, {
-    cast_ids: castIds,
+    castIds,
   });
 }

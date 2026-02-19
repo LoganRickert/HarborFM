@@ -13,7 +13,7 @@ export async function run({ runOne }) {
       const createRes = await apiFetch('/auth/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Expired E2E', valid_until: past }),
+        body: JSON.stringify({ name: 'Expired E2E', validUntil: past }),
       }, adminJar);
       if (createRes.status !== 201) {
         const t = await createRes.text();

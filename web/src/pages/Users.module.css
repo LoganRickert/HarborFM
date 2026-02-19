@@ -131,6 +131,25 @@
   min-width: 0;
 }
 
+.userCardIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.userCardSub {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.userCardFederated {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .userCardEmail {
   margin: 0;
   font-size: 0.9375rem;

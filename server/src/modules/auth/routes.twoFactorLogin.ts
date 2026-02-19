@@ -1,5 +1,13 @@
 import type { FastifyInstance } from "fastify";
-import { db } from "../../db/index.js";
+import { randomInt } from "crypto";
+import { and, eq, gt, sql } from "drizzle-orm";
+import { drizzleDb } from "../../db/index.js";
+import {
+  auth2faChallenges,
+  userOtpCodes,
+  userTotpAttempts,
+  users,
+} from "../../db/schema.js";
 import {
   verify2FABodySchema,
   send2FAEmailCodeBodySchema,
@@ -8,15 +16,15 @@ import {
   parseTwoFactorMethods,
   isMethodAllowed,
 } from "@harborfm/shared";
-import { readSettings } from "../settings/index.js";
+import { readSettings, isEmailProviderConfigured } from "../settings/index.js";
 import {
   getClientIp,
   getIpBan,
   getUserAgent,
-  recordFailureAndMaybeBan,
+  recordTOTPFailureAndCheckLockout,
 } from "../../services/loginAttempts.js";
 import { sendMail, build2FAAddedEmail } from "../../services/email.js";
-import { normalizeHostname } from "../../utils/url.js";
+import { getBaseUrl } from "./shared.js";
 import { sha256Hex } from "../../utils/hash.js";
 import {
   generateTotpSecret,
@@ -26,18 +34,36 @@ import {
   getTotpUri,
   getTotpQrDataUrl,
 } from "../../services/twoFactor.js";
-import { CSRF_COOKIE_NAME, JWT_COOKIE_NAME } from "../../config.js";
-import { COOKIE_OPTS, CSRF_COOKIE_OPTS, generateSecureOtp, newCsrfToken } from "./shared.js";
+import {
+  CSRF_COOKIE_NAME,
+  JWT_COOKIE_NAME,
+  AUTH_2FA_CHALLENGE_EXPIRY_MS,
+  JWT_SESSION_EXPIRY,
+} from "../../config.js";
+import {
+  COOKIE_OPTS,
+  CSRF_COOKIE_OPTS,
+  buildAuthJwtPayload,
+  create2FARateLimitKeyGen,
+  generateSecureOtp,
+  newCsrfToken,
+  get2FAChallengeToken,
+} from "./shared.js";
+import { TWOFA_CHALLENGE_COOKIE_NAME } from "../../config.js";
+import { parseDatetimeToMs } from "../../utils/datetime.js";
+
+/** Small random delay to reduce timing oracle between invalid-challenge vs invalid-code responses. */
+function timingSafeDelayMs(min = 80, max = 180): Promise<void> {
+  const ms = randomInt(min, max + 1);
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
-  const twoFaVerifyKeyGenerator = (request: { body?: unknown; ip?: string }) => {
-    const body = request.body as { challengeToken?: string } | undefined;
-    const token = body?.challengeToken;
-    if (typeof token === "string" && token.trim()) {
-      return `2fa-verify:${token.trim()}`;
-    }
-    return `2fa-verify:ip:${(request.ip || "").trim() || "unknown"}`;
-  };
+  const twoFaVerifyKeyGenerator = (request: {
+    body?: unknown;
+    ip?: string;
+    cookies?: Record<string, string | undefined>;
+  }) => create2FARateLimitKeyGen("2fa-verify")(request);
 
   app.post(
     "/auth/2fa/verify",
@@ -60,7 +86,7 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
             challengeToken: { type: "string" },
             code: { type: "string" },
           },
-          required: ["challengeToken", "code"],
+          required: ["code"],
         },
         response: {
           200: { description: "User and session" },
@@ -71,6 +97,7 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
       const ip = getClientIp(request);
       const ban = getIpBan(ip, "auth_totp");
       if (ban.banned) {
@@ -82,45 +109,57 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
           });
       }
 
+      const challengeToken = get2FAChallengeToken(request);
+      if (!challengeToken) {
+        return reply
+          .status(400)
+          .header("Cache-Control", "no-store")
+          .send({ error: "Challenge required. Please sign in again." });
+      }
       const parsed = verify2FABodySchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.status(400).send({
+        return reply.status(400).header("Cache-Control", "no-store").send({
           error: "Validation failed",
           details: parsed.error.flatten(),
         });
       }
-      const { challengeToken, code } = parsed.data;
+      const { code } = parsed.data;
       const tokenHash = sha256Hex(challengeToken);
 
-      const challenge = db
-        .prepare(
-          `SELECT c.user_id, c.method, u.email, u.totp_secret_enc, u.totp_locked_until FROM auth_2fa_challenges c
-         INNER JOIN users u ON u.id = c.user_id
-         WHERE c.token_hash = ? AND datetime(c.expires_at) > datetime('now')`,
+      const challenge = drizzleDb
+        .select({
+          userId: auth2faChallenges.userId,
+          method: auth2faChallenges.method,
+          email: users.email,
+          username: users.username,
+          totpSecretEnc: users.totpSecretEnc,
+          totpLockedUntil: users.totpLockedUntil,
+        })
+        .from(auth2faChallenges)
+        .innerJoin(users, eq(users.id, auth2faChallenges.userId))
+        .where(
+          and(
+            eq(auth2faChallenges.tokenHash, tokenHash),
+            gt(auth2faChallenges.expiresAt, sql`datetime('now')`),
+          ),
         )
-        .get(tokenHash) as
-        | {
-            user_id: string;
-            method: string;
-            email: string;
-            totp_secret_enc: string | null;
-            totp_locked_until: string | null;
-          }
-        | undefined;
+        .limit(1)
+        .get();
 
       if (!challenge) {
+        await timingSafeDelayMs();
         return reply
           .status(400)
           .send({ error: "Invalid or expired challenge. Please sign in again." });
       }
 
+      const challengeLockedMs = parseDatetimeToMs(challenge.totpLockedUntil);
       if (
-        challenge.totp_locked_until &&
-        new Date(challenge.totp_locked_until) > new Date()
+        challenge.totpLockedUntil &&
+        !Number.isNaN(challengeLockedMs) &&
+        challengeLockedMs > Date.now()
       ) {
-        const retrySec = Math.ceil(
-          (new Date(challenge.totp_locked_until).getTime() - Date.now()) / 1000,
-        );
+        const retrySec = Math.ceil((challengeLockedMs - Date.now()) / 1000);
         return reply
           .status(429)
           .header("Retry-After", String(Math.max(1, retrySec)))
@@ -131,48 +170,48 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
 
       let valid = false;
 
-      if (challenge.method === "totp" && challenge.totp_secret_enc) {
+      if (challenge.method === "totp" && challenge.totpSecretEnc) {
         let secret: string;
         try {
-          secret = decryptTotpSecret(challenge.totp_secret_enc);
+          secret = decryptTotpSecret(challenge.totpSecretEnc);
         } catch {
           return reply.status(401).send({ error: "Invalid code" });
         }
         valid = await verifyTotp(secret, code);
       } else if (challenge.method === "email") {
         const codeHash = sha256Hex(code.trim());
-        const row = db
-          .prepare(
-            `SELECT id FROM user_otp_codes WHERE user_id = ? AND code_hash = ? AND datetime(expires_at) > datetime('now')`,
+        const row = drizzleDb
+          .select({ id: userOtpCodes.id })
+          .from(userOtpCodes)
+          .where(
+            and(
+              eq(userOtpCodes.userId, challenge.userId),
+              eq(userOtpCodes.codeHash, codeHash),
+              gt(userOtpCodes.expiresAt, sql`datetime('now')`),
+            ),
           )
-          .get(challenge.user_id, codeHash) as { id: number } | undefined;
+          .limit(1)
+          .get();
         if (row) {
           valid = true;
-          db.prepare("DELETE FROM user_otp_codes WHERE id = ?").run(row.id);
+          drizzleDb
+            .delete(userOtpCodes)
+            .where(eq(userOtpCodes.id, row.id))
+            .run();
         }
       }
 
       if (!valid) {
-        const ip = getClientIp(request);
-        db.prepare(
-          "INSERT INTO user_totp_attempts (user_id, created_at) VALUES (?, datetime('now'))",
-        ).run(challenge.user_id);
-        const countRow = db
-          .prepare(
-            `SELECT COUNT(*) as cnt FROM user_totp_attempts WHERE user_id = ? AND datetime(created_at) >= datetime('now', '-15 minutes')`,
-          )
-          .get(challenge.user_id) as { cnt: number };
-        const failures = Number(countRow?.cnt ?? 0);
-        if (failures >= 5) {
-          db.prepare(
-            `UPDATE users SET totp_locked_until = datetime('now', '+15 minutes') WHERE id = ?`,
-          ).run(challenge.user_id);
-          recordFailureAndMaybeBan(ip, "auth_totp", {
-            userAgent: getUserAgent(request),
-          });
+        await timingSafeDelayMs();
+        const result = recordTOTPFailureAndCheckLockout(
+          challenge.userId,
+          getClientIp(request),
+          getUserAgent(request),
+        );
+        if (result.locked) {
           return reply
             .status(429)
-            .header("Retry-After", "900")
+            .header("Retry-After", String(result.retryAfterSec ?? 900))
             .send({
               error: "Too many failed attempts. Please try again in 15 minutes.",
             });
@@ -180,35 +219,36 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
         return reply.status(401).send({ error: "Invalid code" });
       }
 
-      db.prepare("DELETE FROM auth_2fa_challenges WHERE token_hash = ?").run(
-        tokenHash,
-      );
-      db.prepare("DELETE FROM user_totp_attempts WHERE user_id = ?").run(
-        challenge.user_id,
-      );
+      drizzleDb
+        .delete(auth2faChallenges)
+        .where(eq(auth2faChallenges.tokenHash, tokenHash))
+        .run();
+      drizzleDb
+        .delete(userTotpAttempts)
+        .where(eq(userTotpAttempts.userId, challenge.userId))
+        .run();
 
       const token = app.jwt.sign(
-        { sub: challenge.user_id, email: challenge.email },
-        { expiresIn: "7d" },
+        buildAuthJwtPayload({
+          id: challenge.userId,
+          email: challenge.email,
+          username: challenge.username,
+        }),
+        { expiresIn: JWT_SESSION_EXPIRY },
       );
       return reply
+        .clearCookie(TWOFA_CHALLENGE_COOKIE_NAME, { path: "/" })
         .setCookie(JWT_COOKIE_NAME, token, COOKIE_OPTS)
         .setCookie(CSRF_COOKIE_NAME, newCsrfToken(), CSRF_COOKIE_OPTS)
-        .send({ user: { id: challenge.user_id, email: challenge.email } });
+        .send({ user: { id: challenge.userId, email: challenge.email } });
     },
   );
 
   const twoFaSendEmailCodeKeyGenerator = (request: {
     body?: unknown;
     ip?: string;
-  }) => {
-    const body = request.body as { challengeToken?: string } | undefined;
-    const token = body?.challengeToken;
-    if (typeof token === "string" && token.trim()) {
-      return `2fa-send-email:${sha256Hex(token.trim())}`;
-    }
-    return `2fa-send-email:ip:${(request.ip || "").trim() || "unknown"}`;
-  };
+    cookies?: Record<string, string | undefined>;
+  }) => create2FARateLimitKeyGen("2fa-send-email")(request);
 
   app.post(
     "/auth/2fa/send-email-code",
@@ -229,7 +269,6 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
         body: {
           type: "object",
           properties: { challengeToken: { type: "string" } },
-          required: ["challengeToken"],
         },
         response: {
           200: { description: "OK" },
@@ -240,11 +279,10 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
       const settings = readSettings();
       if (
-        settings.email_provider !== "smtp" &&
-        settings.email_provider !== "sendgrid" &&
-        settings.email_provider !== "webhook"
+        !isEmailProviderConfigured(settings)
       ) {
         return reply
           .status(400)
@@ -257,41 +295,63 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
       if (!parsed.success) {
         return reply.status(400).send({ error: "Validation failed" });
       }
-      const { challengeToken } = parsed.data;
+      const challengeToken = get2FAChallengeToken(request);
+      if (!challengeToken) {
+        return reply.status(400).send({ error: "Challenge required. Please sign in again." });
+      }
       const tokenHash = sha256Hex(challengeToken);
 
-      const challenge = db
-        .prepare(
-          `SELECT c.user_id, c.method, u.email FROM auth_2fa_challenges c
-         INNER JOIN users u ON u.id = c.user_id
-         WHERE c.token_hash = ? AND datetime(c.expires_at) > datetime('now')`,
+      const challenge = drizzleDb
+        .select({
+          userId: auth2faChallenges.userId,
+          method: auth2faChallenges.method,
+          email: users.email,
+        })
+        .from(auth2faChallenges)
+        .innerJoin(users, eq(users.id, auth2faChallenges.userId))
+        .where(
+          and(
+            eq(auth2faChallenges.tokenHash, tokenHash),
+            gt(auth2faChallenges.expiresAt, sql`datetime('now')`),
+          ),
         )
-        .get(tokenHash) as
-        | { user_id: string; method: string; email: string }
-        | undefined;
+        .limit(1)
+        .get();
 
       if (!challenge || challenge.method !== "email") {
         return reply
           .status(400)
-          .send({ error: "Invalid or expired challenge." });
+          .send({ error: "Invalid or expired challenge. Please sign in again." });
       }
 
-      db.prepare("DELETE FROM user_otp_codes WHERE user_id = ?").run(
-        challenge.user_id,
-      );
+      if (!challenge.email?.trim()) {
+        return reply
+          .status(400)
+          .send({
+            error:
+              "No email on file for this account. Use your authenticator app instead.",
+          });
+      }
+
+      drizzleDb
+        .delete(userOtpCodes)
+        .where(eq(userOtpCodes.userId, challenge.userId))
+        .run();
       const otpCode = generateSecureOtp();
       const codeHash = sha256Hex(otpCode);
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-      db.prepare(
-        `INSERT INTO user_otp_codes (user_id, code_hash, expires_at) VALUES (?, ?, ?)`,
-      ).run(challenge.user_id, codeHash, expiresAt);
+      const expiresAt = new Date(Date.now() + AUTH_2FA_CHALLENGE_EXPIRY_MS).toISOString();
+      drizzleDb.insert(userOtpCodes).values({
+        userId: challenge.userId,
+        codeHash,
+        expiresAt,
+      }).run();
 
       const { build2FAEmailCodeEmail } = await import("../../services/email.js");
       const baseUrl =
-        normalizeHostname(settings.hostname || "") || "http://localhost";
+        getBaseUrl(settings);
       const { subject, text, html } = build2FAEmailCodeEmail(baseUrl, otpCode);
       const sendResult = await sendMail({
-        to: challenge.email,
+        to: challenge.email!,
         subject,
         text,
         html,
@@ -308,21 +368,14 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
   const twoFaSetupKeyGenerator = (request: {
     body?: unknown;
     ip?: string;
+    cookies?: Record<string, string | undefined>;
   }) => {
-    const body = request.body as {
-      challengeToken?: string;
-      method?: string;
-    } | undefined;
-    const token = body?.challengeToken;
-    const method = body?.method;
-    if (method === "email" && typeof token === "string" && token.trim()) {
-      return `2fa-send-email:${sha256Hex(token.trim())}`;
+    const body = request.body as { method?: string } | undefined;
+    const token = get2FAChallengeToken(request);
+    if (body?.method === "email" && token) {
+      return create2FARateLimitKeyGen("2fa-send-email")(request);
     }
-    return `2fa-setup:${
-      typeof token === "string" && token.trim()
-        ? sha256Hex(token.trim())
-        : (request.ip || "").trim() || "unknown"
-    }`;
+    return create2FARateLimitKeyGen("2fa-setup")(request);
   };
 
   app.post(
@@ -347,7 +400,7 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
             challengeToken: { type: "string" },
             method: { type: "string", enum: ["totp", "email"] },
           },
-          required: ["challengeToken", "method"],
+          required: ["method"],
         },
         response: {
           200: { description: "QR data or ok" },
@@ -358,22 +411,35 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
       const parsed = setup2FABodySchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: "Validation failed" });
       }
-      const { challengeToken, method } = parsed.data;
+      const challengeToken = get2FAChallengeToken(request);
+      if (!challengeToken) {
+        return reply.status(400).send({ error: "Challenge required. Please sign in again." });
+      }
+      const { method } = parsed.data;
       const tokenHash = sha256Hex(challengeToken);
 
-      const challenge = db
-        .prepare(
-          `SELECT c.id, c.user_id, u.email, COALESCE(u.read_only, 0) as read_only FROM auth_2fa_challenges c
-         INNER JOIN users u ON u.id = c.user_id
-         WHERE c.token_hash = ? AND datetime(c.expires_at) > datetime('now')`,
+      const challenge = drizzleDb
+        .select({
+          id: auth2faChallenges.id,
+          userId: auth2faChallenges.userId,
+          email: users.email,
+          read_only: sql<number>`COALESCE(${users.readOnly}, 0)`.as("read_only"),
+        })
+        .from(auth2faChallenges)
+        .innerJoin(users, eq(users.id, auth2faChallenges.userId))
+        .where(
+          and(
+            eq(auth2faChallenges.tokenHash, tokenHash),
+            gt(auth2faChallenges.expiresAt, sql`datetime('now')`),
+          ),
         )
-        .get(tokenHash) as
-        | { id: string; user_id: string; email: string; read_only: number }
-        | undefined;
+        .limit(1)
+        .get();
 
       if (!challenge) {
         return reply
@@ -400,14 +466,19 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
         const secret = generateTotpSecret();
         const uri = getTotpUri({
           secret,
-          label: challenge.email,
+          label: challenge.email ?? "",
           issuer: "HarborFM",
         });
         const qrDataUrl = await getTotpQrDataUrl(uri);
+        const secretHash = sha256Hex(secret);
+        drizzleDb
+          .update(auth2faChallenges)
+          .set({ totpSecretHash: secretHash })
+          .where(eq(auth2faChallenges.tokenHash, tokenHash))
+          .run();
         return reply.send({
           qrDataUrl,
           secret,
-          challengeToken,
         });
       }
 
@@ -424,26 +495,37 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
                 "Email 2FA is not available. Configure an email provider in Settings.",
             });
         }
-        db.prepare("DELETE FROM user_otp_codes WHERE user_id = ?").run(
-          challenge.user_id,
-        );
+        if (!challenge.email?.trim()) {
+          return reply
+            .status(400)
+            .send({
+              error:
+                "Email 2FA is not available. Add an email to your account first.",
+            });
+        }
+        drizzleDb
+          .delete(userOtpCodes)
+          .where(eq(userOtpCodes.userId, challenge.userId))
+          .run();
         const otpCode = generateSecureOtp();
         const codeHash = sha256Hex(otpCode);
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-        db.prepare(
-          `INSERT INTO user_otp_codes (user_id, code_hash, expires_at) VALUES (?, ?, ?)`,
-        ).run(challenge.user_id, codeHash, expiresAt);
+        const expiresAt = new Date(Date.now() + AUTH_2FA_CHALLENGE_EXPIRY_MS).toISOString();
+        drizzleDb.insert(userOtpCodes).values({
+          userId: challenge.userId,
+          codeHash,
+          expiresAt,
+        }).run();
         const { build2FAEmailCodeEmail } = await import(
           "../../services/email.js"
         );
         const baseUrl =
-          normalizeHostname(settings.hostname || "") || "http://localhost";
+          getBaseUrl(settings);
         const { subject, text, html } = build2FAEmailCodeEmail(
           baseUrl,
           otpCode,
         );
         await sendMail({ to: challenge.email, subject, text, html });
-        return reply.send({ ok: true, challengeToken });
+        return reply.send({ ok: true });
       }
 
       return reply.status(400).send({ error: "Invalid method" });
@@ -453,14 +535,8 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
   const twoFaConfirmSetupKeyGenerator = (request: {
     body?: unknown;
     ip?: string;
-  }) => {
-    const body = request.body as { challengeToken?: string } | undefined;
-    const token = body?.challengeToken;
-    if (typeof token === "string" && token.trim()) {
-      return `2fa-confirm-setup:${sha256Hex(token.trim())}`;
-    }
-    return `2fa-confirm-setup:ip:${(request.ip || "").trim() || "unknown"}`;
-  };
+    cookies?: Record<string, string | undefined>;
+  }) => create2FARateLimitKeyGen("2fa-confirm-setup")(request);
 
   app.post(
     "/auth/2fa/confirm-setup",
@@ -483,8 +559,9 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
           properties: {
             challengeToken: { type: "string" },
             code: { type: "string" },
+            secret: { type: "string" },
           },
-          required: ["challengeToken", "code"],
+          required: ["code"],
         },
         response: {
           200: { description: "User and session" },
@@ -496,27 +573,37 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const challengeToken = get2FAChallengeToken(request);
+      if (!challengeToken) {
+        return reply.status(400).send({ error: "Challenge required. Please sign in again." });
+      }
       const parsed = confirm2FASetupBodySchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: "Validation failed" });
       }
-      const { challengeToken, code } = parsed.data;
+      const { code } = parsed.data;
       const tokenHash = sha256Hex(challengeToken);
 
-      const challenge = db
-        .prepare(
-          `SELECT c.id, c.user_id, u.email, COALESCE(u.read_only, 0) as read_only, u.totp_locked_until
-         FROM auth_2fa_challenges c
-         INNER JOIN users u ON u.id = c.user_id
-         WHERE c.token_hash = ? AND datetime(c.expires_at) > datetime('now')`,
+      const challenge = drizzleDb
+        .select({
+          id: auth2faChallenges.id,
+          userId: auth2faChallenges.userId,
+          totpSecretHash: auth2faChallenges.totpSecretHash,
+          email: users.email,
+          read_only: sql<number>`COALESCE(${users.readOnly}, 0)`.as("read_only"),
+          totpLockedUntil: users.totpLockedUntil,
+        })
+        .from(auth2faChallenges)
+        .innerJoin(users, eq(users.id, auth2faChallenges.userId))
+        .where(
+          and(
+            eq(auth2faChallenges.tokenHash, tokenHash),
+            gt(auth2faChallenges.expiresAt, sql`datetime('now')`),
+          ),
         )
-        .get(tokenHash) as {
-          id: string;
-          user_id: string;
-          email: string;
-          read_only: number;
-          totp_locked_until: string | null;
-        } | undefined;
+        .limit(1)
+        .get();
 
       if (!challenge) {
         return reply
@@ -529,13 +616,13 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
             "Read-only accounts cannot add or remove two-factor authentication.",
         });
       }
+      const confirmLockedMs = parseDatetimeToMs(challenge.totpLockedUntil);
       if (
-        challenge.totp_locked_until &&
-        new Date(challenge.totp_locked_until) > new Date()
+        challenge.totpLockedUntil &&
+        !Number.isNaN(confirmLockedMs) &&
+        confirmLockedMs > Date.now()
       ) {
-        const retrySec = Math.ceil(
-          (new Date(challenge.totp_locked_until).getTime() - Date.now()) / 1000,
-        );
+        const retrySec = Math.ceil((confirmLockedMs - Date.now()) / 1000);
         return reply
           .status(429)
           .header("Retry-After", String(Math.max(1, retrySec)))
@@ -546,19 +633,36 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
       const hasSecret = typeof body?.secret === "string" && body.secret.trim();
 
       if (hasSecret) {
-        const valid = await verifyTotp(body.secret!.trim(), code);
+        const providedSecret = body.secret!.trim();
+        if (challenge.totpSecretHash) {
+          const providedHash = sha256Hex(providedSecret);
+          if (providedHash !== challenge.totpSecretHash) {
+            await timingSafeDelayMs();
+            return reply.status(401).send({ error: "Invalid code" });
+          }
+        }
+        const valid = await verifyTotp(providedSecret, code);
         if (!valid) {
+          await timingSafeDelayMs();
           return reply.status(401).send({ error: "Invalid code" });
         }
-        const totpChallenge = db
-          .prepare(
-            `SELECT c.id, c.user_id, u.email FROM auth_2fa_challenges c
-           INNER JOIN users u ON u.id = c.user_id
-           WHERE c.token_hash = ? AND datetime(c.expires_at) > datetime('now')`,
+        const totpChallenge = drizzleDb
+          .select({
+            id: auth2faChallenges.id,
+            userId: auth2faChallenges.userId,
+            email: users.email,
+            username: users.username,
+          })
+          .from(auth2faChallenges)
+          .innerJoin(users, eq(users.id, auth2faChallenges.userId))
+          .where(
+            and(
+              eq(auth2faChallenges.tokenHash, tokenHash),
+              gt(auth2faChallenges.expiresAt, sql`datetime('now')`),
+            ),
           )
-          .get(tokenHash) as
-          | { id: string; user_id: string; email: string }
-          | undefined;
+          .limit(1)
+          .get();
         if (!totpChallenge) {
           return reply
             .status(400)
@@ -566,111 +670,126 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
               error: "Invalid or expired challenge. Please sign in again.",
             });
         }
-        const secretEnc = encryptTotpSecret(body.secret!.trim());
-        db.prepare(
-          `UPDATE users SET totp_secret_enc = ?, two_factor_method = ? WHERE id = ?`,
-        ).run(secretEnc, "totp", totpChallenge.user_id);
-        db.prepare("DELETE FROM auth_2fa_challenges WHERE id = ?").run(
-          totpChallenge.id,
-        );
+        const secretEnc = encryptTotpSecret(providedSecret);
+        drizzleDb
+          .update(users)
+          .set({ totpSecretEnc: secretEnc, twoFactorMethod: "totp" })
+          .where(eq(users.id, totpChallenge.userId))
+          .run();
+        drizzleDb
+          .delete(auth2faChallenges)
+          .where(eq(auth2faChallenges.id, totpChallenge.id))
+          .run();
         const totpSettings = readSettings();
         if (
-          totpSettings.email_provider === "smtp" ||
-          totpSettings.email_provider === "sendgrid" ||
-          totpSettings.email_provider === "webhook"
+          totpChallenge.email &&
+          isEmailProviderConfigured(totpSettings)
         ) {
           const baseUrl =
-            normalizeHostname(totpSettings.hostname || "") || "http://localhost";
+            getBaseUrl(totpSettings);
           const { subject, text, html } = build2FAAddedEmail(baseUrl, "totp");
           void sendMail({
-            to: totpChallenge.email,
+            to: totpChallenge.email!,
             subject,
             text,
             html,
           });
         }
         const token = app.jwt.sign(
-          { sub: totpChallenge.user_id, email: totpChallenge.email },
-          { expiresIn: "7d" },
+          buildAuthJwtPayload({
+            id: totpChallenge.userId,
+            email: totpChallenge.email,
+            username: totpChallenge.username,
+          }),
+          { expiresIn: JWT_SESSION_EXPIRY },
         );
         return reply
+          .clearCookie(TWOFA_CHALLENGE_COOKIE_NAME, { path: "/" })
           .setCookie(JWT_COOKIE_NAME, token, COOKIE_OPTS)
           .setCookie(CSRF_COOKIE_NAME, newCsrfToken(), CSRF_COOKIE_OPTS)
           .send({
             user: {
-              id: totpChallenge.user_id,
+              id: totpChallenge.userId,
               email: totpChallenge.email,
             },
           });
       }
 
-      const emailChallenge = db
-        .prepare(
-          `SELECT c.id, c.user_id, u.email FROM auth_2fa_challenges c
-         INNER JOIN users u ON u.id = c.user_id
-         WHERE c.token_hash = ? AND datetime(c.expires_at) > datetime('now')`,
+      const emailChallenge = drizzleDb
+        .select({
+          id: auth2faChallenges.id,
+          userId: auth2faChallenges.userId,
+          email: users.email,
+          username: users.username,
+        })
+        .from(auth2faChallenges)
+        .innerJoin(users, eq(users.id, auth2faChallenges.userId))
+        .where(
+          and(
+            eq(auth2faChallenges.tokenHash, tokenHash),
+            gt(auth2faChallenges.expiresAt, sql`datetime('now')`),
+          ),
         )
-        .get(tokenHash) as
-        | { id: string; user_id: string; email: string }
-        | undefined;
+        .limit(1)
+        .get();
       if (!emailChallenge) {
         return reply
           .status(400)
           .send({ error: "Invalid or expired challenge." });
       }
-      const otpRow = db
-        .prepare(
-          `SELECT id FROM user_otp_codes WHERE user_id = ? AND code_hash = ? AND datetime(expires_at) > datetime('now')`,
+      const otpRow = drizzleDb
+        .select({ id: userOtpCodes.id })
+        .from(userOtpCodes)
+        .where(
+          and(
+            eq(userOtpCodes.userId, emailChallenge.userId),
+            eq(userOtpCodes.codeHash, sha256Hex(code.trim())),
+            gt(userOtpCodes.expiresAt, sql`datetime('now')`),
+          ),
         )
-        .get(
-          emailChallenge.user_id,
-          sha256Hex(code.trim()),
-        ) as { id: number } | undefined;
-      if (!otpRow) {
-        const ip = getClientIp(request);
-        db.prepare(
-          "INSERT INTO user_totp_attempts (user_id, created_at) VALUES (?, datetime('now'))",
-        ).run(emailChallenge.user_id);
-        const countRow = db
-          .prepare(
-            `SELECT COUNT(*) as cnt FROM user_totp_attempts WHERE user_id = ? AND datetime(created_at) >= datetime('now', '-15 minutes')`,
-          )
-          .get(emailChallenge.user_id) as { cnt: number };
-        const failures = Number(countRow?.cnt ?? 0);
-        if (failures >= 5) {
-          db.prepare(
-            `UPDATE users SET totp_locked_until = datetime('now', '+15 minutes') WHERE id = ?`,
-          ).run(emailChallenge.user_id);
-          recordFailureAndMaybeBan(ip, "auth_totp", {
-            userAgent: getUserAgent(request),
-          });
+        .limit(1)
+        .get();
+        if (!otpRow) {
+        await timingSafeDelayMs();
+        const result = recordTOTPFailureAndCheckLockout(
+          emailChallenge.userId,
+          getClientIp(request),
+          getUserAgent(request),
+        );
+        if (result.locked) {
           return reply
             .status(429)
-            .header("Retry-After", "900")
+            .header("Retry-After", String(result.retryAfterSec ?? 900))
             .send({
               error: "Too many failed attempts. Please try again in 15 minutes.",
             });
         }
         return reply.status(401).send({ error: "Invalid code" });
       }
-      db.prepare("DELETE FROM user_otp_codes WHERE id = ?").run(otpRow.id);
-      db.prepare("DELETE FROM user_totp_attempts WHERE user_id = ?").run(
-        emailChallenge.user_id,
-      );
-      db.prepare(
-        `UPDATE users SET two_factor_method = ? WHERE id = ?`,
-      ).run("email", emailChallenge.user_id);
-      db.prepare("DELETE FROM auth_2fa_challenges WHERE id = ?").run(
-        emailChallenge.id,
-      );
+      drizzleDb
+        .delete(userOtpCodes)
+        .where(eq(userOtpCodes.id, otpRow.id))
+        .run();
+      drizzleDb
+        .delete(userTotpAttempts)
+        .where(eq(userTotpAttempts.userId, emailChallenge.userId))
+        .run();
+      drizzleDb
+        .update(users)
+        .set({ twoFactorMethod: "email" })
+        .where(eq(users.id, emailChallenge.userId))
+        .run();
+      drizzleDb
+        .delete(auth2faChallenges)
+        .where(eq(auth2faChallenges.id, emailChallenge.id))
+        .run();
       const emailSettings = readSettings();
       if (
-        emailSettings.email_provider === "smtp" ||
-        emailSettings.email_provider === "sendgrid" ||
-        emailSettings.email_provider === "webhook"
+        emailChallenge.email &&
+        isEmailProviderConfigured(emailSettings)
       ) {
         const baseUrl =
-          normalizeHostname(emailSettings.hostname || "") || "http://localhost";
+          getBaseUrl(emailSettings);
         const { subject, text, html } = build2FAAddedEmail(baseUrl, "email");
         void sendMail({
           to: emailChallenge.email,
@@ -680,15 +799,20 @@ export async function registerTwoFactorLoginRoutes(app: FastifyInstance) {
         });
       }
       const token = app.jwt.sign(
-        { sub: emailChallenge.user_id, email: emailChallenge.email },
-        { expiresIn: "7d" },
+        buildAuthJwtPayload({
+          id: emailChallenge.userId,
+          email: emailChallenge.email,
+          username: emailChallenge.username,
+        }),
+        { expiresIn: JWT_SESSION_EXPIRY },
       );
       return reply
+        .clearCookie(TWOFA_CHALLENGE_COOKIE_NAME, { path: "/" })
         .setCookie(JWT_COOKIE_NAME, token, COOKIE_OPTS)
         .setCookie(CSRF_COOKIE_NAME, newCsrfToken(), CSRF_COOKIE_OPTS)
         .send({
           user: {
-            id: emailChallenge.user_id,
+            id: emailChallenge.userId,
             email: emailChallenge.email,
           },
         });

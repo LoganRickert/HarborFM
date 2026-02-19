@@ -5,7 +5,7 @@ import { TestBlock } from './TestBlock';
 import { AppSettings } from '../../api/settings';
 import styles from '../../pages/Settings.module.css';
 
-const EMAIL_OPTIONS: ProviderOption<AppSettings['email_provider']>[] = [
+const EMAIL_OPTIONS: ProviderOption<AppSettings['emailProvider']>[] = [
   { value: 'none', label: 'None' },
   { value: 'smtp', label: 'SMTP' },
   { value: 'sendgrid', label: 'SendGrid' },
@@ -28,14 +28,14 @@ export function EmailSection({
       <div className={styles.label}>
         Provider
         <ProviderToggle
-          value={form.email_provider}
+          value={form.emailProvider}
           options={EMAIL_OPTIONS}
-          onChange={(value) => onFormChange({ email_provider: value })}
+          onChange={(value) => onFormChange({ emailProvider: value })}
           ariaLabel="Email provider"
         />
       </div>
 
-      {form.email_provider === 'smtp' && (
+      {form.emailProvider === 'smtp' && (
         <>
           <label className={styles.label}>
             SMTP host
@@ -43,8 +43,8 @@ export function EmailSection({
               type="text"
               className={styles.input}
               placeholder="smtp.example.com"
-              value={form.smtp_host}
-              onChange={(e) => onFormChange({ smtp_host: e.target.value })}
+              value={form.smtpHost}
+              onChange={(e) => onFormChange({ smtpHost: e.target.value })}
               autoComplete="off"
             />
           </label>
@@ -57,15 +57,15 @@ export function EmailSection({
               step={1}
               className={styles.input}
               placeholder="587"
-              value={form.smtp_port}
-              onChange={(e) => onFormChange({ smtp_port: Number(e.target.value) || 587 })}
+              value={form.smtpPort}
+              onChange={(e) => onFormChange({ smtpPort: Number(e.target.value) || 587 })}
             />
           </label>
           <label className="toggle">
             <input
               type="checkbox"
-              checked={form.smtp_secure}
-              onChange={(e) => onFormChange({ smtp_secure: e.target.checked })}
+              checked={form.smtpSecure}
+              onChange={(e) => onFormChange({ smtpSecure: e.target.checked })}
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Use TLS (recommended for port 587)</span>
@@ -76,8 +76,8 @@ export function EmailSection({
               type="text"
               className={styles.input}
               placeholder="user@example.com"
-              value={form.smtp_user}
-              onChange={(e) => onFormChange({ smtp_user: e.target.value })}
+              value={form.smtpUser}
+              onChange={(e) => onFormChange({ smtpUser: e.target.value })}
               autoComplete="off"
             />
           </label>
@@ -86,9 +86,9 @@ export function EmailSection({
             <input
               type="password"
               className={styles.input}
-              placeholder={form.smtp_password === '(set)' ? '(saved)' : 'Enter password'}
-              value={form.smtp_password === '(set)' ? '' : form.smtp_password}
-              onChange={(e) => onFormChange({ smtp_password: e.target.value })}
+              placeholder={form.smtpPassword === '(set)' ? '(saved)' : 'Enter password'}
+              value={form.smtpPassword === '(set)' ? '' : form.smtpPassword}
+              onChange={(e) => onFormChange({ smtpPassword: e.target.value })}
               autoComplete="off"
             />
           </label>
@@ -98,8 +98,8 @@ export function EmailSection({
               type="email"
               className={styles.input}
               placeholder="noreply@example.com"
-              value={form.smtp_from}
-              onChange={(e) => onFormChange({ smtp_from: e.target.value })}
+              value={form.smtpFrom}
+              onChange={(e) => onFormChange({ smtpFrom: e.target.value })}
               autoComplete="off"
             />
             <p className={styles.inputHelp}>Email address used as the sender for outgoing mail.</p>
@@ -112,7 +112,7 @@ export function EmailSection({
         </>
       )}
 
-      {form.email_provider === 'webhook' && (
+      {form.emailProvider === 'webhook' && (
         <>
           <label className={styles.label}>
             Webhook URL
@@ -120,8 +120,8 @@ export function EmailSection({
               type="url"
               className={styles.input}
               placeholder="https://discord.com/api/webhooks/..."
-              value={form.email_webhook_url}
-              onChange={(e) => onFormChange({ email_webhook_url: e.target.value })}
+              value={form.emailWebhookUrl}
+              onChange={(e) => onFormChange({ emailWebhookUrl: e.target.value })}
               autoComplete="off"
             />
             <p className={styles.inputHelp}>
@@ -134,8 +134,8 @@ export function EmailSection({
               type="text"
               className={styles.input}
               placeholder="content"
-              value={form.email_webhook_field_key}
-              onChange={(e) => onFormChange({ email_webhook_field_key: e.target.value })}
+              value={form.emailWebhookFieldKey}
+              onChange={(e) => onFormChange({ emailWebhookFieldKey: e.target.value })}
               autoComplete="off"
             />
             <p className={styles.inputHelp}>
@@ -145,16 +145,16 @@ export function EmailSection({
         </>
       )}
 
-      {form.email_provider === 'sendgrid' && (
+      {form.emailProvider === 'sendgrid' && (
         <>
           <label className={styles.label}>
             SendGrid API key
             <input
               type="password"
               className={styles.input}
-              placeholder={form.sendgrid_api_key === '(set)' ? '(saved)' : 'SG....'}
-              value={form.sendgrid_api_key === '(set)' ? '' : form.sendgrid_api_key}
-              onChange={(e) => onFormChange({ sendgrid_api_key: e.target.value })}
+              placeholder={form.sendgridApiKey === '(set)' ? '(saved)' : 'SG....'}
+              value={form.sendgridApiKey === '(set)' ? '' : form.sendgridApiKey}
+              onChange={(e) => onFormChange({ sendgridApiKey: e.target.value })}
               autoComplete="off"
             />
             <p className={styles.inputHelp}>
@@ -176,8 +176,8 @@ export function EmailSection({
               type="email"
               className={styles.input}
               placeholder="noreply@example.com"
-              value={form.sendgrid_from}
-              onChange={(e) => onFormChange({ sendgrid_from: e.target.value })}
+              value={form.sendgridFrom}
+              onChange={(e) => onFormChange({ sendgridFrom: e.target.value })}
               autoComplete="off"
             />
             <p className={styles.inputHelp}>Verified sender in SendGrid. Used as the sender for outgoing mail.</p>
@@ -190,7 +190,7 @@ export function EmailSection({
         </>
       )}
 
-      {(form.email_provider === 'smtp' || form.email_provider === 'sendgrid' || form.email_provider === 'webhook') && (
+      {(form.emailProvider === 'smtp' || form.emailProvider === 'sendgrid' || form.emailProvider === 'webhook') && (
         <div className={styles.emailNotifications}>
           <h3 className={styles.emailNotificationsTitle}>Email notifications</h3>
           <p className={styles.emailNotificationsIntro}>Choose which emails the server sends when email is configured.</p>
@@ -202,8 +202,8 @@ export function EmailSection({
                 <label className="toggle">
                   <input
                     type="checkbox"
-                    checked={form.email_enable_registration_verification}
-                    onChange={(e) => onFormChange({ email_enable_registration_verification: e.target.checked })}
+                    checked={form.emailEnableRegistrationVerification}
+                    onChange={(e) => onFormChange({ emailEnableRegistrationVerification: e.target.checked })}
                   />
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Verification on register</span>
@@ -211,8 +211,8 @@ export function EmailSection({
                 <label className="toggle">
                   <input
                     type="checkbox"
-                    checked={form.email_enable_welcome_after_verify}
-                    onChange={(e) => onFormChange({ email_enable_welcome_after_verify: e.target.checked })}
+                    checked={form.emailEnableWelcomeAfterVerify}
+                    onChange={(e) => onFormChange({ emailEnableWelcomeAfterVerify: e.target.checked })}
                   />
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Welcome after verification</span>
@@ -220,8 +220,8 @@ export function EmailSection({
                 <label className="toggle">
                   <input
                     type="checkbox"
-                    checked={form.email_enable_password_reset}
-                    onChange={(e) => onFormChange({ email_enable_password_reset: e.target.checked })}
+                    checked={form.emailEnablePasswordReset}
+                    onChange={(e) => onFormChange({ emailEnablePasswordReset: e.target.checked })}
                   />
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Password reset</span>
@@ -229,8 +229,8 @@ export function EmailSection({
                 <label className="toggle">
                   <input
                     type="checkbox"
-                    checked={form.email_enable_admin_welcome}
-                    onChange={(e) => onFormChange({ email_enable_admin_welcome: e.target.checked })}
+                    checked={form.emailEnableAdminWelcome}
+                    onChange={(e) => onFormChange({ emailEnableAdminWelcome: e.target.checked })}
                   />
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Admin welcome (set-password)</span>
@@ -243,8 +243,8 @@ export function EmailSection({
                 <label className="toggle">
                   <input
                     type="checkbox"
-                    checked={form.email_enable_new_show}
-                    onChange={(e) => onFormChange({ email_enable_new_show: e.target.checked })}
+                    checked={form.emailEnableNewShow}
+                    onChange={(e) => onFormChange({ emailEnableNewShow: e.target.checked })}
                   />
                   <span className="toggle__track" aria-hidden="true" />
                   <span>New show created</span>
@@ -252,8 +252,8 @@ export function EmailSection({
                 <label className="toggle">
                   <input
                     type="checkbox"
-                    checked={form.email_enable_invite}
-                    onChange={(e) => onFormChange({ email_enable_invite: e.target.checked })}
+                    checked={form.emailEnableInvite}
+                    onChange={(e) => onFormChange({ emailEnableInvite: e.target.checked })}
                   />
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Invite to platform</span>
@@ -261,8 +261,8 @@ export function EmailSection({
                 <label className="toggle">
                   <input
                     type="checkbox"
-                    checked={form.email_enable_contact}
-                    onChange={(e) => onFormChange({ email_enable_contact: e.target.checked })}
+                    checked={form.emailEnableContact}
+                    onChange={(e) => onFormChange({ emailEnableContact: e.target.checked })}
                   />
                   <span className="toggle__track" aria-hidden="true" />
                   <span>Contact form</span>

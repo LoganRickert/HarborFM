@@ -1,7 +1,12 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { db } from "../../db/index.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
+import {
+  getEpisodePodcastId,
+  getPodcastForJoinInfo,
+  getEpisodeForJoinInfo,
+} from "./repo.js";
 import { canAccessEpisode, canEditSegments } from "../../services/access.js";
+import { assertSafeId } from "../../services/paths.js";
 import { nanoid } from "nanoid";
 import {
   createSession,
@@ -24,6 +29,12 @@ import {
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { getRequestOrigin, getPublicWsUrl, broadcastToSession, CALL_JOIN_CONTEXT, sessionSockets } from "./shared.js";
 import { WEBRTC_ENABLED } from "../../config.js";
+import {
+  callStartBodySchema,
+  callSessionCodeParamSchema,
+  callSessionTokenParamSchema,
+  callSessionQuerySchema,
+} from "@harborfm/shared";
 
 export async function registerLifecycleRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -64,8 +75,18 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const body = request.body as { episodeId: string; password?: string };
-      const episodeId = body.episodeId;
+      const parsed = callStartBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: parsed.error.issues[0]?.message ?? "Validation failed", details: parsed.error.flatten() });
+      }
+      const { episodeId } = parsed.data;
+      try {
+        assertSafeId(episodeId, "episodeId");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid episodeId" });
+      }
       const access = canAccessEpisode(request.userId, episodeId);
       if (!access)
         return reply.status(404).send({ error: "Episode not found" });
@@ -104,12 +125,10 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         return reply.send(payload);
       }
 
-      const episodeRow = db
-        .prepare("SELECT podcast_id FROM episodes WHERE id = ?")
-        .get(episodeId) as { podcast_id: string } | undefined;
+      const episodeRow = getEpisodePodcastId(episodeId);
       if (!episodeRow)
         return reply.status(404).send({ error: "Episode not found" });
-      const podcastId = episodeRow.podcast_id;
+      const podcastId = episodeRow.podcastId;
 
       const origin = getRequestOrigin(
         request.headers["origin"] as string | undefined,
@@ -120,7 +139,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         podcastId,
         request.userId,
         origin,
-        body.password ?? null,
+        parsed.data.password ?? null,
         async (endedSession) => {
           if (
             endedSession.roomId &&
@@ -178,13 +197,13 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
               setSessionRoomId(session.sessionId, roomId);
               setSessionHostToken(session.sessionId, hostToken);
               webrtcUrl = publicWsBase;
-              console.log("[call] room created ok", { sessionId: session.sessionId, attempt });
+              request.log.debug({ sessionId: session.sessionId, attempt }, "[call] room created ok");
               break;
             }
-            console.log("[call] room POST not ok", { sessionId: session.sessionId, attempt, status: roomRes.status });
+            request.log.debug({ sessionId: session.sessionId, attempt, status: roomRes.status }, "[call] room POST not ok");
             if (attempt < 3) await new Promise((r) => setTimeout(r, 300 * attempt));
           } catch (err) {
-            console.log("[call] room POST failed", { sessionId: session.sessionId, attempt, err: String(err) });
+            request.log.debug({ sessionId: session.sessionId, attempt, err: String(err) }, "[call] room POST failed");
             if (attempt < 3) await new Promise((r) => setTimeout(r, 300 * attempt));
           }
         }
@@ -251,7 +270,13 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { code } = request.params as { code: string };
+      const codeParsed = callSessionCodeParamSchema.safeParse(request.params);
+      if (!codeParsed.success) {
+        return reply
+          .status(400)
+          .send({ error: codeParsed.error.issues[0]?.message ?? "Validation failed", details: codeParsed.error.flatten() });
+      }
+      const { code } = codeParsed.data;
       const ip = getClientIp(request);
       const ban = getIpBan(ip, CALL_JOIN_CONTEXT);
       if (ban.banned) {
@@ -333,7 +358,13 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { token } = request.params as { token: string };
+      const tokenParsed = callSessionTokenParamSchema.safeParse(request.params);
+      if (!tokenParsed.success) {
+        return reply
+          .status(400)
+          .send({ error: tokenParsed.error.issues[0]?.message ?? "Validation failed", details: tokenParsed.error.flatten() });
+      }
+      const { token } = tokenParsed.data;
       const ip = getClientIp(request);
       const ban = getIpBan(ip, CALL_JOIN_CONTEXT);
       if (ban.banned) {
@@ -350,12 +381,8 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         return reply.status(404).send({ error: "Invalid or expired link" });
       }
 
-      const podcast = db
-        .prepare("SELECT title, artwork_path, artwork_url FROM podcasts WHERE id = ?")
-        .get(session.podcastId) as { title: string; artwork_path: string | null; artwork_url: string | null } | undefined;
-      const episode = db
-        .prepare("SELECT id, title, artwork_path, artwork_url FROM episodes WHERE id = ? AND podcast_id = ?")
-        .get(session.episodeId, session.podcastId) as { id: string; title: string; artwork_path: string | null; artwork_url: string | null } | undefined;
+      const podcast = getPodcastForJoinInfo(session.podcastId);
+      const episode = getEpisodeForJoinInfo(session.episodeId, session.podcastId);
       if (!podcast || !episode)
         return reply.status(404).send({ error: "Show or episode not found" });
 
@@ -364,15 +391,15 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       const passwordRequired = Boolean(session.password && session.password.trim());
 
       let artworkUrl: string | null = null;
-      if (episode.artwork_url) {
-        artworkUrl = episode.artwork_url;
-      } else if (episode.artwork_path) {
-        const fn = episode.artwork_path.split(/[/\\]/).pop();
+      if (episode.artworkUrl) {
+        artworkUrl = episode.artworkUrl;
+      } else if (episode.artworkPath) {
+        const fn = episode.artworkPath.split(/[/\\]/).pop();
         if (fn) artworkUrl = `/api/public/artwork/${session.podcastId}/episodes/${episode.id}/${encodeURIComponent(fn)}`;
       }
-      if (!artworkUrl && podcast.artwork_url) artworkUrl = podcast.artwork_url;
-      if (!artworkUrl && podcast.artwork_path) {
-        const fn = podcast.artwork_path.split(/[/\\]/).pop();
+      if (!artworkUrl && podcast.artworkUrl) artworkUrl = podcast.artworkUrl;
+      if (!artworkUrl && podcast.artworkPath) {
+        const fn = podcast.artworkPath.split(/[/\\]/).pop();
         if (fn) artworkUrl = `/api/public/artwork/${session.podcastId}/${encodeURIComponent(fn)}`;
       }
 
@@ -420,7 +447,18 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { episodeId } = request.query as { episodeId: string };
+      const queryParsed = callSessionQuerySchema.safeParse(request.query);
+      if (!queryParsed.success) {
+        return reply
+          .status(400)
+          .send({ error: queryParsed.error.issues[0]?.message ?? "Validation failed", details: queryParsed.error.flatten() });
+      }
+      const { episodeId } = queryParsed.data;
+      try {
+        assertSafeId(episodeId, "episodeId");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid episodeId" });
+      }
       let session = getActiveSessionForEpisode(episodeId, request.userId);
       const isHost = !!session;
       if (!session) {
@@ -450,9 +488,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         payload.roomId = session.roomId;
         if (isHost && session.hostToken) payload.hostToken = session.hostToken;
       }
-      if (session.pendingSegmentIds?.length) {
-        payload.pendingSegmentIds = session.pendingSegmentIds;
-      }
+      payload.pendingSegmentIds = session.pendingSegmentIds ?? [];
       if (session.recordingInProgress === true) {
         payload.recordingInProgress = true;
       }

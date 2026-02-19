@@ -27,7 +27,14 @@ async function loginAs(page: import('@playwright/test').Page, email: string, pas
 }
 
 async function logout(page: import('@playwright/test').Page) {
-  await page.request.post(`${API_BASE}/auth/logout`);
+  const csrf = await getCsrf(page);
+  const res = await page.request.post(`${API_BASE}/auth/logout`, {
+    headers: { 'x-csrf-token': csrf },
+  });
+  if (!res.ok()) {
+    const text = await res.text();
+    throw new Error(`Logout failed: ${res.status()} ${text}`);
+  }
 }
 
 /** Login via UI to ensure session cookies are in page context (needed for GET /users admin access). Requires no existing session - call logout() first if switching users. */
@@ -60,7 +67,7 @@ test.describe('Call permissions', () => {
           password: 'admin-password-123',
           hostname: `http://localhost:${PORT}`,
           registration_enabled: true,
-          public_feeds_enabled: true,
+          publicFeedsEnabled: true,
           import_pixabay_assets: false,
         },
       });
@@ -368,7 +375,7 @@ test.describe('Call storage limits', () => {
           password: 'admin-password-123',
           hostname: `http://localhost:${PORT}`,
           registration_enabled: true,
-          public_feeds_enabled: true,
+          publicFeedsEnabled: true,
           import_pixabay_assets: false,
         },
       });

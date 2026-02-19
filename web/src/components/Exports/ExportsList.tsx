@@ -31,7 +31,7 @@ export function ExportsList({
   return (
     <ul className={styles.exportList}>
       {exports.map((exp) => {
-        const publicBase = (exp.public_base_url ?? '').trim().replace(/\/$/, '');
+        const publicBase = (exp.publicBaseUrl ?? '').trim().replace(/\/$/, '');
         const exportPrefix = (exp.prefix ?? '').trim().replace(/^\/|\/$/g, '');
         const feedUrl = publicBase
           ? (exportPrefix ? `${publicBase}/${exportPrefix}/feed.xml` : `${publicBase}/feed.xml`)

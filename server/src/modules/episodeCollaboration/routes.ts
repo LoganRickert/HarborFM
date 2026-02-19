@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
 import { requireAuth } from "../../plugins/auth.js";
 import { canAccessEpisode } from "../../services/access.js";
+import { assertSafeId } from "../../services/paths.js";
 import {
   subscribeEpisode,
   unsubscribeEpisode,
@@ -24,6 +25,12 @@ export async function episodeCollaborationRoutes(
     },
     (socket: WebSocket, req: FastifyRequest) => {
       const { episodeId } = req.params as { episodeId: string };
+      try {
+        assertSafeId(episodeId, "episodeId");
+      } catch {
+        socket.close();
+        return;
+      }
       const userId = req.userId;
 
       const access = canAccessEpisode(userId, episodeId);

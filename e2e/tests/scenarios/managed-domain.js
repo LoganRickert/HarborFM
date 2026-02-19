@@ -1,8 +1,8 @@
 /**
- * E2E: Managed domain and managed sub-domain vs custom_feed_slug.
+ * E2E: Managed domain and managed sub-domain vs customFeedSlug.
  *
- * - managed_domain (exact host, e.g. domain.com): custom_feed_slug only when dns_default_allow_domain is true.
- * - managed_sub_domain (sub.domain.com): custom_feed_slug only when dns_default_allow_sub_domain is true and dns_default_domain is set.
+ * - managedDomain (exact host, e.g. domain.com): customFeedSlug only when dnsDefaultAllowDomain is true.
+ * - managedSubDomain (sub.domain.com): customFeedSlug only when dnsDefaultAllowSubDomain is true and dnsDefaultDomain is set.
  *
  * DNS provider is left as "none" so Cloudflare is never called; values are still saved and resolution is tested via host override.
  */
@@ -24,13 +24,13 @@ export async function run({ runOne }) {
   let podcastManagedId;
 
   results.push(
-    await runOne('Managed domain: when allow_domain false, custom_feed_slug is empty', async () => {
+    await runOne('Managed domain: when allow_domain false, customFeedSlug is empty', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dns_default_allow_domain: false,
-          dns_default_allow_sub_domain: false,
+          dnsDefaultAllowDomain: false,
+          dnsDefaultAllowSubDomain: false,
         }),
       }, jar);
 
@@ -40,33 +40,33 @@ export async function run({ runOne }) {
       await apiFetch(`/podcasts/${podcastManagedId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ managed_domain: managedHost }),
+        body: JSON.stringify({ managedDomain: managedHost }),
       }, jar);
 
       const data = await getPublicConfig(managedHost);
-      if (data.custom_feed_slug !== undefined && data.custom_feed_slug !== null) {
-        throw new Error(`Expected no custom_feed_slug when allow_domain false (Host=${managedHost}), got ${data.custom_feed_slug}`);
+      if (data.customFeedSlug !== undefined && data.customFeedSlug !== null) {
+        throw new Error(`Expected no customFeedSlug when allow_domain false (Host=${managedHost}), got ${data.customFeedSlug}`);
       }
     })
   );
 
   results.push(
-    await runOne('Managed domain: when allow_domain true, custom_feed_slug is set', async () => {
+    await runOne('Managed domain: when allow_domain true, customFeedSlug is set', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dns_default_allow_domain: true }),
+        body: JSON.stringify({ dnsDefaultAllowDomain: true }),
       }, jar);
 
       await apiFetch(`/podcasts/${podcastManagedId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ managed_domain: managedHost }),
+        body: JSON.stringify({ managedDomain: managedHost }),
       }, jar);
 
       const data = await getPublicConfig(managedHost);
-      if (data.custom_feed_slug !== slugManaged) {
-        throw new Error(`Expected custom_feed_slug "${slugManaged}" when Host=${managedHost}, got ${data.custom_feed_slug}`);
+      if (data.customFeedSlug !== slugManaged) {
+        throw new Error(`Expected customFeedSlug "${slugManaged}" when Host=${managedHost}, got ${data.customFeedSlug}`);
       }
     })
   );
@@ -79,13 +79,13 @@ export async function run({ runOne }) {
   let podcastSubId;
 
   results.push(
-    await runOne('Managed sub-domain: when allow_sub_domain false, custom_feed_slug is empty', async () => {
+    await runOne('Managed sub-domain: when allow_sub_domain false, customFeedSlug is empty', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dns_default_domain: baseDomain,
-          dns_default_allow_sub_domain: false,
+          dnsDefaultDomain: baseDomain,
+          dnsDefaultAllowSubDomain: false,
         }),
       }, jar);
 
@@ -95,36 +95,36 @@ export async function run({ runOne }) {
       await apiFetch(`/podcasts/${podcastSubId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ managed_sub_domain: subPart }),
+        body: JSON.stringify({ managedSubDomain: subPart }),
       }, jar);
 
       const data = await getPublicConfig(subHost);
-      if (data.custom_feed_slug !== undefined && data.custom_feed_slug !== null) {
-        throw new Error(`Expected no custom_feed_slug when allow_sub_domain false (Host=${subHost}), got ${data.custom_feed_slug}`);
+      if (data.customFeedSlug !== undefined && data.customFeedSlug !== null) {
+        throw new Error(`Expected no customFeedSlug when allow_sub_domain false (Host=${subHost}), got ${data.customFeedSlug}`);
       }
     })
   );
 
   results.push(
-    await runOne('Managed sub-domain: when allow_sub_domain true, custom_feed_slug is set', async () => {
+    await runOne('Managed sub-domain: when allow_sub_domain true, customFeedSlug is set', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dns_default_domain: baseDomain,
-          dns_default_allow_sub_domain: true,
+          dnsDefaultDomain: baseDomain,
+          dnsDefaultAllowSubDomain: true,
         }),
       }, jar);
 
       await apiFetch(`/podcasts/${podcastSubId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ managed_sub_domain: subPart }),
+        body: JSON.stringify({ managedSubDomain: subPart }),
       }, jar);
 
       const data = await getPublicConfig(subHost);
-      if (data.custom_feed_slug !== slugSub) {
-        throw new Error(`Expected custom_feed_slug "${slugSub}" when Host=${subHost}, got ${data.custom_feed_slug}`);
+      if (data.customFeedSlug !== slugSub) {
+        throw new Error(`Expected customFeedSlug "${slugSub}" when Host=${subHost}, got ${data.customFeedSlug}`);
       }
     })
   );
@@ -135,9 +135,9 @@ export async function run({ runOne }) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          dns_default_allow_domain: false,
-          dns_default_allow_sub_domain: false,
-          dns_default_domain: '',
+          dnsDefaultAllowDomain: false,
+          dnsDefaultAllowSubDomain: false,
+          dnsDefaultDomain: '',
         }),
       }, jar);
     })

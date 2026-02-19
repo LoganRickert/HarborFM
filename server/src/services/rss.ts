@@ -6,7 +6,9 @@ import {
   writeFileSync,
 } from "fs";
 import { basename, extname, join } from "path";
-import { db } from "../db/index.js";
+import { drizzleDb } from "../db/index.js";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { episodes, exports, podcasts, settings } from "../db/schema.js";
 import { getExportPathPrefix } from "./export-config.js";
 import {
   assertPathUnder,
@@ -88,6 +90,16 @@ function sanitizeHttpUrl(input: unknown): string {
   }
 }
 
+function getSetting(key: string): string | null {
+  const row = drizzleDb
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, key))
+    .limit(1)
+    .get();
+  return row?.value ?? null;
+}
+
 export function generateRss(
   podcastId: string,
   publicBaseUrl?: string | null,
@@ -97,39 +109,45 @@ export function generateRss(
   const includeSubscriberOnly = opts.includeSubscriberOnlyEpisodes === true;
   const tokenIdPlaceholder = opts.tokenIdPlaceholder;
 
-  const podcast = db
-    .prepare("SELECT * FROM podcasts WHERE id = ?")
-    .get(podcastId) as Record<string, unknown> | undefined;
+  const podcast = drizzleDb
+    .select()
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get();
   if (!podcast) throw new Error("Podcast not found");
 
   // If no publicBaseUrl provided, try to get one from exports or hostname setting
   let publicBase = sanitizeHttpUrl(publicBaseUrl);
   let exportPrefix: string | null = null;
   if (!publicBase) {
-    const exportWithUrl = db
-      .prepare(
-        "SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? AND public_base_url IS NOT NULL AND LENGTH(public_base_url) > 0 LIMIT 1",
+    const exportWithUrl = drizzleDb
+      .select()
+      .from(exports)
+      .where(
+        and(
+          eq(exports.podcastId, podcastId),
+          sql`${exports.publicBaseUrl} IS NOT NULL AND LENGTH(${exports.publicBaseUrl}) > 0`,
+        ),
       )
-      .get(podcastId) as Record<string, unknown> | undefined;
-    if (exportWithUrl?.public_base_url) {
-      publicBase = sanitizeHttpUrl(exportWithUrl.public_base_url);
+      .limit(1)
+      .get();
+    if (exportWithUrl?.publicBaseUrl) {
+      publicBase = sanitizeHttpUrl(exportWithUrl.publicBaseUrl);
       exportPrefix = getExportPathPrefix(exportWithUrl);
     } else {
-      // If no S3 export, check for hostname setting (for self-hosted MP3s)
-      const hostnameSetting = db
-        .prepare("SELECT value FROM settings WHERE key = ?")
-        .get("hostname") as { value: string } | undefined;
-      if (hostnameSetting?.value && hostnameSetting.value.trim()) {
-        publicBase = sanitizeHttpUrl(hostnameSetting.value);
+      const hostnameVal = getSetting("hostname");
+      if (hostnameVal?.trim()) {
+        publicBase = sanitizeHttpUrl(hostnameVal);
       }
-      // If neither S3 export nor hostname setting is configured, no enclosure URL will be included
     }
   } else {
-    const exportRow = db
-      .prepare(
-        "SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? LIMIT 1",
-      )
-      .get(podcastId) as Record<string, unknown> | undefined;
+    const exportRow = drizzleDb
+      .select()
+      .from(exports)
+      .where(eq(exports.podcastId, podcastId))
+      .limit(1)
+      .get();
     if (exportRow) {
       exportPrefix = getExportPathPrefix(exportRow);
     }
@@ -137,26 +155,31 @@ export function generateRss(
 
   // Token feed: always use app hostname for URLs (no S3); need base URL for placeholder paths
   if (tokenIdPlaceholder) {
-    const hostnameSetting = db
-      .prepare("SELECT value FROM settings WHERE key = ?")
-      .get("hostname") as { value: string } | undefined;
-    const hostBase = hostnameSetting?.value?.trim()
-      ? sanitizeHttpUrl(hostnameSetting.value.trim())
-      : "";
+    const hostnameVal = getSetting("hostname");
+    const hostBase = hostnameVal?.trim() ? sanitizeHttpUrl(hostnameVal.trim()) : "";
     if (hostBase) publicBase = hostBase;
     exportPrefix = null; // token feed URLs are app paths only
   }
 
-  const episodeFilter = includeSubscriberOnly
-    ? ""
-    : " AND (COALESCE(subscriber_only, 0) = 0)";
-  const episodes = db
-    .prepare(
-      `SELECT * FROM episodes WHERE podcast_id = ? AND status = 'published'
-       AND (publish_at IS NULL OR datetime(publish_at) <= datetime('now'))${episodeFilter}
-       ORDER BY publish_at DESC, created_at DESC LIMIT 300`,
-    )
-    .all(podcastId) as Record<string, unknown>[];
+  const episodeWhere = includeSubscriberOnly
+    ? and(
+        eq(episodes.podcastId, podcastId),
+        eq(episodes.status, "published"),
+        sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+      )
+    : and(
+        eq(episodes.podcastId, podcastId),
+        eq(episodes.status, "published"),
+        eq(episodes.subscriberOnly, false),
+        sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+      );
+  const episodesList = drizzleDb
+    .select()
+    .from(episodes)
+    .where(episodeWhere)
+    .orderBy(desc(episodes.publishAt), desc(episodes.createdAt))
+    .limit(300)
+    .all();
 
   const titleRaw = String(podcast.title ?? "");
   const title = escapeCdata(titleRaw);
@@ -169,83 +192,76 @@ export function generateRss(
   const subtitle = subtitleRaw ? escapeCdata(subtitleRaw) : "";
   const language = escapeXml(String(podcast.language ?? "en"));
   const author = escapeCdata(
-    String(podcast.author_name ?? podcast.owner_name ?? ""),
+    String(podcast.authorName ?? podcast.ownerName ?? ""),
   );
-  const ownerName = escapeCdata(String(podcast.owner_name ?? ""));
+  const ownerName = escapeCdata(String(podcast.ownerName ?? ""));
   const emailRaw = String(podcast.email ?? "").trim();
   const email = escapeXml(emailRaw);
-  const categoryPrimary = escapeXml(String(podcast.category_primary ?? ""));
-  const categorySecondary = podcast.category_secondary
-    ? escapeXml(String(podcast.category_secondary))
+  const categoryPrimary = escapeXml(String(podcast.categoryPrimary ?? ""));
+  const categorySecondary = podcast.categorySecondary
+    ? escapeXml(String(podcast.categorySecondary))
     : "";
-  const categoryPrimaryTwo = podcast.category_primary_two
-    ? escapeXml(String(podcast.category_primary_two))
+  const categoryPrimaryTwo = podcast.categoryPrimaryTwo
+    ? escapeXml(String(podcast.categoryPrimaryTwo))
     : "";
-  const categorySecondaryTwo = podcast.category_secondary_two
-    ? escapeXml(String(podcast.category_secondary_two))
+  const categorySecondaryTwo = podcast.categorySecondaryTwo
+    ? escapeXml(String(podcast.categorySecondaryTwo))
     : "";
-  const categoryPrimaryThree = podcast.category_primary_three
-    ? escapeXml(String(podcast.category_primary_three))
+  const categoryPrimaryThree = podcast.categoryPrimaryThree
+    ? escapeXml(String(podcast.categoryPrimaryThree))
     : "";
-  const categorySecondaryThree = podcast.category_secondary_three
-    ? escapeXml(String(podcast.category_secondary_three))
+  const categorySecondaryThree = podcast.categorySecondaryThree
+    ? escapeXml(String(podcast.categorySecondaryThree))
     : "";
-  const explicit = (podcast.explicit as number) === 1 ? "true" : "false";
-  const siteUrl = sanitizeHttpUrl(podcast.site_url);
+  const explicit = podcast.explicit ? "true" : "false";
+  const siteUrl = sanitizeHttpUrl(podcast.siteUrl);
   const slugRaw = stripControlChars(String(podcast.slug ?? "")).trim();
   const copyright = podcast.copyright
     ? escapeXml(String(podcast.copyright))
     : "";
-  const podcastGuid = podcast.podcast_guid
-    ? escapeXml(String(podcast.podcast_guid))
+  const podcastGuid = podcast.podcastGuid
+    ? escapeXml(String(podcast.podcastGuid))
     : "";
-  const locked = (podcast.locked as number) === 1 ? "yes" : "no";
+  const locked = podcast.locked ? "yes" : "no";
   const license = podcast.license ? escapeCdata(String(podcast.license)) : "";
   const itunesType = escapeXml(
-    String((podcast.itunes_type as string) || "episodic"),
+    String((podcast.itunesType as string) || "episodic"),
   );
   const medium = escapeXml(String((podcast.medium as string) || "podcast"));
 
   const publicBaseNoSlash = publicBase ? publicBase.replace(/\/$/, "") : "";
 
   // Base URL for app feed pages (channel link and episode links when site_url / episode_link not set)
-  const hostnameRow = db
-    .prepare("SELECT value FROM settings WHERE key = ?")
-    .get("hostname") as { value: string } | undefined;
-  const feedBaseUrlRaw = hostnameRow?.value?.trim()
-    ? sanitizeHttpUrl(hostnameRow.value.trim())
+  const feedBaseHostname = getSetting("hostname");
+  const feedBaseUrlRaw = feedBaseHostname?.trim()
+    ? sanitizeHttpUrl(feedBaseHostname.trim())
     : "";
   const feedBaseUrl = feedBaseUrlRaw ? feedBaseUrlRaw.replace(/\/+$/, "") : "";
 
-  const websubDiscoveryEnabledRow = db
-    .prepare("SELECT value FROM settings WHERE key = ?")
-    .get("websub_discovery_enabled") as { value: string } | undefined;
-  const websubDiscoveryEnabled = websubDiscoveryEnabledRow?.value === "true";
-  const websubHubRow = db
-    .prepare("SELECT value FROM settings WHERE key = ?")
-    .get("websub_hub") as { value: string } | undefined;
+  const websubDiscoveryEnabled = getSetting("websub_discovery_enabled") === "true";
+  const websubHubVal = getSetting("websub_hub");
   const websubHubUrl =
-    websubDiscoveryEnabled && websubHubRow?.value?.trim()
-      ? sanitizeHttpUrl(websubHubRow.value.trim())
+    websubDiscoveryEnabled && websubHubVal?.trim()
+      ? sanitizeHttpUrl(websubHubVal.trim())
       : "";
 
   const slugEnc = encodeURIComponent(slugRaw);
 
   let artworkUrl = "";
-  // Prefer artwork_url if set, otherwise use artwork_path if available
-  if (podcast.artwork_url) {
-    artworkUrl = sanitizeHttpUrl(podcast.artwork_url);
-  } else if (podcast.artwork_path && publicBaseNoSlash) {
+  // Prefer artworkUrl if set, otherwise use artworkPath if available
+  if (podcast.artworkUrl) {
+    artworkUrl = sanitizeHttpUrl(podcast.artworkUrl);
+  } else if (podcast.artworkPath && publicBaseNoSlash) {
     if (tokenIdPlaceholder) {
-      const filename = basename(podcast.artwork_path as string);
+      const filename = basename(podcast.artworkPath as string);
       artworkUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/artwork/${encodeURIComponent(filename)}`;
     } else if (exportPrefix != null) {
-      const ext = artworkExt(podcast.artwork_path as string);
+      const ext = artworkExt(podcast.artworkPath as string);
       artworkUrl = exportPrefix
         ? `${publicBaseNoSlash}/${exportPrefix}/cover.${ext}`
         : `${publicBaseNoSlash}/cover.${ext}`;
     } else {
-      const filename = basename(podcast.artwork_path as string);
+      const filename = basename(podcast.artworkPath as string);
       artworkUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/artwork/${encodeURIComponent(podcastId)}/${encodeURIComponent(filename)}`;
     }
   }
@@ -266,10 +282,10 @@ export function generateRss(
 
   const nowRfc2822 = new Date().toUTCString();
   const lastBuildDate =
-    episodes.length > 0
-      ? episodes[0].publish_at
-        ? new Date(String(episodes[0].publish_at)).toUTCString()
-        : new Date(String(episodes[0].updated_at)).toUTCString()
+    episodesList.length > 0
+      ? episodesList[0].publishAt
+        ? new Date(String(episodesList[0].publishAt)).toUTCString()
+        : new Date(String(episodesList[0].updatedAt)).toUTCString()
       : nowRfc2822;
 
   // When no podcast site_url is set, use the public feed URL (app hostname + /feed/slug)
@@ -327,11 +343,11 @@ ${channelLink ? `      <link>${escapeXml(channelLink)}</link>\n` : ""}    </imag
   if (license)
     out += `    <podcast:license><![CDATA[${license}]]></podcast:license>\n`;
   const fundingUrl =
-    podcast.funding_url != null ? sanitizeHttpUrl(podcast.funding_url) : "";
+    podcast.fundingUrl != null ? sanitizeHttpUrl(podcast.fundingUrl) : "";
   if (fundingUrl) {
     const fundingLabel =
-      podcast.funding_label != null
-        ? escapeCdata(String(podcast.funding_label).trim())
+      podcast.fundingLabel != null
+        ? escapeCdata(String(podcast.fundingLabel).trim())
         : "";
     out += `    <podcast:funding url="${escapeXml(fundingUrl)}">${fundingLabel ? `<![CDATA[${fundingLabel}]]>` : ""}</podcast:funding>\n`;
   }
@@ -350,17 +366,17 @@ ${channelLink ? `      <link>${escapeXml(channelLink)}</link>\n` : ""}    </imag
     }
   }
   const updateRrule =
-    podcast.update_frequency_rrule != null
-      ? String(podcast.update_frequency_rrule).trim()
+    podcast.updateFrequencyRrule != null
+      ? String(podcast.updateFrequencyRrule).trim()
       : "";
   if (updateRrule) {
     const updateLabel =
-      podcast.update_frequency_label != null
-        ? escapeCdata(String(podcast.update_frequency_label).trim())
+      podcast.updateFrequencyLabel != null
+        ? escapeCdata(String(podcast.updateFrequencyLabel).trim())
         : "";
     out += `    <podcast:updateFrequency rrule="${escapeXml(updateRrule)}">${updateLabel ? `<![CDATA[${updateLabel}]]>` : ""}</podcast:updateFrequency>\n`;
   }
-  const spotifyCount = podcast.spotify_recent_count;
+  const spotifyCount = podcast.spotifyRecentCount;
   const spotifyCountNum =
     typeof spotifyCount === "number" ? spotifyCount : Number(spotifyCount);
   if (
@@ -371,14 +387,14 @@ ${channelLink ? `      <link>${escapeXml(channelLink)}</link>\n` : ""}    </imag
     out += `    <spotify:limit recentCount="${spotifyCountNum}"/>\n`;
   }
   const spotifyCountry =
-    podcast.spotify_country_of_origin != null
-      ? String(podcast.spotify_country_of_origin).trim()
+    podcast.spotifyCountryOfOrigin != null
+      ? String(podcast.spotifyCountryOfOrigin).trim()
       : "";
   if (spotifyCountry)
     out += `    <spotify:countryOfOrigin>${escapeXml(spotifyCountry)}</spotify:countryOfOrigin>\n`;
   const appleVerify =
-    podcast.apple_podcasts_verify != null
-      ? String(podcast.apple_podcasts_verify).trim()
+    podcast.applePodcastsVerify != null
+      ? String(podcast.applePodcastsVerify).trim()
       : "";
   if (appleVerify)
     out += `    <itunes:applepodcastsverify>${escapeXml(appleVerify)}</itunes:applepodcastsverify>\n`;
@@ -419,12 +435,12 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
   out += `    <podcast:medium>${medium}</podcast:medium>
 `;
 
-  for (const ep of episodes) {
+  for (const ep of episodesList) {
     const epTitle = escapeCdata(String(ep.title ?? ""));
     const baseDesc = String(ep.description ?? "");
     const snapshot =
-      ep.description_copyright_snapshot != null
-        ? String(ep.description_copyright_snapshot).trim()
+      ep.descriptionCopyrightSnapshot != null
+        ? String(ep.descriptionCopyrightSnapshot).trim()
         : "";
     const epDesc = escapeCdata(
       snapshot ? `${baseDesc}\r\n\r\nMusic:\r\n${snapshot}` : baseDesc,
@@ -434,35 +450,35 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
     const epSubtitleRaw = ep.subtitle != null ? String(ep.subtitle).trim() : "";
     const epSubtitle = epSubtitleRaw ? escapeCdata(epSubtitleRaw) : "";
     const epContentEncoded =
-      ep.content_encoded != null ? String(ep.content_encoded).trim() : "";
+      ep.contentEncoded != null ? String(ep.contentEncoded).trim() : "";
     const guid = escapeXml(String(ep.guid ?? ep.id));
-    const pubDate = ep.publish_at
-      ? new Date(String(ep.publish_at)).toUTCString()
-      : new Date(String(ep.updated_at)).toUTCString();
+    const pubDate = ep.publishAt
+      ? new Date(String(ep.publishAt)).toUTCString()
+      : new Date(String(ep.updatedAt)).toUTCString();
     const epExplicit =
-      (ep.explicit as number) === 1
+      ep.explicit === true
         ? "true"
-        : (podcast.explicit as number) === 1
+        : podcast.explicit
           ? "true"
           : "false";
     const duration =
-      ep.audio_duration_sec != null ? Number(ep.audio_duration_sec) : 0;
-    const season = ep.season_number != null ? Number(ep.season_number) : null;
+      ep.audioDurationSec != null ? Number(ep.audioDurationSec) : 0;
+    const season = ep.seasonNumber != null ? Number(ep.seasonNumber) : null;
     const episodeNum =
-      ep.episode_number != null ? Number(ep.episode_number) : null;
-    const episodeType = (ep.episode_type as string) || "full";
+      ep.episodeNumber != null ? Number(ep.episodeNumber) : null;
+    const episodeType = (ep.episodeType as string) || "full";
 
     let enclosureUrl = "";
     if (publicBaseNoSlash && ep.id) {
       const validEpisodeId = String(ep.id).trim();
       if (validEpisodeId) {
-        const ext = enclosureExt(ep.audio_final_path);
+        const ext = enclosureExt(ep.audioFinalPath);
         if (tokenIdPlaceholder && slugRaw) {
           enclosureUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/episodes/${encodeURIComponent(validEpisodeId)}${ext}`;
         } else if (exportPrefix != null) {
           // S3 export: public base + prefix + episodes/{id}.ext (matches deployPodcastToS3 keys)
           enclosureUrl = `${publicBaseNoSlash}/${exportPrefix}/episodes/${validEpisodeId}${ext}`;
-        } else if (ep.audio_final_path && podcastId) {
+        } else if (ep.audioFinalPath && podcastId) {
           // Self-hosted: API path with file extension so enclosure URLs end in .mp3 etc.
           const validPodcastId = String(podcastId).trim();
           if (validPodcastId) {
@@ -472,7 +488,7 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       }
     }
 
-    const epLink = sanitizeHttpUrl(ep.episode_link);
+    const epLink = sanitizeHttpUrl(ep.episodeLink);
     const epSlugRaw =
       ep.slug != null ? stripControlChars(String(ep.slug)).trim() : "";
     const fallbackEpLink =
@@ -480,7 +496,7 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
         ? `${feedBaseUrl}/feed/${encodeURIComponent(slugRaw)}/${encodeURIComponent(epSlugRaw)}`
         : channelLink;
     const itemLink = epLink || fallbackEpLink;
-    const guidIsPermaLink = (ep.guid_is_permalink as number) === 1;
+    const guidIsPermaLink = ep.guidIsPermalink === true;
 
     out += `    <item>
       <title><![CDATA[${epTitle}]]></title>
@@ -495,10 +511,10 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       out += `      <content:encoded><![CDATA[${epContentEncoded.replace(/\]\]>/g, "]]]]><![CDATA[>")}]]></content:encoded>\n`;
     if (itemLink) out += `      <link>${escapeXml(itemLink)}</link>\n`;
     if (enclosureUrl) {
-      const bytes = ep.audio_bytes != null ? Number(ep.audio_bytes) : 0;
+      const bytes = ep.audioBytes != null ? Number(ep.audioBytes) : 0;
       const enclosureType =
-        typeof ep.audio_mime === "string" && ep.audio_mime
-          ? ep.audio_mime
+        typeof ep.audioMime === "string" && ep.audioMime
+          ? ep.audioMime
           : "audio/mpeg";
       out += `      <enclosure url="${escapeXml(enclosureUrl)}" length="${bytes}" type="${escapeXml(enclosureType)}"/>\n`;
     }
@@ -516,17 +532,17 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       out += `      <podcast:episode>${episodeNum}</podcast:episode>\n`;
     }
     let epArtworkUrl = "";
-    if (ep.artwork_url) {
-      epArtworkUrl = sanitizeHttpUrl(ep.artwork_url);
-    } else if (ep.artwork_path && publicBaseNoSlash && ep.id) {
+    if (ep.artworkUrl) {
+      epArtworkUrl = sanitizeHttpUrl(ep.artworkUrl);
+    } else if (ep.artworkPath && publicBaseNoSlash && ep.id) {
       if (tokenIdPlaceholder && slugRaw) {
-        const filename = basename(String(ep.artwork_path));
+        const filename = basename(String(ep.artworkPath));
         epArtworkUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/artwork/episodes/${encodeURIComponent(String(ep.id))}/${encodeURIComponent(filename)}`;
       } else if (exportPrefix != null) {
-        const ext = artworkExt(ep.artwork_path as string);
+        const ext = artworkExt(ep.artworkPath as string);
         epArtworkUrl = `${publicBaseNoSlash}/${exportPrefix}/episodes/${String(ep.id)}.${ext}`;
       } else if (podcastId) {
-        const filename = basename(String(ep.artwork_path));
+        const filename = basename(String(ep.artworkPath));
         epArtworkUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/artwork/${encodeURIComponent(podcastId)}/episodes/${encodeURIComponent(String(ep.id))}/${encodeURIComponent(filename)}`;
       }
     }
@@ -583,34 +599,41 @@ export function getPublicFeedSelfUrl(
   podcastId: string,
   publicBaseUrl?: string | null,
 ): string | null {
-  const podcast = db
-    .prepare("SELECT slug FROM podcasts WHERE id = ?")
-    .get(podcastId) as { slug: string | null } | undefined;
+  const podcast = drizzleDb
+    .select({ slug: podcasts.slug })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get();
   if (!podcast?.slug) return null;
   let publicBase = sanitizeHttpUrl(publicBaseUrl);
   let exportPrefix: string | null = null;
   if (!publicBase) {
-    const exportWithUrl = db
-      .prepare(
-        "SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? AND public_base_url IS NOT NULL AND LENGTH(public_base_url) > 0 LIMIT 1",
+    const exportWithUrl = drizzleDb
+      .select()
+      .from(exports)
+      .where(
+        and(
+          eq(exports.podcastId, podcastId),
+          sql`${exports.publicBaseUrl} IS NOT NULL AND LENGTH(${exports.publicBaseUrl}) > 0`,
+        ),
       )
-      .get(podcastId) as Record<string, unknown> | undefined;
-    if (exportWithUrl?.public_base_url) {
-      publicBase = sanitizeHttpUrl(exportWithUrl.public_base_url);
+      .limit(1)
+      .get();
+    if (exportWithUrl?.publicBaseUrl) {
+      publicBase = sanitizeHttpUrl(exportWithUrl.publicBaseUrl);
       exportPrefix = getExportPathPrefix(exportWithUrl);
     } else {
-      const hostnameSetting = db
-        .prepare("SELECT value FROM settings WHERE key = ?")
-        .get("hostname") as { value: string } | undefined;
-      if (hostnameSetting?.value?.trim())
-        publicBase = sanitizeHttpUrl(hostnameSetting.value);
+      const hostnameVal = getSetting("hostname");
+      if (hostnameVal?.trim()) publicBase = sanitizeHttpUrl(hostnameVal);
     }
   } else {
-    const exportRow = db
-      .prepare(
-        "SELECT id, podcast_id, mode, name, public_base_url, config_enc FROM exports WHERE podcast_id = ? LIMIT 1",
-      )
-      .get(podcastId) as Record<string, unknown> | undefined;
+    const exportRow = drizzleDb
+      .select()
+      .from(exports)
+      .where(eq(exports.podcastId, podcastId))
+      .limit(1)
+      .get();
     if (exportRow) exportPrefix = getExportPathPrefix(exportRow);
   }
   const publicBaseNoSlash = publicBase ? publicBase.replace(/\/$/, "") : "";

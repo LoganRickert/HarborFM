@@ -5,7 +5,7 @@ export type { ExportCreate, ExportMode, ExportUpdate };
 
 export interface Export {
   id: string;
-  podcast_id: string;
+  podcastId: string;
   provider: string;
   mode: string;
   name: string;
@@ -14,11 +14,11 @@ export interface Export {
   prefix: string;
   /** null when stored encrypted */
   region: string | null;
-  endpoint_url: string | null;
-  public_base_url: string | null;
-  created_at: string;
-  updated_at: string;
-  has_credentials: boolean;
+  endpointUrl: string | null;
+  publicBaseUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  hasCredentials: boolean;
 }
 
 export function listExports(podcastId: string) {
@@ -38,14 +38,14 @@ export function testExport(exportId: string) {
 }
 
 export function deployExport(exportId: string) {
-  return apiPost<{ run_id: string; status: string; uploaded: number; skipped?: number; errors?: string[] }>(
+  return apiPost<{ runId: string; status: string; uploaded: number; skipped?: number; errors?: string[] }>(
     `/exports/${exportId}/deploy`
   );
 }
 
 export function deployAllExports(podcastId: string) {
   return apiPost<{
-    results: { export_id: string; name: string; status: string; uploaded: number; skipped: number; errors?: string[] }[];
+    results: { exportId: string; name: string; status: string; uploaded: number; skipped: number; errors?: string[] }[];
   }>(`/podcasts/${podcastId}/exports/deploy`);
 }
 
@@ -54,7 +54,7 @@ export function deleteExport(exportId: string) {
 }
 
 export function getExportRun(runId: string) {
-  return apiGet<{ id: string; status: string; log: string | null; started_at: string; finished_at: string | null }>(
+  return apiGet<{ id: string; status: string; log: string | null; startedAt: string; finishedAt: string | null }>(
     `/export-runs/${runId}`
   );
 }

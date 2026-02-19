@@ -12,7 +12,7 @@ export async function run({ runOne }) {
   await apiFetch(`/users/${u.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ max_subscriber_tokens: 1 }),
+    body: JSON.stringify({ maxSubscriberTokens: 1 }),
   }, adminJar);
 
   const jar = cookieJar();
@@ -22,7 +22,7 @@ export async function run({ runOne }) {
   await apiFetch(`/podcasts/${podcast.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subscriber_only_feed_enabled: 1 }),
+    body: JSON.stringify({ subscriberOnlyFeedEnabled: 1 }),
   }, jar);
 
   results.push(

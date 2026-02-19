@@ -2,9 +2,12 @@ import type { FastifyInstance } from "fastify";
 import argon2 from "argon2";
 import { nanoid } from "nanoid";
 import { randomBytes } from "crypto";
-import { db } from "../../db/index.js";
+import { and, eq, gt, sql } from "drizzle-orm";
+import { drizzleDb } from "../../db/index.js";
+import { users } from "../../db/schema.js";
+import { isUniqueViolation, sqlNow } from "../../db/utils.js";
 import { registerBodySchema, authTokenQuerySchema } from "@harborfm/shared";
-import { readSettings } from "../settings/index.js";
+import { readSettings, isEmailProviderConfigured } from "../settings/index.js";
 import { getClientIp, getUserAgent } from "../../services/loginAttempts.js";
 import { getLocationForIp } from "../../services/geolocation.js";
 import { verifyCaptcha } from "../../services/captcha.js";
@@ -13,8 +16,13 @@ import {
   buildWelcomeVerificationEmail,
   buildWelcomeVerifiedEmail,
 } from "../../services/email.js";
-import { normalizeHostname } from "../../utils/url.js";
-import { CSRF_COOKIE_NAME, JWT_COOKIE_NAME } from "../../config.js";
+import { getBaseUrl } from "./shared.js";
+import {
+  CSRF_COOKIE_NAME,
+  JWT_COOKIE_NAME,
+  JWT_SESSION_EXPIRY,
+  REGISTRATION_RATE_LIMIT_MAX,
+} from "../../config.js";
 import {
   COOKIE_OPTS,
   CSRF_COOKIE_OPTS,
@@ -23,11 +31,18 @@ import {
   VERIFICATION_EXPIRY_HOURS,
   VERIFICATION_TOKEN_BYTES,
 } from "./shared.js";
+import { sha256Hex } from "../../utils/hash.js";
 
 export async function registerRegisterRoutes(app: FastifyInstance) {
   app.post(
     "/auth/register",
     {
+      config: {
+        rateLimit: {
+          max: REGISTRATION_RATE_LIMIT_MAX,
+          timeWindow: "1 minute",
+        },
+      },
       schema: {
         tags: ["Auth"],
         summary: "Register",
@@ -48,16 +63,18 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
           400: { description: "Validation failed" },
           403: { description: "Registration disabled" },
           409: { description: "Email already registered" },
+          429: { description: "Rate limited" },
         },
       },
     },
     async (request, reply) => {
       // Setup gate: if there are no users, the server must be bootstrapped first.
       // This prevents "first registrant becomes admin" on fresh installs.
-      const userCount = db
-        .prepare("SELECT COUNT(*) as count FROM users")
-        .get() as { count: number };
-      if (userCount.count === 0) {
+      const userCount = drizzleDb
+        .select({ count: sql<number>`count(*)`.as("count") })
+        .from(users)
+        .get();
+      if ((userCount?.count ?? 0) === 0) {
         return reply
           .status(403)
           .send({
@@ -112,9 +129,13 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
         }
       }
 
-      const existing = db
-        .prepare("SELECT id FROM users WHERE email = ?")
-        .get(email);
+      const canonicalEmail = email.trim().toLowerCase();
+      const existing = drizzleDb
+        .select({ id: users.id })
+        .from(users)
+        .where(sql`LOWER(${users.email}) = ${canonicalEmail}`)
+        .limit(1)
+        .get();
       if (existing) {
         return reply.status(409).send({ error: "Email already registered" });
       }
@@ -149,12 +170,11 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
       const can_transcribe = settings.default_can_transcribe ? 1 : 0;
 
       const requiresVerification =
-        (settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid" ||
-          settings.email_provider === "webhook") &&
+        isEmailProviderConfigured(settings) &&
         settings.email_enable_registration_verification;
       let email_verified = 1;
       let email_verification_token: string | null = null;
+      let email_verification_token_hash: string | null = null;
       let email_verification_expires_at: string | null = null;
 
       if (requiresVerification) {
@@ -162,37 +182,36 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
         email_verification_token = randomBytes(
           VERIFICATION_TOKEN_BYTES,
         ).toString("base64url");
+        email_verification_token_hash = sha256Hex(email_verification_token);
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + VERIFICATION_EXPIRY_HOURS);
         email_verification_expires_at = expiresAt.toISOString();
       }
 
-      db.prepare(
-        `INSERT INTO users (id, email, password_hash, role, max_podcasts, max_storage_mb, max_episodes, max_collaborators, max_subscriber_tokens, can_transcribe, email_verified, email_verification_token, email_verification_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
+      const defaultUsername = `user_${nanoid()}`;
+      drizzleDb.insert(users).values({
         id,
-        email,
-        password_hash,
-        userRole,
-        max_podcasts,
-        max_storage_mb,
-        max_episodes,
-        max_collaborators,
-        max_subscriber_tokens,
-        can_transcribe,
-        email_verified,
-        email_verification_token,
-        email_verification_expires_at,
-      );
+        email: canonicalEmail,
+        passwordHash: password_hash,
+        username: defaultUsername,
+        role: userRole,
+        maxPodcasts: max_podcasts,
+        maxStorageMb: max_storage_mb,
+        maxEpisodes: max_episodes,
+        maxCollaborators: max_collaborators,
+        maxSubscriberTokens: max_subscriber_tokens,
+        canTranscribe: can_transcribe,
+        emailVerified: email_verified === 1,
+        emailVerificationTokenHash: email_verification_token_hash,
+        emailVerificationExpiresAt: email_verification_expires_at,
+      }).run();
 
       if (requiresVerification) {
-        const baseUrl =
-          normalizeHostname(settings.hostname || "") || "http://localhost";
+        const baseUrl = getBaseUrl(settings);
         const verifyUrl = `${baseUrl}/verify-email?token=${encodeURIComponent(email_verification_token!)}`;
         const { subject, text, html } =
           buildWelcomeVerificationEmail(verifyUrl);
-        const sendResult = await sendMail({ to: email, subject, text, html });
+        const sendResult = await sendMail({ to: canonicalEmail, subject, text, html });
         if (!sendResult.sent) {
           request.log.warn(
             { emailRedacted: redactEmail(email), err: sendResult.error },
@@ -209,14 +228,24 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
       const ip = getClientIp(request);
       const userAgent = getUserAgent(request);
       const location = await getLocationForIp(ip).catch(() => null);
-      db.prepare(
-        `UPDATE users SET last_login_at = datetime('now'), last_login_ip = ?, last_login_user_agent = ?, last_login_location = ? WHERE id = ?`,
-      ).run(ip, userAgent, location ?? null, id);
-      const token = app.jwt.sign({ sub: id, email }, { expiresIn: "7d" });
+      drizzleDb
+        .update(users)
+        .set({
+          lastLoginAt: sqlNow(),
+          lastLoginIp: ip,
+          lastLoginUserAgent: userAgent,
+          lastLoginLocation: location ?? null,
+        })
+        .where(eq(users.id, id))
+        .run();
+      const token = app.jwt.sign(
+        { sub: id, email: canonicalEmail, username: defaultUsername },
+        { expiresIn: JWT_SESSION_EXPIRY },
+      );
       return reply
         .setCookie(JWT_COOKIE_NAME, token, COOKIE_OPTS)
         .setCookie(CSRF_COOKIE_NAME, newCsrfToken(), CSRF_COOKIE_OPTS)
-        .send({ user: { id, email } });
+        .send({ user: { id, email: canonicalEmail, username: defaultUsername } });
     },
   );
 
@@ -253,13 +282,25 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
           });
       }
       const token = parsed.data.token.trim();
-      const row = db
-        .prepare(
-          `SELECT id, email, COALESCE(disabled, 0) AS disabled, COALESCE(read_only, 0) AS read_only FROM users WHERE email_verification_token = ? AND email_verification_expires_at > datetime('now')`,
+      const tokenHash = sha256Hex(token);
+      const row = drizzleDb
+        .select({
+          id: users.id,
+          email: users.email,
+          username: users.username,
+          pending_email: users.pendingEmail,
+          disabled: sql<number>`COALESCE(${users.disabled}, 0)`.as("disabled"),
+          read_only: sql<number>`COALESCE(${users.readOnly}, 0)`.as("read_only"),
+        })
+        .from(users)
+        .where(
+          and(
+            eq(users.emailVerificationTokenHash, tokenHash),
+            gt(users.emailVerificationExpiresAt, sqlNow()),
+          ),
         )
-        .get(token) as
-        | { id: string; email: string; disabled: number; read_only: number }
-        | undefined;
+        .limit(1)
+        .get();
       if (!row) {
         return reply
           .status(400)
@@ -283,22 +324,63 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
               "This account cannot verify email. Contact the administrator.",
           });
       }
-      db.prepare(
-        `UPDATE users SET email_verified = 1, email_verification_token = NULL, email_verification_expires_at = NULL WHERE id = ?`,
-      ).run(row.id);
+
+      const hasPendingEmail = Boolean(row.pending_email?.trim());
+
+      if (hasPendingEmail) {
+        try {
+          drizzleDb
+            .update(users)
+            .set({
+              email: row.pending_email!.trim(),
+              emailVerified: true,
+              pendingEmail: null,
+              emailVerificationTokenHash: null,
+              emailVerificationExpiresAt: null,
+            })
+            .where(eq(users.id, row.id))
+            .run();
+        } catch (err) {
+          if (isUniqueViolation(err)) {
+            drizzleDb
+              .update(users)
+              .set({
+                pendingEmail: null,
+                emailVerificationTokenHash: null,
+                emailVerificationExpiresAt: null,
+              })
+              .where(eq(users.id, row.id))
+              .run();
+            return reply.status(400).send({
+              error:
+                "This email address is already in use. Please try a different one.",
+            });
+          }
+          throw err;
+        }
+      } else {
+        drizzleDb
+          .update(users)
+          .set({
+            emailVerified: true,
+            emailVerificationTokenHash: null,
+            emailVerificationExpiresAt: null,
+          })
+          .where(eq(users.id, row.id))
+          .run();
+      }
+
+      const verifiedEmail = hasPendingEmail ? row.pending_email!.trim() : row.email;
 
       const settings = readSettings();
       if (
-        (settings.email_provider === "smtp" ||
-          settings.email_provider === "sendgrid" ||
-          settings.email_provider === "webhook") &&
+        isEmailProviderConfigured(settings) &&
         settings.email_enable_welcome_after_verify
       ) {
-        const baseUrl =
-          normalizeHostname(settings.hostname || "") || "http://localhost";
+        const baseUrl = getBaseUrl(settings);
         const { subject, text, html } = buildWelcomeVerifiedEmail(baseUrl);
         const sendResult = await sendMail({
-          to: row.email,
+          to: (verifiedEmail ?? row.email) || "",
           subject,
           text,
           html,
@@ -309,6 +391,21 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
             "Welcome email after verification failed to send",
           );
         }
+      }
+
+      if (hasPendingEmail) {
+        const newToken = app.jwt.sign(
+          {
+            sub: row.id,
+            email: verifiedEmail ?? null,
+            username: row.username ?? null,
+          },
+          { expiresIn: JWT_SESSION_EXPIRY },
+        );
+        return reply
+          .setCookie(JWT_COOKIE_NAME, newToken, COOKIE_OPTS)
+          .setCookie(CSRF_COOKIE_NAME, newCsrfToken(), CSRF_COOKIE_OPTS)
+          .send({ ok: true });
       }
 
       return reply.send({ ok: true });

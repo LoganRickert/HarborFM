@@ -56,18 +56,18 @@ export function Dashboard() {
     const status = activeImport?.status;
     if (
       (status === 'pending' || status === 'importing') &&
-      activeImport?.podcast_id &&
+      activeImport?.podcastId &&
       !userClosedImportDialogRef.current
     ) {
       setImportDialogOpen(true);
-      setActiveImportPodcastId(activeImport.podcast_id);
+      setActiveImportPodcastId(activeImport.podcastId);
     }
-  }, [isAdminView, activeImport?.status, activeImport?.podcast_id]);
+  }, [isAdminView, activeImport?.status, activeImport?.podcastId]);
 
   // Computed values
-  const publicFeedsEnabled = publicConfig?.public_feeds_enabled !== false;
-  const maxPodcasts = meData?.user?.max_podcasts ?? null;
-  const podcastCount = meData?.podcast_count ?? 0;
+  const publicFeedsEnabled = publicConfig?.publicFeedsEnabled !== false;
+  const maxPodcasts = meData?.user?.maxPodcasts ?? null;
+  const podcastCount = meData?.podcastCount ?? 0;
   const atPodcastLimit =
     !isAdminView && maxPodcasts != null && maxPodcasts > 0 && podcastCount >= maxPodcasts;
   const user = useAuthStore((s) => s.user);
@@ -104,7 +104,7 @@ export function Dashboard() {
         total={total}
         readOnly={readOnly}
         atPodcastLimit={atPodcastLimit}
-        webrtcEnabled={publicConfig?.webrtc_enabled}
+        webrtcEnabled={publicConfig?.webrtcEnabled}
         onJoinCallClick={() => setJoinCallDialogOpen(true)}
       />
 

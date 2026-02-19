@@ -22,18 +22,18 @@ export function useSegmentEdit(
   const [waveformData, setWaveformData] = useState<WaveformData | null>(segmentWaveformData ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [trimRanges, setTrimRanges] = useState<Array<[number, number]>>(segment.trim_ranges ?? []);
+  const [trimRanges, setTrimRanges] = useState<Array<[number, number]>>(segment.trimRanges ?? []);
   const [markers, setMarkers] = useState<Marker[]>(segment.markers ?? []);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [timelineMode, setTimelineMode] = useState<TimelineMode>(initialMode);
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<number | null>(null);
   /** Draft edits for selected marker; applied when user clicks Done. */
-  const [markerDraft, setMarkerDraft] = useState<{ title: string; color: string; marker_type: '' | 'chapter' } | null>(null);
+  const [markerDraft, setMarkerDraft] = useState<{ title: string; color: string; markerType: '' | 'chapter' } | null>(null);
   const [viewStartSec, setViewStartSec] = useState(0);
   const [viewEndSec, setViewEndSec] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
 
-  const durationSec = segment.duration_sec ?? 0;
+  const durationSec = segment.durationSec ?? 0;
   useSegmentAudio(segmentEditAudioRef, trimRanges, setCurrentTime, setIsPlaying, isEditTabVisible);
 
   useEffect(() => {
@@ -66,35 +66,35 @@ export function useSegmentEdit(
     if (!isEditTabVisible) return;
     const id = requestAnimationFrame(() => {
       const el = segmentEditAudioRef.current;
-      if (!el || !segment.audio_path || durationSec <= 0) return;
-      el.src = segmentStreamUrl(episodeId, segment.id, segment.audio_path);
+      if (!el || !segment.audioPath || durationSec <= 0) return;
+      el.src = segmentStreamUrl(episodeId, segment.id, segment.audioPath);
     });
     return () => cancelAnimationFrame(id);
-  }, [episodeId, segment.id, segment.audio_path, durationSec, isEditTabVisible]);
+  }, [episodeId, segment.id, segment.audioPath, durationSec, isEditTabVisible]);
 
   useEffect(() => {
-    setTrimRanges(segment.trim_ranges ?? []);
+    setTrimRanges(segment.trimRanges ?? []);
     setMarkers(segment.markers ?? []);
-    const dur = segment.duration_sec ?? 0;
+    const dur = segment.durationSec ?? 0;
     const initialWindow = Math.min(60, Math.max(0.01, dur));
     setViewStartSec(0);
     setViewEndSec(initialWindow);
-  }, [segment.id, segment.trim_ranges, segment.markers, segment.duration_sec]);
+  }, [segment.id, segment.trimRanges, segment.markers, segment.durationSec]);
 
   useEffect(() => {
     if (segmentWaveformData) {
       setWaveformData(segmentWaveformData);
       return;
     }
-    const dur = segment.duration_sec ?? 0;
-    if (!segment.waveform_exists || dur <= 0) return;
+    const dur = segment.durationSec ?? 0;
+    if (!segment.waveformExists || dur <= 0) return;
     fetchSegmentWaveformsBulk(episodeId, [segment.id])
       .then(({ waveforms }) => {
         const wf = waveforms[segment.id];
         setWaveformData(wf?.data?.length ? (wf as WaveformData) : null);
       })
       .catch(() => setWaveformData(null));
-  }, [episodeId, segment.id, segment.waveform_exists, segment.duration_sec, segmentWaveformData]);
+  }, [episodeId, segment.id, segment.waveformExists, segment.durationSec, segmentWaveformData]);
 
   const MARKER_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899'] as const;
 
@@ -107,7 +107,7 @@ export function useSegmentEdit(
     setMarkerDraft({
       title: m.title ?? '',
       color: m.color ?? MARKER_COLORS[0],
-      marker_type: (m.marker_type ?? '') as '' | 'chapter',
+      markerType: (m.markerType ?? '') as '' | 'chapter',
     });
     // Only re-init when selection changes, not when markers change (preserve user's draft until Done)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,13 +120,13 @@ export function useSegmentEdit(
       m.time === b[i]!.time &&
       (m.title ?? '') === (b[i]!.title ?? '') &&
       (m.color ?? '') === (b[i]!.color ?? '') &&
-      (m.marker_type ?? '') === (b[i]!.marker_type ?? ''));
+      (m.markerType ?? '') === (b[i]!.markerType ?? ''));
   const hasEditUnsavedChanges =
-    !trimRangesEqual(trimRanges, segment.trim_ranges ?? []) ||
+    !trimRangesEqual(trimRanges, segment.trimRanges ?? []) ||
     !markersEqual(markers, segment.markers ?? []);
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { trim_ranges?: Array<[number, number]>; markers?: Marker[] }) =>
+    mutationFn: (payload: { trimRanges?: Array<[number, number]>; markers?: Marker[] }) =>
       updateSegment(episodeId, segment.id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
@@ -136,11 +136,11 @@ export function useSegmentEdit(
 
   function handleSave() {
     if (!hasEditUnsavedChanges) return;
-    updateMutation.mutate({ trim_ranges: mergeTrimRanges(trimRanges), markers });
+    updateMutation.mutate({ trimRanges: mergeTrimRanges(trimRanges), markers });
   }
 
   function toggleSegmentPlay() {
-    if (segment.record_failed) return;
+    if (segment.recordFailed) return;
     const el = segmentEditAudioRef.current;
     if (!el) return;
     if (isPlaying) {
@@ -148,7 +148,7 @@ export function useSegmentEdit(
       setIsPlaying(false);
     } else {
       const startAt = currentTime;
-      const url = segmentStreamUrl(episodeId, segment.id, segment.audio_path);
+      const url = segmentStreamUrl(episodeId, segment.id, segment.audioPath);
       const applySeekAndPlay = () => {
         const seekTo = Math.min(startAt, el.duration || durationSec);
         setIsPlaying(true);
@@ -196,7 +196,7 @@ export function useSegmentEdit(
   }
 
   function handleMarkerTypeChange(_index: number, markerType: '' | 'chapter') {
-    setMarkerDraft((d) => (d ? { ...d, marker_type: markerType } : null));
+    setMarkerDraft((d) => (d ? { ...d, markerType: markerType } : null));
   }
 
   function handleMarkerDone() {
@@ -211,7 +211,7 @@ export function useSegmentEdit(
       ...m,
       title: markerDraft.title || undefined,
       color: markerDraft.color || undefined,
-      marker_type: markerDraft.marker_type || undefined,
+      markerType: markerDraft.markerType || undefined,
     };
     setMarkers(next);
     setSelectedMarkerIndex(null);

@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import { randomBytes } from "crypto";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
+import { isApiKeyLimitExceeded } from "../../db/utils.js";
+import { apiKeys } from "../../db/schema.js";
 import {
   authApiKeyCreateBodySchema,
   authApiKeyUpdateBodySchema,
@@ -55,36 +58,39 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
       const q = raw.q;
       const sort = raw.sort ?? "newest";
       const likeEscape = (s: string) =>
-        s.replace(/%/g, "\\%").replace(/_/g, "\\_");
-      let whereClause = "user_id = ?";
-      const params: (string | number)[] = [request.userId];
-      if (q && q.trim()) {
-        whereClause += " AND name LIKE ? ESCAPE '\\'";
-        params.push(`%${likeEscape(q.trim())}%`);
-      }
-      const countResult = db
-        .prepare(`SELECT COUNT(*) as count FROM api_keys WHERE ${whereClause}`)
-        .get(...params) as { count: number };
-      const total = countResult.count;
-      const orderBy = sort === "oldest" ? "created_at ASC" : "created_at DESC";
-      const keys = db
-        .prepare(
-          `SELECT id, name, valid_until, valid_from, COALESCE(disabled, 0) AS disabled, created_at, last_used_at
-         FROM api_keys
-         WHERE ${whereClause}
-         ORDER BY ${orderBy}
-         LIMIT ? OFFSET ?`,
-        )
-        .all(...params, limit, offset) as {
-        id: string;
-        name: string | null;
-        valid_until: string | null;
-        valid_from: string | null;
-        disabled: number;
-        created_at: string;
-        last_used_at: string | null;
-      }[];
-      return { api_keys: keys, total };
+        s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const whereCond =
+        q && q.trim()
+          ? and(
+              eq(apiKeys.userId, request.userId),
+              sql`${apiKeys.name} LIKE ${`%${likeEscape(q.trim())}%`} ESCAPE '\\'`,
+            )
+          : eq(apiKeys.userId, request.userId);
+      const countResult = drizzleDb
+        .select({ count: sql<number>`count(*)`.as("count") })
+        .from(apiKeys)
+        .where(whereCond)
+        .get();
+      const total = countResult?.count ?? 0;
+      const orderByCol =
+        sort === "oldest" ? asc(apiKeys.createdAt) : desc(apiKeys.createdAt);
+      const rows = drizzleDb
+        .select({
+          id: apiKeys.id,
+          name: apiKeys.name,
+          validUntil: apiKeys.validUntil,
+          validFrom: apiKeys.validFrom,
+          disabled: sql<number>`COALESCE(${apiKeys.disabled}, 0)`.as("disabled"),
+          createdAt: apiKeys.createdAt,
+          lastUsedAt: apiKeys.lastUsedAt,
+        })
+        .from(apiKeys)
+        .where(whereCond)
+        .orderBy(orderByCol)
+        .limit(limit)
+        .offset(offset)
+        .all();
+      return { apiKeys: rows, total };
     },
   );
 
@@ -96,13 +102,13 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
         tags: ["Auth"],
         summary: "Create API key",
         description:
-          "Generate a new API key. Optional name, valid_until (ISO), valid_from (ISO). Raw key returned only once. Max 5 per user. Requires session (not API key).",
+          "Generate a new API key. Optional name, validUntil (ISO), validFrom (ISO). Raw key returned only once. Max 5 per user. Requires session (not API key).",
         body: {
           type: "object",
           properties: {
             name: { type: "string" },
-            valid_until: { type: "string", description: "ISO datetime" },
-            valid_from: { type: "string", description: "ISO datetime" },
+            validUntil: { type: "string", description: "ISO datetime" },
+            validFrom: { type: "string", description: "ISO datetime" },
           },
         },
         response: {
@@ -118,10 +124,12 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
         !requireSession(request, reply as Parameters<typeof requireSession>[1])
       )
         return;
-      const count = db
-        .prepare("SELECT COUNT(*) as count FROM api_keys WHERE user_id = ?")
-        .get(request.userId) as { count: number };
-      if (count.count >= MAX_API_KEYS_PER_USER) {
+      const count = drizzleDb
+        .select({ count: sql<number>`count(*)`.as("count") })
+        .from(apiKeys)
+        .where(eq(apiKeys.userId, request.userId))
+        .get();
+      if ((count?.count ?? 0) >= MAX_API_KEYS_PER_USER) {
         return reply.status(400).send({
           error: `You can have at most ${MAX_API_KEYS_PER_USER} API keys. Revoke one to create a new one.`,
         });
@@ -138,34 +146,49 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
       }
       const body = bodyParsed.data;
       const name = body.name?.trim() ?? null;
-      const validUntil = body.valid_until?.trim() ?? null;
-      const validFrom = body.valid_from?.trim() ?? null;
+      const validUntil = body.validUntil?.trim() ?? null;
+      const validFrom = body.validFrom?.trim() ?? null;
       const id = nanoid();
       const rawKey = API_KEY_PREFIX + randomBytes(32).toString("hex");
       const keyHash = sha256Hex(rawKey);
-      db.prepare(
-        "INSERT INTO api_keys (id, user_id, key_hash, name, valid_until, valid_from, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-      ).run(id, request.userId, keyHash, name, validUntil, validFrom);
-      const row = db
-        .prepare(
-          "SELECT id, name, valid_until, valid_from, COALESCE(disabled, 0) AS disabled, created_at FROM api_keys WHERE id = ?",
-        )
-        .get(id) as {
-        id: string;
-        name: string | null;
-        valid_until: string | null;
-        valid_from: string | null;
-        disabled: number;
-        created_at: string;
-      };
+      try {
+        drizzleDb.insert(apiKeys).values({
+          id,
+          userId: request.userId,
+          keyHash,
+          name,
+          validUntil,
+          validFrom,
+        }).run();
+      } catch (err) {
+        if (isApiKeyLimitExceeded(err)) {
+          return reply.status(400).send({
+            error: `You can have at most ${MAX_API_KEYS_PER_USER} API keys. Revoke one to create a new one.`,
+          });
+        }
+        throw err;
+      }
+      const row = drizzleDb
+        .select({
+          id: apiKeys.id,
+          name: apiKeys.name,
+          validUntil: apiKeys.validUntil,
+          validFrom: apiKeys.validFrom,
+          disabled: sql<number>`COALESCE(${apiKeys.disabled}, 0)`.as("disabled"),
+          createdAt: apiKeys.createdAt,
+        })
+        .from(apiKeys)
+        .where(eq(apiKeys.id, id))
+        .limit(1)
+        .get();
       return reply.status(201).send({
-        id: row.id,
+        id: row!.id,
         key: rawKey,
-        name: row.name,
-        valid_until: row.valid_until,
-        valid_from: row.valid_from,
-        disabled: row.disabled,
-        created_at: row.created_at,
+        name: row!.name,
+        validUntil: row!.validUntil,
+        validFrom: row!.validFrom,
+        disabled: row!.disabled,
+        createdAt: row!.createdAt,
       });
     },
   );
@@ -178,7 +201,7 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
         tags: ["Auth"],
         summary: "Update API key",
         description:
-          "Update an API key (name, valid_until, valid_from, disabled). Requires session (not API key).",
+          "Update an API key (name, validUntil, validFrom, disabled). Requires session (not API key).",
         params: {
           type: "object",
           properties: { id: { type: "string" } },
@@ -188,8 +211,8 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             name: { type: "string" },
-            valid_until: { type: "string", description: "ISO datetime" },
-            valid_from: { type: "string", description: "ISO datetime" },
+            validUntil: { type: "string", description: "ISO datetime" },
+            validFrom: { type: "string", description: "ISO datetime" },
             disabled: { type: "boolean" },
           },
         },
@@ -218,9 +241,12 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
           });
       }
       const { id } = paramsParsed.data;
-      const existing = db
-        .prepare("SELECT id FROM api_keys WHERE id = ? AND user_id = ?")
-        .get(id, request.userId);
+      const existing = drizzleDb
+        .select({ id: apiKeys.id })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, request.userId)))
+        .limit(1)
+        .get();
       if (!existing) {
         return reply.status(404).send({ error: "API key not found" });
       }
@@ -235,65 +261,55 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
           });
       }
       const body = bodyParsed.data;
-      const updates: string[] = [];
-      const values: unknown[] = [];
+      const set: Record<string, unknown> = {};
       if (body.name !== undefined) {
-        updates.push("name = ?");
-        values.push(
-          typeof body.name === "string" ? body.name.trim() || null : null,
-        );
+        set.name =
+          typeof body.name === "string" ? body.name.trim() || null : null;
       }
-      if (body.valid_until !== undefined) {
-        updates.push("valid_until = ?");
-        values.push(
-          typeof body.valid_until === "string"
-            ? body.valid_until.trim() || null
-            : null,
-        );
+      if (body.validUntil !== undefined) {
+        set.validUntil =
+          typeof body.validUntil === "string"
+            ? body.validUntil.trim() || null
+            : null;
       }
-      if (body.valid_from !== undefined) {
-        updates.push("valid_from = ?");
-        values.push(
-          typeof body.valid_from === "string"
-            ? body.valid_from.trim() || null
-            : null,
-        );
+      if (body.validFrom !== undefined) {
+        set.validFrom =
+          typeof body.validFrom === "string"
+            ? body.validFrom.trim() || null
+            : null;
       }
       if (body.disabled !== undefined) {
-        updates.push("disabled = ?");
-        values.push(body.disabled ? 1 : 0);
+        set.disabled = body.disabled ? 1 : 0;
       }
-      if (updates.length === 0) {
-        const row = db
-          .prepare(
-            "SELECT id, name, valid_until, valid_from, COALESCE(disabled, 0) AS disabled, created_at FROM api_keys WHERE id = ?",
-          )
-          .get(id) as {
-          id: string;
-          name: string | null;
-          valid_until: string | null;
-          valid_from: string | null;
-          disabled: number;
-          created_at: string;
-        };
-        return reply.send(row);
-      }
-      db.prepare(
-        `UPDATE api_keys SET ${updates.join(", ")} WHERE id = ?`,
-      ).run(...values, id);
-      const row = db
-        .prepare(
-          "SELECT id, name, valid_until, valid_from, COALESCE(disabled, 0) AS disabled, created_at FROM api_keys WHERE id = ?",
-        )
-        .get(id) as {
-        id: string;
-        name: string | null;
-        valid_until: string | null;
-        valid_from: string | null;
-        disabled: number;
-        created_at: string;
+      const apiKeySelect = {
+        id: apiKeys.id,
+        name: apiKeys.name,
+        validUntil: apiKeys.validUntil,
+        validFrom: apiKeys.validFrom,
+        disabled: sql<number>`COALESCE(${apiKeys.disabled}, 0)`.as("disabled"),
+        createdAt: apiKeys.createdAt,
       };
-      return reply.send(row);
+      if (Object.keys(set).length === 0) {
+        const row = drizzleDb
+          .select(apiKeySelect)
+          .from(apiKeys)
+          .where(eq(apiKeys.id, id))
+          .limit(1)
+          .get();
+        return reply.send(row!);
+      }
+      drizzleDb
+        .update(apiKeys)
+        .set(set as Partial<typeof apiKeys.$inferInsert>)
+        .where(eq(apiKeys.id, id))
+        .run();
+      const row = drizzleDb
+        .select(apiKeySelect)
+        .from(apiKeys)
+        .where(eq(apiKeys.id, id))
+        .limit(1)
+        .get();
+      return reply.send(row!);
     },
   );
 
@@ -336,13 +352,19 @@ export async function registerApiKeysRoutes(app: FastifyInstance) {
           });
       }
       const { id } = paramsParsed.data;
-      const existing = db
-        .prepare("SELECT id FROM api_keys WHERE id = ? AND user_id = ?")
-        .get(id, request.userId);
+      const existing = drizzleDb
+        .select({ id: apiKeys.id })
+        .from(apiKeys)
+        .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, request.userId)))
+        .limit(1)
+        .get();
       if (!existing) {
         return reply.status(404).send({ error: "API key not found" });
       }
-      db.prepare("DELETE FROM api_keys WHERE id = ?").run(id);
+      drizzleDb
+        .delete(apiKeys)
+        .where(eq(apiKeys.id, id))
+        .run();
       return reply.status(204).send();
     },
   );

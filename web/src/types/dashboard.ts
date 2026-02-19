@@ -6,7 +6,7 @@ export type DashboardPodcast = Podcast;
 
 export interface DashboardHeaderProps {
   isAdminView: boolean;
-  selectedUser?: { email: string } | null;
+  selectedUser?: { email: string | null } | null;
   total?: number;
   readOnly: boolean;
   atPodcastLimit: boolean;

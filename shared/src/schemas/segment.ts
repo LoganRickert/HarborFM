@@ -18,6 +18,14 @@ export const segmentEpisodeIdOnlyParamSchema = z.object({
 
 /** Body for POST /episodes/:episodeId/segments/waveforms-bulk. Max 10 segment IDs. */
 export const segmentWaveformsBulkBodySchema = z.object({
+  segmentIds: z
+    .array(z.string().min(1))
+    .min(1, { message: 'segmentIds required' })
+    .max(10, { message: 'max 10 segmentIds' }),
+});
+
+/** Body for POST /episodes/:episodeId/segments/waveforms-bulk (snake_case request key). */
+export const segmentWaveformsBulkBodySnakeSchema = z.object({
   segment_ids: z
     .array(z.string().min(1))
     .min(1, { message: 'segment_ids required' })
@@ -27,13 +35,13 @@ export const segmentWaveformsBulkBodySchema = z.object({
 /** JSON body for POST /episodes/:id/segments when adding a reusable segment. */
 export const segmentCreateReusableBodySchema = z.object({
   type: z.literal('reusable'),
-  reusable_asset_id: z.string().min(1, { message: 'reusable_asset_id is required' }),
+  reusableAssetId: z.string().min(1, { message: 'reusableAssetId is required' }),
   name: z.string().optional(),
 });
 
 /** Body for PUT /episodes/:id/segments/reorder. */
 export const segmentReorderBodySchema = z.object({
-  segment_ids: z.array(z.string().min(1), { message: 'segment_ids must be a non-empty array' }).min(1, { message: 'segment_ids array required' }),
+  segmentIds: z.array(z.string().min(1), { message: 'segmentIds must be a non-empty array' }).min(1, { message: 'segmentIds array required' }),
 });
 
 /** Trim range: [start, end] in absolute seconds (2 decimal places). */
@@ -45,13 +53,13 @@ export const trimRangeSchema = z.tuple([
 /** Array of trim ranges (excluded sections). Non-overlapping, sorted. */
 export const trimRangesSchema = z.array(trimRangeSchema);
 
-/** Single marker: point in time with optional title, color (hex), and marker_type. */
+/** Single marker: point in time with optional title, color (hex), and markerType. */
 export const markerSchema = z.object({
   time: z.number().min(0),
   title: z.string().optional(),
   color: z.string().optional(),
   /** '' | undefined = None, 'chapter' = Chapter */
-  marker_type: z.union([z.literal(''), z.literal('chapter')]).optional(),
+  markerType: z.union([z.literal(''), z.literal('chapter')]).optional(),
 });
 
 /** Array of markers. */
@@ -62,7 +70,7 @@ export interface Marker {
   time: number;
   title?: string;
   color?: string;
-  marker_type?: '' | 'chapter';
+  markerType?: '' | 'chapter';
 }
 
 /** Body for PATCH /episodes/:episodeId/segments/:segmentId (update name, trim_ranges, markers). */
@@ -73,24 +81,24 @@ export const segmentUpdateNameBodySchema = z.object({
 /** Body for PATCH /episodes/:episodeId/segments/:segmentId (full update). */
 export const segmentUpdateBodySchema = z.object({
   name: z.union([z.string(), z.null()]).optional(),
-  trim_ranges: trimRangesSchema.optional().nullable(),
+  trimRanges: trimRangesSchema.optional().nullable(),
   markers: markersSchema.optional().nullable(),
 });
 
 /** Body for POST /episodes/:episodeId/segments/:segmentId/trim. */
 export const segmentTrimBodySchema = z
   .object({
-    start_sec: z.number().optional(),
-    end_sec: z.number().optional(),
+    startSec: z.number().optional(),
+    endSec: z.number().optional(),
   })
-  .refine((data) => data.start_sec !== undefined || data.end_sec !== undefined, {
-    message: 'Either start_sec or end_sec must be provided',
+  .refine((data) => data.startSec !== undefined || data.endSec !== undefined, {
+    message: 'Either startSec or endSec must be provided',
   });
 
 /** Body for POST /episodes/:episodeId/segments/:segmentId/remove-silence. */
 export const segmentRemoveSilenceBodySchema = z.object({
-  threshold_seconds: z.number().positive().optional(),
-  silence_threshold: z.number().optional(),
+  thresholdSeconds: z.number().positive().optional(),
+  silenceThreshold: z.number().optional(),
 });
 
 /** Body for POST /episodes/:episodeId/segments/:segmentId/noise-suppression. */
@@ -121,26 +129,26 @@ export const segmentTranscriptDeleteQuerySchema = z.object({
   entryIndex: z.optional(z.coerce.number().int()),
 });
 
-/** Single segment as returned by list/update/create (DB row; list includes asset_name from JOIN). */
+/** Single segment as returned by list/update/create (DB row; list includes assetName from JOIN). */
 export const segmentResponseSchema = z.object({
   id: z.string(),
-  episode_id: z.string(),
+  episodeId: z.string(),
   position: z.number(),
   type: z.enum(['recorded', 'reusable']),
   name: z.string().nullable().optional(),
-  reusable_asset_id: z.string().nullable().optional(),
-  asset_name: z.string().nullable().optional(),
-  audio_path: z.string().nullable().optional(),
-  duration_sec: z.number(),
-  created_at: z.string(),
+  reusableAssetId: z.string().nullable().optional(),
+  assetName: z.string().nullable().optional(),
+  audioPath: z.string().nullable().optional(),
+  durationSec: z.number(),
+  createdAt: z.string(),
   /** True when waveform file exists on disk; client can skip fetch when false. */
-  waveform_exists: z.boolean().optional(),
+  waveformExists: z.boolean().optional(),
   /** True when recording is in progress (placeholder, awaiting webrtc callback). */
-  in_progress: z.boolean().optional(),
+  inProgress: z.boolean().optional(),
   /** True when recording failed (ffmpeg error, server crash, etc). */
-  record_failed: z.boolean().optional(),
+  recordFailed: z.boolean().optional(),
   /** Excluded ranges [[start, end], ...] in absolute seconds. */
-  trim_ranges: z.array(z.tuple([z.number(), z.number()])).optional().nullable(),
+  trimRanges: z.array(z.tuple([z.number(), z.number()])).optional().nullable(),
   /** Markers [{time, title?, color?}, ...]. */
   markers: markersSchema.optional().nullable(),
 });

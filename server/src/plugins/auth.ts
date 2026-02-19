@@ -1,5 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { db } from "../db/index.js";
+import { eq, sql } from "drizzle-orm";
+import { drizzleDb } from "../db/index.js";
+import { apiKeys, users } from "../db/schema.js";
+import { sqlNow } from "../db/utils.js";
 import { randomBytes } from "crypto";
 import { getCookieSecureFlag } from "../services/cookies.js";
 import { sha256Hex } from "../utils/hash.js";
@@ -41,7 +44,10 @@ function newCsrfToken(): string {
 
 export interface JWTPayload {
   sub: string;
-  email: string;
+  /** Actual email address, or null if user has no email (e.g. federated without one). */
+  email?: string | null;
+  /** Username/handle, separate from email. */
+  username?: string | null;
   iat: number;
   exp: number;
 }
@@ -83,24 +89,27 @@ function authViaApiKey(
   const token = getBearerToken(request);
   if (!token || !token.startsWith(API_KEY_PREFIX)) return null;
   const keyHash = sha256Hex(token);
-  const row = db
-    .prepare(
-      "SELECT user_id, valid_until, COALESCE(disabled, 0) AS disabled, valid_from FROM api_keys WHERE key_hash = ?",
-    )
-    .get(keyHash) as {
-    user_id: string;
-    valid_until: string | null;
-    disabled: number;
-    valid_from: string | null;
-  } | undefined;
+  const row = drizzleDb
+    .select({
+      user_id: apiKeys.userId,
+      valid_until: apiKeys.validUntil,
+      disabled: sql<number>`COALESCE(${apiKeys.disabled}, 0)`.as("disabled"),
+      valid_from: apiKeys.validFrom,
+    })
+    .from(apiKeys)
+    .where(eq(apiKeys.keyHash, keyHash))
+    .limit(1)
+    .get();
   if (!row) return null;
   if (row.disabled === 1) return "expired";
   const now = new Date().toISOString();
   if (row.valid_from != null && row.valid_from > now) return "expired";
   if (row.valid_until != null && row.valid_until < now) return "expired";
-  db.prepare(
-    "UPDATE api_keys SET last_used_at = datetime('now') WHERE key_hash = ?",
-  ).run(keyHash);
+  drizzleDb
+    .update(apiKeys)
+    .set({ lastUsedAt: sqlNow() })
+    .where(eq(apiKeys.keyHash, keyHash))
+    .run();
   return row.user_id;
 }
 
@@ -112,11 +121,14 @@ export async function requireAuth(
   const apiKeyResult = authViaApiKey(request);
   if (typeof apiKeyResult === "string" && apiKeyResult !== "expired") {
     const userId = apiKeyResult;
-    const user = db
-      .prepare(
-        "SELECT COALESCE(disabled, 0) as disabled FROM users WHERE id = ?",
-      )
-      .get(userId) as { disabled: number } | undefined;
+    const user = drizzleDb
+      .select({
+        disabled: sql<number>`COALESCE(${users.disabled}, 0)`.as("disabled"),
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+      .get();
     if (!user || user.disabled === 1) {
       return reply.status(403).send({ error: "Account is disabled" });
     }
@@ -130,7 +142,7 @@ export async function requireAuth(
   const token = getBearerToken(request);
   if (token != null && token.startsWith(API_KEY_PREFIX)) {
     const ip = getClientIp(request);
-    console.log(`[ban] Bad/unknown API key attempt from IP=${ip}`);
+    request.log.warn({ ip }, "Bad/unknown API key attempt");
     const userAgent = getUserAgent(request);
     recordFailureAndMaybeBan(ip, AUTH_APIKEY_CONTEXT, { userAgent });
     const ban = getIpBan(ip, AUTH_APIKEY_CONTEXT);
@@ -149,11 +161,14 @@ export async function requireAuth(
     const userId = payload.sub;
 
     // Check if user is disabled
-    const user = db
-      .prepare(
-        "SELECT COALESCE(disabled, 0) as disabled FROM users WHERE id = ?",
-      )
-      .get(userId) as { disabled: number } | undefined;
+    const user = drizzleDb
+      .select({
+        disabled: sql<number>`COALESCE(${users.disabled}, 0)`.as("disabled"),
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+      .get();
     if (!user || user.disabled === 1) {
       return reply.status(403).send({ error: "Account is disabled" });
     }
@@ -192,9 +207,12 @@ export async function requireAdmin(
   await requireAuth(request, reply);
   if (reply.sent) return; // Already sent a response (unauthorized/disabled)
 
-  const user = db
-    .prepare("SELECT role FROM users WHERE id = ?")
-    .get(request.userId) as { role: string } | undefined;
+  const user = drizzleDb
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, request.userId))
+    .limit(1)
+    .get();
   if (!user || user.role !== "admin") {
     return reply.status(403).send({ error: "Admin access required" });
   }
@@ -205,11 +223,14 @@ export async function requireNotReadOnly(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  const row = db
-    .prepare(
-      "SELECT COALESCE(read_only, 0) AS read_only FROM users WHERE id = ?",
-    )
-    .get(request.userId) as { read_only: number } | undefined;
+  const row = drizzleDb
+    .select({
+      read_only: sql<number>`COALESCE(${users.readOnly}, 0)`.as("read_only"),
+    })
+    .from(users)
+    .where(eq(users.id, request.userId))
+    .limit(1)
+    .get();
   if (row?.read_only === 1) {
     return reply
       .status(403)

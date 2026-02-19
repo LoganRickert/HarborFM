@@ -8,12 +8,12 @@ const styles = { ...sharedStyles, ...localStyles };
 
 interface CollaboratorsListProps {
   collaborators: Array<{
-    user_id: string;
-    email: string;
+    userId: string;
+    username: string;
     role: string;
   }>;
   podcastId: string;
-  onRemove: (collaborator: { user_id: string; email: string }) => void;
+  onRemove: (collaborator: { userId: string; username: string }) => void;
   isRemoving: boolean;
 }
 
@@ -34,7 +34,7 @@ export function CollaboratorsList({ collaborators, podcastId, onRemove, isRemovi
       {collaborators.map((c) => {
         const RoleIcon = ROLE_ICONS[c.role as keyof typeof ROLE_ICONS];
         return (
-        <li key={c.user_id} className={styles.exportCard}>
+        <li key={c.userId} className={styles.exportCard}>
           <div className={styles.exportCardRow}>
             <div className={styles.exportCardMeta}>
               <div className={styles.collabMetaWrap}>
@@ -43,11 +43,11 @@ export function CollaboratorsList({ collaborators, podcastId, onRemove, isRemovi
                     <RoleIcon size={ROLE_ICON_SIZE} />
                   </span>
                 )}
-                <strong>{c.email}</strong>
+                <strong>{c.username || 'Unknown'}</strong>
               </div>
             </div>
             <div className={styles.collabCardActions}>
-              <div className={styles.statusToggle} role="group" aria-label={`Role for ${c.email}`}>
+                <div className={styles.statusToggle} role="group" aria-label={`Role for ${c.username || 'Unknown'}`}>
                 {(['view', 'editor', 'manager'] as const).map((role) => (
                   <button
                     key={role}
@@ -55,7 +55,7 @@ export function CollaboratorsList({ collaborators, podcastId, onRemove, isRemovi
                     className={c.role === role ? styles.statusToggleActive : styles.statusToggleBtn}
                     onClick={() => {
                       if (role !== c.role) {
-                        updateCollaborator(podcastId, c.user_id, { role }).then(() => {
+                        updateCollaborator(podcastId, c.userId, { role }).then(() => {
                           queryClient.invalidateQueries({ queryKey: ['collaborators', podcastId] });
                         });
                       }
@@ -70,9 +70,9 @@ export function CollaboratorsList({ collaborators, podcastId, onRemove, isRemovi
               <button
                 type="button"
                 className={styles.collabDeleteBtn}
-                onClick={() => onRemove({ user_id: c.user_id, email: c.email })}
+                onClick={() => onRemove({ userId: c.userId, username: c.username })}
                 disabled={isRemoving}
-                aria-label={`Remove ${c.email}`}
+                aria-label={`Remove ${c.username || 'Unknown'}`}
               >
                 <Trash2 size={16} aria-hidden />
               </button>

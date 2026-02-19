@@ -56,9 +56,9 @@ export function Setup() {
         email,
         password,
         hostname: hostname.trim().replace(/\/+$/, ''),
-        registration_enabled: registrationEnabled,
-        public_feeds_enabled: publicFeedsEnabled,
-        import_pixabay_assets: importPixabayAssets,
+        registrationEnabled,
+        publicFeedsEnabled,
+        importPixabayAssets,
       }),
     onSuccess: async () => {
       // Prevent SetupGuard from using stale cached setupRequired=true.

@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.4 - 2026-02-18
+
+- **Federation (SAML & OIDC):** Single sign-on with configurable OIDC and SAML providers; admin-configurable providers in settings (`ssoOidcProviders`, `ssoSamlProviders`) with encrypted client/cert secrets; OIDC discovery and authorization-code flow with PKCE; SAML IdP flow with state and optional in-response-to validation; user identities linked to local accounts; resolve-or-create and login-by-identity flows; SAML request-id cache and OAuth state/nonce tables for security.
+- **Database: Drizzle ORM:** Migrated from raw better-sqlite3 usage to Drizzle ORM; SQLite remains the default store (via `drizzle-orm/better-sqlite3`); typed schema and queries across auth, episodes, podcasts, segments, tokens, and other modules; Drizzle Kit for migrations, studio, and optional MySQL push (`db:generate`, `db:studio`, `db:push-mysql`).
+
 ## v1.3 - 2026-02-17
 
 - **Segment editor:** Trim ranges and markers (non-destructive); "Add Silence Trims" to auto-detect 1s+ silence and add trim ranges with buffer; marker type (None/Chapter) and color picker; "Server Remove Silence" and noise suppression in Functions tab; waveform shows trimmed regions collapsed and hides trimmed sections.

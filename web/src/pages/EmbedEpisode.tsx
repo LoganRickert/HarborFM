@@ -30,6 +30,7 @@ export function EmbedEpisode() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [volume, setVolume] = useState(1);
+  const [audioLoadFailed, setAudioLoadFailed] = useState(false);
 
   const host = typeof window !== 'undefined' ? window.location.host : '';
   const { data: config, isLoading: configLoading, isFetched: configFetched } = useQuery({
@@ -41,8 +42,8 @@ export function EmbedEpisode() {
     enabled: !podcastSlugParam,
   });
 
-  const effectivePodcastSlug = podcastSlugParam ?? config?.custom_feed_slug ?? '';
-  const isCustomDomain = !podcastSlugParam && !!config?.custom_feed_slug;
+  const effectivePodcastSlug = podcastSlugParam ?? config?.customFeedSlug ?? '';
+  const isCustomDomain = !podcastSlugParam && !!config?.customFeedSlug;
 
   const { data: podcast, isLoading: podcastLoading, isError: podcastError, error: podcastQueryError, refetch: refetchPodcast } = useQuery({
     queryKey: ['public-podcast', effectivePodcastSlug],
@@ -60,8 +61,10 @@ export function EmbedEpisode() {
     queryClient.removeQueries({ queryKey: ['activeImport'] });
   }, [queryClient]);
 
-  const audioUrl = episode?.private_audio_url || episode?.audio_url || null;
-  const durationSec = episode?.audio_duration_sec ?? 0;
+  const audioUrl = episode?.privateAudioUrl || episode?.audioUrl || null;
+  const durationSec = episode?.audioDurationSec ?? 0;
+
+  useEffect(() => setAudioLoadFailed(false), [audioUrl]);
 
   const {
     audioRef,
@@ -77,7 +80,7 @@ export function EmbedEpisode() {
     episodeSlug,
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
-    privateWaveformUrl: episode?.private_waveform_url,
+    privateWaveformUrl: episode?.privateWaveformUrl,
   });
 
   useEffect(() => {
@@ -123,7 +126,7 @@ export function EmbedEpisode() {
 
   if (!episodeSlug) return null;
 
-  if (!podcastSlugParam && configFetched && !config?.custom_feed_slug) {
+  if (!podcastSlugParam && configFetched && !config?.customFeedSlug) {
     return <Navigate to="/" replace />;
   }
 
@@ -171,26 +174,26 @@ export function EmbedEpisode() {
   const rssPath = getPublicRssUrl(effectivePodcastSlug);
   const subscribeUrl = `${origin}${rssPath}`;
   const downloadUrl = audioUrl ? (audioUrl.startsWith('http') ? audioUrl : `${origin}${audioUrl}`) : null;
-  const transcriptUrl = (episode.private_srt_url || episode.srt_url)
-    ? ((episode.private_srt_url || episode.srt_url)!.startsWith('http')
-      ? (episode.private_srt_url || episode.srt_url)!
-      : `${origin}${episode.private_srt_url || episode.srt_url}`)
+  const transcriptUrl = (episode.privateSrtUrl || episode.srtUrl)
+    ? ((episode.privateSrtUrl || episode.srtUrl)!.startsWith('http')
+      ? (episode.privateSrtUrl || episode.srtUrl)!
+      : `${origin}${episode.privateSrtUrl || episode.srtUrl}`)
     : null;
 
-  const seasonEpisodeLong = formatSeasonEpisodeLong(episode.season_number, episode.episode_number);
-  const seasonEpisodeShort = formatSeasonEpisode(episode.season_number, episode.episode_number);
+  const seasonEpisodeLong = formatSeasonEpisodeLong(episode.seasonNumber, episode.episodeNumber);
+  const seasonEpisodeShort = formatSeasonEpisode(episode.seasonNumber, episode.episodeNumber);
 
-  const isSubscriberOnly = !audioUrl && episode.subscriber_only === 1;
+  const isSubscriberOnly = !audioUrl && !audioLoadFailed && Boolean(episode.subscriberOnly);
 
   let artworkSrc: string | null = null;
-  if (episode.artwork_url) {
-    artworkSrc = episode.artwork_url;
-  } else if (episode.artwork_filename) {
-    artworkSrc = `/api/public/artwork/${episode.podcast_id}/episodes/${episode.id}/${encodeURIComponent(episode.artwork_filename)}`;
-  } else if (podcast.artwork_url) {
-    artworkSrc = podcast.artwork_url;
-  } else if (podcast.artwork_filename) {
-    artworkSrc = `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}`;
+  if (episode.artworkUrl) {
+    artworkSrc = episode.artworkUrl;
+  } else if (episode.artworkFilename) {
+    artworkSrc = `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`;
+  } else if (podcast.artworkUrl) {
+    artworkSrc = podcast.artworkUrl;
+  } else if (podcast.artworkFilename) {
+    artworkSrc = `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`;
   }
 
   return (
@@ -245,7 +248,7 @@ export function EmbedEpisode() {
                 <FeedSubscriberOnlyMessage />
               </a>
             </>
-          ) : audioUrl ? (
+          ) : audioUrl && !audioLoadFailed ? (
             <>
               <div className={styles.player}>
                 {hasWaveform && (
@@ -270,12 +273,12 @@ export function EmbedEpisode() {
                   </div>
                 )}
                 {hasWaveform ? (
-                  <audio ref={audioRef} preload="metadata" style={{ display: 'none' }}>
-                    <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+                  <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} onError={() => setAudioLoadFailed(true)}>
+                    <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                   </audio>
                 ) : (
-                  <audio ref={audioRef} controls className={styles.audioNative} preload="metadata">
-                    <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+                  <audio ref={audioRef} controls className={styles.audioNative} preload="metadata" onError={() => setAudioLoadFailed(true)}>
+                    <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                   </audio>
                 )}
               </div>
@@ -326,7 +329,9 @@ export function EmbedEpisode() {
                 </div>
               </div>
             </>
-          ) : null}
+          ) : (
+            <p className={styles.noAudioText}>Audio not available.</p>
+          )}
         </div>
       </div>
       <EmbedResizeObserver rootRef={rootRef} />

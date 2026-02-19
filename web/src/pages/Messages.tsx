@@ -169,17 +169,17 @@ function MessageCard({ message }: { message: ContactMessage }) {
 
   const showToggle = showAsOverflow || expanded;
   const contextLabel =
-    message.episode_title && message.podcast_title
-      ? `${message.episode_title} - ${message.podcast_title}`
-      : message.podcast_title
-        ? message.podcast_title
+    message.episodeTitle && message.podcastTitle
+      ? `${message.episodeTitle} - ${message.podcastTitle}`
+      : message.podcastTitle
+        ? message.podcastTitle
         : null;
   return (
     <div className={styles.messageCard}>
       <div className={styles.messageCardRow}>
         <h2 className={styles.messageCardName}>{message.name}</h2>
-        <time className={styles.messageCardDate} dateTime={message.created_at}>
-          {formatDateTime(message.created_at)}
+        <time className={styles.messageCardDate} dateTime={message.createdAt}>
+          {formatDateTime(message.createdAt)}
         </time>
       </div>
       {contextLabel && (

@@ -16,10 +16,10 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
           step={1}
           className={styles.input}
           placeholder="No limit"
-          value={form.default_max_podcasts ?? ''}
+          value={form.defaultMaxPodcasts ?? ''}
           onChange={(e) => {
             const v = e.target.value;
-            onFormChange({ default_max_podcasts: v === '' ? null : Number(v) });
+            onFormChange({ defaultMaxPodcasts: v === '' ? null : Number(v) });
           }}
         />
       </label>
@@ -31,10 +31,10 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
           step={1}
           className={styles.input}
           placeholder="No limit"
-          value={form.default_max_episodes ?? ''}
+          value={form.defaultMaxEpisodes ?? ''}
           onChange={(e) => {
             const v = e.target.value;
-            onFormChange({ default_max_episodes: v === '' ? null : Number(v) });
+            onFormChange({ defaultMaxEpisodes: v === '' ? null : Number(v) });
           }}
         />
       </label>
@@ -46,10 +46,10 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
           step={1}
           className={styles.input}
           placeholder="No limit"
-          value={form.default_storage_mb ?? ''}
+          value={form.defaultStorageMb ?? ''}
           onChange={(e) => {
             const v = e.target.value;
-            onFormChange({ default_storage_mb: v === '' ? null : Number(v) });
+            onFormChange({ defaultStorageMb: v === '' ? null : Number(v) });
           }}
         />
       </label>
@@ -61,10 +61,10 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
           step={1}
           className={styles.input}
           placeholder="No limit"
-          value={form.default_max_collaborators ?? ''}
+          value={form.defaultMaxCollaborators ?? ''}
           onChange={(e) => {
             const v = e.target.value;
-            onFormChange({ default_max_collaborators: v === '' ? null : Number(v) });
+            onFormChange({ defaultMaxCollaborators: v === '' ? null : Number(v) });
           }}
         />
       </label>
@@ -76,18 +76,18 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
           step={1}
           className={styles.input}
           placeholder="No limit"
-          value={form.default_max_subscriber_tokens ?? ''}
+          value={form.defaultMaxSubscriberTokens ?? ''}
           onChange={(e) => {
             const v = e.target.value;
-            onFormChange({ default_max_subscriber_tokens: v === '' ? null : Number(v) });
+            onFormChange({ defaultMaxSubscriberTokens: v === '' ? null : Number(v) });
           }}
         />
       </label>
       <label className="toggle">
         <input
           type="checkbox"
-          checked={form.default_can_transcribe}
-          onChange={(e) => onFormChange({ default_can_transcribe: e.target.checked })}
+          checked={form.defaultCanTranscribe}
+          onChange={(e) => onFormChange({ defaultCanTranscribe: e.target.checked })}
         />
         <span className="toggle__track" aria-hidden="true" />
         <span>Default Can Transcribe</span>

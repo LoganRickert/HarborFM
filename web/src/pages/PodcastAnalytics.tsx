@@ -33,23 +33,23 @@ const COLORS = {
 };
 const PIE_COLORS = ['#0dcaf0', '#0d6efd', '#198754', '#e6a030', '#6f42c1', '#fd7e14', '#6c757d'];
 
-function last14Days(): { start_date: string; end_date: string } {
+function last14Days(): { startDate: string; endDate: string } {
   const end = new Date();
   end.setUTCDate(end.getUTCDate() - 1);
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - 13);
   return {
-    start_date: start.toISOString().slice(0, 10),
-    end_date: end.toISOString().slice(0, 10),
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
   };
 }
 
 function sumRss(analytics: PodcastAnalytics) {
   let bot = 0;
   let human = 0;
-  for (const row of analytics.rss_daily) {
-    bot += row.bot_count;
-    human += row.human_count;
+  for (const row of analytics.rssDaily) {
+    bot += row.botCount;
+    human += row.humanCount;
   }
   return { bot, human, total: bot + human };
 }
@@ -62,18 +62,18 @@ function episodeTotals(analytics: PodcastAnalytics) {
   for (const e of analytics.episodes) {
     byEpisode[e.id] = { requestsBot: 0, requestsHuman: 0, listensBot: 0, listensHuman: 0 };
   }
-  for (const row of analytics.episode_daily) {
-    const cur = byEpisode[row.episode_id];
+  for (const row of analytics.episodeDaily) {
+    const cur = byEpisode[row.episodeId];
     if (cur) {
-      cur.requestsBot += row.bot_count;
-      cur.requestsHuman += row.human_count;
+      cur.requestsBot += row.botCount;
+      cur.requestsHuman += row.humanCount;
     }
   }
-  for (const row of analytics.episode_listens_daily) {
-    const cur = byEpisode[row.episode_id];
+  for (const row of analytics.episodeListensDaily) {
+    const cur = byEpisode[row.episodeId];
     if (cur) {
-      cur.listensBot += row.bot_count;
-      cur.listensHuman += row.human_count;
+      cur.listensBot += row.botCount;
+      cur.listensHuman += row.humanCount;
     }
   }
   return byEpisode;
@@ -81,10 +81,10 @@ function episodeTotals(analytics: PodcastAnalytics) {
 
 function locationTotals(analytics: PodcastAnalytics) {
   const byLocation: Record<string, { bot: number; human: number }> = {};
-  for (const row of analytics.episode_location_daily) {
+  for (const row of analytics.episodeLocationDaily) {
     const cur = byLocation[row.location] ?? { bot: 0, human: 0 };
-    cur.bot += row.bot_count;
-    cur.human += row.human_count;
+    cur.bot += row.botCount;
+    cur.human += row.humanCount;
     byLocation[row.location] = cur;
   }
   return Object.entries(byLocation)
@@ -170,7 +170,7 @@ export function PodcastAnalytics() {
     enabled: !!id,
   });
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ['podcast-analytics', id, dateRange.start_date, dateRange.end_date],
+    queryKey: ['podcast-analytics', id, dateRange.startDate, dateRange.endDate],
     queryFn: () => getPodcastAnalytics(id!, dateRange),
     enabled: !!id,
   });
@@ -186,30 +186,30 @@ export function PodcastAnalytics() {
 
   const overviewData = useMemo(() => {
     if (!analytics) return [];
-    const byDate: Record<string, { stat_date: string; feed: number; requests: number; listens: number }> = {};
-    for (const row of analytics.rss_daily) {
-      byDate[row.stat_date] = { stat_date: row.stat_date, feed: row.human_count + row.bot_count, requests: 0, listens: 0 };
+    const byDate: Record<string, { statDate: string; feed: number; requests: number; listens: number }> = {};
+    for (const row of analytics.rssDaily) {
+      byDate[row.statDate] = { statDate: row.statDate, feed: row.humanCount + row.botCount, requests: 0, listens: 0 };
     }
-    for (const row of analytics.episode_daily) {
-      if (!byDate[row.stat_date]) byDate[row.stat_date] = { stat_date: row.stat_date, feed: 0, requests: 0, listens: 0 };
-      byDate[row.stat_date].requests += row.human_count + row.bot_count;
+    for (const row of analytics.episodeDaily) {
+      if (!byDate[row.statDate]) byDate[row.statDate] = { statDate: row.statDate, feed: 0, requests: 0, listens: 0 };
+      byDate[row.statDate].requests += row.humanCount + row.botCount;
     }
-    for (const row of analytics.episode_listens_daily) {
-      if (!byDate[row.stat_date]) byDate[row.stat_date] = { stat_date: row.stat_date, feed: 0, requests: 0, listens: 0 };
-      byDate[row.stat_date].listens += row.human_count + row.bot_count;
+    for (const row of analytics.episodeListensDaily) {
+      if (!byDate[row.statDate]) byDate[row.statDate] = { statDate: row.statDate, feed: 0, requests: 0, listens: 0 };
+      byDate[row.statDate].listens += row.humanCount + row.botCount;
     }
-    return Object.values(byDate).sort((a, b) => a.stat_date.localeCompare(b.stat_date));
+    return Object.values(byDate).sort((a, b) => a.statDate.localeCompare(b.statDate));
   }, [analytics]);
 
   const feedData = useMemo(() => {
     if (!analytics) return [];
-    return [...analytics.rss_daily]
-      .sort((a, b) => a.stat_date.localeCompare(b.stat_date))
+    return [...analytics.rssDaily]
+      .sort((a, b) => a.statDate.localeCompare(b.statDate))
       .map((row) => ({
-        stat_date: row.stat_date,
-        People: row.human_count,
-        Apps: row.bot_count,
-        total: row.human_count + row.bot_count,
+        statDate: row.statDate,
+        People: row.humanCount,
+        Apps: row.botCount,
+        total: row.humanCount + row.botCount,
       }));
   }, [analytics]);
 
@@ -271,7 +271,7 @@ export function PodcastAnalytics() {
   const rssTotal = analytics ? sumRss(analytics) : { bot: 0, human: 0, total: 0 };
 
   const renderTimeChart = (
-    data: Array<{ stat_date: string; [key: string]: string | number }>,
+    data: Array<{ statDate: string; [key: string]: string | number }>,
     series: { key: string; name: string; color: string }[],
     viewType: TimeViewType
   ) => {
@@ -281,7 +281,7 @@ export function PodcastAnalytics() {
       return (
         <LineChart {...common}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="stat_date" tickFormatter={formatShortDate} {...axisProps} />
+          <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
           <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
           <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
           <Legend />
@@ -295,7 +295,7 @@ export function PodcastAnalytics() {
       return (
         <AreaChart {...common}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="stat_date" tickFormatter={formatShortDate} {...axisProps} />
+          <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
           <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
           <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
           <Legend />
@@ -309,7 +309,7 @@ export function PodcastAnalytics() {
       return (
         <BarChart {...common} barCategoryGap="10%">
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="stat_date" tickFormatter={formatShortDate} {...axisProps} />
+          <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
           <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
           <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
           <Legend />
@@ -374,8 +374,8 @@ export function PodcastAnalytics() {
                   </thead>
                   <tbody>
                     {[...overviewData].reverse().map((row) => (
-                      <tr key={row.stat_date}>
-                        <td>{formatShortDate(row.stat_date)}</td>
+                      <tr key={row.statDate}>
+                        <td>{formatShortDate(row.statDate)}</td>
                         <td className={styles.num}>{row.feed}</td>
                         <td className={styles.num}>{row.requests}</td>
                         <td className={styles.num}>{row.listens}</td>
@@ -392,7 +392,7 @@ export function PodcastAnalytics() {
                   ) : overviewView === 'line' ? (
                     <LineChart data={overviewData} margin={chartMargin}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="stat_date" tickFormatter={formatShortDate} {...axisProps} />
+                      <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
                       <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
                       <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
                       <Legend />
@@ -403,7 +403,7 @@ export function PodcastAnalytics() {
                   ) : overviewView === 'area' ? (
                     <AreaChart data={overviewData} margin={chartMargin}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="stat_date" tickFormatter={formatShortDate} {...axisProps} />
+                      <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
                       <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
                       <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
                       <Legend />
@@ -414,7 +414,7 @@ export function PodcastAnalytics() {
                   ) : (
                     <BarChart data={overviewData} margin={chartMargin} barCategoryGap="10%">
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="stat_date" tickFormatter={formatShortDate} {...axisProps} />
+                      <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
                       <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
                       <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
                       <Legend />
@@ -469,8 +469,8 @@ export function PodcastAnalytics() {
                   </thead>
                   <tbody>
                     {[...feedData].reverse().map((row) => (
-                      <tr key={row.stat_date}>
-                        <td>{formatShortDate(row.stat_date)}</td>
+                      <tr key={row.statDate}>
+                        <td>{formatShortDate(row.statDate)}</td>
                         <td className={styles.num}>{row.People}</td>
                         <td className={styles.num}>{row.Apps}</td>
                         <td className={styles.num}>{row.total}</td>

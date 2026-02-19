@@ -10,9 +10,9 @@ export const setupCompleteBodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
   hostname: z.string().optional(),
-  registration_enabled: z.boolean().optional(),
-  public_feeds_enabled: z.boolean().optional(),
-  import_pixabay_assets: z.boolean().optional(),
+  registrationEnabled: z.boolean().optional(),
+  publicFeedsEnabled: z.boolean().optional(),
+  importPixabayAssets: z.boolean().optional(),
 });
 
 export type SetupTokenQuery = z.infer<typeof setupTokenQuerySchema>;

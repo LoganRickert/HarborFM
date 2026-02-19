@@ -5,10 +5,10 @@ import { FeedPodcastCardProps } from '../../types/feed';
 import { SubscriptionInfoDialog } from './SubscriptionInfoDialog';
 import styles from './FeedPodcastCard.module.css';
 
-function podcastArtworkUrl(podcast: { artwork_url?: string | null; artwork_filename?: string | null; id: string }): string | null {
-  if (podcast.artwork_url) return podcast.artwork_url;
-  if (podcast.artwork_filename) {
-    return `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}`;
+function podcastArtworkUrl(podcast: { artworkUrl?: string | null; artworkFilename?: string | null; id: string }): string | null {
+  if (podcast.artworkUrl) return podcast.artworkUrl;
+  if (podcast.artworkFilename) {
+    return `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`;
   }
   return null;
 }
@@ -22,8 +22,8 @@ export function FeedPodcastCard({ podcast, showLockIcon }: FeedPodcastCardProps)
     setShowLockInfo(true);
   };
   const artwork = podcastArtworkUrl(podcast);
-  const isSubscriberOnly = podcast.subscriber_only_feed_enabled === 1 && podcast.public_feed_disabled === 1;
-  const hasSubscriberFeatures = podcast.subscriber_only_feed_enabled === 1;
+  const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
+  const hasSubscriberFeatures = Boolean(podcast.subscriberOnlyFeedEnabled);
 
   return (
     <>

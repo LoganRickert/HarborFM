@@ -14,8 +14,8 @@ export function CustomLegalSection({ form, onFormChange }: SettingsFormProps) {
           className={`${styles.input} ${styles.textareaLarge}`}
           rows={8}
           placeholder="Paste or write your terms in Markdown. Leave empty to use the default terms."
-          value={form.custom_terms}
-          onChange={(e) => onFormChange({ custom_terms: e.target.value })}
+          value={form.customTerms}
+          onChange={(e) => onFormChange({ customTerms: e.target.value })}
         />
       </label>
       <label className={styles.label}>
@@ -24,8 +24,8 @@ export function CustomLegalSection({ form, onFormChange }: SettingsFormProps) {
           className={`${styles.input} ${styles.textareaLarge}`}
           rows={8}
           placeholder="Paste or write your privacy policy in Markdown. Leave empty to use the default policy."
-          value={form.custom_privacy}
-          onChange={(e) => onFormChange({ custom_privacy: e.target.value })}
+          value={form.customPrivacy}
+          onChange={(e) => onFormChange({ customPrivacy: e.target.value })}
         />
       </label>
     </SectionCard>

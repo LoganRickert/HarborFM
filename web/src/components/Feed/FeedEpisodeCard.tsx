@@ -21,7 +21,7 @@ export function FeedEpisodeCard({
 
   // Check for both private and public audio URLs
   const episodeWithAuth = episode as PublicEpisodeWithAuth;
-  const hasAudio = !!(episodeWithAuth.private_audio_url || episode.audio_url);
+  const hasAudio = !!(episodeWithAuth.privateAudioUrl || episode.audioUrl);
 
   return (
     <li
@@ -35,17 +35,17 @@ export function FeedEpisodeCard({
         <div className={styles.headerContent}>
           <h3 className={styles.title}>{episode.title}</h3>
           <div className={styles.meta}>
-            {(episode.season_number != null || episode.episode_number != null) && (
+            {(episode.seasonNumber != null || episode.episodeNumber != null) && (
               <span className={styles.seasonEpisode}>
-                {formatSeasonEpisode(episode.season_number, episode.episode_number)}
+                {formatSeasonEpisode(episode.seasonNumber, episode.episodeNumber)}
               </span>
             )}
-            {episode.publish_at && (
-              <span className={styles.date}>{formatDate(episode.publish_at)}</span>
+            {episode.publishAt && (
+              <span className={styles.date}>{formatDate(episode.publishAt)}</span>
             )}
-            {episode.audio_duration_sec && (
+            {episode.audioDurationSec && (
               <span className={styles.duration}>
-                {formatDuration(episode.audio_duration_sec)}
+                {formatDuration(episode.audioDurationSec)}
               </span>
             )}
           </div>
@@ -66,10 +66,14 @@ export function FeedEpisodeCard({
           onPlay={() => onPlay(episode.id)}
           onPause={onPause}
         />
-      ) : episode.subscriber_only === 1 && !hasAudio ? (
+      ) : isSubscriberOnly && !hasAudio ? (
         <div className={styles.lockedCard} aria-label="Subscriber only">
           <Lock size={20} strokeWidth={2} className={styles.lockedIcon} aria-hidden />
           <span className={styles.lockedLabel}>Subscriber Only - Subscribe to Listen</span>
+        </div>
+      ) : showPlayer && !hasAudio ? (
+        <div className={styles.noAudioCard} aria-label="No audio">
+          <p className={styles.noAudioText}>Audio not available.</p>
         </div>
       ) : null}
     </li>

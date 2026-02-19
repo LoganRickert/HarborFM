@@ -75,6 +75,13 @@ export function unsubscribeEpisode(ws: WebSocket): void {
  */
 export function broadcastToEpisode(episodeId: string, payload: object): void {
   const sockets = episodeRooms.get(episodeId);
+  const type = (payload as { type?: string }).type ?? "?";
+  const n = sockets ? sockets.size : 0;
+  const extra =
+    type === "segmentAdded"
+      ? ` pendingSegmentIds=${JSON.stringify((payload as { pendingSegmentIds?: string[] }).pendingSegmentIds)}`
+      : "";
+  console.log("[episodeBroadcast] broadcastToEpisode episodeId=%s type=%s subscribers=%d%s", episodeId, type, n, extra);
   if (!sockets) return;
   for (const ws of sockets) {
     sendToSocket(ws, payload);

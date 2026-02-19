@@ -9,11 +9,11 @@ import {
   geoliteTest,
   geoliteCheck,
   geoliteUpdate,
-  AppSettings,
 } from '../api/settings';
+import type { SettingsResponse } from '@harborfm/shared';
 
 interface UseSettingsMutationsParams {
-  form: AppSettings;
+  form: SettingsResponse;
 }
 
 export function useSettingsMutations({ form }: UseSettingsMutationsParams) {
@@ -21,11 +21,11 @@ export function useSettingsMutations({ form }: UseSettingsMutationsParams) {
   const testMutation = useMutation({
     mutationFn: () => {
       const payload: Parameters<typeof testLlmConnection>[0] = {
-        llm_provider: form.llm_provider as 'ollama' | 'openai',
+        llmProvider: form.llmProvider as 'ollama' | 'openai',
       };
-      if (form.llm_provider === 'ollama') payload.ollama_url = form.ollama_url;
-      if (form.llm_provider === 'openai') {
-        payload.openai_api_key = form.openai_api_key === '(set)' ? undefined : form.openai_api_key;
+      if (form.llmProvider === 'ollama') payload.ollamaUrl = form.ollamaUrl;
+      if (form.llmProvider === 'openai') {
+        payload.openaiApiKey = form.openaiApiKey === '(set)' ? undefined : form.openaiApiKey;
       }
       return testLlmConnection(payload);
     },
@@ -35,42 +35,42 @@ export function useSettingsMutations({ form }: UseSettingsMutationsParams) {
   useEffect(() => {
     testMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.llm_provider]);
+  }, [form.llmProvider]);
 
   // Whisper test mutation
   const whisperTestMutation = useMutation({
-    mutationFn: () => testWhisperConnection(form.whisper_asr_url),
+    mutationFn: () => testWhisperConnection(form.whisperAsrUrl),
   });
 
   // Reset Whisper test when URL changes
   useEffect(() => {
     whisperTestMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.whisper_asr_url]);
+  }, [form.whisperAsrUrl]);
 
   // OpenAI transcription test mutation
   const transcriptionOpenaiTestMutation = useMutation({
     mutationFn: () =>
       testTranscriptionOpenAI({
-        openai_transcription_url: form.openai_transcription_url?.trim() || undefined,
-        openai_transcription_api_key: form.openai_transcription_api_key === '(set)' ? undefined : form.openai_transcription_api_key?.trim() || undefined,
+        openaiTranscriptionUrl: form.openaiTranscriptionUrl?.trim() || undefined,
+        openaiTranscriptionApiKey: form.openaiTranscriptionApiKey === '(set)' ? undefined : form.openaiTranscriptionApiKey?.trim() || undefined,
       }),
   });
 
   useEffect(() => {
     transcriptionOpenaiTestMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.openai_transcription_url, form.openai_transcription_api_key]);
+  }, [form.openaiTranscriptionUrl, form.openaiTranscriptionApiKey]);
 
   // SMTP test mutation
   const smtpTestMutation = useMutation({
     mutationFn: () =>
       testSmtpConnection({
-        smtp_host: form.smtp_host.trim(),
-        smtp_port: form.smtp_port,
-        smtp_secure: form.smtp_secure,
-        smtp_user: form.smtp_user.trim(),
-        smtp_password: form.smtp_password === '(set)' ? '' : form.smtp_password,
+        smtpHost: form.smtpHost.trim(),
+        smtpPort: form.smtpPort,
+        smtpSecure: form.smtpSecure,
+        smtpUser: form.smtpUser.trim(),
+        smtpPassword: form.smtpPassword === '(set)' ? '' : form.smtpPassword,
       }),
   });
 
@@ -78,7 +78,7 @@ export function useSettingsMutations({ form }: UseSettingsMutationsParams) {
   const sendgridTestMutation = useMutation({
     mutationFn: () =>
       testSendGridConnection({
-        sendgrid_api_key: form.sendgrid_api_key === '(set)' ? '' : form.sendgrid_api_key,
+        sendgridApiKey: form.sendgridApiKey === '(set)' ? '' : form.sendgridApiKey,
       }),
   });
 
@@ -87,23 +87,23 @@ export function useSettingsMutations({ form }: UseSettingsMutationsParams) {
     smtpTestMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    form.email_provider,
-    form.smtp_host,
-    form.smtp_port,
-    form.smtp_secure,
-    form.smtp_user,
-    form.smtp_password,
+    form.emailProvider,
+    form.smtpHost,
+    form.smtpPort,
+    form.smtpSecure,
+    form.smtpUser,
+    form.smtpPassword,
   ]);
 
   // Reset SendGrid test when SendGrid fields change
   useEffect(() => {
     sendgridTestMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.email_provider, form.sendgrid_api_key]);
+  }, [form.emailProvider, form.sendgridApiKey]);
 
   // GeoLite mutations
   const geoliteTestMutation = useMutation({
-    mutationFn: (payload: { maxmind_account_id: string; maxmind_license_key?: string }) =>
+    mutationFn: (payload: { maxmindAccountId: string; maxmindLicenseKey?: string }) =>
       geoliteTest(payload),
   });
 
@@ -112,7 +112,7 @@ export function useSettingsMutations({ form }: UseSettingsMutationsParams) {
   });
 
   const geoliteUpdateMutation = useMutation({
-    mutationFn: (payload: { maxmind_account_id: string; maxmind_license_key?: string }) =>
+    mutationFn: (payload: { maxmindAccountId: string; maxmindLicenseKey?: string }) =>
       geoliteUpdate(payload),
     onSuccess: () => {
       geoliteCheckMutation.mutate();

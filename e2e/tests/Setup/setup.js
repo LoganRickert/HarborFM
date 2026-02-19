@@ -24,7 +24,7 @@ export async function run({ runOne }) {
 
   results.push(
     await runOne('POST /setup/complete creates admin and completes setup', async () => {
-      await completeSetup({ registration_enabled: true, public_feeds_enabled: true });
+      await completeSetup({ registrationEnabled: true, publicFeedsEnabled: true });
       const res = await fetch(`${baseURL}/setup/status`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
@@ -34,9 +34,15 @@ export async function run({ runOne }) {
 
   results.push(
     await runOne('GET /setup/status after setup returns registrationEnabled and publicFeedsEnabled', async () => {
-      const res = await fetch(`${baseURL}/setup/status`);
+      let res = await fetch(`${baseURL}/setup/status`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
-      const data = await res.json();
+      let data = await res.json();
+      if (data.setupRequired) {
+        await completeSetup({ registrationEnabled: true, publicFeedsEnabled: true });
+        res = await fetch(`${baseURL}/setup/status`);
+        if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+        data = await res.json();
+      }
       if (data.registrationEnabled !== true) throw new Error('Expected registrationEnabled: true');
       if (data.publicFeedsEnabled !== true) throw new Error('Expected publicFeedsEnabled: true');
     })

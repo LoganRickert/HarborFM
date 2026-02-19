@@ -43,6 +43,11 @@ export const CORS_ORIGIN =
     ? process.env.CORS_ORIGIN === "true" || process.env.CORS_ORIGIN === "1"
     : !IS_PRODUCTION;
 
+/** 2FA challenge cookie name (HttpOnly, for setup/verify flows). Env: TWOFA_CHALLENGE_COOKIE_NAME. */
+export const TWOFA_CHALLENGE_COOKIE_NAME =
+  process.env.TWOFA_CHALLENGE_COOKIE_NAME?.trim() ||
+  `${APP_NAME_SLUG}_twofa_challenge`;
+
 /** Min free storage (MB) required to record a new section. Env: RECORD_MIN_FREE_MB. Default 5. */
 export const RECORD_MIN_FREE_MB = Number(process.env.RECORD_MIN_FREE_MB) || 5;
 export const RECORD_MIN_FREE_BYTES = RECORD_MIN_FREE_MB * 1024 * 1024;
@@ -172,6 +177,14 @@ export const WEBRTC_RECORDINGS_DIR =
 export const DB_FILENAME =
   process.env.DB_FILENAME?.trim() || `${APP_NAME_SLUG}.db`;
 
+/** Database provider: sqlite (default) or mysql. Env: DB_PROVIDER */
+export const DB_PROVIDER =
+  (process.env.DB_PROVIDER?.trim()?.toLowerCase() as "sqlite" | "mysql") ||
+  "sqlite";
+
+/** MySQL connection URL. Required when DB_PROVIDER=mysql. Env: DATABASE_URL */
+export const DATABASE_URL = process.env.DATABASE_URL?.trim() || null;
+
 /** Max "invite to platform" emails per inviter per 24 hours. Env: PLATFORM_INVITES_PER_DAY. Default 10. */
 export const MAX_PLATFORM_INVITES_PER_DAY =
   Number(process.env.PLATFORM_INVITES_PER_DAY) || 10;
@@ -220,6 +233,53 @@ export const RENDER_RATE_LIMIT_WINDOW_MS =
 export const FORGOT_PASSWORD_RATE_MINUTES =
   Number(process.env.FORGOT_PASSWORD_RATE_MINUTES) || 5;
 
+/** Forgot-password IP rate limit: max requests per time window per IP. Env: FORGOT_PASSWORD_IP_RATE_LIMIT_MAX. Default 5. */
+export const FORGOT_PASSWORD_IP_RATE_LIMIT_MAX =
+  Number(process.env.FORGOT_PASSWORD_IP_RATE_LIMIT_MAX) || 5;
+
+/** Profile update (email/username) rate limit (minutes). Env: PROFILE_UPDATE_RATE_LIMIT_MINUTES. Default 5. Max 60. */
+export const PROFILE_UPDATE_RATE_LIMIT_MINUTES =
+  Number(process.env.PROFILE_UPDATE_RATE_LIMIT_MINUTES) || 5;
+
+export const PROFILE_UPDATE_RATE_LIMIT_MS =
+  PROFILE_UPDATE_RATE_LIMIT_MINUTES * 60 * 1000;
+
+/** Profile update request rate limit: window (ms). Env: PROFILE_UPDATE_REQUEST_RATE_LIMIT_MS. Default 60000 (1 min). */
+export const PROFILE_UPDATE_REQUEST_RATE_LIMIT_MS =
+  Number(process.env.PROFILE_UPDATE_REQUEST_RATE_LIMIT_MS) || 60_000;
+/** Profile update request rate limit: max requests per window. Env: PROFILE_UPDATE_REQUEST_RATE_LIMIT_MAX. Default 5. */
+export const PROFILE_UPDATE_REQUEST_RATE_LIMIT_MAX =
+  Number(process.env.PROFILE_UPDATE_REQUEST_RATE_LIMIT_MAX) || 5;
+
+/** 2FA challenge token expiry (minutes). Env: AUTH_2FA_CHALLENGE_EXPIRY_MINUTES. Default 10. */
+export const AUTH_2FA_CHALLENGE_EXPIRY_MINUTES =
+  Number(process.env.AUTH_2FA_CHALLENGE_EXPIRY_MINUTES) || 10;
+export const AUTH_2FA_CHALLENGE_EXPIRY_MS =
+  AUTH_2FA_CHALLENGE_EXPIRY_MINUTES * 60 * 1000;
+
+/** 2FA challenge token size (bytes). Env: AUTH_CHALLENGE_TOKEN_BYTES. Default 24. */
+export const AUTH_CHALLENGE_TOKEN_BYTES =
+  Number(process.env.AUTH_CHALLENGE_TOKEN_BYTES) || 24;
+
+/** JWT session expiry (days). Env: JWT_SESSION_EXPIRY_DAYS. Default 7. */
+export const JWT_SESSION_EXPIRY_DAYS =
+  Number(process.env.JWT_SESSION_EXPIRY_DAYS) || 7;
+export const JWT_SESSION_EXPIRY = `${JWT_SESSION_EXPIRY_DAYS}d`;
+export const SESSION_COOKIE_MAX_AGE_SECONDS =
+  JWT_SESSION_EXPIRY_DAYS * 24 * 60 * 60;
+
+/** Email verification token size (bytes). Env: VERIFICATION_TOKEN_BYTES. Default 24. */
+export const VERIFICATION_TOKEN_BYTES =
+  Number(process.env.VERIFICATION_TOKEN_BYTES) || 24;
+
+/** Email verification link validity (hours). Env: VERIFICATION_EXPIRY_HOURS. Default 24. */
+export const VERIFICATION_EXPIRY_HOURS =
+  Number(process.env.VERIFICATION_EXPIRY_HOURS) || 24;
+
+/** Password reset token size (bytes). Env: RESET_TOKEN_BYTES. Default 32. */
+export const RESET_TOKEN_BYTES =
+  Number(process.env.RESET_TOKEN_BYTES) || 32;
+
 /** Login failure threshold: ban after this many failures in the window. Env: LOGIN_FAILURE_THRESHOLD. Default 3. */
 export const LOGIN_FAILURE_THRESHOLD =
   Number(process.env.LOGIN_FAILURE_THRESHOLD) || 3;
@@ -241,6 +301,12 @@ export const RESET_TOKEN_EXPIRY_HOURS =
 
 /** Global rate limit: max requests per time window. Env: RATE_LIMIT_MAX. Default 100. */
 export const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX) || 100;
+
+/** Registration rate limit: max per time window per IP. Env: REGISTRATION_RATE_LIMIT_MAX. Default 5 (burst for CAPTCHA retries). Set higher (e.g. 100) for e2e. */
+export const REGISTRATION_RATE_LIMIT_MAX =
+  process.env.REGISTRATION_RATE_LIMIT_MAX !== undefined
+    ? Number(process.env.REGISTRATION_RATE_LIMIT_MAX)
+    : 5;
 
 /** Global rate limit: time window (e.g. "1 minute"). Env: RATE_LIMIT_TIME_WINDOW. Default "1 minute". */
 export const RATE_LIMIT_TIME_WINDOW =
@@ -336,6 +402,10 @@ export const ROLE_MIN_MANAGE_COLLABORATORS = parseShareRole(
 /** AAD for DNS-related encrypted secrets (Cloudflare API token etc). Env: DNS_SECRETS_AAD. */
 export const DNS_SECRETS_AAD =
   process.env.DNS_SECRETS_AAD?.trim() || `${APP_NAME}-dns`;
+
+/** AAD for SSO-related encrypted secrets (OIDC client secrets, SAML certs). Env: SSO_SECRETS_AAD. */
+export const SSO_SECRETS_AAD =
+  process.env.SSO_SECRETS_AAD?.trim() || `${APP_NAME}-sso`;
 
 /** Initial setup token for /setup?id=... URL. Env: SETUP_ID or SETUP_TOKEN. When set, used instead of file. */
 export const SETUP_ID =

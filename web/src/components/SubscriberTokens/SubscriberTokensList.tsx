@@ -16,16 +16,16 @@ interface SubscriberTokensListProps {
 }
 
 function getStatus(token: SubscriberToken): TokenStatus {
-  const expired = token.valid_until != null && new Date(token.valid_until) < new Date();
+  const expired = token.validUntil != null && new Date(token.validUntil) < new Date();
   if (expired) return 'expired';
   if (token.disabled) return 'disabled';
   return 'active';
 }
 
 function getMetaText(t: SubscriberToken): string {
-  const parts = [`Created ${new Date(t.created_at).toLocaleDateString()}`];
-  if (t.valid_until) parts.push(`Expires ${new Date(t.valid_until).toLocaleDateString()}`);
-  if (t.last_used_at) parts.push(`Last used ${new Date(t.last_used_at).toLocaleDateString()}`);
+  const parts = [`Created ${new Date(t.createdAt).toLocaleDateString()}`];
+  if (t.validUntil) parts.push(`Expires ${new Date(t.validUntil).toLocaleDateString()}`);
+  if (t.lastUsedAt) parts.push(`Last used ${new Date(t.lastUsedAt).toLocaleDateString()}`);
   return parts.join(' · ');
 }
 

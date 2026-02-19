@@ -12,7 +12,7 @@ export async function run({ runOne }) {
   await apiFetch(`/podcasts/${podcast.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subscriber_only_feed_enabled: 1 }),
+    body: JSON.stringify({ subscriberOnlyFeedEnabled: 1 }),
   }, jar);
 
   results.push(
@@ -21,7 +21,7 @@ export async function run({ runOne }) {
       const createTokenRes = await apiFetch(`/podcasts/${podcast.id}/subscriber-tokens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Expired E2E', valid_until: oneSecondLater }),
+        body: JSON.stringify({ name: 'Expired E2E', validUntil: oneSecondLater }),
       }, jar);
       if (createTokenRes.status !== 201) {
         const t = await createTokenRes.text();

@@ -9,8 +9,8 @@ export async function run({ runOne }) {
       const res = await apiFetch('/settings', {}, adminJar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      if (typeof data.registration_enabled !== 'boolean') throw new Error('Expected registration_enabled');
-      if (typeof data.public_feeds_enabled !== 'boolean') throw new Error('Expected public_feeds_enabled');
+      if (typeof data.registrationEnabled !== 'boolean') throw new Error('Expected registrationEnabled');
+      if (typeof data.publicFeedsEnabled !== 'boolean') throw new Error('Expected publicFeedsEnabled');
     })
   );
 
@@ -19,7 +19,7 @@ export async function run({ runOne }) {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ registration_enabled: false }),
+        body: JSON.stringify({ registrationEnabled: false }),
       }, adminJar);
       const res = await fetch(`${baseURL}/auth/register`, {
         method: 'POST',
@@ -37,7 +37,7 @@ export async function run({ runOne }) {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ registration_enabled: true }),
+        body: JSON.stringify({ registrationEnabled: true }),
       }, adminJar);
       const { email, password } = await createUser({ email: `reopen-${Date.now()}@e2e.test` });
       const jar = cookieJar();

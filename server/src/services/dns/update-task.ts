@@ -1,6 +1,8 @@
 import type { FastifyBaseLogger } from "fastify";
 import { readSettings } from "../../modules/settings/index.js";
-import { db } from "../../db/index.js";
+import { eq } from "drizzle-orm";
+import { drizzleDb } from "../../db/index.js";
+import { podcasts } from "../../db/schema.js";
 import { ensureCnameForPodcast, getEffectiveDomain, type DnsLogger } from "./cloudflare.js";
 
 const CERT_WARMUP_DELAY_MS = 30_000;
@@ -40,20 +42,18 @@ export async function runDnsUpdateTask(
     ? { info: (msg, ctx) => log.info?.(ctx ?? {}, msg), error: (err, msg) => log.error?.(err, msg) }
     : { error: console.error, info: (msg) => console.log(msg) };
   try {
-    const row = db
-      .prepare(
-        `SELECT id, link_domain, managed_domain, managed_sub_domain, cloudflare_api_key_enc
-         FROM podcasts WHERE id = ?`,
-      )
-      .get(podcastId) as
-      | {
-          id: string;
-          link_domain: string | null;
-          managed_domain: string | null;
-          managed_sub_domain: string | null;
-          cloudflare_api_key_enc: string | null;
-        }
-      | undefined;
+    const row = drizzleDb
+      .select({
+        id: podcasts.id,
+        linkDomain: podcasts.linkDomain,
+        managedDomain: podcasts.managedDomain,
+        managedSubDomain: podcasts.managedSubDomain,
+        cloudflareApiKeyEnc: podcasts.cloudflareApiKeyEnc,
+      })
+      .from(podcasts)
+      .where(eq(podcasts.id, podcastId))
+      .limit(1)
+      .get();
     if (!row) return;
     const settings = readSettings();
     if (settings.dns_provider !== "cloudflare") return;

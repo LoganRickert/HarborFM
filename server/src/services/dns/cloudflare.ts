@@ -3,24 +3,24 @@ export interface DnsLogger {
   error?: (err: unknown, msg?: string) => void;
 }
 import { DNS_SECRETS_AAD } from "../../config.js";
-import type { AppSettings } from "../../modules/settings/routes.js";
+import type { AppSettings } from "../../modules/settings/index.js";
 import { decryptSecret, isEncryptedSecret } from "../secrets.js";
 
 type PodcastDnsRow = {
   id: string;
-  link_domain: string | null;
-  managed_domain: string | null;
-  managed_sub_domain: string | null;
-  cloudflare_api_key_enc: string | null;
+  linkDomain: string | null;
+  managedDomain: string | null;
+  managedSubDomain: string | null;
+  cloudflareApiKeyEnc: string | null;
 };
 
 /** Effective custom domain for this podcast (link, managed, or sub.default). */
 export function getEffectiveDomain(row: PodcastDnsRow, settings: AppSettings): string | null {
-  const link = row.link_domain?.trim();
+  const link = row.linkDomain?.trim();
   if (link) return link;
-  const managed = row.managed_domain?.trim();
+  const managed = row.managedDomain?.trim();
   if (managed) return managed;
-  const sub = row.managed_sub_domain?.trim();
+  const sub = row.managedSubDomain?.trim();
   const defaultDomain = settings.dns_default_domain?.trim();
   if (sub && defaultDomain) return `${sub}.${defaultDomain}`;
   return null;
@@ -29,11 +29,11 @@ export function getEffectiveDomain(row: PodcastDnsRow, settings: AppSettings): s
 /** All domains that could have a CNAME for this podcast (link, managed, or sub.default). */
 function getAllCandidateDomains(row: PodcastDnsRow, settings: AppSettings): string[] {
   const out: string[] = [];
-  const link = row.link_domain?.trim();
+  const link = row.linkDomain?.trim();
   if (link) out.push(link.toLowerCase());
-  const managed = row.managed_domain?.trim();
+  const managed = row.managedDomain?.trim();
   if (managed) out.push(managed.toLowerCase());
-  const sub = row.managed_sub_domain?.trim();
+  const sub = row.managedSubDomain?.trim();
   const defaultDomain = settings.dns_default_domain?.trim();
   if (sub && defaultDomain) out.push(`${sub}.${defaultDomain}`.toLowerCase());
   return [...new Set(out)];
@@ -43,9 +43,9 @@ function getEffectiveApiToken(
   row: PodcastDnsRow,
   settings: AppSettings,
 ): string | null {
-  if (row.cloudflare_api_key_enc && isEncryptedSecret(row.cloudflare_api_key_enc)) {
+  if (row.cloudflareApiKeyEnc && isEncryptedSecret(row.cloudflareApiKeyEnc)) {
     try {
-      return decryptSecret(row.cloudflare_api_key_enc, DNS_SECRETS_AAD);
+      return decryptSecret(row.cloudflareApiKeyEnc, DNS_SECRETS_AAD);
     } catch {
       return null;
     }

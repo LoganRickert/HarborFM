@@ -1,9 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import send from "@fastify/send";
 import { basename, dirname, join, resolve } from "path";
-import { copyFileSync, unlinkSync, existsSync, writeFileSync } from "fs";
-import { db } from "../../db/index.js";
+import { copyFileSync, existsSync, writeFileSync } from "fs";
+import { drizzleDb } from "../../db/index.js";
 import { getPodcastOwnerId, canReadLibraryAsset } from "../../services/access.js";
+import { getReusableAssetById } from "./repo.js";
 import { getSessionById } from "../../services/callSession.js";
 import { getWebRtcConfig } from "../../services/webrtcConfig.js";
 import {
@@ -71,7 +72,7 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
       if (!ownerId) {
         return reply.send({ stop: false });
       }
-      const stop = wouldExceedStorageLimit(db, ownerId, body.bytesRecordedSoFar);
+      const stop = wouldExceedStorageLimit(drizzleDb, ownerId, body.bytesRecordedSoFar);
       return reply.send({
         stop,
         error: stop ? "Storage limit reached. Free up space to record." : undefined,
@@ -226,12 +227,10 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
       if (!canReadLibraryAsset(session.hostUserId, assetId)) {
         return reply.status(403).send({ error: "Asset not found" });
       }
-      const row = db
-        .prepare("SELECT * FROM reusable_assets WHERE id = ?")
-        .get(assetId) as Record<string, unknown> | undefined;
+      const row = getReusableAssetById(assetId);
       if (!row) return reply.status(404).send({ error: "Asset not found" });
-      const path = row.audio_path ? resolveDataPath(row.audio_path as string) : "";
-      const ownerUserId = row.owner_user_id as string;
+      const path = row.audioPath ? resolveDataPath(row.audioPath) : "";
+      const ownerUserId = row.ownerUserId;
       if (!path || !existsSync(path)) return reply.status(404).send({ error: "File not found" });
       const base = libraryDir(ownerUserId);
       const safePath = assertPathUnder(path, base);
@@ -292,6 +291,10 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
         tracksManifest?: unknown;
         perTrackFilePaths?: string[];
       };
+      request.log.debug(
+        { filePath: body.filePath, segmentId: body.segmentId, episodeId: body.episodeId },
+        "[call] recording-segment callback received",
+      );
       try {
         assertSafeId(body.segmentId, "segmentId");
         assertSafeId(body.episodeId, "episodeId");
@@ -332,31 +335,38 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
           body.podcastId,
           body.name?.trim() || null,
         );
+        request.log.debug({ segmentId: body.segmentId, durationSec: row?.durationSec }, "[call] createSegmentFromPath done");
+        let pendingSegmentIds: string[] = [];
         if (body.sessionId) {
           const sess = getSessionById(body.sessionId);
+          const beforePending = sess?.pendingSegmentIds ?? [];
           if (sess?.pendingSegmentIds) {
             sess.pendingSegmentIds = sess.pendingSegmentIds.filter((id) => id !== body.segmentId);
             if (sess.pendingSegmentIds.length === 0) sess.pendingSegmentIds = undefined;
           }
           const sessAfterAdd = getSessionById(body.sessionId);
+          pendingSegmentIds = sessAfterAdd?.pendingSegmentIds ?? [];
+          request.log.debug({ before: beforePending, after: pendingSegmentIds }, "[call] session pendingSegmentIds updated");
           broadcastToSession(body.sessionId, {
             type: "segmentRecorded",
             segment: redactSegmentForClient(row),
-            pendingSegmentIds: sessAfterAdd?.pendingSegmentIds ?? [],
+            pendingSegmentIds,
           });
         }
-        broadcastToEpisode(body.episodeId, {
+        const episodePayload: { type: "segmentAdded"; segment: unknown; pendingSegmentIds?: string[]; recordingInProgress?: boolean } = {
           type: "segmentAdded",
           segment: redactSegmentForClient(row),
-        });
-        try {
-          unlinkSync(sourcePath);
-        } catch (unlinkErr) {
-          request.log.warn(
-            { err: unlinkErr, sourcePath },
-            "Could not remove source recording file (permission denied); segment created successfully",
-          );
+        };
+        if (body.sessionId) {
+          episodePayload.pendingSegmentIds = pendingSegmentIds;
+          episodePayload.recordingInProgress = false;
         }
+        request.log.debug(
+          { episodeId: body.episodeId, segmentId: body.segmentId, pendingSegmentIds: episodePayload.pendingSegmentIds },
+          "[call] broadcasting segmentAdded to episode",
+        );
+        broadcastToEpisode(body.episodeId, episodePayload);
+        // Source file is deleted by the WebRTC service after successful callback (same process that created it).
         if (body.tracksManifest && Array.isArray(body.perTrackFilePaths) && body.perTrackFilePaths.length > 0) {
           try {
             const manifest = body.tracksManifest as { recordingEpochMs?: number } | undefined;
@@ -372,11 +382,7 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
                 const base = relPath.split("/").pop() ?? relPath;
                 copyFileSync(src, join(mtDir, base));
                 copiedBases.push(base);
-                try {
-                  unlinkSync(src);
-                } catch {
-                  /* ignore */
-                }
+                // Per-track files are deleted by the WebRTC service after successful callback.
               }
             }
             setImmediate(() => {

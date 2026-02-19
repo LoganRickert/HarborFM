@@ -1,7 +1,7 @@
 import type { FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
 import { nanoid } from "nanoid";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
 import type { CallSession } from "../../services/callSession.js";
 import {
   getSessionByToken,
@@ -332,13 +332,6 @@ export function handleGuestJoin(
   }
   const webrtcCfg = getWebRtcConfig();
   const hasRoom = Boolean(session.roomId && webrtcCfg.publicWsUrl);
-  console.log("[call] guest join", {
-    sessionId: state.sessionId,
-    roomId: session.roomId,
-    hasRoom,
-    hasServiceUrl: !!webrtcCfg.serviceUrl,
-    hasPublicWs: !!webrtcCfg.publicWsUrl,
-  });
   if (!hasRoom && webrtcCfg.serviceUrl) {
     socket.send(
       JSON.stringify({
@@ -380,7 +373,7 @@ export function handleStartRecording(
   const clientEpochMs = msg.clientEpochMs;
   const webrtcCfg = getWebRtcConfig();
   const ownerId = session?.podcastId ? getPodcastOwnerId(session.podcastId) : undefined;
-  if (ownerId && wouldExceedStorageLimit(db, ownerId, RECORD_MIN_FREE_BYTES)) {
+  if (ownerId && wouldExceedStorageLimit(drizzleDb, ownerId, RECORD_MIN_FREE_BYTES)) {
     broadcastToSession(sessionId, {
       type: "recordingError",
       error: "Storage limit reached. Free up space to record.",
@@ -434,7 +427,7 @@ export function handleStartRecording(
               typeof data?.recordingEpochMs === "number" ? data.recordingEpochMs : Date.now();
             if (!sessionForRecording.recordingInProgress) return;
           }
-          req.log.info({ sid: sessionId }, "[call] broadcasting recordingStarted");
+          req.log.info("[call] broadcasting recordingStarted");
           const sessForSegId = getSessionById(sessionId);
           if (sessForSegId) {
             sessForSegId.currentRecordingSegmentId = segId;
@@ -508,7 +501,7 @@ export function handleStartRecording(
 export function handleStopRecording(req: FastifyRequest, sessionId: string): void {
   updateHostHeartbeat(sessionId);
   const session = getSessionById(sessionId);
-  req.log.info({ sid: sessionId, hasSession: !!session, roomId: session?.roomId }, "[call] stopRecording received");
+  req.log.info({ hasSession: !!session, roomId: session?.roomId }, "[call] stopRecording received");
   if (session) {
     session.recordingInProgress = false;
     session.recordingStartedAtEpochMs = undefined;
@@ -531,7 +524,6 @@ export function handleStopRecording(req: FastifyRequest, sessionId: string): voi
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     const stopHeaders = webrtcRequestHeaders(webrtcCfg);
-    console.log("[call] stop-recording request", { stopUrl, roomId, hasSecret: !!webrtcCfg.webrtcServiceSecret });
     fetch(stopUrl, {
       method: "POST",
       headers: stopHeaders,
@@ -541,15 +533,14 @@ export function handleStopRecording(req: FastifyRequest, sessionId: string): voi
       .then((res) => {
         clearTimeout(timeout);
         const text = res.ok ? "" : ` status=${res.status}`;
-        console.log("[call] stop-recording response", { ok: res.ok, status: res.status, sid: sessionId });
-        req.log.info({ status: res.status, sid: sessionId }, `[call] stop-recording response${text}`);
+        req.log.info({ status: res.status }, `[call] stop-recording response${text}`);
         if (!res.ok) throw new Error(`stop-recording returned ${res.status}`);
-        req.log.info({ sid: sessionId }, "[call] broadcasting recordingStopped");
-        console.log("[call] broadcasting recordingStopped");
         const sessAfterStop = getSessionById(sessionId);
+        const pendingSegmentIds = sessAfterStop?.pendingSegmentIds ?? [];
+        req.log.info({ pendingSegmentIds }, "[call] broadcasting recordingStopped");
         broadcastToSession(sessionId, {
           type: "recordingStopped",
-          pendingSegmentIds: sessAfterStop?.pendingSegmentIds ?? [],
+          pendingSegmentIds,
         });
         if (session?.episodeId) {
           broadcastToEpisode(session.episodeId, { type: "callSessionUpdated" });
@@ -557,8 +548,7 @@ export function handleStopRecording(req: FastifyRequest, sessionId: string): voi
       })
       .catch((err) => {
         clearTimeout(timeout);
-        console.log("[call] stop-recording fetch failed", { err: String(err), roomId, sid: sessionId });
-        req.log.warn({ err, roomId, sid: sessionId }, "[call] WebRTC stop-recording failed");
+        req.log.warn({ err, roomId }, "[call] WebRTC stop-recording failed");
         broadcastToSession(sessionId, {
           type: "recordingStopFailed",
           error: "Failed to stop recording",
@@ -566,7 +556,7 @@ export function handleStopRecording(req: FastifyRequest, sessionId: string): voi
       });
   } else {
     req.log.info(
-      { sid: sessionId, reason: !session?.roomId ? "no roomId" : "no serviceUrl" },
+      { reason: !session?.roomId ? "no roomId" : "no serviceUrl" },
       "[call] stopRecording else branch, broadcasting recordingStopped",
     );
     const sessElse = getSessionById(sessionId);

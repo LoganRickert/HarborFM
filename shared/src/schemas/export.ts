@@ -12,10 +12,10 @@ const s3Create = z.object({
   bucket: z.string().min(1, { error: 'Bucket is required' }),
   prefix: z.string().default(''),
   region: z.string().min(1, { error: 'Region is required' }),
-  endpoint_url: optionalUrl,
-  access_key_id: z.string().min(1, { error: 'Access key is required' }),
-  secret_access_key: z.string().min(1, { error: 'Secret key is required' }),
-  public_base_url: z.string().url().optional().nullable(),
+  endpointUrl: optionalUrl,
+  accessKeyId: z.string().min(1, { error: 'Access key is required' }),
+  secretAccessKey: z.string().min(1, { error: 'Secret key is required' }),
+  publicBaseUrl: z.string().url().optional().nullable(),
 });
 
 const ftpCreate = z.object({
@@ -27,7 +27,7 @@ const ftpCreate = z.object({
   password: z.string().min(1, { error: 'Password is required' }),
   path: z.string().default(''),
   secure: z.boolean().optional().default(false),
-  public_base_url: z.string().url().optional().nullable(),
+  publicBaseUrl: z.string().url().optional().nullable(),
 });
 
 const sftpCreate = z.object({
@@ -37,11 +37,11 @@ const sftpCreate = z.object({
   port: z.coerce.number().int().min(1).max(65535).optional().default(22),
   username: z.string().min(1, { error: 'Username is required' }),
   password: z.string().optional(),
-  private_key: z.string().optional(),
+  privateKey: z.string().optional(),
   path: z.string().default(''),
-  public_base_url: z.string().url().optional().nullable(),
-}).refine((d) => d.password != null && d.password !== '' || (d.private_key != null && d.private_key !== ''), {
-  error: 'Provide either password or private_key',
+  publicBaseUrl: z.string().url().optional().nullable(),
+}).refine((d) => d.password != null && d.password !== '' || (d.privateKey != null && d.privateKey !== ''), {
+  error: 'Provide either password or privateKey',
   path: ['password'],
 });
 
@@ -52,19 +52,19 @@ const webdavCreate = z.object({
   username: z.string().min(1, { error: 'Username is required' }),
   password: z.string().min(1, { error: 'Password is required' }),
   path: z.string().default(''),
-  public_base_url: z.string().url().optional().nullable(),
+  publicBaseUrl: z.string().url().optional().nullable(),
 });
 
 const ipfsCreate = z.object({
   mode: z.literal('IPFS'),
   name: z.string().min(1, { error: 'Name is required' }),
-  api_url: z.string().url({ error: 'IPFS API URL is required (e.g. http://127.0.0.1:5001)' }),
-  api_key: z.string().optional(),
+  apiUrl: z.string().url({ error: 'IPFS API URL is required (e.g. http://127.0.0.1:5001)' }),
+  apiKey: z.string().optional(),
   username: z.string().optional(),
   password: z.string().optional(),
   path: z.string().default(''),
-  gateway_url: z.string().url().optional().nullable(),
-  public_base_url: z.string().url().optional().nullable(),
+  gatewayUrl: z.string().url().optional().nullable(),
+  publicBaseUrl: z.string().url().optional().nullable(),
 });
 
 const smbCreate = z.object({
@@ -77,7 +77,7 @@ const smbCreate = z.object({
   password: z.string().min(1, { error: 'Password is required' }),
   domain: z.string().optional().default(''),
   path: z.string().default(''),
-  public_base_url: z.string().url().optional().nullable(),
+  publicBaseUrl: z.string().url().optional().nullable(),
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- preprocess callback receives (data, ctx); we only use data
@@ -109,13 +109,13 @@ export const exportUpdateSchema = z.object({
   mode: exportModeSchema.optional(),
   name: z.string().min(1).optional(),
   prefix: z.string().optional(),
-  public_base_url: z.string().url().optional().nullable(),
+  publicBaseUrl: z.string().url().optional().nullable(),
   // S3
   bucket: z.string().optional(),
   region: z.string().optional(),
-  endpoint_url: optionalUrl,
-  access_key_id: z.string().optional(),
-  secret_access_key: z.string().optional(),
+  endpointUrl: optionalUrl,
+  accessKeyId: z.string().optional(),
+  secretAccessKey: z.string().optional(),
   // FTP
   host: z.string().optional(),
   port: z.coerce.number().int().min(1).max(65535).optional(),
@@ -124,13 +124,13 @@ export const exportUpdateSchema = z.object({
   path: z.string().optional(),
   secure: z.boolean().optional(),
   // SFTP
-  private_key: z.string().optional(),
+  privateKey: z.string().optional(),
   // WebDAV
   url: z.string().url().optional(),
   // IPFS
-  api_url: z.string().url().optional(),
-  api_key: z.string().optional(),
-  gateway_url: z.string().url().optional().nullable(),
+  apiUrl: z.string().url().optional(),
+  apiKey: z.string().optional(),
+  gatewayUrl: z.string().url().optional().nullable(),
   // SMB
   share: z.string().optional(),
   domain: z.string().optional(),

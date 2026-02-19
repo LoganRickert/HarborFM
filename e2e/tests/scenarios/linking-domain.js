@@ -1,10 +1,10 @@
 /**
- * E2E: Link domain server setting and custom_feed_slug.
+ * E2E: Link domain server setting and customFeedSlug.
  *
- * - User cannot set link_domain when server "allow linking domain" is disabled (API rejects).
- * - User can set link_domain when server "allow linking domain" is enabled.
- * - When linking enabled and podcast has link_domain: GET /public/config with that host returns custom_feed_slug.
- * - When linking disabled (even if podcast has link_domain): GET /public/config with that host does not return custom_feed_slug.
+ * - User cannot set linkDomain when server "allow linking domain" is disabled (API rejects).
+ * - User can set linkDomain when server "allow linking domain" is enabled.
+ * - When linking enabled and podcast has linkDomain: GET /public/config with that host returns customFeedSlug.
+ * - When linking disabled (even if podcast has linkDomain): GET /public/config with that host does not return customFeedSlug.
  */
 import {
   apiFetch,
@@ -21,11 +21,11 @@ export async function run({ runOne }) {
   let podcastId;
 
   results.push(
-    await runOne('With linking domain disabled, PATCH podcast with link_domain is rejected', async () => {
+    await runOne('With linking domain disabled, PATCH podcast with linkDomain is rejected', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dns_allow_linking_domain: false }),
+        body: JSON.stringify({ dnsAllowLinkingDomain: false }),
       }, jar);
 
       const created = await createShow(jar, { title: 'E2E Link Domain Show', slug });
@@ -34,7 +34,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcastId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ link_domain: linkHost }),
+        body: JSON.stringify({ linkDomain: linkHost }),
       }, jar);
 
       if (res.status !== 400) {
@@ -49,17 +49,17 @@ export async function run({ runOne }) {
   );
 
   results.push(
-    await runOne('With linking domain enabled, PATCH podcast with link_domain is accepted', async () => {
+    await runOne('With linking domain enabled, PATCH podcast with linkDomain is accepted', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dns_allow_linking_domain: true }),
+        body: JSON.stringify({ dnsAllowLinkingDomain: true }),
       }, jar);
 
       const res = await apiFetch(`/podcasts/${podcastId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ link_domain: linkHost }),
+        body: JSON.stringify({ linkDomain: linkHost }),
       }, jar);
 
       if (res.status !== 200) {
@@ -67,32 +67,32 @@ export async function run({ runOne }) {
         throw new Error(`Expected 200 when linking enabled, got ${res.status} ${t}`);
       }
       const data = await res.json();
-      if ((data.link_domain || '').trim().toLowerCase() !== linkHost.toLowerCase()) {
-        throw new Error(`Expected link_domain to be set to ${linkHost}, got ${data.link_domain}`);
+      if ((data.linkDomain || '').trim().toLowerCase() !== linkHost.toLowerCase()) {
+        throw new Error(`Expected linkDomain to be set to ${linkHost}, got ${data.linkDomain}`);
       }
     })
   );
 
   results.push(
-    await runOne('When linking enabled and podcast has link_domain, GET /public/config with that host returns custom_feed_slug', async () => {
+    await runOne('When linking enabled and podcast has linkDomain, GET /public/config with that host returns customFeedSlug', async () => {
       const data = await getPublicConfig(linkHost);
-      if (data.custom_feed_slug !== slug) {
-        throw new Error(`Expected custom_feed_slug "${slug}" when Host=${linkHost}, got ${data.custom_feed_slug}`);
+      if (data.customFeedSlug !== slug) {
+        throw new Error(`Expected customFeedSlug "${slug}" when Host=${linkHost}, got ${data.customFeedSlug}`);
       }
     })
   );
 
   results.push(
-    await runOne('When linking disabled and podcast has link_domain, GET /public/config with that host does not return custom_feed_slug', async () => {
+    await runOne('When linking disabled and podcast has linkDomain, GET /public/config with that host does not return customFeedSlug', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dns_allow_linking_domain: false }),
+        body: JSON.stringify({ dnsAllowLinkingDomain: false }),
       }, jar);
 
       const data = await getPublicConfig(linkHost);
-      if (data.custom_feed_slug !== undefined && data.custom_feed_slug !== null) {
-        throw new Error(`Expected no custom_feed_slug when linking disabled, got ${data.custom_feed_slug}`);
+      if (data.customFeedSlug !== undefined && data.customFeedSlug !== null) {
+        throw new Error(`Expected no customFeedSlug when linking disabled, got ${data.customFeedSlug}`);
       }
     })
   );
@@ -102,7 +102,7 @@ export async function run({ runOne }) {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dns_allow_linking_domain: true }),
+        body: JSON.stringify({ dnsAllowLinkingDomain: true }),
       }, jar);
     })
   );

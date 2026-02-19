@@ -95,8 +95,8 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   // Episodes from server are already filtered (by search) and sorted
   const filteredAndSortedEpisodes = useMemo(() => {
     return [...allEpisodes].sort((a, b) => {
-      const dateA = a.publish_at ? new Date(a.publish_at).getTime() : new Date(a.created_at).getTime();
-      const dateB = b.publish_at ? new Date(b.publish_at).getTime() : new Date(b.created_at).getTime();
+      const dateA = a.publishAt ? new Date(a.publishAt).getTime() : new Date(a.createdAt).getTime();
+      const dateB = b.publishAt ? new Date(b.publishAt).getTime() : new Date(b.createdAt).getTime();
       return sortNewestFirst ? dateB - dateA : dateA - dateB;
     });
   }, [allEpisodes, sortNewestFirst]);
@@ -104,7 +104,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   // Update meta tags
   useMeta({
     title: podcast ? `${podcast.title} - HarborFM` : undefined,
-    description: podcast?.description || (podcast ? `Listen to ${podcast.title}${podcast.author_name ? ` by ${podcast.author_name}` : ''} on HarborFM.` : undefined),
+    description: podcast?.description || (podcast ? `Listen to ${podcast.title}${podcast.authorName ? ` by ${podcast.authorName}` : ''} on HarborFM.` : undefined),
   });
 
   if (!podcastSlug) return null;
@@ -131,7 +131,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     );
   }
 
-  const isSubscriberOnly = podcast.subscriber_only_feed_enabled === 1 && podcast.public_feed_disabled === 1;
+  const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
 
   return (
     <div className={sharedStyles.wrapper}>
@@ -144,7 +144,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               podcastSlug={podcastSlug}
               onMessageClick={() => setFeedbackOpen(true)}
               shareUrl={
-                podcast?.canonical_feed_url ??
+                podcast?.canonicalFeedUrl ??
                 (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined)
               }
               shareTitle={podcast ? `${podcast.title} - HarborFM` : undefined}

@@ -12,10 +12,10 @@ interface PodcastHeroProps {
     title: string;
     slug: string;
     description?: string | null;
-    artwork_url?: string | null;
-    artwork_filename?: string | null;
-    subscriber_only_feed_enabled?: number;
-    public_feed_disabled?: number;
+    artworkUrl?: string | null;
+    artworkFilename?: string | null;
+    subscriberOnlyFeedEnabled?: boolean;
+    publicFeedDisabled?: boolean;
   };
   readOnly: boolean;
   canManageShow: boolean;
@@ -33,21 +33,21 @@ export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onL
 
   return (
     <div className={styles.podcastHero}>
-      {(podcast.artwork_url || podcast.artwork_filename) && (
+      {(podcast.artworkUrl || podcast.artworkFilename) && (
         <img
-          src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/podcasts/${podcast.id}/artwork/${encodeURIComponent(podcast.artwork_filename)}` : '')}
+          src={podcast.artworkUrl ?? (podcast.artworkFilename ? `/api/podcasts/${podcast.id}/artwork/${encodeURIComponent(podcast.artworkFilename)}` : '')}
           alt=""
           className={styles.podcastHeroArtwork}
         />
       )}
       <div className={styles.podcastHeroMain}>
         <div className={centerTitle ? `${styles.podcastHeroTitleRow} ${styles.podcastHeroTitleRowCentered}` : styles.podcastHeroTitleRow}>
-          {podcast.subscriber_only_feed_enabled === 1 && (
+          {podcast.subscriberOnlyFeedEnabled && (
             <Lock
               size={22}
               strokeWidth={2}
               className={
-                podcast.public_feed_disabled === 1
+                podcast.publicFeedDisabled
                   ? `${styles.podcastHeroTitleLock} ${styles.podcastHeroTitleLockGold}`
                   : styles.podcastHeroTitleLock
               }

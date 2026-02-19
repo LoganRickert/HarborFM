@@ -44,7 +44,7 @@ export async function run({ runOne }) {
       await apiFetch(`/podcasts/${podcast.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscriber_only_feed_enabled: 1 }),
+        body: JSON.stringify({ subscriberOnlyFeedEnabled: 1 }),
       }, jar);
       const res = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
@@ -65,7 +65,7 @@ export async function run({ runOne }) {
       await apiFetch(`/episodes/${episode.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'published', publish_at: null }),
+        body: JSON.stringify({ status: 'published', publishAt: null }),
       }, jar);
       await uploadEpisodeAudio(jar, episode.id, podcast.id, testDataMp3());
       await processEpisodeAudio(jar, episode.id);
@@ -105,7 +105,7 @@ export async function run({ runOne }) {
       await apiFetch(`/episodes/${episode.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'published', subscriber_only: 1 }),
+        body: JSON.stringify({ status: 'published', subscriberOnly: 1 }),
       }, jar);
       const res = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}/episodes`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
@@ -144,7 +144,7 @@ export async function run({ runOne }) {
       await apiFetch(`/podcasts/${podcast.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ public_feed_disabled: 1 }),
+        body: JSON.stringify({ publicFeedDisabled: 1 }),
       }, jar);
       const res = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}/rss`);
       if (res.status !== 404) throw new Error(`Expected 404 for public RSS when feed disabled, got ${res.status}`);

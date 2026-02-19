@@ -7,7 +7,11 @@ import {
 } from "fs";
 import { join } from "path";
 import { nanoid } from "nanoid";
-import { db } from "../db/index.js";
+import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { drizzleDb } from "../db/drizzle.js";
+import { settings, users } from "../db/schema.js";
+import { sqlNow } from "../db/utils.js";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD_HASH,
@@ -24,9 +28,15 @@ import { timingSafeEqualStrings } from "../utils/secretCompare.js";
 const SETUP_TOKEN_FILENAME = "setup-token.txt";
 
 function writeSetting(key: string, value: string): void {
-  db.prepare(
-    "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-  ).run(key, value);
+  const now = sqlNow();
+  drizzleDb
+    .insert(settings)
+    .values({ key, value, updatedAt: now })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value, updatedAt: now },
+    })
+    .run();
 }
 
 /**
@@ -82,9 +92,13 @@ export function bootstrapIfNeeded(): boolean {
   }
 
   const id = nanoid();
-  db.prepare(
-    "INSERT INTO users (id, email, password_hash, role, can_transcribe) VALUES (?, ?, ?, ?, 1)",
-  ).run(id, email.toLowerCase(), passwordHash, "admin");
+  drizzleDb.insert(users).values({
+    id,
+    email: email.toLowerCase(),
+    passwordHash,
+    role: "admin",
+    canTranscribe: 1,
+  }).run();
 
   const hostnameRaw = getAdminHostnameFromEnv();
   const hostname = hostnameRaw ? normalizeHostname(hostnameRaw) : "";
@@ -114,14 +128,18 @@ export function bootstrapIfNeeded(): boolean {
 }
 
 export function isSetupComplete(): boolean {
-  const row = db.prepare("SELECT COUNT(*) as count FROM users").get() as {
-    count: number;
-  };
-  if (row.count > 0) return true;
+  const row = drizzleDb
+    .select({ count: sql<number>`COUNT(*)`.as("count") })
+    .from(users)
+    .get();
+  if ((row?.count ?? 0) > 0) return true;
   // Fallback: settings table may have setup_completed from seed/bootstrap
-  const setting = db.prepare(
-    "SELECT value FROM settings WHERE key = 'setup_completed'"
-  ).get() as { value: string } | undefined;
+  const setting = drizzleDb
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, "setup_completed"))
+    .limit(1)
+    .get() as { value: string } | undefined;
   return setting?.value === "true";
 }
 

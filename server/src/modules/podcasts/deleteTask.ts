@@ -1,6 +1,8 @@
 import { existsSync, rmSync, statSync, unlinkSync } from "fs";
 import { join } from "path";
-import { db } from "../../db/index.js";
+import { eq, sql } from "drizzle-orm";
+import { drizzleDb } from "../../db/index.js";
+import { episodeSegments, episodes, podcasts, users } from "../../db/schema.js";
 import { deleteTokenFeedTemplateFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import {
@@ -72,24 +74,26 @@ function deleteEpisodeData(
   assertSafeId(episodeId, "episodeId");
   const segmentBase = join(getDataDir(), "uploads", podcastId, episodeId);
 
-  const episodeRow = db
-    .prepare(
-      "SELECT artwork_path, audio_source_path FROM episodes WHERE id = ?",
-    )
-    .get(episodeId) as
-    | { artwork_path: string | null; audio_source_path: string | null }
-    | undefined;
+  const episodeRow = drizzleDb
+    .select({
+      artworkPath: episodes.artworkPath,
+      audioSourcePath: episodes.audioSourcePath,
+    })
+    .from(episodes)
+    .where(eq(episodes.id, episodeId))
+    .limit(1)
+    .get();
   if (!episodeRow) return 0;
 
   let bytesFreed = 0;
 
-  const segments = db
-    .prepare(
-      "SELECT audio_path FROM episode_segments WHERE episode_id = ? AND audio_path IS NOT NULL",
-    )
-    .all(episodeId) as { audio_path: string }[];
+  const segments = drizzleDb
+    .select({ audioPath: episodeSegments.audioPath })
+    .from(episodeSegments)
+    .where(eq(episodeSegments.episodeId, episodeId))
+    .all();
   for (const seg of segments) {
-    const path = seg.audio_path ? resolveDataPath(seg.audio_path) : "";
+    const path = seg.audioPath ? resolveDataPath(seg.audioPath) : "";
     if (!path) continue;
     try {
       assertPathUnder(path, segmentBase);
@@ -98,8 +102,8 @@ function deleteEpisodeData(
       /* best-effort */
     }
   }
-  const audioSourcePath = episodeRow.audio_source_path
-    ? resolveDataPath(episodeRow.audio_source_path)
+  const audioSourcePath = episodeRow.audioSourcePath
+    ? resolveDataPath(episodeRow.audioSourcePath)
     : "";
   if (audioSourcePath && existsSync(audioSourcePath)) {
     try {
@@ -133,8 +137,8 @@ function deleteEpisodeData(
       /* best-effort */
     }
   }
-  const episodeArtPath = episodeRow.artwork_path
-    ? resolveDataPath(episodeRow.artwork_path)
+  const episodeArtPath = episodeRow.artworkPath
+    ? resolveDataPath(episodeRow.artworkPath)
     : "";
   if (episodeArtPath && existsSync(episodeArtPath)) {
     try {
@@ -147,19 +151,69 @@ function deleteEpisodeData(
   }
 
   if (bytesFreed > 0) {
-    db.prepare(
-      `UPDATE users
-       SET disk_bytes_used =
-         CASE
-           WHEN COALESCE(disk_bytes_used, 0) - ? < 0 THEN 0
-           ELSE COALESCE(disk_bytes_used, 0) - ?
-         END
-       WHERE id = ?`,
-    ).run(bytesFreed, bytesFreed, storageUserId);
+    drizzleDb
+      .update(users)
+      .set({
+        diskBytesUsed: sql`CASE WHEN COALESCE(disk_bytes_used, 0) - ${bytesFreed} < 0 THEN 0 ELSE COALESCE(disk_bytes_used, 0) - ${bytesFreed} END`,
+      })
+      .where(eq(users.id, storageUserId))
+      .run();
   }
 
-  db.prepare("DELETE FROM episodes WHERE id = ?").run(episodeId);
+  drizzleDb.delete(episodes).where(eq(episodes.id, episodeId)).run();
   return bytesFreed;
+}
+
+/**
+ * Delete a podcast and all its data (episodes, audio, artwork, rss, etc.) synchronously.
+ * Does NOT use the async status machinery. Use for admin operations like user deletion.
+ */
+export function runPodcastDeleteSync(podcastId: string): void {
+  const ownerRow = drizzleDb
+    .select({ ownerUserId: podcasts.ownerUserId })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get();
+  if (!ownerRow) return;
+
+  const storageUserId = ownerRow.ownerUserId;
+  const episodeRows = drizzleDb
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(eq(episodes.podcastId, podcastId))
+    .orderBy(episodes.id)
+    .all();
+
+  for (const ep of episodeRows) {
+    deleteEpisodeData(ep.id, podcastId, storageUserId);
+  }
+
+  try {
+    notifyWebSubHub(podcastId, null);
+  } catch (_) {
+    /* non-fatal */
+  }
+  deleteTokenFeedTemplateFile(podcastId);
+
+  const dataDir = getDataDir();
+  const dirs = [
+    join(dataDir, "artwork", podcastId),
+    join(dataDir, "rss", podcastId),
+    join(dataDir, "sitemap", podcastId),
+  ];
+  for (const dir of dirs) {
+    try {
+      assertResolvedPathUnder(dir, dataDir);
+      if (existsSync(dir)) {
+        rmSync(dir, { recursive: true });
+      }
+    } catch (_) {
+      /* best-effort */
+    }
+  }
+
+  drizzleDb.delete(podcasts).where(eq(podcasts.id, podcastId)).run();
 }
 
 /**
@@ -174,9 +228,12 @@ export async function runPodcastDelete(
   if (!state || state.status !== "pending") return;
 
   try {
-    const ownerRow = db
-      .prepare("SELECT owner_user_id FROM podcasts WHERE id = ?")
-      .get(podcastId) as { owner_user_id: string } | undefined;
+    const ownerRow = drizzleDb
+      .select({ ownerUserId: podcasts.ownerUserId })
+      .from(podcasts)
+      .where(eq(podcasts.id, podcastId))
+      .limit(1)
+      .get();
     if (!ownerRow) {
       setDeleteStatus(podcastId, {
         status: "failed",
@@ -184,14 +241,15 @@ export async function runPodcastDelete(
       });
       return;
     }
-    const storageUserId = ownerRow.owner_user_id;
+    const storageUserId = ownerRow.ownerUserId;
 
-    const episodes = db
-      .prepare(
-        "SELECT id FROM episodes WHERE podcast_id = ? ORDER BY id ASC",
-      )
-      .all(podcastId) as { id: string }[];
-    const total = episodes.length;
+    const episodeRows = drizzleDb
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(eq(episodes.podcastId, podcastId))
+      .orderBy(episodes.id)
+      .all();
+    const total = episodeRows.length;
 
     setDeleteStatus(podcastId, {
       status: "deleting",
@@ -200,8 +258,8 @@ export async function runPodcastDelete(
       total,
     });
 
-    for (let i = 0; i < episodes.length; i++) {
-      deleteEpisodeData(episodes[i].id, podcastId, storageUserId);
+    for (let i = 0; i < episodeRows.length; i++) {
+      deleteEpisodeData(episodeRows[i].id, podcastId, storageUserId);
       setDeleteStatus(podcastId, {
         status: "deleting",
         message: `Deleting episodes (${i + 1} / ${total})`,
@@ -241,7 +299,7 @@ export async function runPodcastDelete(
       }
     }
 
-    db.prepare("DELETE FROM podcasts WHERE id = ?").run(podcastId);
+    drizzleDb.delete(podcasts).where(eq(podcasts.id, podcastId)).run();
     activeDeleteByUserId.delete(initiatorUserId);
 
     setDeleteStatus(podcastId, {

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { Producer } from "mediasoup/types";
-import { existsSync, mkdirSync, statSync } from "fs";
+import { existsSync, mkdirSync, statSync, unlinkSync } from "fs";
 import { join } from "path";
 import type { ChildProcess } from "child_process";
 import type { RecordingManager } from "../recording/RecordingManager.js";
@@ -638,6 +638,23 @@ export function registerRecordingRoutes(
         .then(async (res) => {
           if (res.ok) {
             request.log.info({ status: res.status }, "Recording callback succeeded");
+            // Delete our recording files after server has copied them (we own the files, so no EACCES).
+            try {
+              const mainPath = join(RECORDING_DATA_DIR, state.filePathRelative);
+              if (existsSync(mainPath)) unlinkSync(mainPath);
+            } catch (e) {
+              request.log.warn({ err: e, filePath: state.filePathRelative }, "Could not remove main recording file after callback");
+            }
+            if (Array.isArray(perTrackFilePaths)) {
+              for (const rel of perTrackFilePaths) {
+                try {
+                  const p = join(RECORDING_DATA_DIR, rel);
+                  if (existsSync(p)) unlinkSync(p);
+                } catch (e) {
+                  request.log.warn({ err: e, rel }, "Could not remove per-track file after callback");
+                }
+              }
+            }
           } else {
             const bodyText = await res.text();
             request.log.warn({ status: res.status, body: bodyText }, "Recording callback failed");

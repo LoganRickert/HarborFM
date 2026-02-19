@@ -17,9 +17,9 @@ export function EpisodeEditor() {
     enabled: !!id,
   });
   const { data: podcast } = useQuery({
-    queryKey: ['podcast', episode?.podcast_id],
-    queryFn: () => getPodcast(episode!.podcast_id),
-    enabled: !!episode?.podcast_id,
+    queryKey: ['podcast', episode?.podcastId],
+    queryFn: () => getPodcast(episode!.podcastId),
+    enabled: !!episode?.podcastId,
   });
   const { data: segmentsData, isLoading: segmentsLoading } = useQuery({
     queryKey: ['segments', id],

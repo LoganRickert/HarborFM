@@ -11,13 +11,17 @@ import {
 } from '../../api/auth';
 import type { TwoFactorStatus } from '../../api/auth';
 import { Shield, Mail, X, ChevronRight, Check, ShieldOff } from 'lucide-react';
+import { OtpInput } from '../OtpInput/OtpInput';
 import styles from '../../pages/Profile.module.css';
 
 interface Props {
   twoFactor: TwoFactorStatus | null | undefined;
+  hasEmail?: boolean;
+  /** False for federated accounts (no password). */
+  hasPassword?: boolean;
 }
 
-export function TwoFactorProfileSection({ twoFactor }: Props) {
+export function TwoFactorProfileSection({ twoFactor, hasEmail = true, hasPassword = true }: Props) {
   const queryClient = useQueryClient();
   const { data: setup } = useQuery({
     queryKey: ['setupStatus'],
@@ -34,7 +38,7 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
   /** Methods available for adding (implemented + allowed + provider if needed). */
   const availableMethods = TWO_FACTOR_METHODS.filter((m) => {
     if (!twoFactorEnabled || !isMethodAllowed(allowedMethods, m.id)) return false;
-    if (m.requiresProvider === 'email') return emailConfigured;
+    if (m.requiresProvider === 'email') return emailConfigured && hasEmail;
     return true;
   });
   const totp2FAAvailable = availableMethods.some((m) => m.id === 'totp');
@@ -42,7 +46,7 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
 
   const [totpStep, setTotpStep] = useState<'idle' | 'password' | 'confirm'>('idle');
   const [emailStep, setEmailStep] = useState<'idle' | 'sent' | 'confirm'>('idle');
-  const [disableStep, setDisableStep] = useState<'idle' | 'password'>('idle');
+  const [disableStep, setDisableStep] = useState<'idle' | 'password' | 'code' | 'send-email'>('idle');
 
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -91,11 +95,16 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
   });
 
   const disableMutation = useMutation({
-    mutationFn: () => disable2FA(password),
+    mutationFn: () =>
+      hasPassword
+        ? disable2FA({ password })
+        : disable2FA({ code: code.trim() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setDisableStep('idle');
       setPassword('');
+      setCode('');
+      setEmailStep('idle');
     },
   });
 
@@ -119,7 +128,7 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
       </p>
 
       {errorMsg && (
-        <p className={styles.error} style={{ marginBottom: 12 }} role="alert">
+        <p id="twofactor-profile-error" className={styles.error} style={{ marginBottom: 12 }} role="alert">
           {errorMsg}
         </p>
       )}
@@ -136,12 +145,56 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
                 <button
                   type="button"
                   className={styles.dangerBtn}
-                  onClick={() => setDisableStep('password')}
+                  onClick={() => {
+                    if (hasPassword) {
+                      setDisableStep('password');
+                    } else if (twoFactor?.hasEmail && !twoFactor?.hasTOTP) {
+                      setDisableStep('send-email');
+                    } else {
+                      setDisableStep('code');
+                    }
+                  }}
                 >
                   <ShieldOff size={18} strokeWidth={2} aria-hidden />
                   Disable 2FA
                 </button>
-              ) : (
+              ) : disableStep === 'send-email' ? (
+                <>
+                  <div className={styles.federatedCard} style={{ marginBottom: 12 }}>
+                    <p className={styles.federatedCardText}>
+                      A code will be sent to your email. Enter it below to disable 2FA.
+                    </p>
+                  </div>
+                  <div className={styles.twoFactorBtnRow}>
+                    <button
+                      type="button"
+                      className={styles.secondaryBtn}
+                      onClick={() => {
+                        setDisableStep('idle');
+                        setEmailStep('idle');
+                        disableMutation.reset();
+                        startEmailMutation.reset();
+                      }}
+                    >
+                      <X size={18} strokeWidth={2} aria-hidden />
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.primaryBtn}
+                      onClick={() => {
+                        startEmailMutation.mutate(undefined, {
+                          onSuccess: () => setDisableStep('code'),
+                        });
+                      }}
+                      disabled={startEmailMutation.isPending}
+                    >
+                      <Mail size={18} strokeWidth={2} aria-hidden />
+                      {startEmailMutation.isPending ? 'Sending...' : 'Send code to email'}
+                    </button>
+                  </div>
+                </>
+              ) : disableStep === 'password' ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -176,6 +229,52 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
                       type="submit"
                       className={styles.dangerBtn}
                       disabled={!password.trim() || disableMutation.isPending}
+                    >
+                      <ShieldOff size={18} strokeWidth={2} aria-hidden />
+                      {disableMutation.isPending ? 'Disabling...' : 'Confirm disable'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (code.length >= 6) disableMutation.mutate();
+                  }}
+                >
+                  <p className={styles.cardNote} style={{ marginBottom: 12 }}>
+                    {twoFactor?.hasTOTP
+                      ? 'Enter the 6-digit code from your authenticator app.'
+                      : 'Enter the 6-digit code sent to your email.'}
+                  </p>
+                  <OtpInput
+                    value={code}
+                    onChange={setCode}
+                    length={6}
+                    disabled={disableMutation.isPending}
+                    label="Code"
+                    error={!!disableMutation.isError}
+                    ariaLabel="6-digit verification code"
+                    ariaDescribedBy={disableMutation.isError ? 'twofactor-profile-error' : undefined}
+                  />
+                  <div className={styles.twoFactorBtnRow}>
+                    <button
+                      type="button"
+                      className={styles.secondaryBtn}
+                      onClick={() => {
+                        setDisableStep('idle');
+                        setCode('');
+                        setEmailStep('idle');
+                        disableMutation.reset();
+                      }}
+                    >
+                      <X size={18} strokeWidth={2} aria-hidden />
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className={styles.dangerBtn}
+                      disabled={code.length < 6 || disableMutation.isPending}
                     >
                       <ShieldOff size={18} strokeWidth={2} aria-hidden />
                       {disableMutation.isPending ? 'Disabling...' : 'Confirm disable'}
@@ -281,18 +380,16 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
                 Scan with Authy, Microsoft Authenticator, 1Password, or similar. Then enter the 6-digit code.
               </p>
               <img src={qrDataUrl} alt="QR code" width={160} height={160} style={{ marginBottom: 12 }} />
-              <label className={styles.label}>
-                Code
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                  className={styles.input}
-                  placeholder="000000"
-                />
-              </label>
+              <OtpInput
+                value={code}
+                onChange={setCode}
+                length={6}
+                disabled={confirmTotpMutation.isPending}
+                label="Code"
+                error={!!confirmTotpMutation.isError}
+                ariaLabel="6-digit verification code"
+                ariaDescribedBy={confirmTotpMutation.isError ? 'twofactor-profile-error' : undefined}
+              />
               <div className={styles.twoFactorBtnRow}>
                 <span />
                 <button
@@ -317,18 +414,16 @@ export function TwoFactorProfileSection({ twoFactor }: Props) {
               <p className={styles.cardNote} style={{ marginBottom: 12 }}>
                 Check your email for the 6-digit code.
               </p>
-              <label className={styles.label}>
-                Code
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                  className={styles.input}
-                  placeholder="000000"
-                />
-              </label>
+              <OtpInput
+                value={code}
+                onChange={setCode}
+                length={6}
+                disabled={confirmEmailMutation.isPending}
+                label="Code"
+                error={!!confirmEmailMutation.isError}
+                ariaLabel="6-digit verification code"
+                ariaDescribedBy={confirmEmailMutation.isError ? 'twofactor-profile-error' : undefined}
+              />
               <div className={styles.twoFactorBtnRow}>
                 <button
                   type="button"

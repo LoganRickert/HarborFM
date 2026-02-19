@@ -1167,9 +1167,14 @@
   margin-top: 0.25rem;
 }
 
+.chapterColorRow > * {
+  flex: 1 1 0;
+  min-width: 28px;
+}
+
 .chapterColorBtn {
-  width: 28px;
-  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   padding: 0;
   border: 2px solid;
   border-radius: 6px;

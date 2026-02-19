@@ -18,8 +18,8 @@ export function EpisodeNew() {
     queryFn: () => getPodcast(id!),
     enabled: !!id,
   });
-  const maxEpisodes = podcast?.max_episodes ?? null;
-  const episodeCount = Number(podcast?.episode_count ?? 0);
+  const maxEpisodes = podcast?.maxEpisodes ?? null;
+  const episodeCount = Number(podcast?.episodeCount ?? 0);
   const atEpisodeLimit = maxEpisodes != null && maxEpisodes > 0 && episodeCount >= Number(maxEpisodes);
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
   const readOnly = isReadOnly(meData?.user);
@@ -40,7 +40,7 @@ export function EpisodeNew() {
         title: title || '',
         description: description || '',
         status: 'draft',
-        guid_is_permalink: 0,
+        guidIsPermalink: 0,
       });
     },
     onSuccess: (ep) => {

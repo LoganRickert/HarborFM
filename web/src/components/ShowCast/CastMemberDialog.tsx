@@ -73,10 +73,10 @@ export function CastMemberDialog({
         setName(cast.name);
         setRole(cast.role as 'host' | 'guest');
         setDescription(cast.description ?? '');
-        setPhotoUrl(cast.photo_url ?? '');
-        setSocialLinkText(cast.social_link_text ?? '');
-        setIsPublic(cast.is_public ?? 1);
-        setCoverMode(cast.photo_filename ? 'upload' : 'url');
+        setPhotoUrl(cast.photoUrl ?? '');
+        setSocialLinkText(cast.socialLinkText ?? '');
+        setIsPublic(cast.isPublic ?? 1);
+        setCoverMode(cast.photoFilename ? 'upload' : 'url');
         setPendingFile(null);
       } else {
         setName('');
@@ -150,9 +150,9 @@ export function CastMemberDialog({
       name: trimName,
       role,
       description: description.trim() || undefined,
-      photo_url: coverMode === 'url' ? (photoUrl.trim() || undefined) : undefined,
-      social_link_text: socialLinkText.trim() || undefined,
-      is_public: isPublic as 0 | 1,
+      photoUrl: coverMode === 'url' ? (photoUrl.trim() || undefined) : undefined,
+      socialLinkText: socialLinkText.trim() || undefined,
+      isPublic: isPublic as 0 | 1,
     };
     if (isEdit) {
       updateMutation.mutate(body);
@@ -163,8 +163,8 @@ export function CastMemberDialog({
 
   const photoSrc =
     pendingPreviewUrl ||
-    (cast?.photo_filename && podcastId
-      ? castPhotoUrl(podcastId, cast.id, cast.photo_filename)
+    (cast?.photoFilename && podcastId
+      ? castPhotoUrl(podcastId, cast.id, cast.photoFilename)
       : '') ||
     safeImageSrc(photoUrl);
 

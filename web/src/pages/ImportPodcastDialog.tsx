@@ -92,8 +92,8 @@ export function ImportPodcastDialog({ open, initialPodcastId, onClose }: ImportP
     setError(null);
     setPhase('submitting');
     try {
-      const { podcast_id } = await startImportPodcast(feedUrl);
-      podcastIdRef.current = podcast_id;
+      const { podcastId } = await startImportPodcast(feedUrl);
+      podcastIdRef.current = podcastId;
       setPhase('polling');
       setStatusMessage('Starting import…');
     } catch (err: unknown) {

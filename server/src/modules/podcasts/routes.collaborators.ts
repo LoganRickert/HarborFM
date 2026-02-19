@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { podcastCollaboratorAddBodySchema, podcastCollaboratorUpdateBodySchema } from "@harborfm/shared";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
+import { podcastShares, podcasts, users } from "../../db/schema.js";
 import { getPodcastRole, canManageCollaborators } from "../../services/access.js";
 
 export async function registerCollaboratorRoutes(app: FastifyInstance) {
@@ -30,21 +32,25 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
       const role = getPodcastRole(request.userId, podcastId);
       if (!canManageCollaborators(role))
         return reply.status(404).send({ error: "Podcast not found" });
-      const rows = db
-        .prepare(
-          `SELECT ps.user_id, ps.role, ps.created_at, u.email
-         FROM podcast_shares ps
-         JOIN users u ON u.id = ps.user_id
-         WHERE ps.podcast_id = ?
-         ORDER BY ps.created_at ASC`,
-        )
-        .all(podcastId) as Array<{
-        user_id: string;
-        role: string;
-        created_at: string;
-        email: string;
-      }>;
-      return { collaborators: rows };
+      const rows = drizzleDb
+        .select({
+          userId: podcastShares.userId,
+          role: podcastShares.role,
+          createdAt: podcastShares.createdAt,
+          username: users.username,
+        })
+        .from(podcastShares)
+        .innerJoin(users, eq(users.id, podcastShares.userId))
+        .where(eq(podcastShares.podcastId, podcastId))
+        .orderBy(asc(podcastShares.createdAt))
+        .all();
+      const collaborators = rows.map((r) => ({
+        userId: r.userId,
+        role: r.role,
+        createdAt: r.createdAt,
+        username: r.username ?? "",
+      }));
+      return { collaborators };
     },
   );
 
@@ -56,7 +62,7 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
         tags: ["Podcasts"],
         summary: "Add collaborator",
         description:
-          "Invite a user by email. Returns USER_NOT_FOUND if email has no account.",
+          "Invite a user by email or username. If input contains @, lookup by email; otherwise by username. Returns USER_NOT_FOUND if no account.",
         params: {
           type: "object",
           properties: { podcastId: { type: "string" } },
@@ -64,7 +70,10 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
         },
         body: {
           type: "object",
-          properties: { email: { type: "string" }, role: { type: "string" } },
+          properties: {
+            email: { type: "string", description: "Email or username (handle). If contains @, lookup by email; else by username." },
+            role: { type: "string" },
+          },
           required: ["email", "role"],
         },
         response: {
@@ -87,21 +96,30 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
           .status(400)
           .send({ error: parsed.error.issues[0]?.message ?? "Validation failed", details: parsed.error.flatten() });
       }
-      const email = parsed.data.email.trim().toLowerCase();
+      const input = parsed.data.email.trim();
       const shareRole = parsed.data.role;
-      const user = db
-        .prepare(
-          "SELECT id, COALESCE(disabled, 0) as disabled, COALESCE(read_only, 0) as read_only FROM users WHERE LOWER(email) = ?",
+      const isEmail = input.includes("@");
+      const lowerInput = input.toLowerCase();
+      const user = drizzleDb
+        .select({
+          id: users.id,
+          disabled: sql<number>`COALESCE(${users.disabled}, 0)`.as("disabled"),
+          readOnly: sql<number>`COALESCE(${users.readOnly}, 0)`.as("readOnly"),
+        })
+        .from(users)
+        .where(
+          isEmail
+            ? sql`LOWER(${users.email}) = ${lowerInput}`
+            : sql`LOWER(${users.username}) = ${lowerInput}`,
         )
-        .get(email) as
-        | { id: string; disabled: number; read_only: number }
-        | undefined;
+        .limit(1)
+        .get();
       if (!user) {
         return reply.status(404).send({
           error: "user_not_found",
           code: "USER_NOT_FOUND",
-          email,
-          can_invite_to_platform: true,
+          email: isEmail ? input : undefined,
+          can_invite_to_platform: isEmail,
         });
       }
       if (user.disabled === 1) {
@@ -112,7 +130,7 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
               "That account is disabled and cannot be added as a collaborator.",
           });
       }
-      if (user.read_only === 1) {
+      if (user.readOnly === 1) {
         return reply
           .status(400)
           .send({
@@ -120,57 +138,84 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
               "That account is read-only and cannot be added as a collaborator.",
           });
       }
-      const podcast = db
-        .prepare(
-          "SELECT owner_user_id, max_collaborators FROM podcasts WHERE id = ?",
-        )
-        .get(podcastId) as
-        | { owner_user_id: string; max_collaborators: number | null }
-        | undefined;
+      const podcast = drizzleDb
+        .select({
+          ownerUserId: podcasts.ownerUserId,
+          maxCollaborators: podcasts.maxCollaborators,
+        })
+        .from(podcasts)
+        .where(eq(podcasts.id, podcastId))
+        .limit(1)
+        .get();
       if (!podcast)
         return reply.status(404).send({ error: "Podcast not found" });
-      const ownerLimits = db
-        .prepare("SELECT max_collaborators FROM users WHERE id = ?")
-        .get(podcast.owner_user_id) as
-        | { max_collaborators: number | null }
-        | undefined;
+      const ownerLimits = drizzleDb
+        .select({ maxCollaborators: users.maxCollaborators })
+        .from(users)
+        .where(eq(users.id, podcast.ownerUserId))
+        .limit(1)
+        .get();
       const maxCollaborators =
-        podcast.max_collaborators ?? ownerLimits?.max_collaborators ?? null;
+        podcast.maxCollaborators ?? ownerLimits?.maxCollaborators ?? null;
       if (maxCollaborators != null && maxCollaborators > 0) {
-        const count = db
-          .prepare(
-            "SELECT COUNT(*) as count FROM podcast_shares WHERE podcast_id = ?",
-          )
-          .get(podcastId) as { count: number };
-        if (count.count >= maxCollaborators) {
+        const countRow = drizzleDb
+          .select({ count: sql<number>`COUNT(*)`.as("count") })
+          .from(podcastShares)
+          .where(eq(podcastShares.podcastId, podcastId))
+          .get();
+        const count = countRow?.count ?? 0;
+        if (count >= maxCollaborators) {
           return reply
             .status(403)
             .send({ error: "This show has reached its collaborator limit." });
         }
       }
-      if (user.id === podcast.owner_user_id) {
+      if (user.id === podcast.ownerUserId) {
         return reply
           .status(400)
           .send({ error: "The owner is already on the show." });
       }
       try {
-        db.prepare(
-          "INSERT INTO podcast_shares (podcast_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT(podcast_id, user_id) DO UPDATE SET role = excluded.role",
-        ).run(podcastId, user.id, shareRole);
+        drizzleDb
+          .insert(podcastShares)
+          .values({
+            podcastId,
+            userId: user.id,
+            role: shareRole,
+          })
+          .onConflictDoUpdate({
+            target: [podcastShares.podcastId, podcastShares.userId],
+            set: { role: shareRole },
+          })
+          .run();
       } catch {
         return reply.status(500).send({ error: "Failed to add collaborator" });
       }
-      const row = db
-        .prepare(
-          `SELECT ps.user_id, ps.role, ps.created_at, u.email FROM podcast_shares ps JOIN users u ON u.id = ps.user_id WHERE ps.podcast_id = ? AND ps.user_id = ?`,
+      const row = drizzleDb
+        .select({
+          userId: podcastShares.userId,
+          role: podcastShares.role,
+          createdAt: podcastShares.createdAt,
+          username: users.username,
+        })
+        .from(podcastShares)
+        .innerJoin(users, eq(users.id, podcastShares.userId))
+        .where(
+          and(
+            eq(podcastShares.podcastId, podcastId),
+            eq(podcastShares.userId, user.id),
+          ),
         )
-        .get(podcastId, user.id) as {
-        user_id: string;
-        role: string;
-        created_at: string;
-        email: string;
-      };
-      return reply.status(201).send(row);
+        .limit(1)
+        .get();
+      if (!row)
+        return reply.status(500).send({ error: "Failed to fetch collaborator" });
+      return reply.status(201).send({
+        userId: row.userId,
+        role: row.role,
+        createdAt: row.createdAt,
+        username: row.username ?? "",
+      });
     },
   );
 
@@ -216,27 +261,54 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
           .send({ error: parsed.error.issues[0]?.message ?? "Validation failed", details: parsed.error.flatten() });
       }
       const shareRole = parsed.data.role;
-      const existing = db
-        .prepare(
-          "SELECT user_id FROM podcast_shares WHERE podcast_id = ? AND user_id = ?",
+      const existing = drizzleDb
+        .select({ userId: podcastShares.userId })
+        .from(podcastShares)
+        .where(
+          and(
+            eq(podcastShares.podcastId, podcastId),
+            eq(podcastShares.userId, targetUserId),
+          ),
         )
-        .get(podcastId, targetUserId);
+        .limit(1)
+        .get();
       if (!existing)
         return reply.status(404).send({ error: "Collaborator not found" });
-      db.prepare(
-        "UPDATE podcast_shares SET role = ? WHERE podcast_id = ? AND user_id = ?",
-      ).run(shareRole, podcastId, targetUserId);
-      const row = db
-        .prepare(
-          `SELECT ps.user_id, ps.role, ps.created_at, u.email FROM podcast_shares ps JOIN users u ON u.id = ps.user_id WHERE ps.podcast_id = ? AND ps.user_id = ?`,
+      drizzleDb
+        .update(podcastShares)
+        .set({ role: shareRole })
+        .where(
+          and(
+            eq(podcastShares.podcastId, podcastId),
+            eq(podcastShares.userId, targetUserId),
+          ),
         )
-        .get(podcastId, targetUserId) as {
-        user_id: string;
-        role: string;
-        created_at: string;
-        email: string;
+        .run();
+      const row = drizzleDb
+        .select({
+          userId: podcastShares.userId,
+          role: podcastShares.role,
+          createdAt: podcastShares.createdAt,
+          username: users.username,
+        })
+        .from(podcastShares)
+        .innerJoin(users, eq(users.id, podcastShares.userId))
+        .where(
+          and(
+            eq(podcastShares.podcastId, podcastId),
+            eq(podcastShares.userId, targetUserId),
+          ),
+        )
+        .limit(1)
+        .get();
+      if (!row)
+        return reply.status(404).send({ error: "Collaborator not found" });
+      return {
+        userId: row.userId,
+        role: row.role,
+        createdAt: row.createdAt,
+        username: row.username ?? "",
       };
-      return row;
     },
   );
 
@@ -272,16 +344,28 @@ export async function registerCollaboratorRoutes(app: FastifyInstance) {
       const isSelf = request.userId === targetUserId;
       if (!canManageCollaborators(role) && !isSelf)
         return reply.status(404).send({ error: "Podcast not found" });
-      const existing = db
-        .prepare(
-          "SELECT user_id FROM podcast_shares WHERE podcast_id = ? AND user_id = ?",
+      const existing = drizzleDb
+        .select({ userId: podcastShares.userId })
+        .from(podcastShares)
+        .where(
+          and(
+            eq(podcastShares.podcastId, podcastId),
+            eq(podcastShares.userId, targetUserId),
+          ),
         )
-        .get(podcastId, targetUserId);
+        .limit(1)
+        .get();
       if (!existing)
         return reply.status(404).send({ error: "Collaborator not found" });
-      db.prepare(
-        "DELETE FROM podcast_shares WHERE podcast_id = ? AND user_id = ?",
-      ).run(podcastId, targetUserId);
+      drizzleDb
+        .delete(podcastShares)
+        .where(
+          and(
+            eq(podcastShares.podcastId, podcastId),
+            eq(podcastShares.userId, targetUserId),
+          ),
+        )
+        .run();
       return reply.status(204).send();
     },
   );

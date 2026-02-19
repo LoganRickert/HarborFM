@@ -35,8 +35,8 @@ export async function run({ runOne }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'E2E Valid From Future',
-          valid_from: oneYearFromNow(),
-          valid_until: twoYearsFromNow(),
+          validFrom: oneYearFromNow(),
+          validUntil: twoYearsFromNow(),
         }),
       }, apiKeyUserJar);
       if (createRes.status !== 201) {
@@ -62,8 +62,8 @@ export async function run({ runOne }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'E2E Valid Window Key',
-          valid_from: oneYearAgo(),
-          valid_until: twoYearsFromNow(),
+          validFrom: oneYearAgo(),
+          validUntil: twoYearsFromNow(),
         }),
       }, apiKeyUserJar);
       if (createRes.status !== 201) {
@@ -87,7 +87,7 @@ export async function run({ runOne }) {
       const createRes = await apiFetch('/auth/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'E2E Disable Test Key', valid_until: twoYearsFromNow() }),
+        body: JSON.stringify({ name: 'E2E Disable Test Key', validUntil: twoYearsFromNow() }),
       }, apiKeyUserJar);
       if (createRes.status !== 201) {
         const t = await createRes.text();
@@ -135,7 +135,7 @@ export async function run({ runOne }) {
   await apiFetch(`/podcasts/${podcast.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subscriber_only_feed_enabled: 1 }),
+    body: JSON.stringify({ subscriberOnlyFeedEnabled: 1 }),
   }, adminJar);
 
   results.push(
@@ -145,8 +145,8 @@ export async function run({ runOne }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'E2E Token Valid From Future',
-          valid_from: oneYearFromNow(),
-          valid_until: twoYearsFromNow(),
+          validFrom: oneYearFromNow(),
+          validUntil: twoYearsFromNow(),
         }),
       }, adminJar);
       if (createRes.status !== 201) {
@@ -170,8 +170,8 @@ export async function run({ runOne }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'E2E Token Valid Window',
-          valid_from: oneYearAgo(),
-          valid_until: twoYearsFromNow(),
+          validFrom: oneYearAgo(),
+          validUntil: twoYearsFromNow(),
         }),
       }, adminJar);
       if (createRes.status !== 201) {

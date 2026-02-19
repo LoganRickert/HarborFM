@@ -3,8 +3,11 @@ import { nanoid } from "nanoid";
 import send from "@fastify/send";
 import { basename, dirname, join, extname } from "path";
 import { existsSync, unlinkSync, writeFileSync } from "fs";
+import { eq } from "drizzle-orm";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
+import { podcasts } from "../../db/schema.js";
+import { sqlNow } from "../../db/utils.js";
 import { getPodcastRole, canAccessPodcast, canEditEpisodeOrPodcastMetadata } from "../../services/access.js";
 import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
 import {
@@ -16,7 +19,7 @@ import {
 } from "../../services/paths.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { podcastRowWithFilename, ARTWORK_FILENAME_REGEX } from "./utils.js";
-import { getArtworkPath } from "./repo.js";
+import { getArtworkPath, getById } from "./repo.js";
 
 export async function registerArtworkRoutes(app: FastifyInstance) {
   app.get(
@@ -120,9 +123,12 @@ export async function registerArtworkRoutes(app: FastifyInstance) {
       if (!canEditEpisodeOrPodcastMetadata(role)) {
         return reply.status(404).send({ error: "Podcast not found" });
       }
-      const existing = db
-        .prepare("SELECT id, artwork_path FROM podcasts WHERE id = ?")
-        .get(id) as { id: string; artwork_path: string | null } | undefined;
+      const existing = drizzleDb
+        .select({ id: podcasts.id, artworkPath: podcasts.artworkPath })
+        .from(podcasts)
+        .where(eq(podcasts.id, id))
+        .limit(1)
+        .get();
       if (!existing)
         return reply.status(404).send({ error: "Podcast not found" });
       const data = await request.file();
@@ -141,11 +147,17 @@ export async function registerArtworkRoutes(app: FastifyInstance) {
           .send({ error: `Image too large (max ${ARTWORK_MAX_MB}MB)` });
       assertResolvedPathUnder(destPath, dir);
       writeFileSync(destPath, buffer);
-      db.prepare(
-        "UPDATE podcasts SET artwork_path = ?, artwork_url = NULL, updated_at = datetime('now') WHERE id = ?",
-      ).run(pathRelativeToData(destPath), id);
-      const oldPath = existing.artwork_path
-        ? resolveDataPath(existing.artwork_path)
+      drizzleDb
+        .update(podcasts)
+        .set({
+          artworkPath: pathRelativeToData(destPath),
+          artworkUrl: null,
+          updatedAt: sqlNow(),
+        })
+        .where(eq(podcasts.id, id))
+        .run();
+      const oldPath = existing.artworkPath
+        ? resolveDataPath(existing.artworkPath)
         : "";
       if (oldPath && oldPath !== destPath) {
         try {
@@ -155,9 +167,8 @@ export async function registerArtworkRoutes(app: FastifyInstance) {
           // ignore
         }
       }
-      const row = db
-        .prepare("SELECT * FROM podcasts WHERE id = ?")
-        .get(id) as Record<string, unknown>;
+      const row = getById(id);
+      if (!row) return reply.status(404).send({ error: "Podcast not found" });
       return podcastRowWithFilename(row);
     },
   );

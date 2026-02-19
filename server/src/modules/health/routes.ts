@@ -4,6 +4,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { CADDY_TLS_CHECK_SECRET } from "../../config.js";
 import { isDomainAllowed } from "../../services/dns/custom-domain-resolver.js";
+import { timingSafeEqualStrings } from "../../utils/secretCompare.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -76,8 +77,8 @@ export async function healthRoutes(app: FastifyInstance) {
   // Caddy on-demand TLS permission check. Secret in path prevents domain enumeration.
   app.get("/caddy-tls-check/:secret", { schema: { hide: true } }, async (request, reply) => {
     const secret = (request.params as { secret?: string }).secret ?? "";
-    const expected = CADDY_TLS_CHECK_SECRET;
-    if (!expected || secret !== expected) {
+    const expected = CADDY_TLS_CHECK_SECRET ?? "";
+    if (!expected || !timingSafeEqualStrings(secret, expected)) {
       return reply.status(404).send();
     }
     const domain = (request.query as { domain?: string }).domain ?? "";

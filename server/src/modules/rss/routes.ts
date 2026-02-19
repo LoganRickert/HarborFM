@@ -18,7 +18,7 @@ export async function rssRoutes(app: FastifyInstance) {
         tags: ["RSS"],
         summary: "RSS preview",
         description:
-          "Generate RSS XML for a podcast (preview). Optional public_base_url in query.",
+          "Generate RSS XML for a podcast (preview). Optional publicBaseUrl in query.",
         params: {
           type: "object",
           properties: { id: { type: "string" } },
@@ -26,7 +26,7 @@ export async function rssRoutes(app: FastifyInstance) {
         },
         querystring: {
           type: "object",
-          properties: { public_base_url: { type: "string" } },
+          properties: { publicBaseUrl: { type: "string" } },
         },
         response: {
           200: { description: "RSS XML" },
@@ -43,8 +43,8 @@ export async function rssRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Podcast not found" });
       }
       const queryParsed = rssPublicBaseUrlQuerySchema.safeParse(request.query);
-      const publicBaseUrl = queryParsed.success && queryParsed.data.public_base_url
-        ? queryParsed.data.public_base_url
+      const publicBaseUrl = queryParsed.success && queryParsed.data.publicBaseUrl
+        ? queryParsed.data.publicBaseUrl
         : null;
       const xml = generateRss(podcastId, publicBaseUrl);
       return reply
@@ -61,7 +61,7 @@ export async function rssRoutes(app: FastifyInstance) {
         tags: ["RSS"],
         summary: "Generate RSS file",
         description:
-          "Write RSS feed to disk for a podcast. Optional public_base_url in body.",
+          "Write RSS feed to disk for a podcast. Optional publicBaseUrl in body.",
         params: {
           type: "object",
           properties: { id: { type: "string" } },
@@ -69,7 +69,7 @@ export async function rssRoutes(app: FastifyInstance) {
         },
         body: {
           type: "object",
-          properties: { public_base_url: { type: "string" } },
+          properties: { publicBaseUrl: { type: "string" } },
         },
         response: {
           200: { description: "Path and message" },
@@ -86,8 +86,8 @@ export async function rssRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Podcast not found" });
       }
       const bodyParsed = rssPublicBaseUrlBodySchema.safeParse(request.body);
-      const publicBaseUrl = bodyParsed.success && bodyParsed.data.public_base_url
-        ? bodyParsed.data.public_base_url
+      const publicBaseUrl = bodyParsed.success && bodyParsed.data.publicBaseUrl
+        ? bodyParsed.data.publicBaseUrl
         : null;
       const path = writeRssFile(podcastId, publicBaseUrl);
       deleteTokenFeedTemplateFile(podcastId);

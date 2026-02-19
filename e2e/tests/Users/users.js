@@ -37,11 +37,11 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/users/${u.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ read_only: true }),
+        body: JSON.stringify({ readOnly: true }),
       }, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const updated = await res.json();
-      if (updated.read_only !== 1) throw new Error('Expected read_only 1');
+      if (updated.readOnly !== 1) throw new Error('Expected readOnly 1');
     })
   );
 

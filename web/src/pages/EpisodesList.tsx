@@ -21,12 +21,12 @@ export function EpisodesList() {
     queryFn: () => listEpisodes(id!),
     enabled: !!id,
   });
-  const maxEpisodes = podcast?.max_episodes ?? null;
-  const episodeCount = Number(podcast?.episode_count ?? episodes.length);
+  const maxEpisodes = podcast?.maxEpisodes ?? null;
+  const episodeCount = Number(podcast?.episodeCount ?? episodes.length);
   const atEpisodeLimit = maxEpisodes != null && maxEpisodes > 0 && episodeCount >= Number(maxEpisodes);
   const { data: meData } = useQuery({ queryKey: ['me'], queryFn: me });
   const readOnly = isReadOnly(meData?.user);
-  const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
+  const myRole = (podcast as { myRole?: string } | undefined)?.myRole;
   const canCreateEpisode = myRole === 'owner' || myRole === 'manager';
 
   const publishedCount = episodes.filter((e) => e.status === 'published').length;
@@ -134,10 +134,10 @@ export function EpisodesList() {
                   <h2 className={styles.statusSectionTitle}>{sectionLabel}</h2>
                   <ul className={styles.list}>
                     {statusEpisodes.map((ep) => {
-                      const isSubscriberOnly = ep.subscriber_only === 1;
+                      const isSubscriberOnly = Boolean(ep.subscriberOnly);
                       const statusBadgeText =
-                        ep.publish_at && ep.publish_at.trim()
-                          ? formatDateShort(ep.publish_at)
+                        ep.publishAt && ep.publishAt.trim()
+                          ? formatDateShort(ep.publishAt)
                           : sectionLabel;
                       return (
                         <li
@@ -154,12 +154,12 @@ export function EpisodesList() {
                               </div>
                               <div className={styles.itemMeta}>
                                 <span className={styles.itemStatus}>{statusBadgeText}</span>
-                                {(ep.season_number != null || ep.episode_number != null) && (
+                                {(ep.seasonNumber != null || ep.episodeNumber != null) && (
                                   <span className={styles.itemMetaItem}>
-                                    S{ep.season_number ?? '?'} E{ep.episode_number ?? '?'}
+                                    S{ep.seasonNumber ?? '?'} E{ep.episodeNumber ?? '?'}
                                   </span>
                                 )}
-                                {ep.audio_final_path && (
+                                {ep.audioFinalPath && (
                                   <span className={styles.itemMetaItem}>✓ Audio</span>
                                 )}
                               </div>

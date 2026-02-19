@@ -34,9 +34,9 @@ export function PodcastDetail() {
     staleTime: 10_000,
   });
 
-  const publicFeedsEnabled = publicConfig?.public_feeds_enabled !== false;
+  const publicFeedsEnabled = publicConfig?.publicFeedsEnabled !== false;
   const readOnly = isReadOnly(meData?.user);
-  const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
+  const myRole = (podcast as { myRole?: string } | undefined)?.myRole;
   const canManageShow = myRole === 'owner' || myRole === 'manager';
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -92,7 +92,7 @@ export function PodcastDetail() {
       {canManageShow && (
         <CollaboratorsSection
           podcastId={id}
-          effectiveMaxCollaborators={podcast?.effective_max_collaborators ?? undefined}
+          effectiveMaxCollaborators={podcast?.effectiveMaxCollaborators ?? undefined}
         />
       )}
 
@@ -103,8 +103,8 @@ export function PodcastDetail() {
           podcastId={id}
           podcastSlug={podcast.slug}
           readOnly={readOnly}
-          subscriberOnlyFeedEnabled={podcast?.subscriber_only_feed_enabled === 1}
-          effectiveMaxSubscriberTokens={podcast?.effective_max_subscriber_tokens ?? undefined}
+          subscriberOnlyFeedEnabled={Boolean(podcast?.subscriberOnlyFeedEnabled)}
+          effectiveMaxSubscriberTokens={podcast?.effectiveMaxSubscriberTokens ?? undefined}
         />
       )}
     </div>

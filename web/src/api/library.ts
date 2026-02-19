@@ -1,21 +1,56 @@
-import type { LibraryAsset, LibraryUpdate } from '@harborfm/shared';
+import type { LibraryUpdate } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
 
-export type { LibraryAsset, LibraryUpdate };
+/** camelCase shape for library assets (API responses mapped from server snake_case). */
+export interface LibraryAsset {
+  id: string;
+  ownerUserId?: string;
+  name: string;
+  tag: string | null;
+  durationSec: number;
+  createdAt: string;
+  globalAsset?: number | boolean;
+  copyright?: string | null;
+  license?: string | null;
+}
+
+function toLibraryAsset(r: Record<string, unknown>): LibraryAsset {
+  const durationSec = r.durationSec ?? r.duration_sec;
+  const createdAt = r.createdAt ?? r.created_at;
+  const ownerUserId = r.ownerUserId ?? r.owner_user_id;
+  const globalAsset = r.globalAsset ?? r.global_asset;
+  return {
+    id: String(r.id ?? ''),
+    ownerUserId: ownerUserId != null ? String(ownerUserId) : undefined,
+    name: String(r.name ?? ''),
+    tag: r.tag != null ? String(r.tag) : null,
+    durationSec: Number(durationSec ?? 0),
+    createdAt: String(createdAt ?? ''),
+    globalAsset: globalAsset as number | boolean | undefined,
+    copyright: r.copyright != null ? String(r.copyright) : null,
+    license: r.license != null ? String(r.license) : null,
+  };
+}
+
+export type { LibraryUpdate };
 
 export function listLibrary(): Promise<{ assets: LibraryAsset[] }> {
   return fetch(`${BASE}/library`, { method: 'GET', credentials: 'include' }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
-    return r.json();
+    return r.json().then((data: { assets: Record<string, unknown>[] }) => ({
+      assets: (data.assets ?? []).map(toLibraryAsset),
+    }));
   });
 }
 
 export function listLibraryForUser(userId: string): Promise<{ assets: LibraryAsset[] }> {
   return fetch(`${BASE}/library/user/${userId}`, { method: 'GET', credentials: 'include' }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
-    return r.json();
+    return r.json().then((data: { assets: Record<string, unknown>[] }) => ({
+      assets: (data.assets ?? []).map(toLibraryAsset),
+    }));
   });
 }
 
@@ -27,7 +62,7 @@ export function importFromPixabay(url: string): Promise<LibraryAsset> {
     body: JSON.stringify({ url }),
   }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
-    return r.json();
+    return r.json().then((data: Record<string, unknown>) => toLibraryAsset(data));
   });
 }
 
@@ -52,7 +87,7 @@ export function createLibraryAsset(
   });
   return res.then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
-    return r.json();
+    return r.json().then((data: Record<string, unknown>) => toLibraryAsset(data));
   });
 }
 
@@ -64,7 +99,7 @@ export function updateLibraryAsset(id: string, data: LibraryUpdate): Promise<Lib
     body: JSON.stringify(data),
   }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
-    return r.json();
+    return r.json().then((data: Record<string, unknown>) => toLibraryAsset(data));
   });
 }
 
@@ -76,7 +111,7 @@ export function updateLibraryAssetForUser(userId: string, id: string, data: Libr
     body: JSON.stringify(data),
   }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
-    return r.json();
+    return r.json().then((data: Record<string, unknown>) => toLibraryAsset(data));
   });
 }
 

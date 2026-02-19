@@ -82,23 +82,25 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
   }, [form]);
 
   useEffect(() => {
-    const raw = (form.artwork_url ?? '').trim();
+    const raw = (form.artworkUrl ?? '').trim();
     if (!raw) {
       setDebouncedArtworkUrl('');
       return;
     }
     const t = setTimeout(() => setDebouncedArtworkUrl(raw), 400);
     return () => clearTimeout(t);
-  }, [form.artwork_url]);
+  }, [form.artworkUrl]);
 
   useEffect(() => {
     if (podcast) {
       setForm({
         ...podcast,
-        artwork_url: podcast.artwork_url ?? null,
+        artworkUrl: podcast.artworkUrl ?? null,
+        subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
+        publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
       });
-      setDebouncedArtworkUrl((podcast.artwork_url ?? '').trim());
-      setCoverMode(podcast.artwork_filename ? 'upload' : 'url');
+      setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
+      setCoverMode(podcast.artworkFilename ? 'upload' : 'url');
       setPendingArtworkFile(null);
     }
   }, [podcast]);
@@ -107,9 +109,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
     if (open && podcast) {
       setForm({
         ...podcast,
-        artwork_url: podcast.artwork_url ?? null,
+        artworkUrl: podcast.artworkUrl ?? null,
+        subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
+        publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
       });
-      setDebouncedArtworkUrl((podcast.artwork_url ?? '').trim());
+      setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setPendingArtworkFile(null);
     }
   }, [open, podcast]);
@@ -218,70 +222,70 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         return;
       }
     }
-    const payload: PodcastUpdate = {
+    const payload = {
       title: currentForm.title,
       slug: currentForm.slug,
       description: currentForm.description,
       subtitle: currentForm.subtitle ?? null,
       summary: currentForm.summary ?? null,
       language: currentForm.language,
-      author_name: currentForm.author_name,
-      owner_name: currentForm.owner_name,
+      authorName: currentForm.authorName,
+      ownerName: currentForm.ownerName,
       email: currentForm.email,
-      category_primary: currentForm.category_primary,
-      category_secondary: currentForm.category_secondary,
-      category_primary_two: currentForm.category_primary_two,
-      category_secondary_two: currentForm.category_secondary_two,
-      category_primary_three: currentForm.category_primary_three,
-      category_secondary_three: currentForm.category_secondary_three,
+      categoryPrimary: currentForm.categoryPrimary,
+      categorySecondary: currentForm.categorySecondary,
+      categoryPrimaryTwo: currentForm.categoryPrimaryTwo,
+      categorySecondaryTwo: currentForm.categorySecondaryTwo,
+      categoryPrimaryThree: currentForm.categoryPrimaryThree,
+      categorySecondaryThree: currentForm.categorySecondaryThree,
       explicit: currentForm.explicit !== undefined ? (currentForm.explicit === 1 ? 1 : 0) : undefined,
-      site_url: currentForm.site_url,
-      artwork_url: fileToUpload ? null : (currentForm.artwork_url !== undefined ? currentForm.artwork_url : null),
+      siteUrl: currentForm.siteUrl,
+      artworkUrl: fileToUpload ? null : (currentForm.artworkUrl !== undefined ? currentForm.artworkUrl : null),
       copyright: currentForm.copyright,
-      podcast_guid: currentForm.podcast_guid,
+      podcastGuid: currentForm.podcastGuid,
       locked: currentForm.locked !== undefined ? (currentForm.locked === 1 ? 1 : 0) : undefined,
       license: currentForm.license,
-      itunes_type: currentForm.itunes_type,
+      itunesType: currentForm.itunesType,
       medium: currentForm.medium,
-      funding_url: currentForm.funding_url ?? null,
-      funding_label: currentForm.funding_label ?? null,
+      fundingUrl: currentForm.fundingUrl ?? null,
+      fundingLabel: currentForm.fundingLabel ?? null,
       persons: currentForm.persons ?? null,
-      update_frequency_rrule: currentForm.update_frequency_rrule ?? null,
-      update_frequency_label: currentForm.update_frequency_label ?? null,
-      spotify_recent_count: currentForm.spotify_recent_count ?? null,
-      spotify_country_of_origin: currentForm.spotify_country_of_origin ?? null,
-      apple_podcasts_verify: currentForm.apple_podcasts_verify ?? null,
+      updateFrequencyRrule: currentForm.updateFrequencyRrule ?? null,
+      updateFrequencyLabel: currentForm.updateFrequencyLabel ?? null,
+      spotifyRecentCount: currentForm.spotifyRecentCount ?? null,
+      spotifyCountryOfOrigin: currentForm.spotifyCountryOfOrigin ?? null,
+      applePodcastsVerify: currentForm.applePodcastsVerify ?? null,
       unlisted: currentForm.unlisted !== undefined ? (currentForm.unlisted === 1 ? 1 : 0) : undefined,
-      subscriber_only_feed_enabled: currentForm.subscriber_only_feed_enabled !== undefined ? (currentForm.subscriber_only_feed_enabled === 1 ? 1 : 0) : undefined,
-      public_feed_disabled: currentForm.public_feed_disabled !== undefined ? (currentForm.public_feed_disabled === 1 ? 1 : 0) : undefined,
-    };
-    if (podcast?.my_role === 'owner' && podcast?.dns_config) {
-      const dc = podcast.dns_config;
-      if (dc.allow_linking_domain && currentForm.link_domain !== undefined) {
-        const linkVal = currentForm.link_domain?.trim() || null;
+      subscriberOnlyFeedEnabled: currentForm.subscriberOnlyFeedEnabled !== undefined ? currentForm.subscriberOnlyFeedEnabled : undefined,
+      publicFeedDisabled: currentForm.publicFeedDisabled !== undefined ? currentForm.publicFeedDisabled : undefined,
+    } as PodcastUpdate;
+    if (podcast?.myRole === 'owner' && podcast?.dnsConfig) {
+      const dc = podcast.dnsConfig;
+      if (dc.allowLinkingDomain && currentForm.linkDomain !== undefined) {
+        const linkVal = currentForm.linkDomain?.trim() || null;
         if (linkVal && (linkVal.toLowerCase().startsWith('http://') || linkVal.toLowerCase().startsWith('https://'))) {
           setLinkDomainError('Use hostname only (no http:// or https://).');
           return;
         }
-        payload.link_domain = linkVal;
+        payload.linkDomain = linkVal;
       }
-      // When allow domain is enabled, send form value; when disabled, send null to clear so we don't submit stale managed_domain
-      if (dc.allow_domain && currentForm.managed_domain !== undefined) {
-        payload.managed_domain = currentForm.managed_domain?.trim() || null;
+      // When allow domain is enabled, send form value; when disabled, send null to clear so we don't submit stale managedDomain
+      if (dc.allowDomain && currentForm.managedDomain !== undefined) {
+        payload.managedDomain = currentForm.managedDomain?.trim() || null;
       } else {
-        payload.managed_domain = null;
+        payload.managedDomain = null;
       }
       // When sub-domain is enabled (allow_sub_domain + default_domain), send form value; otherwise send null to clear
-      if (dc.allow_sub_domain && dc.default_domain && currentForm.managed_sub_domain !== undefined) {
-        payload.managed_sub_domain = currentForm.managed_sub_domain?.trim() || null;
+      if (dc.allowSubDomain && dc.defaultDomain && currentForm.managedSubDomain !== undefined) {
+        payload.managedSubDomain = currentForm.managedSubDomain?.trim() || null;
       } else {
-        payload.managed_sub_domain = null;
+        payload.managedSubDomain = null;
       }
       // When custom key is enabled, send form value; when disabled, never send a key and send null to clear any stored one
-      if (dc.allow_custom_key && currentForm.cloudflare_api_key !== undefined) {
-        payload.cloudflare_api_key = currentForm.cloudflare_api_key?.trim() || undefined;
+      if (dc.allowCustomKey && currentForm.cloudflareApiKey !== undefined) {
+        payload.cloudflareApiKey = currentForm.cloudflareApiKey?.trim() || undefined;
       } else {
-        payload.cloudflare_api_key = null;
+        payload.cloudflareApiKey = null;
       }
     }
     setLinkDomainError(null);
@@ -432,13 +436,13 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                 <label className="toggle" aria-describedby="subscribers-enabled-desc">
                   <input
                     type="checkbox"
-                    checked={form.subscriber_only_feed_enabled === 1}
+                    checked={Boolean(form.subscriberOnlyFeedEnabled)}
                     onChange={(e) => {
                       const on = e.target.checked;
                       setForm((f) => ({
                         ...f,
-                        subscriber_only_feed_enabled: on ? 1 : 0,
-                        ...(on ? {} : { public_feed_disabled: 0 }),
+                        subscriberOnlyFeedEnabled: on,
+                        ...(on ? {} : { publicFeedDisabled: false }),
                       }));
                     }}
                   />
@@ -448,13 +452,13 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                 <p id="subscribers-enabled-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                   Allow adding subscribers and sharing a private feed link. Subscribers can see episodes that include subscriber-only ones when using their link.
                 </p>
-                {form.subscriber_only_feed_enabled === 1 && (
+                {Boolean(form.subscriberOnlyFeedEnabled) && (
                   <>
                     <label className="toggle" aria-describedby="subscriber-only-desc">
                       <input
                         type="checkbox"
-                        checked={form.public_feed_disabled === 1}
-                        onChange={(e) => setForm((f) => ({ ...f, public_feed_disabled: e.target.checked ? 1 : 0 }))}
+                        checked={Boolean(form.publicFeedDisabled)}
+                        onChange={(e) => setForm((f) => ({ ...f, publicFeedDisabled: e.target.checked }))}
                       />
                       <span className="toggle__track" aria-hidden="true" />
                       <span>Subscriber Only</span>
@@ -507,16 +511,16 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   <div className={styles.coverImageWrap}>
                     {(coverMode === 'url'
                       ? debouncedArtworkUrl && (debouncedArtworkUrl.startsWith('http://') || debouncedArtworkUrl.startsWith('https://'))
-                      : (pendingArtworkFile || podcast?.artwork_filename)
+                      : (pendingArtworkFile || podcast?.artworkFilename)
                     ) ? (
                       <img
-                        key={coverMode === 'url' ? `url-${debouncedArtworkUrl}` : `upload-${podcast?.artwork_filename ?? ''}-${Boolean(pendingArtworkPreviewUrl)}`}
+                        key={coverMode === 'url' ? `url-${debouncedArtworkUrl}` : `upload-${podcast?.artworkFilename ?? ''}-${Boolean(pendingArtworkPreviewUrl)}`}
                         src={safeImageSrc(
                           coverMode === 'url'
                             ? debouncedArtworkUrl
                             : pendingArtworkPreviewUrl ??
-                              (podcast?.artwork_filename && podcastId
-                                ? `/api/podcasts/${podcastId}/artwork/${encodeURIComponent(podcast.artwork_filename)}`
+                              (podcast?.artworkFilename && podcastId
+                                ? `/api/podcasts/${podcastId}/artwork/${encodeURIComponent(podcast.artworkFilename)}`
                                 : '')
                         )}
                         alt=""
@@ -551,10 +555,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                       {coverMode === 'url' ? (
                         <input
                           type="url"
-                          value={form.artwork_url ?? ''}
+                          value={form.artworkUrl ?? ''}
                           onChange={(e) => {
                             const value = e.target.value.trim();
-                            setForm((f) => ({ ...f, artwork_url: value === '' ? null : value }));
+                            setForm((f) => ({ ...f, artworkUrl: value === '' ? null : value }));
                           }}
                           className={styles.input}
                           placeholder="https://..."
@@ -606,8 +610,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Author Name
                   <input
                     type="text"
-                    value={form.author_name ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, author_name: e.target.value }))}
+                    value={form.authorName ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, authorName: e.target.value }))}
                     className={styles.input}
                     placeholder="e.g. Jane Smith"
                   />
@@ -616,8 +620,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Owner Name
                   <input
                     type="text"
-                    value={form.owner_name ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, owner_name: e.target.value }))}
+                    value={form.ownerName ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, ownerName: e.target.value }))}
                     className={styles.input}
                     placeholder="e.g. Jane Smith or Company Name"
                   />
@@ -642,10 +646,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Primary Category
                   <input
                     type="text"
-                    value={form.category_primary ?? ''}
+                    value={form.categoryPrimary ?? ''}
                     onChange={(e) => {
                     const v = e.target.value;
-                    setForm((f) => ({ ...f, category_primary: v, ...(!v.trim() ? { category_secondary: null } : {}) }));
+                    setForm((f) => ({ ...f, categoryPrimary: v, ...(!v.trim() ? { categorySecondary: null } : {}) }));
                   }}
                     className={styles.input}
                     placeholder="e.g. Technology"
@@ -655,11 +659,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Secondary Category
                   <input
                     type="text"
-                    value={form.category_secondary ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, category_secondary: (f.category_primary ?? '').trim() ? e.target.value || null : null }))}
+                    value={form.categorySecondary ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, categorySecondary: (f.categoryPrimary ?? '').trim() ? e.target.value || null : null }))}
                     className={styles.input}
                     placeholder="e.g. Technology News"
-                    disabled={!(form.category_primary ?? '').trim()}
+                    disabled={!(form.categoryPrimary ?? '').trim()}
                   />
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                     Optional subcategory (e.g. Technology News under Technology)
@@ -669,10 +673,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Primary Category 2
                   <input
                     type="text"
-                    value={form.category_primary_two ?? ''}
+                    value={form.categoryPrimaryTwo ?? ''}
                     onChange={(e) => {
                     const v = e.target.value || null;
-                    setForm((f) => ({ ...f, category_primary_two: v, ...(!(v ?? '').trim() ? { category_secondary_two: null } : {}) }));
+                    setForm((f) => ({ ...f, categoryPrimaryTwo: v, ...(!(v ?? '').trim() ? { categorySecondaryTwo: null } : {}) }));
                   }}
                     className={styles.input}
                     placeholder="e.g. Arts"
@@ -682,21 +686,21 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Secondary Category 2
                   <input
                     type="text"
-                    value={form.category_secondary_two ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, category_secondary_two: (f.category_primary_two ?? '').trim() ? e.target.value || null : null }))}
+                    value={form.categorySecondaryTwo ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, categorySecondaryTwo: (f.categoryPrimaryTwo ?? '').trim() ? e.target.value || null : null }))}
                     className={styles.input}
                     placeholder="e.g. Visual Arts"
-                    disabled={!(form.category_primary_two ?? '').trim()}
+                    disabled={!(form.categoryPrimaryTwo ?? '').trim()}
                   />
                 </label>
                 <label className={styles.label}>
                   Primary Category 3
                   <input
                     type="text"
-                    value={form.category_primary_three ?? ''}
+                    value={form.categoryPrimaryThree ?? ''}
                     onChange={(e) => {
                     const v = e.target.value || null;
-                    setForm((f) => ({ ...f, category_primary_three: v, ...(!(v ?? '').trim() ? { category_secondary_three: null } : {}) }));
+                    setForm((f) => ({ ...f, categoryPrimaryThree: v, ...(!(v ?? '').trim() ? { categorySecondaryThree: null } : {}) }));
                   }}
                     className={styles.input}
                     placeholder="e.g. Leisure"
@@ -706,11 +710,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Secondary Category 3
                   <input
                     type="text"
-                    value={form.category_secondary_three ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, category_secondary_three: (f.category_primary_three ?? '').trim() ? e.target.value || null : null }))}
+                    value={form.categorySecondaryThree ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, categorySecondaryThree: (f.categoryPrimaryThree ?? '').trim() ? e.target.value || null : null }))}
                     className={styles.input}
                     placeholder="e.g. Hobbies"
-                    disabled={!(form.category_primary_three ?? '').trim()}
+                    disabled={!(form.categoryPrimaryThree ?? '').trim()}
                   />
                 </label>
                 </div>
@@ -723,8 +727,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   Site URL
                   <input
                     type="url"
-                    value={form.site_url ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, site_url: e.target.value || null }))}
+                    value={form.siteUrl ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, siteUrl: e.target.value || null }))}
                     className={styles.input}
                     placeholder="e.g. https://myshow.com"
                   />
@@ -759,28 +763,28 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   />
                 </label>
 
-                {podcast?.my_role === 'owner' &&
-                  podcast.dns_config &&
-                  (podcast.dns_config.allow_linking_domain ||
-                    podcast.dns_config.allow_domain ||
-                    (podcast.dns_config.allow_sub_domain && !!podcast.dns_config.default_domain)) && (
+                {podcast?.myRole === 'owner' &&
+                  podcast.dnsConfig &&
+                  (podcast.dnsConfig.allowLinkingDomain ||
+                    podcast.dnsConfig.allowDomain ||
+                    (podcast.dnsConfig.allowSubDomain && !!podcast.dnsConfig.defaultDomain)) && (
                   <>
                     <h3 className={styles.dialogSectionTitle}>DNS &amp; Custom Domain</h3>
-                    {podcast.dns_config.allow_linking_domain && (
+                    {podcast.dnsConfig.allowLinkingDomain && (
                       <label className={styles.label}>
                         Link Domain
                         <input
                           type="text"
-                          value={form.link_domain ?? ''}
+                          value={form.linkDomain ?? ''}
                           onChange={(e) => {
                             const v = e.target.value.trim() || null;
-                            setForm((f) => ({ ...f, link_domain: v }));
+                            setForm((f) => ({ ...f, linkDomain: v }));
                             if (linkDomainError && v && !v.toLowerCase().startsWith('http://') && !v.toLowerCase().startsWith('https://')) {
                               setLinkDomainError(null);
                             }
                           }}
                           onBlur={() => {
-                            const v = (form.link_domain ?? '').trim();
+                            const v = (form.linkDomain ?? '').trim();
                             if (v && (v.toLowerCase().startsWith('http://') || v.toLowerCase().startsWith('https://'))) {
                               setLinkDomainError('Use hostname only (no http:// or https://).');
                             }
@@ -801,59 +805,59 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         )}
                       </label>
                     )}
-                    {podcast.dns_config.allow_domain && (
+                    {podcast.dnsConfig.allowDomain && (
                       <label className={styles.label}>
                         Managed Domain
-                        {podcast.dns_config.allow_domains?.length ? (
+                        {podcast.dnsConfig.allowDomains?.length ? (
                           <select
-                            value={form.managed_domain ?? ''}
-                            onChange={(e) => setForm((f) => ({ ...f, managed_domain: e.target.value || null }))}
+                            value={form.managedDomain ?? ''}
+                            onChange={(e) => setForm((f) => ({ ...f, managedDomain: e.target.value || null }))}
                             className={styles.input}
                           >
                             <option value="">-</option>
-                            {podcast.dns_config.allow_domains.map((d) => (
+                            {podcast.dnsConfig.allowDomains.map((d) => (
                               <option key={d} value={d}>{d}</option>
                             ))}
                           </select>
                         ) : (
                           <input
                             type="text"
-                            value={form.managed_domain ?? ''}
-                            onChange={(e) => setForm((f) => ({ ...f, managed_domain: e.target.value.trim() || null }))}
+                            value={form.managedDomain ?? ''}
+                            onChange={(e) => setForm((f) => ({ ...f, managedDomain: e.target.value.trim() || null }))}
                             className={styles.input}
                             placeholder="e.g. example.com"
                           />
                         )}
                       </label>
                     )}
-                    {podcast.dns_config.allow_domain && podcast.dns_config.allow_custom_key && (
+                    {podcast.dnsConfig.allowDomain && podcast.dnsConfig.allowCustomKey && (
                       <label className={styles.label}>
                         CloudFlare API Key (Optional)
                         <input
                           type="password"
-                          value={form.cloudflare_api_key ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, cloudflare_api_key: e.target.value || undefined }))}
+                          value={form.cloudflareApiKey ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, cloudflareApiKey: e.target.value || undefined }))}
                           className={styles.input}
-                          placeholder={form.cloudflare_api_key_set ? '(leave blank to keep current)' : 'Enter API token'}
+                          placeholder={form.cloudflareApiKeySet ? '(leave blank to keep current)' : 'Enter API token'}
                           autoComplete="off"
                         />
                       </label>
                     )}
-                    {podcast.dns_config.allow_sub_domain && podcast.dns_config.default_domain && (
+                    {podcast.dnsConfig.allowSubDomain && podcast.dnsConfig.defaultDomain && (
                       <label className={styles.label}>
                         Managed Sub-Domain
                         <input
                           type="text"
-                          value={form.managed_sub_domain ?? ''}
+                          value={form.managedSubDomain ?? ''}
                           onChange={(e) => {
                             const v = e.target.value.replace(/[^a-zA-Z0-9-]/g, '').trim() || null;
-                            setForm((f) => ({ ...f, managed_sub_domain: v }));
+                            setForm((f) => ({ ...f, managedSubDomain: v }));
                           }}
                           className={styles.input}
-                          placeholder={`e.g. www, myshow (→ myshow.${podcast.dns_config.default_domain})`}
+                          placeholder={`e.g. www, myshow (→ myshow.${podcast.dnsConfig.defaultDomain})`}
                         />
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
-                          Sub-domain under {podcast.dns_config.default_domain}. Letters, numbers, and hyphens only.
+                          Sub-domain under {podcast.dnsConfig.defaultDomain}. Letters, numbers, and hyphens only.
                         </p>
                       </label>
                     )}
@@ -869,8 +873,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         Podcast GUID
                         <input
                           type="text"
-                          value={form.podcast_guid ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, podcast_guid: e.target.value || null }))}
+                          value={form.podcastGuid ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, podcastGuid: e.target.value || null }))}
                           className={styles.input}
                           placeholder="Leave blank to auto-generate"
                         />
@@ -894,9 +898,9 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                             <button
                               key={t}
                               type="button"
-                              className={(form.itunes_type ?? 'episodic') === t ? styles.statusToggleActive : styles.statusToggleBtn}
-                              onClick={() => setForm((f) => ({ ...f, itunes_type: t }))}
-                              aria-pressed={(form.itunes_type ?? 'episodic') === t}
+                              className={(form.itunesType ?? 'episodic') === t ? styles.statusToggleActive : styles.statusToggleBtn}
+                              onClick={() => setForm((f) => ({ ...f, itunesType: t }))}
+                              aria-pressed={(form.itunesType ?? 'episodic') === t}
                               aria-label={t === 'episodic' ? 'Episodic' : 'Serial'}
                             >
                               {t === 'episodic' ? 'Episodic' : 'Serial'}
@@ -927,8 +931,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         Funding URL
                         <input
                           type="url"
-                          value={form.funding_url ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, funding_url: e.target.value.trim() || null }))}
+                          value={form.fundingUrl ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, fundingUrl: e.target.value.trim() || null }))}
                           className={styles.input}
                           placeholder="e.g. https://patreon.com/myshow"
                         />
@@ -937,8 +941,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         Funding Label
                         <input
                           type="text"
-                          value={form.funding_label ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, funding_label: e.target.value.trim() || null }))}
+                          value={form.fundingLabel ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, fundingLabel: e.target.value.trim() || null }))}
                           className={styles.input}
                           placeholder="e.g. Support the show"
                         />
@@ -974,8 +978,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         Update schedule (Spotify)
                         <input
                           type="text"
-                          value={form.update_frequency_rrule ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, update_frequency_rrule: e.target.value.trim() || null }))}
+                          value={form.updateFrequencyRrule ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, updateFrequencyRrule: e.target.value.trim() || null }))}
                           className={styles.input}
                           placeholder="e.g. FREQ=WEEKLY or FREQ=DAILY"
                         />
@@ -984,8 +988,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         Update schedule label (Spotify)
                         <input
                           type="text"
-                          value={form.update_frequency_label ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, update_frequency_label: e.target.value.trim() || null }))}
+                          value={form.updateFrequencyLabel ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, updateFrequencyLabel: e.target.value.trim() || null }))}
                           className={styles.input}
                           placeholder="e.g. Weekly or Daily"
                         />
@@ -995,11 +999,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         <input
                           type="number"
                           min={0}
-                          value={form.spotify_recent_count ?? ''}
+                          value={form.spotifyRecentCount ?? ''}
                           onChange={(e) => {
                             const v = e.target.value;
                             const n = v === '' ? null : parseInt(v, 10);
-                            setForm((f) => ({ ...f, spotify_recent_count: n != null && !Number.isNaN(n) && n >= 0 ? n : null }));
+                            setForm((f) => ({ ...f, spotifyRecentCount: n != null && !Number.isNaN(n) && n >= 0 ? n : null }));
                           }}
                           className={styles.input}
                           placeholder="e.g. 150"
@@ -1009,8 +1013,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         Spotify country of origin
                         <input
                           type="text"
-                          value={form.spotify_country_of_origin ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, spotify_country_of_origin: e.target.value.trim() || null }))}
+                          value={form.spotifyCountryOfOrigin ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, spotifyCountryOfOrigin: e.target.value.trim() || null }))}
                           className={styles.input}
                           placeholder="e.g. US"
                         />
@@ -1019,14 +1023,14 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         Apple Podcasts verification code
                         <input
                           type="text"
-                          value={form.apple_podcasts_verify ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, apple_podcasts_verify: e.target.value.trim() || null }))}
+                          value={form.applePodcastsVerify ?? ''}
+                          onChange={(e) => setForm((f) => ({ ...f, applePodcastsVerify: e.target.value.trim() || null }))}
                           className={styles.input}
                           placeholder="From Apple Podcasts Connect"
                         />
                       </label>
 
-                      {podcast?.my_role === 'owner' && (
+                      {podcast?.myRole === 'owner' && (
                         <div className={styles.deletePodcastSection}>
                           <h3 className={styles.dialogSectionTitle}>Danger zone</h3>
                           <button

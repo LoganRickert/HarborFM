@@ -11,18 +11,18 @@ function toTitleCase(s: string): string {
 interface PodcastDetailsGridProps {
   podcast: {
     slug: string;
-    site_url?: string | null;
-    author_name?: string | null;
-    category_primary?: string | null;
-    category_secondary?: string | null;
-    category_primary_two?: string | null;
-    category_secondary_two?: string | null;
-    category_primary_three?: string | null;
-    category_secondary_three?: string | null;
+    siteUrl?: string | null;
+    authorName?: string | null;
+    categoryPrimary?: string | null;
+    categorySecondary?: string | null;
+    categoryPrimaryTwo?: string | null;
+    categorySecondaryTwo?: string | null;
+    categoryPrimaryThree?: string | null;
+    categorySecondaryThree?: string | null;
     language?: string | null;
     medium?: string | null;
-    itunes_type?: string;
-    owner_name?: string | null;
+    itunesType?: string;
+    ownerName?: string | null;
     email?: string | null;
     explicit?: number;
   };
@@ -49,41 +49,41 @@ export function PodcastDetailsGrid({ podcast, detailsExpanded, onDetailsToggle }
       </button>
       <div id="podcast-details-content" className={detailsExpanded ? styles.podcastDetailsContent : styles.podcastDetailsContentCollapsed}>
         <dl className={styles.podcastDetailsGrid}>
-        {podcast.site_url && (
+        {podcast.siteUrl && (
           <div className={styles.podcastDetailsItem}>
             <dt className={styles.podcastDetailsTerm}>Website</dt>
             <dd className={styles.podcastDetailsValue}>
-              <a href={podcast.site_url} target="_blank" rel="noopener noreferrer" className={styles.podcastDetailsActionLink}>
+              <a href={podcast.siteUrl} target="_blank" rel="noopener noreferrer" className={styles.podcastDetailsActionLink}>
                 <ExternalLink size={16} strokeWidth={2} aria-hidden />
                 Visit website
               </a>
             </dd>
           </div>
         )}
-        {podcast.author_name && (
+        {podcast.authorName && (
           <div className={styles.podcastDetailsItem}>
             <dt className={styles.podcastDetailsTerm}>Author</dt>
-            <dd className={styles.podcastDetailsValue}>{podcast.author_name}</dd>
+            <dd className={styles.podcastDetailsValue}>{podcast.authorName}</dd>
           </div>
         )}
         {[
-          podcast.category_primary,
-          podcast.category_secondary,
-          podcast.category_primary_two,
-          podcast.category_secondary_two,
-          podcast.category_primary_three,
-          podcast.category_secondary_three,
+          podcast.categoryPrimary,
+          podcast.categorySecondary,
+          podcast.categoryPrimaryTwo,
+          podcast.categorySecondaryTwo,
+          podcast.categoryPrimaryThree,
+          podcast.categorySecondaryThree,
         ].some(Boolean) && (
           <div className={styles.podcastDetailsItem}>
             <dt className={styles.podcastDetailsTerm}>Categories</dt>
             <dd className={styles.podcastDetailsValue}>
               {[
-                podcast.category_primary,
-                podcast.category_secondary,
-                podcast.category_primary_two,
-                podcast.category_secondary_two,
-                podcast.category_primary_three,
-                podcast.category_secondary_three,
+                podcast.categoryPrimary,
+                podcast.categorySecondary,
+                podcast.categoryPrimaryTwo,
+                podcast.categorySecondaryTwo,
+                podcast.categoryPrimaryThree,
+                podcast.categorySecondaryThree,
               ].filter(Boolean).join(', ')}
             </dd>
           </div>
@@ -102,12 +102,12 @@ export function PodcastDetailsGrid({ podcast, detailsExpanded, onDetailsToggle }
         )}
         <div className={styles.podcastDetailsItem}>
           <dt className={styles.podcastDetailsTerm}>Type</dt>
-          <dd className={styles.podcastDetailsValue}>{podcast.itunes_type === 'serial' ? 'Serial' : 'Episodic'}</dd>
+          <dd className={styles.podcastDetailsValue}>{podcast.itunesType === 'serial' ? 'Serial' : 'Episodic'}</dd>
         </div>
-        {podcast.owner_name && (
+        {podcast.ownerName && (
           <div className={styles.podcastDetailsItem}>
             <dt className={styles.podcastDetailsTerm}>Owner</dt>
-            <dd className={styles.podcastDetailsValue}>{podcast.owner_name}</dd>
+            <dd className={styles.podcastDetailsValue}>{podcast.ownerName}</dd>
           </div>
         )}
         {podcast.email && (

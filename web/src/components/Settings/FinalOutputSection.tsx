@@ -16,8 +16,8 @@ export function FinalOutputSection({ form, onFormChange }: SettingsFormProps) {
           max={320}
           step={1}
           className={styles.input}
-          value={form.final_bitrate_kbps}
-          onChange={(e) => onFormChange({ final_bitrate_kbps: Number(e.target.value) })}
+          value={form.finalBitrateKbps}
+          onChange={(e) => onFormChange({ finalBitrateKbps: Number(e.target.value) })}
         />
       </label>
 
@@ -26,15 +26,15 @@ export function FinalOutputSection({ form, onFormChange }: SettingsFormProps) {
         <div className={styles.llmToggle} role="group" aria-label="Output channels">
           <button
             type="button"
-            className={form.final_channels === 'mono' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
-            onClick={() => onFormChange({ final_channels: 'mono' })}
+            className={form.finalChannels === 'mono' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
+            onClick={() => onFormChange({ finalChannels: 'mono' })}
           >
             Mono
           </button>
           <button
             type="button"
-            className={form.final_channels === 'stereo' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
-            onClick={() => onFormChange({ final_channels: 'stereo' })}
+            className={form.finalChannels === 'stereo' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
+            onClick={() => onFormChange({ finalChannels: 'stereo' })}
           >
             Stereo
           </button>
@@ -46,15 +46,15 @@ export function FinalOutputSection({ form, onFormChange }: SettingsFormProps) {
         <div className={styles.llmToggle} role="group" aria-label="Output format">
           <button
             type="button"
-            className={form.final_format === 'mp3' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
-            onClick={() => onFormChange({ final_format: 'mp3' })}
+            className={form.finalFormat === 'mp3' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
+            onClick={() => onFormChange({ finalFormat: 'mp3' })}
           >
             MP3
           </button>
           <button
             type="button"
-            className={form.final_format === 'm4a' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
-            onClick={() => onFormChange({ final_format: 'm4a' })}
+            className={form.finalFormat === 'm4a' ? styles.llmToggleBtnActive : styles.llmToggleBtn}
+            onClick={() => onFormChange({ finalFormat: 'm4a' })}
           >
             M4A
           </button>

@@ -135,6 +135,116 @@
   margin: 0.25rem 0 0;
 }
 
+.exampleBtn {
+  margin-top: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.exampleBtn:hover {
+  background: rgba(0, 212, 170, 0.1);
+}
+
+.ssoBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.ssoBlock:first-of-type {
+  margin-top: 0;
+}
+
+.ssoBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ssoBlockTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.addProviderBtn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.addProviderBtn:hover {
+  background: rgba(0, 212, 170, 0.1);
+}
+
+.ssoEmpty {
+  margin: 0;
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.providerCard {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.providerCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--bg-muted, rgba(255, 255, 255, 0.05));
+  border-bottom: 1px solid var(--border);
+}
+
+.providerCardLabel {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.deleteProviderBtn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--error);
+  background: transparent;
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.deleteProviderBtn:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.providerCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
 .modelName {
   padding: 0.125rem 0.375rem;
   border-radius: 4px;

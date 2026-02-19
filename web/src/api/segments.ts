@@ -33,7 +33,7 @@ export function addReusableSegment(episodeId: string, reusableAssetId: string, n
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-    body: JSON.stringify({ type: 'reusable', reusable_asset_id: reusableAssetId, name: name ?? undefined }),
+    body: JSON.stringify({ type: 'reusable', reusableAssetId, name: name ?? undefined }),
   }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
     return r.json();
@@ -45,7 +45,7 @@ export function reorderSegments(episodeId: string, segmentIds: string[]): Promis
     method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
-    body: JSON.stringify({ segment_ids: segmentIds }),
+    body: JSON.stringify({ segmentIds }),
   }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
     return r.json();
@@ -94,7 +94,7 @@ export function fetchSegmentWaveformsBulk(
   segmentIds: string[],
 ): Promise<{ waveforms: Record<string, { data?: number[] }> }> {
   if (segmentIds.length === 0) return Promise.resolve({ waveforms: {} });
-  if (segmentIds.length > 10) throw new Error('max 10 segment_ids');
+  if (segmentIds.length > 10) throw new Error('max 10 segment IDs');
   return fetch(`${BASE}/episodes/${episodeId}/segments/waveforms-bulk`, {
     method: 'POST',
     credentials: 'include',
@@ -197,9 +197,9 @@ export function deleteSegmentTranscript(episodeId: string, segmentId: string, en
 }
 
 export function trimSegmentAudio(episodeId: string, segmentId: string, startSec?: number, endSec?: number): Promise<void> {
-  const body: { start_sec?: number; end_sec?: number } = {};
-  if (startSec !== undefined) body.start_sec = startSec;
-  if (endSec !== undefined) body.end_sec = endSec;
+  const body: { startSec?: number; endSec?: number } = {};
+  if (startSec !== undefined) body.startSec = startSec;
+  if (endSec !== undefined) body.endSec = endSec;
   return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/trim`, {
     method: 'POST',
     credentials: 'include',
@@ -211,9 +211,9 @@ export function trimSegmentAudio(episodeId: string, segmentId: string, startSec?
 }
 
 export function removeSilenceFromSegment(episodeId: string, segmentId: string, thresholdSeconds?: number, silenceThreshold?: number): Promise<void> {
-  const body: { threshold_seconds?: number; silence_threshold?: number } = {};
-  if (thresholdSeconds !== undefined) body.threshold_seconds = thresholdSeconds;
-  if (silenceThreshold !== undefined) body.silence_threshold = silenceThreshold;
+  const body: { thresholdSeconds?: number; silenceThreshold?: number } = {};
+  if (thresholdSeconds !== undefined) body.thresholdSeconds = thresholdSeconds;
+  if (silenceThreshold !== undefined) body.silenceThreshold = silenceThreshold;
   return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/remove-silence`, {
     method: 'POST',
     credentials: 'include',

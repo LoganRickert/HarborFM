@@ -32,9 +32,9 @@ export interface GenerateFinalBarProps {
   error?: string | null;
   /** When false, the Generate Transcript button is disabled (grayed out). */
   canGenerateTranscript?: boolean;
-  /** Chapter markers for the final waveform (from episode.final_markers). */
+  /** Chapter markers for the final waveform (from episode.finalMarkers). */
   finalMarkers?: Array<{ time: number; title?: string; color?: string }>;
-  /** Called when user edits chapters (add/edit/delete). Parent should PATCH episode with final_markers. */
+  /** Called when user edits chapters (add/edit/delete). Parent should PATCH episode with finalMarkers. */
   onMarkersChange?: (markers: Array<{ time: number; title?: string; color?: string }>) => void;
 }
 

@@ -38,6 +38,18 @@ import * as m036 from "./migrations/036_episodes_final_markers.js";
 import * as m037 from "./migrations/037_two_factor_auth.js";
 import * as m038 from "./migrations/038_password_reset_token_hash.js";
 import * as m039 from "./migrations/039_paths_to_relative.js";
+import * as m040 from "./migrations/040_sso_user_identities.js";
+import * as m041 from "./migrations/041_sso_oauth_state.js";
+import * as m042 from "./migrations/042_sso_oauth_state_nonce.js";
+import * as m043 from "./migrations/043_sso_saml_state.js";
+import * as m044 from "./migrations/044_sso_saml_cache.js";
+import * as m045 from "./migrations/045_username_user_nanoid.js";
+import * as m046 from "./migrations/046_profile_update_rate_limit.js";
+import * as m047 from "./migrations/047_pending_email.js";
+import * as m048 from "./migrations/048_email_verification_token_hash.js";
+import * as m049 from "./migrations/049_password_reset_totp_attempts.js";
+import * as m050 from "./migrations/050_auth_2fa_totp_secret_hash.js";
+import * as m051 from "./migrations/051_api_keys_max_per_user_trigger.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -79,6 +91,18 @@ const migrations = [
   { name: "037_two_factor_auth", ...m037 },
   { name: "038_password_reset_token_hash", ...m038 },
   { name: "039_paths_to_relative", ...m039 },
+  { name: "040_sso_user_identities", ...m040 },
+  { name: "041_sso_oauth_state", ...m041 },
+  { name: "042_sso_oauth_state_nonce", ...m042 },
+  { name: "043_sso_saml_state", ...m043 },
+  { name: "044_sso_saml_cache", ...m044 },
+  { name: "045_username_user_nanoid", ...m045 },
+  { name: "046_profile_update_rate_limit", ...m046 },
+  { name: "047_pending_email", ...m047 },
+  { name: "048_email_verification_token_hash", ...m048 },
+  { name: "049_password_reset_totp_attempts", ...m049 },
+  { name: "050_auth_2fa_totp_secret_hash", ...m050 },
+  { name: "051_api_keys_max_per_user_trigger", ...m051 },
 ];
 
 const MIGRATIONS_TABLE = `

@@ -1,10 +1,19 @@
+import { and, eq, exists, or, sql } from "drizzle-orm";
 import {
   ROLE_MIN_EDIT_SEGMENTS,
   ROLE_MIN_EDIT_METADATA,
   ROLE_MIN_MANAGE_COLLABORATORS,
 } from "../config.js";
 import type { ShareRole } from "../utils/roles.js";
-import { db } from "../db/index.js";
+import { drizzleDb } from "../db/index.js";
+import {
+  episodes,
+  episodeSegments,
+  podcasts,
+  podcastShares,
+  reusableAssets,
+  users,
+} from "../db/schema.js";
 
 /** Known share roles (string; new roles can be added in code). */
 export const KNOWN_ROLES = new Set<string>(["view", "editor", "manager"]);
@@ -20,9 +29,12 @@ const ROLE_ORDER: Record<string, number> = {
  * (e.g. allow admin to access any podcast/episode).
  */
 export function isAdmin(userId: string): boolean {
-  const user = db.prepare("SELECT role FROM users WHERE id = ?").get(userId) as
-    | { role: string }
-    | undefined;
+  const user = drizzleDb
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+    .get();
   return user?.role === "admin";
 }
 
@@ -34,16 +46,25 @@ export function getPodcastRole(
   userId: string,
   podcastId: string,
 ): string | null {
-  const ownerRow = db
-    .prepare("SELECT id FROM podcasts WHERE id = ? AND owner_user_id = ?")
-    .get(podcastId, userId);
+  const ownerRow = drizzleDb
+    .select({ id: podcasts.id })
+    .from(podcasts)
+    .where(and(eq(podcasts.id, podcastId), eq(podcasts.ownerUserId, userId)))
+    .limit(1)
+    .get();
   if (ownerRow) return "owner";
   if (isAdmin(userId)) return "owner";
-  const share = db
-    .prepare(
-      "SELECT role FROM podcast_shares WHERE podcast_id = ? AND user_id = ?",
+  const share = drizzleDb
+    .select({ role: podcastShares.role })
+    .from(podcastShares)
+    .where(
+      and(
+        eq(podcastShares.podcastId, podcastId),
+        eq(podcastShares.userId, userId),
+      ),
     )
-    .get(podcastId, userId) as { role: string } | undefined;
+    .limit(1)
+    .get();
   return share?.role ?? null;
 }
 
@@ -70,17 +91,24 @@ export function canAccessEpisode(
   options?: { includeEpisode?: boolean },
 ): CanAccessEpisodeResult | null {
   const includeEpisode = options?.includeEpisode === true;
-  const episodeRow = db
-    .prepare(
-      includeEpisode
-        ? "SELECT * FROM episodes WHERE id = ?"
-        : "SELECT podcast_id FROM episodes WHERE id = ?",
-    )
-    .get(episodeId) as
-    | ({ podcast_id: string } & Record<string, unknown>)
-    | undefined;
+  const episodeRow = includeEpisode
+    ? drizzleDb
+        .select()
+        .from(episodes)
+        .where(eq(episodes.id, episodeId))
+        .limit(1)
+        .get()
+    : drizzleDb
+        .select({ podcast_id: episodes.podcastId })
+        .from(episodes)
+        .where(eq(episodes.id, episodeId))
+        .limit(1)
+        .get();
   if (!episodeRow) return null;
-  const podcastId = episodeRow.podcast_id;
+  const podcastId =
+    "podcastId" in episodeRow
+      ? episodeRow.podcastId
+      : (episodeRow as { podcast_id: string }).podcast_id;
   const role = getPodcastRole(userId, podcastId);
   if (role === null) return null;
   return {
@@ -146,27 +174,47 @@ export function canEditDnsSettings(userId: string, podcastId: string): boolean {
  * Allowed: admin, owner of asset, global asset, or asset used in a podcast the user has view+ access to.
  */
 export function canReadLibraryAsset(userId: string, assetId: string): boolean {
-  const asset = db
-    .prepare(
-      "SELECT owner_user_id, COALESCE(global_asset, 0) AS global_asset FROM reusable_assets WHERE id = ?",
-    )
-    .get(assetId) as
-    | { owner_user_id: string; global_asset: number }
-    | undefined;
+  const asset = drizzleDb
+    .select({
+      owner_user_id: reusableAssets.ownerUserId,
+      global_asset: sql<number>`COALESCE(${reusableAssets.globalAsset}, 0)`.as(
+        "global_asset",
+      ),
+    })
+    .from(reusableAssets)
+    .where(eq(reusableAssets.id, assetId))
+    .limit(1)
+    .get();
   if (!asset) return false;
   if (isAdmin(userId)) return true;
   if (asset.owner_user_id === userId) return true;
   if (asset.global_asset === 1) return true;
-  const usedInAccessiblePodcast = db
-    .prepare(
-      `SELECT 1 FROM episode_segments es
-       JOIN episodes e ON e.id = es.episode_id
-       JOIN podcasts p ON p.id = e.podcast_id
-       WHERE es.reusable_asset_id = ?
-         AND (p.owner_user_id = ? OR EXISTS (SELECT 1 FROM podcast_shares WHERE podcast_id = p.id AND user_id = ?))
-       LIMIT 1`,
+  const usedInAccessiblePodcast = drizzleDb
+    .select({ one: sql`1` })
+    .from(episodeSegments)
+    .innerJoin(episodes, eq(episodes.id, episodeSegments.episodeId))
+    .innerJoin(podcasts, eq(podcasts.id, episodes.podcastId))
+    .where(
+      and(
+        eq(episodeSegments.reusableAssetId, assetId),
+        or(
+          eq(podcasts.ownerUserId, userId),
+          exists(
+            drizzleDb
+              .select()
+              .from(podcastShares)
+              .where(
+                and(
+                  eq(podcastShares.podcastId, podcasts.id),
+                  eq(podcastShares.userId, userId),
+                ),
+              ),
+          ),
+        ),
+      ),
     )
-    .get(assetId, userId, userId);
+    .limit(1)
+    .get();
   return !!usedInAccessiblePodcast;
 }
 
@@ -179,31 +227,42 @@ export function canUseAssetInSegment(
   assetId: string,
   podcastId: string,
 ): boolean {
-  const asset = db
-    .prepare(
-      "SELECT owner_user_id, COALESCE(global_asset, 0) AS global_asset FROM reusable_assets WHERE id = ?",
-    )
-    .get(assetId) as
-    | { owner_user_id: string; global_asset: number }
-    | undefined;
+  const asset = drizzleDb
+    .select({
+      owner_user_id: reusableAssets.ownerUserId,
+      global_asset: sql<number>`COALESCE(${reusableAssets.globalAsset}, 0)`.as(
+        "global_asset",
+      ),
+    })
+    .from(reusableAssets)
+    .where(eq(reusableAssets.id, assetId))
+    .limit(1)
+    .get();
   if (!asset) return false;
   if (asset.owner_user_id === userId) return true;
   if (asset.global_asset === 1) return true;
-  const alreadyUsed = db
-    .prepare(
-      `SELECT 1 FROM episode_segments es
-       JOIN episodes e ON e.id = es.episode_id
-       WHERE es.reusable_asset_id = ? AND e.podcast_id = ?
-       LIMIT 1`,
+  const alreadyUsed = drizzleDb
+    .select({ one: sql`1` })
+    .from(episodeSegments)
+    .innerJoin(episodes, eq(episodes.id, episodeSegments.episodeId))
+    .where(
+      and(
+        eq(episodeSegments.reusableAssetId, assetId),
+        eq(episodes.podcastId, podcastId),
+      ),
     )
-    .get(assetId, podcastId);
+    .limit(1)
+    .get();
   return !!alreadyUsed;
 }
 
 /** Returns the podcast owner's user id (for storage accounting). */
 export function getPodcastOwnerId(podcastId: string): string | undefined {
-  const row = db
-    .prepare("SELECT owner_user_id FROM podcasts WHERE id = ?")
-    .get(podcastId) as { owner_user_id: string } | undefined;
+  const row = drizzleDb
+    .select({ owner_user_id: podcasts.ownerUserId })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get();
   return row?.owner_user_id;
 }

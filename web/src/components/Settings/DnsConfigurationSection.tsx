@@ -6,7 +6,7 @@ import styles from '../../pages/Settings.module.css';
 
 const CLOUDFLARE_API_TOKENS_URL = 'https://dash.cloudflare.com/profile/api-tokens';
 
-const DNS_PROVIDER_OPTIONS: ProviderOption<AppSettings['dns_provider']>[] = [
+const DNS_PROVIDER_OPTIONS: ProviderOption<AppSettings['dnsProvider']>[] = [
   { value: 'none', label: 'None' },
   { value: 'cloudflare', label: 'CloudFlare' },
 ];
@@ -31,8 +31,8 @@ function formatDomainsList(arr: string[]): string {
 
 export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProps) {
   const domainsList = parseDomainsList(
-    typeof form.dns_default_allow_domains === 'string'
-      ? form.dns_default_allow_domains
+    typeof form.dnsDefaultAllowDomains === 'string'
+      ? form.dnsDefaultAllowDomains
       : '[]',
   );
 
@@ -44,8 +44,8 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
       <label className="toggle">
         <input
           type="checkbox"
-          checked={form.dns_allow_linking_domain}
-          onChange={(e) => onFormChange({ dns_allow_linking_domain: e.target.checked })}
+          checked={form.dnsAllowLinkingDomain}
+          onChange={(e) => onFormChange({ dnsAllowLinkingDomain: e.target.checked })}
         />
         <span className="toggle__track" aria-hidden="true" />
         <span>Allow Linking Domain</span>
@@ -57,9 +57,9 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
       <div className={styles.label}>
         Provider
         <ProviderToggle
-          value={form.dns_provider}
+          value={form.dnsProvider}
           options={DNS_PROVIDER_OPTIONS}
-          onChange={(value) => onFormChange({ dns_provider: value })}
+          onChange={(value) => onFormChange({ dnsProvider: value })}
           ariaLabel="DNS provider"
         />
       </div>
@@ -67,16 +67,16 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
         Choose how custom domains are set up. &quot;None&quot; turns off automatic DNS. &quot;CloudFlare&quot; lets HarborFM create or update DNS records in your CloudFlare account so custom domains work.
       </p>
 
-      {form.dns_provider === 'cloudflare' && (
+      {form.dnsProvider === 'cloudflare' && (
         <>
           <label className={styles.label}>
             Provider API Token
             <input
               type="password"
               className={styles.input}
-              placeholder={form.dns_provider_api_token_set ? '(saved)' : 'Enter API token'}
-              value={form.dns_provider_api_token ?? ''}
-              onChange={(e) => onFormChange({ dns_provider_api_token: e.target.value })}
+              placeholder={form.dnsProviderApiTokenSet ? '(saved)' : 'Enter API token'}
+              value={form.dnsProviderApiToken ?? ''}
+              onChange={(e) => onFormChange({ dnsProviderApiToken: e.target.value })}
               autoComplete="off"
             />
             <p className={styles.inputHelp}>
@@ -87,8 +87,8 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <label className="toggle">
             <input
               type="checkbox"
-              checked={form.dns_use_cname}
-              onChange={(e) => onFormChange({ dns_use_cname: e.target.checked })}
+              checked={form.dnsUseCname}
+              onChange={(e) => onFormChange({ dnsUseCname: e.target.checked })}
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Use CNAME</span>
@@ -96,15 +96,15 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <p className={styles.inputHelp}>
             When on, HarborFM creates a CNAME record pointing your custom domain to this server. Turn off if your host or network requires an A record (a numeric IP) instead.
           </p>
-          {!form.dns_use_cname && (
+          {!form.dnsUseCname && (
             <label className={styles.label}>
               Server IP for A Record
               <input
                 type="text"
                 className={styles.input}
                 placeholder="e.g. 192.0.2.1"
-                value={form.dns_a_record_ip ?? ''}
-                onChange={(e) => onFormChange({ dns_a_record_ip: e.target.value })}
+                value={form.dnsARecordIp ?? ''}
+                onChange={(e) => onFormChange({ dnsARecordIp: e.target.value })}
                 autoComplete="off"
               />
               <p className={styles.inputHelp}>
@@ -115,8 +115,8 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <label className="toggle">
             <input
               type="checkbox"
-              checked={form.dns_default_allow_domain}
-              onChange={(e) => onFormChange({ dns_default_allow_domain: e.target.checked })}
+              checked={form.dnsDefaultAllowDomain}
+              onChange={(e) => onFormChange({ dnsDefaultAllowDomain: e.target.checked })}
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Allow Domain</span>
@@ -124,7 +124,7 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <p className={styles.inputHelp}>
             When on, podcast owners can set a &quot;managed domain&quot; (a full domain you allow). You can restrict which domains they can pick using the list below.
           </p>
-          {form.dns_default_allow_domain && (
+          {form.dnsDefaultAllowDomain && (
             <label className={styles.label}>
               Allow Domains
               <input
@@ -134,7 +134,7 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
                 value={formatDomainsList(domainsList)}
                 onChange={(e) =>
                   onFormChange({
-                    dns_default_allow_domains: JSON.stringify(
+                    dnsDefaultAllowDomains: JSON.stringify(
                       e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
                     ),
                   })
@@ -148,8 +148,8 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <label className="toggle">
             <input
               type="checkbox"
-              checked={form.dns_default_allow_custom_key}
-              onChange={(e) => onFormChange({ dns_default_allow_custom_key: e.target.checked })}
+              checked={form.dnsDefaultAllowCustomKey}
+              onChange={(e) => onFormChange({ dnsDefaultAllowCustomKey: e.target.checked })}
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Allow Custom Key</span>
@@ -160,8 +160,8 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <label className="toggle">
             <input
               type="checkbox"
-              checked={form.dns_default_allow_sub_domain}
-              onChange={(e) => onFormChange({ dns_default_allow_sub_domain: e.target.checked })}
+              checked={form.dnsDefaultAllowSubDomain}
+              onChange={(e) => onFormChange({ dnsDefaultAllowSubDomain: e.target.checked })}
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Allow Sub-Domain</span>
@@ -169,15 +169,15 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <p className={styles.inputHelp}>
             When on, podcast owners can use a sub-domain of a shared base domain (e.g. &quot;myshow&quot; under example.com → myshow.example.com). You must set the base domain below.
           </p>
-          {form.dns_default_allow_sub_domain && (
+          {form.dnsDefaultAllowSubDomain && (
             <label className={styles.label}>
               Domain (Required)
               <input
                 type="text"
                 className={styles.input}
                 placeholder="e.g. example.com"
-                value={form.dns_default_domain}
-                onChange={(e) => onFormChange({ dns_default_domain: e.target.value })}
+                value={form.dnsDefaultDomain}
+                onChange={(e) => onFormChange({ dnsDefaultDomain: e.target.value })}
                 autoComplete="off"
               />
               <p className={styles.inputHelp}>
@@ -188,8 +188,8 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
           <label className="toggle">
             <input
               type="checkbox"
-              checked={form.dns_default_enable_cloudflare_proxy}
-              onChange={(e) => onFormChange({ dns_default_enable_cloudflare_proxy: e.target.checked })}
+              checked={form.dnsDefaultEnableCloudflareProxy}
+              onChange={(e) => onFormChange({ dnsDefaultEnableCloudflareProxy: e.target.checked })}
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Enable CloudFlare Proxy</span>

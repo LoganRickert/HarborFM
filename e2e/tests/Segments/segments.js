@@ -16,22 +16,22 @@ export async function run({ runOne }) {
   );
 
   results.push(
-    await runOne('PATCH segment trim_ranges and markers persists', async () => {
+    await runOne('PATCH segment trimRanges and markers persists', async () => {
       const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Patch Seg Ep', status: 'draft' });
       const seg = await addRecordedSegment(jar, patchEp.id);
-      const durationSec = seg.duration_sec ?? 60;
+      const durationSec = seg.durationSec ?? 60;
       const trimRanges = [[1, Math.min(5, durationSec - 0.1)]];
       const markers = [{ time: Math.min(2, durationSec), title: 'Intro' }];
 
       const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trim_ranges: trimRanges, markers }),
+        body: JSON.stringify({ trimRanges, markers }),
       }, jar);
       if (res.status !== 200) throw new Error(`PATCH segment failed: ${res.status} ${await res.text()}`);
       const patched = await res.json();
-      if (JSON.stringify(patched.trim_ranges) !== JSON.stringify(trimRanges)) {
-        throw new Error(`trim_ranges: expected ${JSON.stringify(trimRanges)}, got ${JSON.stringify(patched.trim_ranges)}`);
+      if (JSON.stringify(patched.trimRanges) !== JSON.stringify(trimRanges)) {
+        throw new Error(`trimRanges: expected ${JSON.stringify(trimRanges)}, got ${JSON.stringify(patched.trimRanges)}`);
       }
       if (!patched.markers?.length || patched.markers[0].title !== 'Intro') {
         throw new Error(`markers: expected [{ time: 2, title: 'Intro' }], got ${JSON.stringify(patched.markers)}`);
@@ -42,24 +42,24 @@ export async function run({ runOne }) {
       const list = await listRes.json();
       const found = list.segments?.find((s) => s.id === seg.id);
       if (!found) throw new Error('Segment not found after PATCH');
-      if (JSON.stringify(found.trim_ranges) !== JSON.stringify(trimRanges)) {
-        throw new Error(`Persisted trim_ranges: expected ${JSON.stringify(trimRanges)}, got ${JSON.stringify(found.trim_ranges)}`);
+      if (JSON.stringify(found.trimRanges) !== JSON.stringify(trimRanges)) {
+        throw new Error(`Persisted trimRanges: expected ${JSON.stringify(trimRanges)}, got ${JSON.stringify(found.trimRanges)}`);
       }
     })
   );
 
   results.push(
-    await runOne('PATCH segment invalid trim_ranges returns 400', async () => {
+    await runOne('PATCH segment invalid trimRanges returns 400', async () => {
       const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Invalid Trim Ep', status: 'draft' });
       const seg = await addRecordedSegment(jar, patchEp.id);
-      const durationSec = seg.duration_sec ?? 60;
+      const durationSec = seg.durationSec ?? 60;
 
       const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trim_ranges: [[0, durationSec + 10]] }),
+        body: JSON.stringify({ trimRanges: [[0, durationSec + 10]] }),
       }, jar);
-      if (res.status !== 400) throw new Error(`Expected 400 for invalid trim_ranges, got ${res.status}`);
+      if (res.status !== 400) throw new Error(`Expected 400 for invalid trimRanges, got ${res.status}`);
       const data = await res.json();
       if (!data.error) throw new Error('Expected error message in response');
     })
@@ -69,7 +69,7 @@ export async function run({ runOne }) {
     await runOne('PATCH segment invalid markers returns 400', async () => {
       const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Invalid Marker Ep', status: 'draft' });
       const seg = await addRecordedSegment(jar, patchEp.id);
-      const durationSec = seg.duration_sec ?? 60;
+      const durationSec = seg.durationSec ?? 60;
 
       const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
         method: 'PATCH',
@@ -83,22 +83,22 @@ export async function run({ runOne }) {
   );
 
   results.push(
-    await runOne('PATCH episode final_markers persists', async () => {
+    await runOne('PATCH episode finalMarkers persists', async () => {
       const markersEp = await createEpisode(jar, podcast.id, { title: 'E2E Final Markers Ep', status: 'draft' });
       const markers = [{ time: 0, title: 'Start', color: '#ff0000' }];
 
       const res = await apiFetch(`/episodes/${markersEp.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ final_markers: markers }),
+        body: JSON.stringify({ finalMarkers: markers }),
       }, jar);
       if (res.status !== 200) throw new Error(`PATCH episode failed: ${res.status} ${await res.text()}`);
 
       const getRes = await apiFetch(`/episodes/${markersEp.id}`, {}, jar);
       if (getRes.status !== 200) throw new Error(`GET episode failed: ${getRes.status}`);
       const ep = await getRes.json();
-      if (!ep.final_markers?.length || ep.final_markers[0].title !== 'Start') {
-        throw new Error(`final_markers: expected [{ time: 0, title: 'Start', color: '#ff0000' }], got ${JSON.stringify(ep.final_markers)}`);
+      if (!ep.finalMarkers?.length || ep.finalMarkers[0].title !== 'Start') {
+        throw new Error(`finalMarkers: expected [{ time: 0, title: 'Start', color: '#ff0000' }], got ${JSON.stringify(ep.finalMarkers)}`);
       }
     })
   );
@@ -180,7 +180,7 @@ export async function run({ runOne }) {
       res = await apiFetch(`/episodes/${reorderEp.id}/segments/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ segment_ids: reversedIds }),
+        body: JSON.stringify({ segmentIds: reversedIds }),
       }, jar);
       if (res.status !== 200) throw new Error(`Reorder failed: ${res.status} ${await res.text()}`);
       const reorderData = await res.json();

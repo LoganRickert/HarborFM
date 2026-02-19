@@ -11,21 +11,24 @@ import {
   SiTiktok,
   SiYoutube,
 } from 'react-icons/si';
+import type { PublicPodcast } from '../../api/public';
 import styles from './FeedPodcast/PodcastLinks.module.css';
 import sharedStyles from '../../styles/shared.module.css';
 
+type PodcastWithLinks = PublicPodcast | { [key: string]: unknown } | Record<string, string | null | undefined>;
+
 const LINK_KEYS = [
-  'apple_podcasts_url',
-  'spotify_url',
-  'amazon_music_url',
-  'podcast_index_url',
-  'listen_notes_url',
-  'castbox_url',
-  'x_url',
-  'facebook_url',
-  'instagram_url',
-  'tiktok_url',
-  'youtube_url',
+  'applePodcastsUrl',
+  'spotifyUrl',
+  'amazonMusicUrl',
+  'podcastIndexUrl',
+  'listenNotesUrl',
+  'castboxUrl',
+  'xUrl',
+  'facebookUrl',
+  'instagramUrl',
+  'tiktokUrl',
+  'youtubeUrl',
 ] as const;
 
 const PODCAST_PLATFORMS: Array<{
@@ -33,12 +36,12 @@ const PODCAST_PLATFORMS: Array<{
   label: string;
   Icon: React.ComponentType<{ size?: number }>;
 }> = [
-  { key: 'apple_podcasts_url', label: 'Apple Podcasts', Icon: SiApplepodcasts },
-  { key: 'spotify_url', label: 'Spotify', Icon: SiSpotify },
-  { key: 'amazon_music_url', label: 'Amazon Music', Icon: SiAmazonmusic },
-  { key: 'podcast_index_url', label: 'Podcast Index', Icon: SiPodcastindex },
-  { key: 'listen_notes_url', label: 'Listen Notes', Icon: ExternalLink },
-  { key: 'castbox_url', label: 'Castbox', Icon: SiCastbox },
+  { key: 'applePodcastsUrl', label: 'Apple Podcasts', Icon: SiApplepodcasts },
+  { key: 'spotifyUrl', label: 'Spotify', Icon: SiSpotify },
+  { key: 'amazonMusicUrl', label: 'Amazon Music', Icon: SiAmazonmusic },
+  { key: 'podcastIndexUrl', label: 'Podcast Index', Icon: SiPodcastindex },
+  { key: 'listenNotesUrl', label: 'Listen Notes', Icon: ExternalLink },
+  { key: 'castboxUrl', label: 'Castbox', Icon: SiCastbox },
 ];
 
 const SOCIAL_PLATFORMS: Array<{
@@ -46,11 +49,11 @@ const SOCIAL_PLATFORMS: Array<{
   label: string;
   Icon: React.ComponentType<{ size?: number }>;
 }> = [
-  { key: 'x_url', label: 'X', Icon: SiX },
-  { key: 'facebook_url', label: 'Facebook', Icon: SiFacebook },
-  { key: 'instagram_url', label: 'Instagram', Icon: SiInstagram },
-  { key: 'tiktok_url', label: 'TikTok', Icon: SiTiktok },
-  { key: 'youtube_url', label: 'YouTube', Icon: SiYoutube },
+  { key: 'xUrl', label: 'X', Icon: SiX },
+  { key: 'facebookUrl', label: 'Facebook', Icon: SiFacebook },
+  { key: 'instagramUrl', label: 'Instagram', Icon: SiInstagram },
+  { key: 'tiktokUrl', label: 'TikTok', Icon: SiTiktok },
+  { key: 'youtubeUrl', label: 'YouTube', Icon: SiYoutube },
 ];
 
 function LinkGroup({
@@ -60,10 +63,11 @@ function LinkGroup({
 }: {
   label: string;
   platforms: typeof PODCAST_PLATFORMS;
-  podcast: { [key: string]: unknown };
+  podcast: PodcastWithLinks;
 }) {
-  const links = platforms.filter((p) => {
-    const url = podcast[p.key];
+  const p = podcast as Record<string, unknown>;
+  const links = platforms.filter((plat) => {
+    const url = p[plat.key];
     return url && typeof url === 'string' && url.trim().length > 0;
   });
   if (links.length === 0) return null;
@@ -73,7 +77,7 @@ function LinkGroup({
       <span className={styles.linkGroupLabel}>{label}</span>
       <div className={styles.linkGroupIcons}>
         {links.map(({ key, label: platformLabel, Icon }) => {
-          const url = podcast[key] as string | undefined;
+          const url = p[key] as string | undefined;
           if (!url || typeof url !== 'string') return null;
           const href = url.startsWith('http') ? url : `https://${url}`;
           return (
@@ -96,14 +100,15 @@ function LinkGroup({
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function hasPodcastLinks(podcast: { [key: string]: unknown }) {
+export function hasPodcastLinks(podcast: PodcastWithLinks) {
+  const p = podcast as Record<string, unknown>;
   return LINK_KEYS.some((key) => {
-    const url = podcast[key];
+    const url = p[key];
     return url && typeof url === 'string' && url.trim().length > 0;
   });
 }
 
-export function PodcastLinks({ podcast }: { podcast: { [key: string]: unknown } }) {
+export function PodcastLinks({ podcast }: { podcast: PodcastWithLinks }) {
   if (!hasPodcastLinks(podcast)) return null;
 
   return (
@@ -114,7 +119,7 @@ export function PodcastLinks({ podcast }: { podcast: { [key: string]: unknown } 
   );
 }
 
-export function PodcastLinksCard({ podcast }: { podcast: { [key: string]: unknown } }) {
+export function PodcastLinksCard({ podcast }: { podcast: PodcastWithLinks }) {
   if (!hasPodcastLinks(podcast)) return null;
 
   return (

@@ -5,11 +5,11 @@ export interface ContactMessage {
   name: string;
   email: string;
   message: string;
-  created_at: string;
-  podcast_id?: string | null;
-  episode_id?: string | null;
-  podcast_title?: string | null;
-  episode_title?: string | null;
+  createdAt: string;
+  podcastId?: string | null;
+  episodeId?: string | null;
+  podcastTitle?: string | null;
+  episodeTitle?: string | null;
 }
 
 export interface MessagesResponse {

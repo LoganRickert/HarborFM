@@ -33,9 +33,9 @@ export interface TestBlockProps {
 }
 
 export interface GeoliteSectionProps extends SettingsFormProps {
-  geoliteTestMutation: UseMutationResult<{ ok: boolean; error?: string }, Error, { maxmind_account_id: string; maxmind_license_key?: string }, unknown>;
+  geoliteTestMutation: UseMutationResult<{ ok: boolean; error?: string }, Error, { maxmindAccountId: string; maxmindLicenseKey?: string }, unknown>;
   geoliteCheckMutation: UseMutationResult<{ city: boolean; country: boolean } | undefined, Error, void, unknown>;
-  geoliteUpdateMutation: UseMutationResult<{ ok: boolean; error?: string }, Error, { maxmind_account_id: string; maxmind_license_key?: string }, unknown>;
+  geoliteUpdateMutation: UseMutationResult<{ ok: boolean; error?: string }, Error, { maxmindAccountId: string; maxmindLicenseKey?: string }, unknown>;
   onGeoliteTest: () => void;
   onGeoliteCheck: () => void;
   onGeoliteUpdate: () => void;
@@ -56,7 +56,7 @@ export interface TranscriptionSectionProps extends SettingsFormProps {
 export interface LLMSectionProps extends SettingsFormProps {
   testMutation: UseMutationResult<{ ok: boolean; error?: string }, Error, void, unknown>;
   onTest: () => void;
-  onProviderChange: (provider: AppSettings['llm_provider']) => void;
+  onProviderChange: (provider: AppSettings['llmProvider']) => void;
 }
 
 export interface EmailSectionProps extends SettingsFormProps {

@@ -405,6 +405,13 @@ All environment variables supported by the server work the same in Docker. Set t
 | `API_KEY_PREFIX` | `hfm_` | Prefix for API keys |
 | `MAX_API_KEYS_PER_USER` | `5` | Max API keys per user |
 | `FORGOT_PASSWORD_RATE_MINUTES` | `5` | Cooldown (minutes) between password-reset requests per email |
+| `PROFILE_UPDATE_RATE_LIMIT_MINUTES` | `5` | Min interval (minutes) between email/username changes per user |
+| `AUTH_2FA_CHALLENGE_EXPIRY_MINUTES` | `10` | 2FA challenge token validity (minutes) |
+| `AUTH_CHALLENGE_TOKEN_BYTES` | `24` | 2FA challenge token size (bytes) |
+| `JWT_SESSION_EXPIRY_DAYS` | `7` | JWT session expiry (days) |
+| `VERIFICATION_TOKEN_BYTES` | `24` | Email verification token size (bytes) |
+| `VERIFICATION_EXPIRY_HOURS` | `24` | Email verification link validity (hours) |
+| `RESET_TOKEN_BYTES` | `32` | Password reset token size (bytes) |
 | `RESET_TOKEN_EXPIRY_HOURS` | `1` | Password-reset and set-password link validity (hours) |
 | **Login protection** | | |
 | `LOGIN_FAILURE_THRESHOLD` | `3` | Ban after this many failed login attempts in the window |
@@ -422,6 +429,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | **Rate limits** | | |
 | `RATE_LIMIT_MAX` | `100` | Global rate limit: max requests per time window |
 | `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
+| `REGISTRATION_RATE_LIMIT_MAX` | `5` | Max registration requests per IP per minute. Set higher (e.g. 100) for e2e tests. |
 | `RENDER_RATE_LIMIT_WINDOW_MS` | `60000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |
 | **Podcast stats** | | |
 | `STATS_FLUSH_INTERVAL_MS` | `60000` | Podcast stats flush interval (ms) |

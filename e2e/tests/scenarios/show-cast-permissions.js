@@ -11,7 +11,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'E2E Host', role: 'host', is_public: 1 }),
+        body: JSON.stringify({ name: 'E2E Host', role: 'host', isPublic: 1 }),
       }, adminJar);
       if (res.status !== 200 && res.status !== 201) throw new Error(`Expected 200/201, got ${res.status}`);
       const data = await res.json();
@@ -24,7 +24,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'E2E Guest', role: 'guest', is_public: 1 }),
+        body: JSON.stringify({ name: 'E2E Guest', role: 'guest', isPublic: 1 }),
       }, adminJar);
       if (res.status !== 200 && res.status !== 201) throw new Error(`Expected 200/201, got ${res.status}`);
       const data = await res.json();
@@ -51,7 +51,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Mgr Host', role: 'host', is_public: 1 }),
+        body: JSON.stringify({ name: 'Mgr Host', role: 'host', isPublic: 1 }),
       }, jar);
       if (res.status !== 200 && res.status !== 201) throw new Error(`Expected 200/201, got ${res.status}`);
     })
@@ -70,7 +70,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Mgr Guest', role: 'guest', is_public: 1 }),
+        body: JSON.stringify({ name: 'Mgr Guest', role: 'guest', isPublic: 1 }),
       }, jar);
       if (res.status !== 200 && res.status !== 201) throw new Error(`Expected 200/201, got ${res.status}`);
     })
@@ -89,7 +89,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Ed Guest', role: 'guest', is_public: 1 }),
+        body: JSON.stringify({ name: 'Ed Guest', role: 'guest', isPublic: 1 }),
       }, jar);
       if (res.status !== 200 && res.status !== 201) throw new Error(`Expected 200/201, got ${res.status}`);
     })
@@ -108,7 +108,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Ed Host Attempt', role: 'host', is_public: 1 }),
+        body: JSON.stringify({ name: 'Ed Host Attempt', role: 'host', isPublic: 1 }),
       }, jar);
       if (res.status !== 403 && res.status !== 404) throw new Error(`Expected 403 or 404 for editor creating host, got ${res.status}`);
     })
@@ -127,12 +127,12 @@ export async function run({ runOne }) {
       const resHost = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'View Host', role: 'host', is_public: 1 }),
+        body: JSON.stringify({ name: 'View Host', role: 'host', isPublic: 1 }),
       }, jar);
       const resGuest = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'View Guest', role: 'guest', is_public: 1 }),
+        body: JSON.stringify({ name: 'View Guest', role: 'guest', isPublic: 1 }),
       }, jar);
       if (resHost.status !== 403 && resHost.status !== 404) throw new Error(`Expected 403/404 for view creating host, got ${resHost.status}`);
       if (resGuest.status !== 403 && resGuest.status !== 404) throw new Error(`Expected 403/404 for view creating guest, got ${resGuest.status}`);
@@ -154,7 +154,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/episodes/${episode.id}/cast`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cast_ids: [guestCast.id] }),
+        body: JSON.stringify({ castIds: [guestCast.id] }),
       }, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
@@ -175,7 +175,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/episodes/${episode.id}/cast`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cast_ids: [hostCast.id, guestCast.id] }),
+        body: JSON.stringify({ castIds: [hostCast.id, guestCast.id] }),
       }, jar);
       if (res.status !== 403 && res.status !== 404) throw new Error(`Expected 403 or 404 for view assigning cast, got ${res.status}`);
     })

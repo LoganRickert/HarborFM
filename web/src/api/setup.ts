@@ -28,9 +28,9 @@ export function completeSetup(
     email: string;
     password: string;
     hostname: string;
-    registration_enabled: boolean;
-    public_feeds_enabled: boolean;
-    import_pixabay_assets?: boolean;
+    registrationEnabled: boolean;
+    publicFeedsEnabled: boolean;
+    importPixabayAssets?: boolean;
   }
 ) {
   const q = new URLSearchParams({ id });

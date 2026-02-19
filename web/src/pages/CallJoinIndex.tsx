@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Phone } from 'lucide-react';
 import { getCallByCode, getJoinInfo, getActiveSession } from '../api/call';
 import type { ApiError } from '../api/client';
 import { CallJoinHeader } from '../components/CallJoinHeader';
+import { OtpInput } from '../components/OtpInput/OtpInput';
 import styles from './CallJoinIndex.module.css';
 
 export function CallJoinIndex() {
@@ -14,7 +15,6 @@ export function CallJoinIndex() {
   const [alreadyConnected, setAlreadyConnected] = useState(false);
   const [alreadyConnectedEpisodeId, setAlreadyConnectedEpisodeId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const displayError = error ?? urlError;
@@ -25,7 +25,6 @@ export function CallJoinIndex() {
     setAlreadyConnected(false);
     setAlreadyConnectedEpisodeId(null);
     setSubmitting(false);
-    requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
   const clearUrlError = () => {
@@ -89,8 +88,7 @@ export function CallJoinIndex() {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+  const handleCodeChange = (val: string) => {
     setCode(val);
     setError(null);
     setAlreadyConnected(false);
@@ -111,21 +109,16 @@ export function CallJoinIndex() {
             Enter the 4-digit code from the host&apos;s call panel.
           </p>
           <form onSubmit={handleSubmit} className={styles.form}>
-            <input
-              ref={inputRef}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="one-time-code"
-              maxLength={4}
+            <OtpInput
               value={code}
-              onChange={handleInputChange}
-              className={styles.codeInput}
-              placeholder="0000"
-              aria-label="4-digit join code"
-              aria-invalid={!!displayError}
-              aria-describedby={displayError ? 'join-call-error' : undefined}
+              onChange={handleCodeChange}
+              length={4}
               disabled={submitting}
+              error={!!displayError}
+              autoComplete="one-time-code"
+              autoFocus
+              ariaLabel="4-digit join code"
+              ariaDescribedBy={displayError ? 'join-call-error' : undefined}
             />
             {alreadyConnected && (
               <div className={styles.infoCard} role="status">

@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { X, Phone } from 'lucide-react';
 import { getCallByCode, getJoinInfo, getActiveSession } from '../../api/call';
 import type { ApiError } from '../../api/client';
+import { OtpInput } from '../OtpInput/OtpInput';
 import styles from './JoinCallDialog.module.css';
 
 export interface JoinCallDialogProps {
@@ -16,7 +17,6 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
   const [alreadyConnected, setAlreadyConnected] = useState(false);
   const [alreadyConnectedEpisodeId, setAlreadyConnectedEpisodeId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,7 +26,6 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
       setAlreadyConnected(false);
       setAlreadyConnectedEpisodeId(null);
       setSubmitting(false);
-      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
 
@@ -77,8 +76,7 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+  const handleCodeChange = (val: string) => {
     setCode(val);
     setError(null);
     setAlreadyConnected(false);
@@ -116,21 +114,16 @@ export function JoinCallDialog({ open, onOpenChange }: JoinCallDialogProps) {
           Enter the 4-digit code from the host&apos;s call panel.
         </p>
         <form onSubmit={handleSubmit} className={styles.form}>
-          <input
-            ref={inputRef}
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            autoComplete="one-time-code"
-            maxLength={4}
+          <OtpInput
             value={code}
-            onChange={handleInputChange}
-            className={styles.codeInput}
-            placeholder="0000"
-            aria-label="4-digit join code"
-            aria-invalid={!!error}
-            aria-describedby={error ? 'join-call-error' : undefined}
+            onChange={handleCodeChange}
+            length={4}
             disabled={submitting}
+            error={!!error}
+            autoComplete="one-time-code"
+            autoFocus
+            ariaLabel="4-digit join code"
+            ariaDescribedBy={error ? 'join-call-error' : undefined}
           />
           {alreadyConnected && (
             <div className={styles.infoCard} role="status">

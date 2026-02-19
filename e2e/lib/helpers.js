@@ -80,9 +80,9 @@ export async function completeSetup(opts = {}) {
       email,
       password,
       hostname: opts.hostname || 'http://localhost:3099',
-      registration_enabled: opts.registration_enabled !== false,
-      public_feeds_enabled: opts.public_feeds_enabled !== false,
-      import_pixabay_assets: false,
+      registrationEnabled: opts.registrationEnabled !== false,
+      publicFeedsEnabled: opts.publicFeedsEnabled !== false,
+      importPixabayAssets: false,
     }),
   });
   if (!res.ok) {
@@ -142,9 +142,9 @@ export async function apiFetch(path, options = {}, jar) {
 
 /**
  * GET /public/config with optional host override (simulates request from that host).
- * Use for testing custom_feed_slug when Host matches a podcast's link_domain.
+ * Use for testing customFeedSlug when Host matches a podcast's linkDomain.
  * @param {string} [hostOverride] - e.g. 'asdf.warpfusion.app'; sets X-Forwarded-Host.
- * @returns {Promise<{ public_feeds_enabled: boolean, custom_feed_slug?: string }>}
+ * @returns {Promise<{ publicFeedsEnabled: boolean, customFeedSlug?: string }>}
  */
 export async function getPublicConfig(hostOverride) {
   const headers = {};

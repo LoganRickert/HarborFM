@@ -2,28 +2,47 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { TWO_FACTOR_METHODS, parseTwoFactorMethods, isMethodAllowed } from '@harborfm/shared';
+import { OtpInput } from '../components/OtpInput/OtpInput';
 import { setup2FA, confirm2FASetup, send2FAEmailCode } from '../api/auth';
 import { setupStatus } from '../api/setup';
 import { useAuthStore } from '../store/auth';
 import styles from './Auth.module.css';
 
-const CHALLENGE_TOKEN_KEY = 'harborfm-2fa-challenge-token';
+const METHODS_KEY = 'harborfm-2fa-methods';
+
+function getInitialMethods(): string[] | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const methodsFromUrl = params.get('methods')?.trim();
+    if (methodsFromUrl) {
+      const methods = methodsFromUrl.split(',').map((m) => m.trim()).filter(Boolean);
+      sessionStorage.setItem(METHODS_KEY, JSON.stringify(methods));
+      const url = new URL(window.location.href);
+      url.searchParams.delete('methods');
+      window.history.replaceState({}, '', url.pathname + url.search);
+      return methods;
+    }
+    const stored = sessionStorage.getItem(METHODS_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as unknown;
+      if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+        return parsed as string[];
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 export function Login2FASetup() {
   const navigate = useNavigate();
-  const token = useState(() => {
-    try {
-      return sessionStorage.getItem(CHALLENGE_TOKEN_KEY);
-    } catch {
-      return null;
-    }
-  })[0];
+  const initialMethods = useState(getInitialMethods)[0];
   const setUser = useAuthStore((s) => s.setUser);
 
   const [step, setStep] = useState<'choose' | 'totp' | 'email'>('choose');
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
-  const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
 
@@ -35,36 +54,37 @@ export function Login2FASetup() {
   const allowedMethods = parseTwoFactorMethods(setup?.twoFactorMethods);
   const emailConfigured = Boolean(setup?.emailConfigured);
 
+  const restrictedMethods = initialMethods;
+
   const availableMethods = TWO_FACTOR_METHODS.filter((m) => {
+    if (restrictedMethods && !restrictedMethods.includes(m.id)) return false;
     if (!isMethodAllowed(allowedMethods, m.id)) return false;
     if (m.requiresProvider === 'email') return emailConfigured;
     return true;
   });
 
   useEffect(() => {
-    if (!token?.trim()) {
+    if (!restrictedMethods?.length) {
       navigate('/login', { replace: true });
     }
-  }, [token, navigate]);
+  }, [restrictedMethods, navigate]);
 
-  const clearChallengeToken = () => {
+  const clearMethods = () => {
     try {
-      sessionStorage.removeItem(CHALLENGE_TOKEN_KEY);
+      sessionStorage.removeItem(METHODS_KEY);
     } catch {
-      // ignore
+      /* ignore */
     }
   };
 
   const setupMutation = useMutation({
-    mutationFn: (method: 'totp' | 'email') => setup2FA(token!, method),
+    mutationFn: (method: 'totp' | 'email') => setup2FA(method),
     onSuccess: (data, method) => {
-      if (method === 'totp' && data.qrDataUrl && data.secret && data.challengeToken) {
+      if (method === 'totp' && data.qrDataUrl && data.secret) {
         setQrDataUrl(data.qrDataUrl);
         setSecret(data.secret);
-        setChallengeToken(data.challengeToken);
         setStep('totp');
       } else if (method === 'email') {
-        setChallengeToken(data.challengeToken ?? token);
         setStep('email');
         setResendCooldown(60);
         const id = setInterval(() => {
@@ -73,24 +93,23 @@ export function Login2FASetup() {
         setTimeout(() => clearInterval(id), 60_000);
       }
     },
+    onError: () => {
+      navigate('/login', { replace: true });
+    },
   });
 
   const confirmMutation = useMutation({
     mutationFn: () =>
-      confirm2FASetup(
-        challengeToken ?? token!,
-        code,
-        step === 'totp' ? secret ?? undefined : undefined
-      ),
+      confirm2FASetup(code, step === 'totp' ? secret ?? undefined : undefined),
     onSuccess: (data) => {
-      clearChallengeToken();
+      clearMethods();
       setUser(data.user);
       navigate('/', { replace: true });
     },
   });
 
   const resendMutation = useMutation({
-    mutationFn: () => send2FAEmailCode(challengeToken ?? token!),
+    mutationFn: () => send2FAEmailCode(),
     onSuccess: () => {
       setResendCooldown(30);
       const id = setInterval(() => {
@@ -106,7 +125,7 @@ export function Login2FASetup() {
     confirmMutation.mutate();
   }
 
-  if (!token?.trim()) {
+  if (!restrictedMethods?.length) {
     return null;
   }
 
@@ -168,22 +187,19 @@ export function Login2FASetup() {
                   </p>
                 </div>
               )}
-              <label className={styles.label}>
-                Code
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                  className={styles.input}
-                  placeholder="000000"
-                  autoFocus
-                />
-              </label>
+              <OtpInput
+                value={code}
+                onChange={setCode}
+                length={6}
+                disabled={confirmMutation.isPending}
+                error={!!confirmMutation.isError}
+                label="Code"
+                autoComplete="one-time-code"
+                ariaLabel="6-digit verification code"
+                ariaDescribedBy={confirmMutation.isError ? 'login2fa-setup-error' : undefined}
+              />
               {confirmMutation.isError && (
-                <div className={styles.verificationCardError} role="alert">
+                <div id="login2fa-setup-error" className={styles.verificationCardError} role="alert">
                   <p className={styles.verificationCardErrorText}>
                     {confirmMutation.error?.message}
                   </p>
@@ -212,7 +228,7 @@ export function Login2FASetup() {
                   {resendCooldown > 0 ? `Send code (${resendCooldown}s)` : 'Send code'}
                 </button>
               )}
-              <Link to="/login" className={styles.footerActionLink} style={{ display: 'block', marginTop: '0.5rem' }}>
+              <Link to="/login" className={styles.footerActionLink} style={{ display: 'block', marginTop: '0.5rem', textAlign: 'center' }}>
                 Back to sign in
               </Link>
             </form>

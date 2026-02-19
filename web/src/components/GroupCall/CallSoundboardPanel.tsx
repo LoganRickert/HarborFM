@@ -41,7 +41,7 @@ function SoundboardItem({
   onSeek: (time: number) => void;
 }) {
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
-  const durationSec = asset.duration_sec ?? 0;
+  const durationSec = asset.durationSec ?? 0;
 
   useEffect(() => {
     if (durationSec <= 0) {
@@ -162,13 +162,13 @@ export function CallSoundboardPanel({
     const assets = data?.assets ?? [];
     const q = searchQuery.trim().toLowerCase();
     let list = assets.filter((a) => {
-      if ((a.duration_sec ?? 0) <= 0) return false;
+      if ((a.durationSec ?? 0) <= 0) return false;
       if (q && !a.name.toLowerCase().includes(q)) return false;
       return true;
     });
     list = [...list].sort((a, b) => {
-      const ta = new Date(a.created_at ?? 0).getTime();
-      const tb = new Date(b.created_at ?? 0).getTime();
+      const ta = new Date(a.createdAt ?? 0).getTime();
+      const tb = new Date(b.createdAt ?? 0).getTime();
       return tb - ta; // newest first
     });
     return list;
@@ -253,7 +253,7 @@ export function CallSoundboardPanel({
   function handlePlay(asset: LibraryAsset) {
     onPlayAttempt?.();
     const now = Date.now();
-    const durationSec = asset.duration_sec ?? 0;
+    const durationSec = asset.durationSec ?? 0;
 
     if (playingId === asset.id) {
       transitioningToAssetIdRef.current = null;
@@ -321,7 +321,7 @@ export function CallSoundboardPanel({
   }
 
   function handleSeek(asset: LibraryAsset, time: number) {
-    const durationSec = asset.duration_sec ?? 0;
+    const durationSec = asset.durationSec ?? 0;
     const seekTime = Math.max(0, Math.min(time, durationSec));
 
     if (playingId === asset.id) {

@@ -81,8 +81,8 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
       return true;
     });
     list = [...list].sort((a, b) => {
-      const ta = new Date(a.created_at).getTime();
-      const tb = new Date(b.created_at).getTime();
+      const ta = new Date(a.createdAt).getTime();
+      const tb = new Date(b.createdAt).getTime();
       return sortNewestFirst ? tb - ta : ta - tb;
     });
     return list;
@@ -287,8 +287,8 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
                         {asset.tag && <span className={styles.libraryItemTag}>{asset.tag}</span>}
                       </div>
                       <div className={styles.libraryItemMeta}>
-                        {formatDuration(asset.duration_sec)}
-                        <span className={styles.libraryItemDate}> · {formatLibraryDate(asset.created_at)}</span>
+                        {formatDuration(asset.durationSec)}
+                        <span className={styles.libraryItemDate}> · {formatLibraryDate(asset.createdAt)}</span>
                       </div>
                     </div>
                   </li>

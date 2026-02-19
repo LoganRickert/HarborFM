@@ -124,7 +124,7 @@ export function SubscriberTokensSection({
   const atTokenLimit = effectiveMaxSubscriberTokens != null && effectiveMaxSubscriberTokens > 0 && allTokensCount >= effectiveMaxSubscriberTokens;
 
   const enableMutation = useMutation({
-    mutationFn: () => updatePodcast(podcastId, { subscriber_only_feed_enabled: 1 }),
+    mutationFn: () => updatePodcast(podcastId, { subscriberOnlyFeedEnabled: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['podcast', podcastId] });
     },

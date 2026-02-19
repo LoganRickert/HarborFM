@@ -7,7 +7,7 @@ export class CollaboratorApiError extends Error {
   constructor(
     message: string,
     public status: number,
-    public data?: { code?: string; email?: string; error?: string }
+    public data?: { code?: string; email?: string; error?: string; canInviteToPlatform?: boolean }
   ) {
     super(message);
     this.name = 'CollaboratorApiError';
@@ -18,92 +18,92 @@ const BASE = '/api';
 
 export interface Podcast {
   id: string;
-  owner_user_id: string;
+  ownerUserId: string;
   title: string;
   slug: string;
   description: string;
   subtitle: string | null;
   summary: string | null;
   language: string;
-  author_name: string;
-  owner_name: string;
+  authorName: string;
+  ownerName: string;
   email: string;
-  category_primary: string;
-  category_secondary: string | null;
-  category_primary_two: string | null;
-  category_secondary_two: string | null;
-  category_primary_three: string | null;
-  category_secondary_three: string | null;
+  categoryPrimary: string;
+  categorySecondary: string | null;
+  categoryPrimaryTwo: string | null;
+  categorySecondaryTwo: string | null;
+  categoryPrimaryThree: string | null;
+  categorySecondaryThree: string | null;
   explicit: number;
-  artwork_path: string | null;
-  artwork_filename: string | null;
-  artwork_url: string | null;
-  site_url: string | null;
+  artworkPath: string | null;
+  artworkFilename: string | null;
+  artworkUrl: string | null;
+  siteUrl: string | null;
   copyright: string | null;
-  podcast_guid: string | null;
+  podcastGuid: string | null;
   locked: number;
   license: string | null;
-  itunes_type: 'episodic' | 'serial';
+  itunesType: 'episodic' | 'serial';
   medium: 'podcast' | 'music' | 'video' | 'film' | 'audiobook' | 'newsletter' | 'blog';
-  funding_url: string | null;
-  funding_label: string | null;
+  fundingUrl: string | null;
+  fundingLabel: string | null;
   persons: string | null;
-  update_frequency_rrule: string | null;
-  update_frequency_label: string | null;
-  spotify_recent_count: number | null;
-  spotify_country_of_origin: string | null;
-  apple_podcasts_verify: string | null;
-  created_at: string;
-  updated_at: string;
-  max_episodes?: number | null;
-  episode_count?: number;
-  my_role?: 'owner' | 'view' | 'editor' | 'manager';
-  is_shared?: boolean;
-  max_collaborators?: number | null;
+  updateFrequencyRrule: string | null;
+  updateFrequencyLabel: string | null;
+  spotifyRecentCount: number | null;
+  spotifyCountryOfOrigin: string | null;
+  applePodcastsVerify: string | null;
+  createdAt: string;
+  updatedAt: string;
+  maxEpisodes?: number | null;
+  episodeCount?: number;
+  myRole?: 'owner' | 'view' | 'editor' | 'manager';
+  isShared?: boolean;
+  maxCollaborators?: number | null;
   /** Whether the podcast owner has at least 5 MB free for recording (used for Record new section). */
-  can_record_new_section?: boolean;
+  canRecordNewSection?: boolean;
   /** Effective max collaborators (podcast or owner limit). Used to hide add form when at limit. */
-  effective_max_collaborators?: number | null;
-  effective_max_subscriber_tokens?: number | null;
+  effectiveMaxCollaborators?: number | null;
+  effectiveMaxSubscriberTokens?: number | null;
   /** 1 = unlisted (not on /feed or sitemap). */
   unlisted?: number;
-  /** 1 = subscriber-only feed enabled (tokens can be created). */
-  subscriber_only_feed_enabled?: number;
-  /** 1 = public feed disabled (only tokenized subscriber feed works). */
-  public_feed_disabled?: number;
+  /** Subscriber-only feed enabled (tokens can be created). */
+  subscriberOnlyFeedEnabled?: boolean;
+  /** Public feed disabled (only tokenized subscriber feed works). */
+  publicFeedDisabled?: boolean;
   /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
-  owner_can_transcribe?: number;
+  ownerCanTranscribe?: number;
   /** DNS: link domain (hostname). */
-  link_domain?: string | null;
+  linkDomain?: string | null;
   /** DNS: managed domain (hostname). */
-  managed_domain?: string | null;
+  managedDomain?: string | null;
   /** DNS: managed sub-domain. */
-  managed_sub_domain?: string | null;
+  managedSubDomain?: string | null;
   /** True when podcast has a Cloudflare API key set (key never sent to client). */
-  cloudflare_api_key_set?: boolean;
+  cloudflareApiKeySet?: boolean;
   /** Client-only: new API key when editing (sent in PATCH; never returned by API). */
-  cloudflare_api_key?: string;
+  cloudflareApiKey?: string;
   /** When the podcast has an active custom domain, the preferred URL for sharing (e.g. https://myshow.com/). */
-  canonical_feed_url?: string | null;
-  apple_podcasts_url?: string | null;
-  spotify_url?: string | null;
-  amazon_music_url?: string | null;
-  podcast_index_url?: string | null;
-  listen_notes_url?: string | null;
-  castbox_url?: string | null;
-  x_url?: string | null;
-  facebook_url?: string | null;
-  instagram_url?: string | null;
-  tiktok_url?: string | null;
-  youtube_url?: string | null;
+  canonicalFeedUrl?: string | null;
+  applePodcastsUrl?: string | null;
+  spotifyUrl?: string | null;
+  amazonMusicUrl?: string | null;
+  podcastIndexUrl?: string | null;
+  listenNotesUrl?: string | null;
+  castboxUrl?: string | null;
+  xUrl?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  tiktokUrl?: string | null;
+  youtubeUrl?: string | null;
   /** DNS config from server settings (allow toggles and default domain list for edit UI). */
-  dns_config?: {
-    allow_linking_domain: boolean;
-    allow_domain: boolean;
-    allow_domains: string[];
-    default_domain: string;
-    allow_sub_domain: boolean;
-    allow_custom_key: boolean;
+  dnsConfig?: {
+    allowLinkingDomain: boolean;
+    allowDomain: boolean;
+    allowDomains: string[];
+    defaultDomain: string;
+    allowSubDomain: boolean;
+    allowCustomKey: boolean;
   };
 }
 
@@ -136,38 +136,75 @@ export function getPodcast(id: string) {
   return apiGet<Podcast>(`/podcasts/${id}`);
 }
 
+/** Analytics response (camelCase). Server may send snake_case; we map in getPodcastAnalytics. */
 export interface PodcastAnalytics {
-  rss_daily: Array<{ stat_date: string; bot_count: number; human_count: number }>;
+  rssDaily: Array<{ statDate: string; botCount: number; humanCount: number }>;
   episodes: Array<{ id: string; title: string; slug: string | null }>;
-  episode_daily: Array<{
-    episode_id: string;
-    stat_date: string;
-    bot_count: number;
-    human_count: number;
+  episodeDaily: Array<{
+    episodeId: string;
+    statDate: string;
+    botCount: number;
+    humanCount: number;
   }>;
-  episode_location_daily: Array<{
-    episode_id: string;
-    stat_date: string;
+  episodeLocationDaily: Array<{
+    episodeId: string;
+    statDate: string;
     location: string;
-    bot_count: number;
-    human_count: number;
+    botCount: number;
+    humanCount: number;
   }>;
-  episode_listens_daily: Array<{
-    episode_id: string;
-    stat_date: string;
-    bot_count: number;
-    human_count: number;
+  episodeListensDaily: Array<{
+    episodeId: string;
+    statDate: string;
+    botCount: number;
+    humanCount: number;
   }>;
+}
+
+function mapAnalyticsFromServer(raw: {
+  rss_daily?: Array<{ stat_date?: string; bot_count?: number; human_count?: number }>;
+  episodes?: Array<{ id: string; title: string; slug: string | null }>;
+  episode_daily?: Array<{ episode_id?: string; stat_date?: string; bot_count?: number; human_count?: number }>;
+  episode_location_daily?: Array<{ episode_id?: string; stat_date?: string; location?: string; bot_count?: number; human_count?: number }>;
+  episode_listens_daily?: Array<{ episode_id?: string; stat_date?: string; bot_count?: number; human_count?: number }>;
+}): PodcastAnalytics {
+  return {
+    rssDaily: (raw.rss_daily ?? []).map((r) => ({
+      statDate: r.stat_date ?? '',
+      botCount: r.bot_count ?? 0,
+      humanCount: r.human_count ?? 0,
+    })),
+    episodes: raw.episodes ?? [],
+    episodeDaily: (raw.episode_daily ?? []).map((r) => ({
+      episodeId: r.episode_id ?? '',
+      statDate: r.stat_date ?? '',
+      botCount: r.bot_count ?? 0,
+      humanCount: r.human_count ?? 0,
+    })),
+    episodeLocationDaily: (raw.episode_location_daily ?? []).map((r) => ({
+      episodeId: r.episode_id ?? '',
+      statDate: r.stat_date ?? '',
+      location: r.location ?? '',
+      botCount: r.bot_count ?? 0,
+      humanCount: r.human_count ?? 0,
+    })),
+    episodeListensDaily: (raw.episode_listens_daily ?? []).map((r) => ({
+      episodeId: r.episode_id ?? '',
+      statDate: r.stat_date ?? '',
+      botCount: r.bot_count ?? 0,
+      humanCount: r.human_count ?? 0,
+    })),
+  };
 }
 
 export function getPodcastAnalytics(podcastId: string, params?: PodcastAnalyticsQuery) {
   const search = new URLSearchParams();
-  if (params?.start_date) search.set('start_date', params.start_date);
-  if (params?.end_date) search.set('end_date', params.end_date);
+  if (params?.startDate) search.set('startDate', params.startDate);
+  if (params?.endDate) search.set('endDate', params.endDate);
   if (params?.limit != null) search.set('limit', String(params.limit));
   if (params?.offset != null) search.set('offset', String(params.offset));
   const query = search.toString();
-  return apiGet<PodcastAnalytics>(`/podcasts/${podcastId}/analytics${query ? `?${query}` : ''}`);
+  return apiGet<Parameters<typeof mapAnalyticsFromServer>[0]>(`/podcasts/${podcastId}/analytics${query ? `?${query}` : ''}`).then(mapAnalyticsFromServer);
 }
 
 export function createPodcast(body: PodcastCreate) {
@@ -191,10 +228,10 @@ export async function uploadPodcastArtwork(podcastId: string, file: File): Promi
 }
 
 export interface Collaborator {
-  user_id: string;
-  email: string;
+  userId: string;
+  username: string;
   role: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export function listCollaborators(podcastId: string) {
@@ -208,15 +245,20 @@ export async function addCollaborator(podcastId: string, body: { email: string; 
     headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
     body: JSON.stringify(body),
   });
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch(() => ({})) as Record<string, unknown>;
   if (!res.ok) {
     throw new CollaboratorApiError(
-      (data as { error?: string }).error ?? res.statusText,
+      (data.error as string) ?? res.statusText,
       res.status,
-      data as { code?: string; email?: string }
+      {
+        code: data.code as string | undefined,
+        email: data.email as string | undefined,
+        error: data.error as string | undefined,
+        canInviteToPlatform: data.can_invite_to_platform as boolean | undefined,
+      }
     );
   }
-  return data as Collaborator;
+  return data as unknown as Collaborator;
 }
 
 export function updateCollaborator(podcastId: string, userId: string, body: { role: string }) {
@@ -238,13 +280,13 @@ export interface ImportStatus {
   status: 'idle' | 'pending' | 'importing' | 'done' | 'failed';
   message?: string;
   error?: string;
-  current_episode?: number;
-  total_episodes?: number;
+  currentEpisode?: number;
+  totalEpisodes?: number;
 }
 
-/** Start importing a podcast from an RSS/Atom feed URL. Returns 202 with podcast_id; poll getImportStatus for progress. */
+/** Start importing a podcast from an RSS/Atom feed URL. Returns 202 with podcastId; poll getImportStatus for progress. */
 export function startImportPodcast(feedUrl: string) {
-  return apiPost<{ podcast_id: string }>('/podcasts/import', { feed_url: feedUrl });
+  return apiPost<{ podcastId: string }>('/podcasts/import', { feedUrl });
 }
 
 export function getImportStatus(podcastId: string) {
@@ -253,11 +295,11 @@ export function getImportStatus(podcastId: string) {
 
 export interface ActiveImportStatus {
   status: 'idle' | 'pending' | 'importing' | 'done' | 'failed';
-  podcast_id?: string;
+  podcastId?: string;
   message?: string;
   error?: string;
-  current_episode?: number;
-  total_episodes?: number;
+  currentEpisode?: number;
+  totalEpisodes?: number;
 }
 
 /** Get the current user's in-progress import, if any. Use on Dashboard load to restore the import popup after refresh. */
@@ -269,8 +311,8 @@ export interface DeletePodcastStatus {
   status: 'idle' | 'pending' | 'deleting' | 'done' | 'failed';
   message?: string;
   error?: string;
-  current_episode?: number;
-  total_episodes?: number;
+  currentEpisode?: number;
+  totalEpisodes?: number;
 }
 
 /** Start deleting a podcast. Returns 202; poll getDeletePodcastStatus for progress. */
@@ -279,21 +321,47 @@ export function startDeletePodcast(podcastId: string) {
 }
 
 export function getDeletePodcastStatus(podcastId: string) {
-  return apiGet<DeletePodcastStatus>(`/podcasts/${podcastId}/delete-status`);
+  return apiGet<{
+    status: string;
+    message?: string;
+    error?: string;
+    current_episode?: number;
+    total_episodes?: number;
+  }>(`/podcasts/${podcastId}/delete-status`).then((raw) => ({
+    status: raw.status as DeletePodcastStatus['status'],
+    message: raw.message,
+    error: raw.error,
+    currentEpisode: raw.current_episode,
+    totalEpisodes: raw.total_episodes,
+  }));
 }
 
 export interface ActiveDeleteStatus {
   status: 'idle' | 'pending' | 'deleting' | 'done' | 'failed';
-  podcast_id?: string;
+  podcastId?: string;
   message?: string;
   error?: string;
-  current_episode?: number;
-  total_episodes?: number;
+  currentEpisode?: number;
+  totalEpisodes?: number;
 }
 
 /** Get the current user's in-progress delete, if any. */
 export function getActiveDelete() {
-  return apiGet<ActiveDeleteStatus>('/podcasts/delete-status');
+  return apiGet<{
+    status: string;
+    podcast_id?: string;
+    message?: string;
+    error?: string;
+    current_episode?: number;
+    total_episodes?: number;
+  }>('/podcasts/delete-status').then((raw) => ({
+    status: raw.status as ActiveDeleteStatus['status'],
+    podcastId: raw.podcast_id,
+    message: raw.message,
+    error: raw.error,
+    currentEpisode: raw.current_episode,
+    totalEpisodes: raw.total_episodes,
+  }));
 }
 
 export function updatePodcast(id: string, body: PodcastUpdate) {
@@ -304,11 +372,11 @@ export function updatePodcast(id: string, body: PodcastUpdate) {
 export interface SubscriberToken {
   id: string;
   name: string;
-  created_at: string;
-  valid_from: string | null;
-  valid_until: string | null;
+  createdAt: string;
+  validFrom: string | null;
+  validUntil: string | null;
   disabled: number;
-  last_used_at: string | null;
+  lastUsedAt: string | null;
 }
 
 export function listSubscriberTokens(
@@ -327,7 +395,7 @@ export function listSubscriberTokens(
 
 export function createSubscriberToken(
   podcastId: string,
-  body: { name: string; valid_from?: string; valid_until?: string }
+  body: { name: string; validFrom?: string; validUntil?: string }
 ) {
   return apiPost<SubscriberToken & { token: string }>(`/podcasts/${podcastId}/subscriber-tokens`, body);
 }
@@ -335,7 +403,7 @@ export function createSubscriberToken(
 export function updateSubscriberToken(
   podcastId: string,
   tokenId: string,
-  body: { disabled?: boolean; valid_until?: string; valid_from?: string }
+  body: { disabled?: boolean; validUntil?: string; validFrom?: string }
 ) {
   return apiPatch<SubscriberToken>(`/podcasts/${podcastId}/subscriber-tokens/${tokenId}`, body);
 }
@@ -345,7 +413,7 @@ export function deleteSubscriberToken(podcastId: string, tokenId: string) {
 }
 
 // Show cast (hosts and guests)
-export type CastMember = CastResponse & { photo_filename?: string | null };
+export type CastMember = CastResponse & { photoFilename?: string | null };
 
 export function listCast(
   podcastId: string,
@@ -355,7 +423,7 @@ export function listCast(
     q?: string;
     sort?: 'newest' | 'oldest';
     /** Exclude cast already assigned to this episode */
-    episode_id?: string;
+    episodeId?: string;
   }
 ) {
   const search = new URLSearchParams();
@@ -363,7 +431,7 @@ export function listCast(
   if (params?.offset != null) search.set('offset', String(params.offset));
   if (params?.q) search.set('q', params.q);
   if (params?.sort) search.set('sort', params.sort);
-  if (params?.episode_id) search.set('episode_id', params.episode_id);
+  if (params?.episodeId) search.set('episodeId', params.episodeId);
   const query = search.toString();
   return apiGet<{ cast: CastMember[]; total: number }>(`/podcasts/${podcastId}/cast${query ? `?${query}` : ''}`);
 }

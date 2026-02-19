@@ -16,8 +16,8 @@ export function AccessGeneralSection({
       <label className="toggle">
         <input
           type="checkbox"
-          checked={form.registration_enabled}
-          onChange={(e) => onFormChange({ registration_enabled: e.target.checked })}
+          checked={form.registrationEnabled}
+          onChange={(e) => onFormChange({ registrationEnabled: e.target.checked })}
         />
         <span className="toggle__track" aria-hidden="true" />
         <span>Enable Account Registration</span>
@@ -29,8 +29,8 @@ export function AccessGeneralSection({
       <label className="toggle">
         <input
           type="checkbox"
-          checked={form.public_feeds_enabled}
-          onChange={(e) => onFormChange({ public_feeds_enabled: e.target.checked })}
+          checked={form.publicFeedsEnabled}
+          onChange={(e) => onFormChange({ publicFeedsEnabled: e.target.checked })}
         />
         <span className="toggle__track" aria-hidden="true" />
         <span>Enable Public Feeds</span>
@@ -42,8 +42,8 @@ export function AccessGeneralSection({
       <label className="toggle">
         <input
           type="checkbox"
-          checked={form.gdpr_consent_banner_enabled}
-          onChange={(e) => onFormChange({ gdpr_consent_banner_enabled: e.target.checked })}
+          checked={form.gdprConsentBannerEnabled}
+          onChange={(e) => onFormChange({ gdprConsentBannerEnabled: e.target.checked })}
         />
         <span className="toggle__track" aria-hidden="true" />
         <span>Enable Cookie / Tracking Consent Banner</span>
@@ -69,22 +69,22 @@ export function AccessGeneralSection({
       <label className="toggle">
         <input
           type="checkbox"
-          checked={form.websub_discovery_enabled}
-          onChange={(e) => onFormChange({ websub_discovery_enabled: e.target.checked })}
+          checked={form.websubDiscoveryEnabled}
+          onChange={(e) => onFormChange({ websubDiscoveryEnabled: e.target.checked })}
         />
         <span className="toggle__track" aria-hidden="true" />
         <span>Enable WebSub Discovery</span>
       </label>
 
-      {form.websub_discovery_enabled && (
+      {form.websubDiscoveryEnabled && (
         <label className={styles.label}>
           WebSub Discovery
           <input
             type="url"
             className={styles.input}
             placeholder="https://pubsubhubbub.appspot.com/"
-            value={form.websub_hub}
-            onChange={(e) => onFormChange({ websub_hub: e.target.value })}
+            value={form.websubHub}
+            onChange={(e) => onFormChange({ websubHub: e.target.value })}
           />
           <p className={styles.inputHelp}>
             When set, the feed XML includes a WebSub hub link (rel="hub") so hubs can discover and subscribe to feed updates.
@@ -99,8 +99,8 @@ export function AccessGeneralSection({
           className={styles.input}
           rows={1}
           placeholder="Optional message above the sign in form..."
-          value={form.welcome_banner}
-          onChange={(e) => onFormChange({ welcome_banner: e.target.value })}
+          value={form.welcomeBanner}
+          onChange={(e) => onFormChange({ welcomeBanner: e.target.value })}
           onInput={onResizeWelcomeBanner}
         />
         <p className={styles.inputHelp}>

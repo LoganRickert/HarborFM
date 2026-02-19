@@ -10,7 +10,7 @@ export type ChapterMarker = { time: number; title?: string; color?: string };
 const CHAPTER_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899'] as const;
 
 export interface ChaptersCardProps {
-  /** Chapter markers (from episode.final_markers). */
+  /** Chapter markers (from episode.finalMarkers). */
   markers: ChapterMarker[];
   /** Called when markers change (add/edit/delete). */
   onMarkersChange: (markers: ChapterMarker[]) => void;

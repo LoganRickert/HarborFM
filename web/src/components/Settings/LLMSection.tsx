@@ -6,7 +6,7 @@ import { AppSettings } from '../../api/settings';
 import { OLLAMA_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from '../../hooks/useSettingsForm';
 import styles from '../../pages/Settings.module.css';
 
-const LLM_OPTIONS: ProviderOption<AppSettings['llm_provider']>[] = [
+const LLM_OPTIONS: ProviderOption<AppSettings['llmProvider']>[] = [
   { value: 'none', label: 'None' },
   { value: 'ollama', label: 'Ollama' },
   { value: 'openai', label: 'OpenAI' },
@@ -20,7 +20,7 @@ export function LLMSection({
   onProviderChange,
 }: LLMSectionProps) {
   const modelPlaceholder =
-    form.llm_provider === 'openai' ? OPENAI_DEFAULT_MODEL : OLLAMA_DEFAULT_MODEL;
+    form.llmProvider === 'openai' ? OPENAI_DEFAULT_MODEL : OLLAMA_DEFAULT_MODEL;
 
   return (
     <SectionCard
@@ -30,7 +30,7 @@ export function LLMSection({
       <div className={styles.label}>
         LLM Provider
         <ProviderToggle
-          value={form.llm_provider}
+          value={form.llmProvider}
           options={LLM_OPTIONS}
           onChange={(value) => {
             onProviderChange(value);
@@ -40,32 +40,32 @@ export function LLMSection({
         />
       </div>
 
-      {form.llm_provider === 'ollama' ? (
+      {form.llmProvider === 'ollama' ? (
         <label className={styles.label}>
           Ollama URL
           <input
             type="url"
             className={styles.input}
             placeholder="http://localhost:11434"
-            value={form.ollama_url}
-            onChange={(e) => onFormChange({ ollama_url: e.target.value })}
+            value={form.ollamaUrl}
+            onChange={(e) => onFormChange({ ollamaUrl: e.target.value })}
           />
         </label>
-      ) : form.llm_provider === 'openai' ? (
+      ) : form.llmProvider === 'openai' ? (
         <label className={styles.label}>
           OpenAI API key
           <input
             type="password"
             className={styles.input}
-            placeholder={form.openai_api_key === '(set)' ? '(saved)' : 'sk-...'}
-            value={form.openai_api_key === '(set)' ? '' : form.openai_api_key}
-            onChange={(e) => onFormChange({ openai_api_key: e.target.value })}
+            placeholder={form.openaiApiKey === '(set)' ? '(saved)' : 'sk-...'}
+            value={form.openaiApiKey === '(set)' ? '' : form.openaiApiKey}
+            onChange={(e) => onFormChange({ openaiApiKey: e.target.value })}
             autoComplete="off"
           />
         </label>
       ) : null}
 
-      {form.llm_provider !== 'none' && (
+      {form.llmProvider !== 'none' && (
         <>
           <label className={styles.label}>
             Model

@@ -12,7 +12,7 @@ export async function run({ runOne }) {
   await apiFetch(`/users/${u.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ max_collaborators: 1 }),
+    body: JSON.stringify({ maxCollaborators: 1 }),
   }, adminJar);
 
   const jar = cookieJar();

@@ -4,7 +4,7 @@ import { ProviderToggle } from './ProviderToggle';
 import { AppSettings } from '../../api/settings';
 import styles from '../../pages/Settings.module.css';
 
-const CAPTCHA_OPTIONS: ProviderOption<AppSettings['captcha_provider']>[] = [
+const CAPTCHA_OPTIONS: ProviderOption<AppSettings['captchaProvider']>[] = [
   { value: 'none', label: 'None' },
   { value: 'hcaptcha', label: 'hCaptcha' },
   { value: 'recaptcha_v2', label: 'Google v2' },
@@ -29,13 +29,13 @@ export function CaptchaSection({ form, onFormChange }: SettingsFormProps) {
       <div className={styles.label}>
         Provider
         <ProviderToggle
-          value={form.captcha_provider}
+          value={form.captchaProvider}
           options={CAPTCHA_OPTIONS}
-          onChange={(value) => onFormChange({ captcha_provider: value })}
+          onChange={(value) => onFormChange({ captchaProvider: value })}
           ariaLabel="CAPTCHA provider"
         />
       </div>
-      {form.captcha_provider !== 'none' && (
+      {form.captchaProvider !== 'none' && (
         <>
           <label className={styles.label}>
             Site key
@@ -43,12 +43,12 @@ export function CaptchaSection({ form, onFormChange }: SettingsFormProps) {
               type="text"
               className={styles.input}
               placeholder={
-                form.captcha_provider.startsWith('recaptcha')
+                form.captchaProvider.startsWith('recaptcha')
                   ? '6Lc...'
                   : 'Paste your site key from the provider dashboard'
               }
-              value={form.captcha_site_key}
-              onChange={(e) => onFormChange({ captcha_site_key: e.target.value })}
+              value={form.captchaSiteKey}
+              onChange={(e) => onFormChange({ captchaSiteKey: e.target.value })}
               autoComplete="off"
             />
           </label>
@@ -57,9 +57,9 @@ export function CaptchaSection({ form, onFormChange }: SettingsFormProps) {
             <input
               type="password"
               className={styles.input}
-              placeholder={form.captcha_secret_key === '(set)' ? '(saved)' : 'Paste your secret key'}
-              value={form.captcha_secret_key === '(set)' ? '' : form.captcha_secret_key}
-              onChange={(e) => onFormChange({ captcha_secret_key: e.target.value })}
+              placeholder={form.captchaSecretKey === '(set)' ? '(saved)' : 'Paste your secret key'}
+              value={form.captchaSecretKey === '(set)' ? '' : form.captchaSecretKey}
+              onChange={(e) => onFormChange({ captchaSecretKey: e.target.value })}
               autoComplete="off"
             />
           </label>

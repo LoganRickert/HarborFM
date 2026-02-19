@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import cookie from "@fastify/cookie";
+import formbody from "@fastify/formbody";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
@@ -48,7 +49,7 @@ import { exportRoutes } from "./modules/exports/index.js";
 import { settingsRoutes } from "./modules/settings/index.js";
 import { llmRoutes } from "./modules/llm/index.js";
 import { usersRoutes } from "./modules/users/index.js";
-import { publicRoutes } from "./modules/public/routes.js";
+import { publicRoutes } from "./modules/public/index.js";
 import { setupRoutes } from "./modules/setup/index.js";
 import { contactRoutes } from "./modules/contact/index.js";
 import { messagesRoutes } from "./modules/messages/index.js";
@@ -158,6 +159,7 @@ async function main() {
   });
 
   await app.register(cookie);
+  await app.register(formbody);
   await app.register(multipart, { limits: { fileSize: MULTIPART_MAX_BYTES } });
   await app.register(jwt, {
     secret: JWT_SECRET,
@@ -165,6 +167,18 @@ async function main() {
   });
   await app.register(authPlugin);
   await app.register(fastifyWebsocket);
+
+  // Console request logging (readable one-line per request)
+  app.addHook("onRequest", async (request, _reply) => {
+    (request as { _reqStart?: number })._reqStart = Date.now();
+  });
+  app.addHook("onResponse", async (request, reply) => {
+    const start = (request as { _reqStart?: number })._reqStart;
+    const ms = start ? (Date.now() - start).toFixed(0) : "?";
+    console.log(
+      `[server] ${request.method} ${request.url} ${reply.statusCode} ${ms}ms`,
+    );
+  });
 
   const apiPrefix = `/${API_PREFIX}`;
   await app.register(fastifySwagger, {
@@ -296,6 +310,10 @@ async function main() {
         request.url.startsWith(`/${API_PREFIX}/`)
       ) {
         return reply.status(404).send({ error: "Not found" });
+      }
+      const pathname = request.url.split("?")[0];
+      if (pathname === "/login" || pathname === "/login/2fa-setup") {
+        reply.header("Cache-Control", "no-store");
       }
       return reply.sendFile("index.html");
     });

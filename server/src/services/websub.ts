@@ -1,4 +1,6 @@
-import { db } from "../db/index.js";
+import { drizzleDb } from "../db/drizzle.js";
+import { settings } from "../db/schema.js";
+import { eq } from "drizzle-orm";
 import { getPublicFeedSelfUrl } from "./rss.js";
 
 /**
@@ -10,14 +12,20 @@ export function notifyWebSubHub(
   podcastId: string,
   publicBaseUrl?: string | null,
 ): void {
-  const enabledRow = db
-    .prepare("SELECT value FROM settings WHERE key = ?")
-    .get("websub_discovery_enabled") as { value: string } | undefined;
+  const enabledRow = drizzleDb
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, "websub_discovery_enabled"))
+    .limit(1)
+    .get() as { value: string } | undefined;
   if (enabledRow?.value !== "true") return;
 
-  const hubRow = db
-    .prepare("SELECT value FROM settings WHERE key = ?")
-    .get("websub_hub") as { value: string } | undefined;
+  const hubRow = drizzleDb
+    .select({ value: settings.value })
+    .from(settings)
+    .where(eq(settings.key, "websub_hub"))
+    .limit(1)
+    .get() as { value: string } | undefined;
   const hubUrl = hubRow?.value?.trim();
   if (!hubUrl || !hubUrl.startsWith("http")) return;
 

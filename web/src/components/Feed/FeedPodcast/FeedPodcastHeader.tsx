@@ -16,15 +16,15 @@ export function FeedPodcastHeader({
   const [showLockInfo, setShowLockInfo] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const { getTokenIdForPodcast } = useSubscriberAuth();
-  const isSubscriberOnly = podcast.subscriber_only_feed_enabled === 1 && podcast.public_feed_disabled === 1;
-  const hasSubscriberFeatures = podcast.subscriber_only_feed_enabled === 1;
+  const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
+  const hasSubscriberFeatures = Boolean(podcast.subscriberOnlyFeedEnabled);
   
   // Use private RSS URL if authenticated
   const tokenId = getTokenIdForPodcast(podcastSlug);
   const isAuthenticated = !!tokenId;
   const rssUrl = tokenId 
     ? `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(tokenId)}/rss`
-    : podcast.rss_url ?? `/api/public/podcasts/${podcastSlug}/rss`;
+    : podcast.rssUrl ?? `/api/public/podcasts/${podcastSlug}/rss`;
   
   // Disable RSS button if subscriber-only with no public feed and user is not authenticated
   const shouldDisableRss = isSubscriberOnly && !isAuthenticated;
@@ -32,9 +32,9 @@ export function FeedPodcastHeader({
   return (
     <>
       <div className={styles.header}>
-        {(podcast.artwork_url || podcast.artwork_filename) && (
+        {(podcast.artworkUrl || podcast.artworkFilename) && (
           <img
-            src={podcast.artwork_url ?? (podcast.artwork_filename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artwork_filename)}` : '')}
+            src={podcast.artworkUrl ?? (podcast.artworkFilename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}` : '')}
             alt={podcast.title}
             className={styles.artwork}
           />
@@ -43,8 +43,8 @@ export function FeedPodcastHeader({
           <div className={styles.top}>
             <div>
               <h1 className={styles.title}>{podcast.title}</h1>
-              {podcast.author_name && (
-                <p className={styles.author}>by {podcast.author_name}</p>
+              {podcast.authorName && (
+                <p className={styles.author}>by {podcast.authorName}</p>
               )}
             </div>
             <div className={styles.actions}>

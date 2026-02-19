@@ -1,6 +1,8 @@
 import { statSync, copyFileSync, existsSync } from "fs";
 import { resolve, join } from "path";
-import { db } from "../db/index.js";
+import { and, eq, sql } from "drizzle-orm";
+import { drizzleDb } from "../db/index.js";
+import { episodeSegments, episodes, users } from "../db/schema.js";
 import { getPodcastOwnerId } from "./access.js";
 import {
   uploadsDir,
@@ -22,37 +24,62 @@ export function createRecordingSegmentPlaceholder(
   podcastId: string,
   segmentName: string | null,
 ): Record<string, unknown> {
-  const episode = db.prepare("SELECT podcast_id FROM episodes WHERE id = ?").get(episodeId) as
-    | { podcast_id: string }
-    | undefined;
-  if (!episode || episode.podcast_id !== podcastId) {
+  const episode = drizzleDb
+    .select({ podcastId: episodes.podcastId })
+    .from(episodes)
+    .where(eq(episodes.id, episodeId))
+    .limit(1)
+    .get();
+  if (!episode || episode.podcastId !== podcastId) {
     throw new Error("Episode does not belong to podcast");
   }
 
-  const maxPos = db
-    .prepare(
-      "SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM episode_segments WHERE episode_id = ?",
-    )
-    .get(episodeId) as { pos: number };
+  const maxPosRow = drizzleDb
+    .select({
+      pos: sql<number>`COALESCE(MAX(${episodeSegments.position}), -1) + 1`,
+    })
+    .from(episodeSegments)
+    .where(eq(episodeSegments.episodeId, episodeId))
+    .get();
+  const pos = maxPosRow?.pos ?? 0;
 
-  db.prepare(
-    `INSERT INTO episode_segments (id, episode_id, position, type, name, audio_path, duration_sec, in_progress, record_failed)
-     VALUES (?, ?, ?, 'recorded', ?, NULL, 0, 1, 0)`,
-  ).run(segmentId, episodeId, maxPos.pos, segmentName);
+  drizzleDb
+    .insert(episodeSegments)
+    .values({
+      id: segmentId,
+      episodeId,
+      position: pos,
+      type: "recorded",
+      name: segmentName,
+      audioPath: null,
+      durationSec: 0,
+      inProgress: true,
+      recordFailed: false,
+    })
+    .run();
 
-  const row = db
-    .prepare("SELECT * FROM episode_segments WHERE id = ?")
-    .get(segmentId) as Record<string, unknown>;
-  return row;
+  const row = drizzleDb
+    .select()
+    .from(episodeSegments)
+    .where(eq(episodeSegments.id, segmentId))
+    .limit(1)
+    .get();
+  return row as Record<string, unknown>;
 }
 
 /**
  * Mark a placeholder segment as having failed to record (ffmpeg failed, webrtc error, etc).
  */
 export function markSegmentRecordFailed(segmentId: string): void {
-  db.prepare(
-    "UPDATE episode_segments SET in_progress = 0, record_failed = 1, name = COALESCE(NULLIF(TRIM(name), ''), 'Recording Failed') WHERE id = ? AND in_progress = 1",
-  ).run(segmentId);
+  drizzleDb
+    .update(episodeSegments)
+    .set({
+      inProgress: false,
+      recordFailed: true,
+      name: sql`COALESCE(NULLIF(TRIM(${episodeSegments.name}), ''), 'Recording Failed')`,
+    })
+    .where(and(eq(episodeSegments.id, segmentId), eq(episodeSegments.inProgress, true)))
+    .run();
 }
 
 /**
@@ -61,20 +88,26 @@ export function markSegmentRecordFailed(segmentId: string): void {
  * Returns the updated segment row on success; throws on failure.
  */
 export async function recoverRecordedSegment(segmentId: string): Promise<Record<string, unknown>> {
-  const row = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId) as
-    | { episode_id: string; record_failed?: number }
-    | undefined;
-  if (!row || row.record_failed !== 1) {
+  const row = drizzleDb
+    .select({ episodeId: episodeSegments.episodeId, recordFailed: episodeSegments.recordFailed })
+    .from(episodeSegments)
+    .where(eq(episodeSegments.id, segmentId))
+    .limit(1)
+    .get();
+  if (!row || !row.recordFailed) {
     throw new Error("Segment is not in failed state or does not exist");
   }
-  const episodeId = row.episode_id;
-  const episode = db.prepare("SELECT podcast_id FROM episodes WHERE id = ?").get(episodeId) as
-    | { podcast_id: string }
-    | undefined;
+  const episodeId = row.episodeId;
+  const episode = drizzleDb
+    .select({ podcastId: episodes.podcastId })
+    .from(episodes)
+    .where(eq(episodes.id, episodeId))
+    .limit(1)
+    .get();
   if (!episode) {
     throw new Error("Episode not found");
   }
-  const podcastId = episode.podcast_id;
+  const podcastId = episode.podcastId;
   const webrtcDir = getWebrtcRecordingsDir();
   const sourcePath = resolve(join(webrtcDir, "recordings", `${segmentId}.wav`));
   if (!existsSync(sourcePath)) {
@@ -94,7 +127,7 @@ export async function recoverRecordedSegment(segmentId: string): Promise<Record<
   if (!storageUserId) {
     throw new Error("Podcast owner not found");
   }
-  if (wouldExceedStorageLimit(db, storageUserId, stat.size)) {
+  if (wouldExceedStorageLimit(drizzleDb, storageUserId, stat.size)) {
     throw new Error("Storage limit exceeded");
   }
   let durationSec = 0;
@@ -109,20 +142,32 @@ export async function recoverRecordedSegment(segmentId: string): Promise<Record<
   } catch {
     // best-effort
   }
-  db.prepare(
-    `UPDATE episode_segments SET audio_path = ?, duration_sec = ?, record_failed = 0 WHERE id = ? AND record_failed = 1`,
-  ).run(pathRelativeToData(destPath), durationSec, segmentId);
-  db.prepare(
-    `UPDATE users SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ? WHERE id = ?`,
-  ).run(stat.size, storageUserId);
-  const updated = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId) as Record<string, unknown>;
+  const relPath = pathRelativeToData(destPath);
+  drizzleDb
+    .update(episodeSegments)
+    .set({ audioPath: relPath, durationSec, recordFailed: false })
+    .where(and(eq(episodeSegments.id, segmentId), eq(episodeSegments.recordFailed, true)))
+    .run();
+  drizzleDb
+    .update(users)
+    .set({
+      diskBytesUsed: sql`COALESCE(${users.diskBytesUsed}, 0) + ${stat.size}`,
+    })
+    .where(eq(users.id, storageUserId))
+    .run();
+  const updated = drizzleDb
+    .select()
+    .from(episodeSegments)
+    .where(eq(episodeSegments.id, segmentId))
+    .limit(1)
+    .get();
   try {
     const { unlinkSync } = await import("fs");
     unlinkSync(sourcePath);
   } catch {
     // ignore - source may be in use or permissions
   }
-  return updated;
+  return updated as Record<string, unknown>;
 }
 
 /**
@@ -137,20 +182,26 @@ export async function createSegmentFromPath(
   podcastId: string,
   segmentName: string | null,
 ): Promise<Record<string, unknown>> {
-  const existing = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId) as
-    | { in_progress?: number }
-    | undefined;
+  const existing = drizzleDb
+    .select()
+    .from(episodeSegments)
+    .where(eq(episodeSegments.id, segmentId))
+    .limit(1)
+    .get();
   if (existing) {
-    if (existing.in_progress === 0) {
+    if (!existing.inProgress) {
       return existing as Record<string, unknown>; /* idempotency for duplicate callback */
     }
-    /* in_progress=1: placeholder from createRecordingSegmentPlaceholder; we will UPDATE */
+    /* inProgress=true: placeholder from createRecordingSegmentPlaceholder; we will UPDATE */
   }
 
-  const episode = db.prepare("SELECT podcast_id FROM episodes WHERE id = ?").get(episodeId) as
-    | { podcast_id: string }
-    | undefined;
-  if (!episode || episode.podcast_id !== podcastId) {
+  const episode = drizzleDb
+    .select({ podcastId: episodes.podcastId })
+    .from(episodes)
+    .where(eq(episodes.id, episodeId))
+    .limit(1)
+    .get();
+  if (!episode || episode.podcastId !== podcastId) {
     throw new Error("Episode does not belong to podcast");
   }
 
@@ -179,7 +230,7 @@ export async function createSegmentFromPath(
   if (!storageUserId) {
     throw new Error("Podcast owner not found");
   }
-  if (wouldExceedStorageLimit(db, storageUserId, bytesWritten)) {
+  if (wouldExceedStorageLimit(drizzleDb, storageUserId, bytesWritten)) {
     throw new Error("Storage limit exceeded");
   }
 
@@ -197,44 +248,78 @@ export async function createSegmentFromPath(
     // best-effort
   }
 
-  const isPlaceholderUpdate = existing && existing.in_progress === 1;
+  const isPlaceholderUpdate = existing?.inProgress === true;
+  const relPath = pathRelativeToData(resolvedPath);
 
   try {
     if (isPlaceholderUpdate) {
-      db.prepare(
-        `UPDATE episode_segments
-         SET audio_path = ?, duration_sec = ?, name = COALESCE(?, name), in_progress = 0, record_failed = 0
-         WHERE id = ? AND in_progress = 1`,
-      ).run(pathRelativeToData(resolvedPath), durationSec, segmentName, segmentId);
+      const set: {
+        audioPath: string;
+        durationSec: number;
+        inProgress: boolean;
+        recordFailed: boolean;
+        name?: string;
+      } = {
+        audioPath: relPath,
+        durationSec,
+        inProgress: false,
+        recordFailed: false,
+      };
+      if (segmentName != null) set.name = segmentName;
+      drizzleDb
+        .update(episodeSegments)
+        .set(set)
+        .where(and(eq(episodeSegments.id, segmentId), eq(episodeSegments.inProgress, true)))
+        .run();
     } else {
-      const maxPos = db
-        .prepare(
-          "SELECT COALESCE(MAX(position), -1) + 1 AS pos FROM episode_segments WHERE episode_id = ?",
-        )
-        .get(episodeId) as { pos: number };
-
-      db.prepare(
-        `INSERT INTO episode_segments (id, episode_id, position, type, name, audio_path, duration_sec)
-         VALUES (?, ?, ?, 'recorded', ?, ?, ?)`,
-      ).run(segmentId, episodeId, maxPos.pos, segmentName, pathRelativeToData(resolvedPath), durationSec);
+      const maxPosRow = drizzleDb
+        .select({
+          pos: sql<number>`COALESCE(MAX(${episodeSegments.position}), -1) + 1`,
+        })
+        .from(episodeSegments)
+        .where(eq(episodeSegments.episodeId, episodeId))
+        .get();
+      const pos = maxPosRow?.pos ?? 0;
+      drizzleDb
+        .insert(episodeSegments)
+        .values({
+          id: segmentId,
+          episodeId,
+          position: pos,
+          type: "recorded",
+          name: segmentName,
+          audioPath: relPath,
+          durationSec,
+        })
+        .run();
     }
 
-    db.prepare(
-      `UPDATE users
-       SET disk_bytes_used = COALESCE(disk_bytes_used, 0) + ?
-       WHERE id = ?`,
-    ).run(bytesWritten, storageUserId);
+    drizzleDb
+      .update(users)
+      .set({
+        diskBytesUsed: sql`COALESCE(${users.diskBytesUsed}, 0) + ${bytesWritten}`,
+      })
+      .where(eq(users.id, storageUserId))
+      .run();
   } catch (err: unknown) {
     const sqliteErr = err as { code?: string };
     if (sqliteErr?.code === "SQLITE_CONSTRAINT_PRIMARYKEY" || sqliteErr?.code === "SQLITE_CONSTRAINT") {
-      const existingRow = db.prepare("SELECT * FROM episode_segments WHERE id = ?").get(segmentId);
+      const existingRow = drizzleDb
+        .select()
+        .from(episodeSegments)
+        .where(eq(episodeSegments.id, segmentId))
+        .limit(1)
+        .get();
       if (existingRow) return existingRow as Record<string, unknown>;
     }
     throw err;
   }
 
-  const row = db
-    .prepare("SELECT * FROM episode_segments WHERE id = ?")
-    .get(segmentId) as Record<string, unknown>;
-  return row;
+  const row = drizzleDb
+    .select()
+    .from(episodeSegments)
+    .where(eq(episodeSegments.id, segmentId))
+    .limit(1)
+    .get();
+  return row as Record<string, unknown>;
 }

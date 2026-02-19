@@ -31,8 +31,8 @@ export function WebRTCSection({ form, onFormChange }: SettingsFormProps) {
           type="url"
           className={styles.input}
           placeholder="http://webrtc:3002"
-          value={form.webrtc_service_url}
-          onChange={(e) => onFormChange({ webrtc_service_url: e.target.value })}
+          value={form.webrtcServiceUrl}
+          onChange={(e) => onFormChange({ webrtcServiceUrl: e.target.value })}
           autoComplete="off"
         />
       </label>
@@ -46,8 +46,8 @@ export function WebRTCSection({ form, onFormChange }: SettingsFormProps) {
           type="url"
           className={styles.input}
           placeholder="wss://example.com/webrtc-ws or ws://localhost:3002"
-          value={form.webrtc_public_ws_url}
-          onChange={(e) => onFormChange({ webrtc_public_ws_url: e.target.value })}
+          value={form.webrtcPublicWsUrl}
+          onChange={(e) => onFormChange({ webrtcPublicWsUrl: e.target.value })}
           autoComplete="off"
         />
       </label>
@@ -60,9 +60,9 @@ export function WebRTCSection({ form, onFormChange }: SettingsFormProps) {
         <input
           type="password"
           className={styles.input}
-          placeholder={form.recording_callback_secret === '(set)' ? '(saved)' : 'Shared secret for webrtc service'}
-          value={form.recording_callback_secret === '(set)' ? '' : form.recording_callback_secret}
-          onChange={(e) => onFormChange({ recording_callback_secret: e.target.value })}
+          placeholder={form.recordingCallbackSecret === '(set)' ? '(saved)' : 'Shared secret for webrtc service'}
+          value={form.recordingCallbackSecret === '(set)' ? '' : form.recordingCallbackSecret}
+          onChange={(e) => onFormChange({ recordingCallbackSecret: e.target.value })}
           autoComplete="off"
         />
       </label>

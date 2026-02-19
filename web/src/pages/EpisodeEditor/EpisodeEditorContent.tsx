@@ -61,7 +61,7 @@ export function EpisodeEditorContent({
   asrAvail,
 }: EpisodeEditorContentProps) {
   const id = episode.id;
-  const podcastId = episode.podcast_id;
+  const podcastId = episode.podcastId;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -71,10 +71,10 @@ export function EpisodeEditorContent({
     queryKey: ['publicConfig', host],
     queryFn: getPublicConfig,
   });
-  const webrtcEnabled = publicConfig?.webrtc_enabled === true;
-  const canRecord = (podcast?.can_record_new_section ?? canRecordNewSection(meData)) === true;
+  const webrtcEnabled = publicConfig?.webrtcEnabled === true;
+  const canRecord = (podcast?.canRecordNewSection ?? canRecordNewSection(meData)) === true;
   const readOnly = isReadOnly(meData?.user ?? user);
-  const myRole = (podcast as { my_role?: string } | undefined)?.my_role;
+  const myRole = (podcast as { myRole?: string } | undefined)?.myRole;
   const canEditMetadata = myRole === 'owner' || myRole === 'manager';
   const canEditSegments = myRole === 'owner' || myRole === 'manager' || myRole === 'editor';
   const canDeleteEpisode = myRole === 'owner' || meData?.user?.role === 'admin';
@@ -174,6 +174,12 @@ export function EpisodeEditorContent({
 
   const handleRecordingStateChange = useCallback(
     (args?: { pendingSegmentIds?: string[]; recordingActive?: boolean }) => {
+      console.log('[EpisodeEditorContent] handleRecordingStateChange', {
+        pendingSegmentIds: args?.pendingSegmentIds,
+        recordingActive: args?.recordingActive,
+        willSetPending: args?.pendingSegmentIds !== undefined,
+        willSetActive: args?.recordingActive !== undefined,
+      });
       if (args?.pendingSegmentIds !== undefined) {
         setWsPendingSegmentIds(args.pendingSegmentIds);
       }
@@ -278,7 +284,7 @@ export function EpisodeEditorContent({
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['episode', id] });
       queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
-      if (!('final_markers' in (variables ?? {}))) {
+      if (!('finalMarkers' in (variables ?? {}))) {
         setDetailsDialogOpen(false);
         setPendingArtworkFile(null);
         setCoverUploadKey((k) => k + 1);
@@ -308,7 +314,7 @@ export function EpisodeEditorContent({
   useEffect(() => {
     if (detailsDialogOpen) {
       setDialogForm(episodeForm);
-      setCoverMode(episode.artwork_filename ? 'upload' : 'url');
+      setCoverMode(episode.artworkFilename ? 'upload' : 'url');
       setPendingArtworkFile(null);
       setDebouncedArtworkUrl((episodeForm.artworkUrl ?? '').trim());
       updateMutation.reset();
@@ -316,7 +322,7 @@ export function EpisodeEditorContent({
     }
     // Intentionally omit updateMutation/uploadArtworkMutation - .reset() can change refs and cause an infinite loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detailsDialogOpen, episodeForm, episode.artwork_filename, episodeForm.artworkUrl]);
+  }, [detailsDialogOpen, episodeForm, episode.artworkFilename, episodeForm.artworkUrl]);
 
   const addRecordedMutation = useMutation({
     mutationFn: ({ file, name }: { file: File; name?: string | null }) => addRecordedSegment(id, file, name),
@@ -434,18 +440,18 @@ export function EpisodeEditorContent({
           episodeForm.episodeNumber === '' ? null : parseInt(episodeForm.episodeNumber, 10) || null
         }
         artworkUrl={
-          episode.artwork_url
-            ? episode.artwork_url
-            : episode.artwork_filename
-              ? `/api/podcasts/${podcastId}/episodes/${id}/artwork/${encodeURIComponent(episode.artwork_filename)}`
+          episode.artworkUrl
+            ? episode.artworkUrl
+            : episode.artworkFilename
+              ? `/api/podcasts/${podcastId}/episodes/${id}/artwork/${encodeURIComponent(episode.artworkFilename)}`
               : null
         }
         onEditClick={metadataReadOnly ? undefined : () => setDetailsDialogOpen(true)}
-        subscriberOnly={episode.subscriber_only}
+        subscriberOnly={episode.subscriberOnly}
         shareUrl={
           podcast && episode.slug && (episode.status === 'scheduled' || episode.status === 'published')
-            ? podcast.canonical_feed_url
-              ? `${podcast.canonical_feed_url.replace(/\/$/, '')}/${episode.slug}`
+            ? podcast.canonicalFeedUrl
+              ? `${podcast.canonicalFeedUrl.replace(/\/$/, '')}/${episode.slug}`
               : typeof window !== 'undefined'
                 ? `${window.location.origin}/feed/${podcast.slug}/${episode.slug}`
                 : undefined
@@ -455,8 +461,8 @@ export function EpisodeEditorContent({
         embedCode={
           podcast && episode.slug && (episode.status === 'scheduled' || episode.status === 'published') && typeof window !== 'undefined'
             ? (() => {
-                const base = podcast.canonical_feed_url ? podcast.canonical_feed_url.replace(/\/$/, '') : window.location.origin;
-                const embedSrc = podcast.canonical_feed_url ? `${base}/embed/${episode.slug}` : `${base}/embed/${podcast.slug}/${episode.slug}`;
+                const base = podcast.canonicalFeedUrl ? podcast.canonicalFeedUrl.replace(/\/$/, '') : window.location.origin;
+                const embedSrc = podcast.canonicalFeedUrl ? `${base}/embed/${episode.slug}` : `${base}/embed/${podcast.slug}/${episode.slug}`;
                 return `<iframe src="${embedSrc}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>`;
               })()
             : undefined
@@ -504,11 +510,28 @@ export function EpisodeEditorContent({
               isRecordingActive={
                 callPanelOpenInThisTab ? (wsRecordingActive ?? activeSession?.recordingInProgress === true) : (activeSession?.recordingInProgress === true)
               }
-              processingSegmentIds={(
-                callPanelOpenInThisTab ? (wsPendingSegmentIds ?? activeSession?.pendingSegmentIds ?? []) : (activeSession?.pendingSegmentIds ?? [])
-              ).filter(
-                (segId) => !segments.some((s) => s.id === segId)
-              )}
+              processingSegmentIds={(() => {
+                const sessionPending = activeSession?.pendingSegmentIds;
+                const wsPending = wsPendingSegmentIds ?? null;
+                const sessionCleared = Array.isArray(sessionPending) && sessionPending.length === 0;
+                const raw =
+                  callPanelOpenInThisTab
+                    ? (sessionCleared ? [] : (wsPending ?? sessionPending ?? []))
+                    : (sessionPending ?? []);
+                const filtered = raw.filter((segId) => !segments.some((s) => s.id === segId));
+                if (raw.length > 0 || filtered.length > 0) {
+                  console.log('[EpisodeEditorContent] processingSegmentIds', {
+                    callPanelOpenInThisTab,
+                    wsPendingSegmentIds: wsPending,
+                    activeSessionPending: activeSession?.pendingSegmentIds ?? null,
+                    sessionCleared,
+                    raw,
+                    segmentIds: segments.map((s) => s.id),
+                    filtered,
+                  });
+                }
+                return filtered;
+              })()}
               onAddRecord={() => setShowRecord(true)}
               onAddLibrary={() => setShowLibrary(true)}
               recordDisabled={!canRecord}
@@ -541,26 +564,26 @@ export function EpisodeEditorContent({
         onBuild={() => renderMutation.mutate()}
         isBuilding={renderMutation.isPending || renderStatus?.status === 'building'}
         buildMessage={buildAlreadyInProgressMessage}
-        hasFinalAudio={Boolean(episode.audio_final_path)}
-        finalDurationSec={episode.audio_duration_sec ?? 0}
-        finalUpdatedAt={episode.updated_at}
-        finalMarkers={episode.final_markers ?? []}
+        hasFinalAudio={Boolean(episode.audioFinalPath)}
+        finalDurationSec={episode.audioDurationSec ?? 0}
+        finalUpdatedAt={episode.updatedAt}
+        finalMarkers={episode.finalMarkers ?? []}
         onMarkersChange={
           !segmentReadOnly && canEditSegments
-            ? (markers) => updateMutation.mutate({ final_markers: markers } as EpisodeUpdate)
+            ? (markers) => updateMutation.mutate({ finalMarkers: markers } as EpisodeUpdate)
             : undefined
         }
         readOnly={segmentReadOnly}
         onFinalPlayStart={pauseCurrentSegment}
         pauseAndResetRef={finalPauseRef}
-        hasTranscript={episode.has_transcript === true}
+        hasTranscript={episode.hasTranscript === true}
         onOpenTranscript={() => setShowEpisodeTranscript(true)}
         onGenerateTranscript={
-          asrAvail?.available && episode.has_transcript !== true
+          asrAvail?.available && episode.hasTranscript !== true
             ? async () => { await generateTranscriptMutation.mutateAsync(); }
             : undefined
         }
-        canGenerateTranscript={asrAvail?.available === true && meData?.user?.can_transcribe === 1}
+        canGenerateTranscript={asrAvail?.available === true && meData?.user?.canTranscribe === 1}
         error={
           (renderStatus?.status === 'failed' ? (renderStatus.error ?? 'Build failed') : null) ??
           (renderMutation.isError ? renderMutation.error?.message : null) ??
@@ -672,7 +695,7 @@ export function EpisodeEditorContent({
                     try {
                       await uploadArtworkMutation.mutateAsync(fileToUpload);
                       setPendingArtworkFile(null);
-                      const { artwork_url: _artworkUrl, ...rest } = payload;
+                      const { artworkUrl: _artworkUrl, ...rest } = payload;
                       void _artworkUrl;
                       updateMutation.mutate(rest as EpisodeUpdate);
                     } catch {
@@ -681,7 +704,7 @@ export function EpisodeEditorContent({
                     return;
                   }
                   const finalPayload =
-                    coverMode === 'upload' ? (() => { const { artwork_url: _artworkUrl, ...rest } = payload; void _artworkUrl; return rest; })() : payload;
+                    coverMode === 'upload' ? (() => { const { artworkUrl: _artworkUrl, ...rest } = payload; void _artworkUrl; return rest; })() : payload;
                   updateMutation.mutate(finalPayload as EpisodeUpdate);
                 }}
                 onCancel={() => setDetailsDialogOpen(false)}
@@ -701,7 +724,7 @@ export function EpisodeEditorContent({
                 coverImageConfig={{
                   podcastId,
                   episodeId: id,
-                  artworkFilename: episode.artwork_filename ?? null,
+                  artworkFilename: episode.artworkFilename ?? null,
                   coverMode,
                   setCoverMode,
                   pendingArtworkFile,
@@ -796,10 +819,10 @@ export function EpisodeEditorContent({
           segment={seg}
           segmentId={segmentIdForInfo}
           segmentName={seg.name?.trim() || 'Section'}
-          segmentAudioPath={seg.audio_path}
+          segmentAudioPath={seg.audioPath}
           segmentWaveformData={segmentWaveforms.get(seg.id)}
           asrAvailable={Boolean(asrAvail?.available)}
-          ownerCanTranscribe={podcast?.owner_can_transcribe === 1}
+          ownerCanTranscribe={podcast?.ownerCanTranscribe === 1}
           initialTab={segmentModalInitialTab}
           onClose={() => setSegmentIdForInfo(null)}
         />
@@ -815,7 +838,7 @@ export function EpisodeEditorContent({
                 const seg = segments.find((s) => s.id === segmentToDelete);
                 const name =
                   seg?.name?.trim() ||
-                  (seg?.type === 'recorded' ? 'Recorded section' : seg?.asset_name) ||
+                  (seg?.type === 'recorded' ? 'Recorded section' : seg?.assetName) ||
                   'This section';
                 return `"${name}" will be removed. This cannot be undone.`;
               })()

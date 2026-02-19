@@ -18,6 +18,7 @@ import {
   WebRTCSection,
   EmailSection,
   TwoFactorSection,
+  SsoSection,
   DnsConfigurationSection,
   CustomLegalSection,
 } from '../components/Settings';
@@ -80,101 +81,105 @@ export function Settings() {
 
   useEffect(() => {
     resizeWelcomeBanner();
-  }, [form.welcome_banner, resizeWelcomeBanner]);
+  }, [form.welcomeBanner, resizeWelcomeBanner]);
 
   // Main save mutation
   const mutation = useMutation({
     mutationFn: () =>
       updateSettings({
-        whisper_asr_url: form.whisper_asr_url.trim().replace(/\/+$/, ''),
-        transcription_provider: form.transcription_provider,
-        openai_transcription_url: form.openai_transcription_url?.trim() || undefined,
-        openai_transcription_api_key: form.openai_transcription_api_key === '(set)' ? undefined : form.openai_transcription_api_key,
-        transcription_model: form.transcription_model?.trim() || undefined,
-        default_can_transcribe: form.default_can_transcribe,
-        llm_provider: form.llm_provider,
-        ollama_url: form.ollama_url,
-        openai_api_key: form.openai_api_key === '(set)' ? undefined : form.openai_api_key,
+        whisperAsrUrl: form.whisperAsrUrl.trim().replace(/\/+$/, ''),
+        transcriptionProvider: form.transcriptionProvider,
+        openaiTranscriptionUrl: form.openaiTranscriptionUrl?.trim() || undefined,
+        openaiTranscriptionApiKey: form.openaiTranscriptionApiKey === '(set)' ? undefined : form.openaiTranscriptionApiKey,
+        transcriptionModel: form.transcriptionModel?.trim() || undefined,
+        defaultCanTranscribe: form.defaultCanTranscribe,
+        llmProvider: form.llmProvider,
+        ollamaUrl: form.ollamaUrl,
+        openaiApiKey: form.openaiApiKey === '(set)' ? undefined : form.openaiApiKey,
         model: form.model,
-        registration_enabled: form.registration_enabled,
-        public_feeds_enabled: form.public_feeds_enabled,
-        gdpr_consent_banner_enabled: form.gdpr_consent_banner_enabled,
-        websub_discovery_enabled: form.websub_discovery_enabled,
+        registrationEnabled: form.registrationEnabled,
+        publicFeedsEnabled: form.publicFeedsEnabled,
+        gdprConsentBannerEnabled: form.gdprConsentBannerEnabled,
+        websubDiscoveryEnabled: form.websubDiscoveryEnabled,
         hostname: form.hostname,
-        websub_hub: form.websub_hub,
-        final_bitrate_kbps: form.final_bitrate_kbps,
-        final_channels: form.final_channels,
-        final_format: form.final_format,
-        maxmind_account_id: form.maxmind_account_id.trim(),
-        maxmind_license_key: form.maxmind_license_key === '(set)' ? undefined : form.maxmind_license_key,
-        default_max_podcasts: form.default_max_podcasts,
-        default_storage_mb: form.default_storage_mb,
-        default_max_episodes: form.default_max_episodes,
-        default_max_collaborators: form.default_max_collaborators,
-        default_max_subscriber_tokens: form.default_max_subscriber_tokens,
-        captcha_provider: form.captcha_provider,
-        captcha_site_key: form.captcha_provider === 'none' ? '' : form.captcha_site_key.trim(),
-        captcha_secret_key:
-          form.captcha_provider === 'none' ? '' : form.captcha_secret_key === '(set)' ? undefined : form.captcha_secret_key,
-        email_provider: form.email_provider,
-        email_webhook_url: form.email_provider === 'webhook' ? form.email_webhook_url.trim() : '',
-        email_webhook_field_key: form.email_provider === 'webhook' ? (form.email_webhook_field_key.trim() || 'content') : 'content',
-        smtp_host: form.email_provider === 'smtp' ? form.smtp_host.trim() : '',
-        smtp_port: form.smtp_port,
-        smtp_secure: form.smtp_secure,
-        smtp_user: form.email_provider === 'smtp' ? form.smtp_user.trim() : '',
-        smtp_password: form.email_provider === 'smtp' && form.smtp_password !== '(set)' ? form.smtp_password : undefined,
-        smtp_from: form.email_provider === 'smtp' ? form.smtp_from.trim() : '',
-        sendgrid_api_key: form.email_provider === 'sendgrid' && form.sendgrid_api_key !== '(set)' ? form.sendgrid_api_key : undefined,
-        sendgrid_from: form.email_provider === 'sendgrid' ? form.sendgrid_from.trim() : '',
-        email_enable_registration_verification: form.email_enable_registration_verification,
-        email_enable_welcome_after_verify: form.email_enable_welcome_after_verify,
-        email_enable_password_reset: form.email_enable_password_reset,
-        email_enable_admin_welcome: form.email_enable_admin_welcome,
-        email_enable_new_show: form.email_enable_new_show,
-        email_enable_invite: form.email_enable_invite,
-        email_enable_contact: form.email_enable_contact,
-        welcome_banner: form.welcome_banner,
-        custom_terms: form.custom_terms,
-        custom_privacy: form.custom_privacy,
-        dns_provider: form.dns_provider,
-        dns_provider_api_token:
-          (form.dns_provider_api_token && form.dns_provider_api_token !== '(set)')
-            ? form.dns_provider_api_token
-            : form.dns_provider_api_token_set
+        websubHub: form.websubHub,
+        finalBitrateKbps: form.finalBitrateKbps,
+        finalChannels: form.finalChannels,
+        finalFormat: form.finalFormat,
+        maxmindAccountId: form.maxmindAccountId.trim(),
+        maxmindLicenseKey: form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey,
+        defaultMaxPodcasts: form.defaultMaxPodcasts,
+        defaultStorageMb: form.defaultStorageMb,
+        defaultMaxEpisodes: form.defaultMaxEpisodes,
+        defaultMaxCollaborators: form.defaultMaxCollaborators,
+        defaultMaxSubscriberTokens: form.defaultMaxSubscriberTokens,
+        captchaProvider: form.captchaProvider,
+        captchaSiteKey: form.captchaProvider === 'none' ? '' : form.captchaSiteKey.trim(),
+        captchaSecretKey:
+          form.captchaProvider === 'none' ? '' : form.captchaSecretKey === '(set)' ? undefined : form.captchaSecretKey,
+        emailProvider: form.emailProvider,
+        emailWebhookUrl: form.emailProvider === 'webhook' ? form.emailWebhookUrl.trim() : '',
+        emailWebhookFieldKey: form.emailProvider === 'webhook' ? (form.emailWebhookFieldKey.trim() || 'content') : 'content',
+        smtpHost: form.emailProvider === 'smtp' ? form.smtpHost.trim() : '',
+        smtpPort: form.smtpPort,
+        smtpSecure: form.smtpSecure,
+        smtpUser: form.emailProvider === 'smtp' ? form.smtpUser.trim() : '',
+        smtpPassword: form.emailProvider === 'smtp' && form.smtpPassword !== '(set)' ? form.smtpPassword : undefined,
+        smtpFrom: form.emailProvider === 'smtp' ? form.smtpFrom.trim() : '',
+        sendgridApiKey: form.emailProvider === 'sendgrid' && form.sendgridApiKey !== '(set)' ? form.sendgridApiKey : undefined,
+        sendgridFrom: form.emailProvider === 'sendgrid' ? form.sendgridFrom.trim() : '',
+        emailEnableRegistrationVerification: form.emailEnableRegistrationVerification,
+        emailEnableWelcomeAfterVerify: form.emailEnableWelcomeAfterVerify,
+        emailEnablePasswordReset: form.emailEnablePasswordReset,
+        emailEnableAdminWelcome: form.emailEnableAdminWelcome,
+        emailEnableNewShow: form.emailEnableNewShow,
+        emailEnableInvite: form.emailEnableInvite,
+        emailEnableContact: form.emailEnableContact,
+        welcomeBanner: form.welcomeBanner,
+        customTerms: form.customTerms,
+        customPrivacy: form.customPrivacy,
+        dnsProvider: form.dnsProvider,
+        dnsProviderApiToken:
+          (form.dnsProviderApiToken && form.dnsProviderApiToken !== '(set)')
+            ? form.dnsProviderApiToken
+            : form.dnsProviderApiTokenSet
               ? '(set)'
               : undefined,
-        dns_use_cname: form.dns_use_cname,
-        dns_a_record_ip: form.dns_a_record_ip,
-        dns_allow_linking_domain: form.dns_allow_linking_domain,
-        dns_default_allow_domain: form.dns_default_allow_domain,
-        dns_default_allow_domains: (() => {
-          const v = form.dns_default_allow_domains;
+        dnsUseCname: form.dnsUseCname,
+        dnsARecordIp: form.dnsARecordIp,
+        dnsAllowLinkingDomain: form.dnsAllowLinkingDomain,
+        dnsDefaultAllowDomain: form.dnsDefaultAllowDomain,
+        dnsDefaultAllowDomains: (() => {
+          const v = form.dnsDefaultAllowDomains;
           if (typeof v === 'string') {
             if (v.trim().startsWith('[')) {
               try {
                 const arr = JSON.parse(v) as unknown;
-                return Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string') : [];
+                const list = Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string') : [];
+                return JSON.stringify(list);
               } catch {
-                return v.split(',').map((s) => s.trim()).filter(Boolean);
+                const list = v.split(',').map((s) => s.trim()).filter(Boolean);
+                return JSON.stringify(list);
               }
             }
-            return v.split(',').map((s) => s.trim()).filter(Boolean);
+            return v;
           }
-          return [];
+          return '[]';
         })(),
-        dns_default_allow_custom_key: form.dns_default_allow_custom_key,
-        dns_default_allow_sub_domain: form.dns_default_allow_sub_domain,
-        dns_default_domain: form.dns_default_domain,
-        dns_default_enable_cloudflare_proxy: form.dns_default_enable_cloudflare_proxy,
-        webrtc_service_url: form.webrtc_service_url?.trim() ?? '',
-        webrtc_public_ws_url: form.webrtc_public_ws_url?.trim() ?? '',
-        recording_callback_secret:
-          form.recording_callback_secret === '(set)' ? undefined : form.recording_callback_secret,
-        two_factor_enabled: form.two_factor_enabled,
-        two_factor_methods: form.two_factor_methods,
-        two_factor_enforced: form.two_factor_enforced,
-      } as unknown as Parameters<typeof updateSettings>[0]),
+        dnsDefaultAllowCustomKey: form.dnsDefaultAllowCustomKey,
+        dnsDefaultAllowSubDomain: form.dnsDefaultAllowSubDomain,
+        dnsDefaultDomain: form.dnsDefaultDomain,
+        dnsDefaultEnableCloudflareProxy: form.dnsDefaultEnableCloudflareProxy,
+        webrtcServiceUrl: form.webrtcServiceUrl?.trim() ?? '',
+        webrtcPublicWsUrl: form.webrtcPublicWsUrl?.trim() ?? '',
+        recordingCallbackSecret:
+          form.recordingCallbackSecret === '(set)' ? undefined : form.recordingCallbackSecret,
+        twoFactorEnabled: form.twoFactorEnabled,
+        twoFactorMethods: form.twoFactorMethods,
+        twoFactorEnforced: form.twoFactorEnforced,
+        ssoOidcProviders: form.ssoOidcProviders,
+        ssoSamlProviders: form.ssoSamlProviders,
+      }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setForm(data);
@@ -210,9 +215,9 @@ export function Settings() {
 
   // Handle LLM provider change
   const handleLLMProviderChange = useCallback(
-    (provider: typeof form.llm_provider) => {
+    (provider: typeof form.llmProvider) => {
       updateForm({
-        llm_provider: provider,
+        llmProvider: provider,
         model:
           provider === 'openai'
             ? OPENAI_DEFAULT_MODEL
@@ -303,17 +308,17 @@ export function Settings() {
           geoliteUpdateMutation={geoliteUpdateMutation}
           onGeoliteTest={() =>
             geoliteTestMutation.mutate({
-              maxmind_account_id: form.maxmind_account_id.trim(),
-              maxmind_license_key:
-                form.maxmind_license_key === '(set)' ? undefined : form.maxmind_license_key.trim() || undefined,
+              maxmindAccountId: form.maxmindAccountId.trim(),
+              maxmindLicenseKey:
+                form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey.trim() || undefined,
             })
           }
           onGeoliteCheck={() => geoliteCheckMutation.mutate()}
           onGeoliteUpdate={() =>
             geoliteUpdateMutation.mutate({
-              maxmind_account_id: form.maxmind_account_id.trim(),
-              maxmind_license_key:
-                form.maxmind_license_key === '(set)' ? undefined : form.maxmind_license_key.trim() || undefined,
+              maxmindAccountId: form.maxmindAccountId.trim(),
+              maxmindLicenseKey:
+                form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey.trim() || undefined,
             })
           }
         />
@@ -349,6 +354,8 @@ export function Settings() {
         />
 
         <TwoFactorSection form={form} onFormChange={updateForm} />
+
+        <SsoSection form={form} onFormChange={updateForm} />
 
         <DnsConfigurationSection form={form} onFormChange={updateForm} />
 

@@ -2,28 +2,47 @@ import { basename } from "path";
 
 /**
  * Redact sensitive fields from a segment before sending to clients.
- * Replaces audio_path (filesystem path) with basename-only for cache busting
+ * Replaces audioPath (filesystem path) with basename-only for cache busting
  * without exposing server directory structure.
- * Parses trim_ranges and markers from JSON strings to arrays/objects.
+ * Parses trimRanges and markers from JSON strings to arrays/objects.
+ * Input and output are camelCase only.
  */
 export function redactSegmentForClient(
   segment: Record<string, unknown>,
 ): Record<string, unknown> {
-  const out = { ...segment };
-  const path = out.audio_path;
+  const out: Record<string, unknown> = {
+    id: segment.id,
+    episodeId: segment.episodeId,
+    position: segment.position,
+    type: segment.type,
+    name: segment.name,
+    reusableAssetId: segment.reusableAssetId,
+    audioPath: segment.audioPath,
+    durationSec: segment.durationSec,
+    createdAt: segment.createdAt,
+    inProgress: segment.inProgress,
+    recordFailed: segment.recordFailed,
+    trimRanges: segment.trimRanges,
+    markers: segment.markers,
+    assetName: segment.assetName,
+    waveformExists: segment.waveformExists,
+  };
+  const path = segment.audioPath;
   if (path != null && typeof path === "string" && path.length > 0) {
-    out.audio_path = basename(path);
+    out.audioPath = basename(path);
   }
-  if (typeof out.trim_ranges === "string" && out.trim_ranges) {
+  const trimRaw = segment.trimRanges;
+  if (typeof trimRaw === "string" && trimRaw) {
     try {
-      out.trim_ranges = JSON.parse(out.trim_ranges as string);
+      out.trimRanges = JSON.parse(trimRaw);
     } catch {
-      out.trim_ranges = null;
+      out.trimRanges = null;
     }
   }
-  if (typeof out.markers === "string" && out.markers) {
+  const markersRaw = segment.markers;
+  if (typeof markersRaw === "string" && markersRaw) {
     try {
-      out.markers = JSON.parse(out.markers as string);
+      out.markers = JSON.parse(markersRaw);
     } catch {
       out.markers = null;
     }

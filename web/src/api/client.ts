@@ -77,15 +77,35 @@ export async function api<T>(
   }
   if (!res.ok) {
     if (res.status === 429) {
-      const retryAfter = res.headers.get('Retry-After');
+      const body = await res.json().catch(() => ({}));
+      const serverMsg = (body as { error?: string }).error;
       const msg =
-        retryAfter && /^\d+$/.test(retryAfter)
-          ? `Too many requests. Please try again in ${retryAfter} second${retryAfter === '1' ? '' : 's'}.`
-          : 'Too many requests. Please wait a moment and try again.';
+        serverMsg ??
+        (() => {
+          const retryAfter = res.headers.get('Retry-After');
+          if (retryAfter && /^\d+$/.test(retryAfter)) {
+            const sec = parseInt(retryAfter, 10);
+            const totalMinutes = Math.ceil(sec / 60);
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            const parts: string[] = [];
+            if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`);
+            if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`);
+            if (parts.length === 0) parts.push('1 minute');
+            return `Too many requests. Please try again in ${parts.join(' ')}.`;
+          }
+          return 'Too many requests. Please wait a moment and try again.';
+        })();
       throw Object.assign(new Error(msg), { status: 429 });
     }
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    const apiErr = Object.assign(new Error((err as { error?: string }).error ?? res.statusText), {
+    const errBody = err as { error?: string; message?: string };
+    const errMsg =
+      errBody.error ||
+      errBody.message ||
+      res.statusText ||
+      "Something went wrong";
+    const apiErr = Object.assign(new Error(errMsg), {
       status: res.status,
     });
     throw apiErr;

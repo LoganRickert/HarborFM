@@ -65,7 +65,7 @@ export function useConsent() {
     }
   }, []);
 
-  const bannerEnabled = Boolean(publicConfig?.gdpr_consent_banner_enabled);
+  const bannerEnabled = Boolean(publicConfig?.gdprConsentBannerEnabled);
   const showBanner =
     bannerEnabled &&
     consentGiven === null &&

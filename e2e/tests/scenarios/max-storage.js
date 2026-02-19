@@ -47,7 +47,7 @@ export async function run({ runOne }) {
   const patchRes = await apiFetch(`/users/${u.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ max_storage_mb: 1 }),
+    body: JSON.stringify({ maxStorageMb: 1 }),
   }, adminJar);
   if (patchRes.status !== 200) throw new Error(`PATCH user limit failed: ${patchRes.status}`);
 

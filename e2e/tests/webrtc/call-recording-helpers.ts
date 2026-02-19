@@ -40,7 +40,7 @@ export async function createCallRecordingFixture(page: Page): Promise<CallRecord
         password: 'admin-password-123',
         hostname: `http://localhost:${PORT}`,
         registration_enabled: true,
-        public_feeds_enabled: true,
+        publicFeedsEnabled: true,
         import_pixabay_assets: false,
       },
     });

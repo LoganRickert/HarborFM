@@ -16,7 +16,7 @@ interface CollaboratorFormProps {
 
 export function CollaboratorForm({ podcastId, atLimit, limitValue, onSuccess }: CollaboratorFormProps) {
   const queryClient = useQueryClient();
-  const [addEmail, setAddEmail] = useState('');
+  const [addEmailOrHandle, setAddEmailOrHandle] = useState('');
   const [addRole, setAddRole] = useState<'view' | 'editor' | 'manager'>('editor');
   const [addError, setAddError] = useState<string | null>(null);
   const [userNotFoundEmail, setUserNotFoundEmail] = useState<string | null>(null);
@@ -27,15 +27,24 @@ export function CollaboratorForm({ podcastId, atLimit, limitValue, onSuccess }: 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['collaborators', podcastId] });
       queryClient.invalidateQueries({ queryKey: ['podcasts'] });
-      setAddEmail('');
+      setAddEmailOrHandle('');
       setAddError(null);
       setUserNotFoundEmail(null);
       onSuccess();
     },
     onError: (err: unknown) => {
-      if (err instanceof CollaboratorApiError && err.data?.code === 'USER_NOT_FOUND' && err.data?.email) {
-        setUserNotFoundEmail(err.data.email);
-        setAddError('This person is not on the platform yet.');
+      if (err instanceof CollaboratorApiError && err.data?.code === 'USER_NOT_FOUND') {
+        const canInvite = err.data?.canInviteToPlatform;
+        const input = err.data?.email;
+        if (canInvite && input) {
+          setUserNotFoundEmail(input);
+          setAddError('This person is not on the platform yet.');
+        } else {
+          setUserNotFoundEmail(null);
+          setAddError(
+            'No account found with that email or username. Double-check the spelling or try a different way to look them up.'
+          );
+        }
       } else {
         setAddError(err instanceof Error ? err.message : 'Failed to add collaborator');
         setUserNotFoundEmail(null);
@@ -56,9 +65,9 @@ export function CollaboratorForm({ podcastId, atLimit, limitValue, onSuccess }: 
     e.preventDefault();
     setAddError(null);
     setUserNotFoundEmail(null);
-    const email = addEmail.trim().toLowerCase();
-    if (!email) return;
-    addMutation.mutate({ email, role: addRole });
+    const value = addEmailOrHandle.trim();
+    if (!value) return;
+    addMutation.mutate({ email: value, role: addRole });
   }
 
   function handleInviteToPlatform() {
@@ -80,10 +89,10 @@ export function CollaboratorForm({ podcastId, atLimit, limitValue, onSuccess }: 
       <form onSubmit={handleAdd} className={styles.collabForm}>
         <div className={styles.collabFormInputWrap}>
           <input
-            type="email"
-            placeholder="Email"
-            value={addEmail}
-            onChange={(e) => setAddEmail(e.target.value)}
+            type="text"
+            placeholder="Email or @handle"
+            value={addEmailOrHandle}
+            onChange={(e) => setAddEmailOrHandle(e.target.value)}
             className={styles.collabFormInput}
             required
           />

@@ -24,8 +24,12 @@ export interface CastMemberRowMember {
   id: string;
   name: string;
   role: string;
+  /** @deprecated use photoFilename */
   photo_filename?: string | null;
+  /** Prefer photoFilename for derived URL; fallback to photo_url for external URLs */
+  photoFilename?: string | null;
   photo_url?: string | null;
+  photoUrl?: string | null;
 }
 
 export interface CastMemberRowProps {
@@ -44,11 +48,11 @@ export function CastMemberRow({
   variant = 'row',
   children,
 }: CastMemberRowProps) {
+  const fn = member.photoFilename ?? member.photo_filename;
+  const url = member.photoUrl ?? member.photo_url;
   const photoSrc =
     photoSrcProp ??
-    ((member.photo_filename && podcastId
-      ? castPhotoUrl(podcastId, member.id, member.photo_filename)
-      : '') || safeImageSrc(member.photo_url));
+    ((fn && podcastId ? castPhotoUrl(podcastId, member.id, fn) : '') || safeImageSrc(url));
 
   const avatarNode = photoSrc ? (
     <img src={photoSrc} alt={`${member.name} photo`} className={variant === 'chip' ? styles.castChipAvatar : styles.castAvatar} />

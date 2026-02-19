@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { db } from "../../db/index.js";
+import { eq } from "drizzle-orm";
+import { drizzleDb } from "../../db/index.js";
+import { podcasts } from "../../db/schema.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { getPodcastRole, canAccessPodcast } from "../../services/access.js";
 import {
@@ -40,7 +42,7 @@ export async function registerDeleteRoutes(app: FastifyInstance) {
             type: "object",
             properties: {
               error: { type: "string" },
-              podcast_id: { type: "string" },
+              podcastId: { type: "string" },
             },
           },
         },
@@ -67,11 +69,16 @@ export async function registerDeleteRoutes(app: FastifyInstance) {
         return reply.status(409).send({
           error:
             "You already have a podcast deletion in progress. Wait for it to finish or refresh the page to see its status.",
-          podcast_id: existingId,
+          podcastId: existingId,
         });
       }
 
-      const exists = db.prepare("SELECT 1 FROM podcasts WHERE id = ?").get(podcastId);
+      const exists = drizzleDb
+        .select({ id: podcasts.id })
+        .from(podcasts)
+        .where(eq(podcasts.id, podcastId))
+        .limit(1)
+        .get();
       if (!exists) {
         return reply.status(404).send({ error: "Podcast not found" });
       }
@@ -176,7 +183,7 @@ export async function registerDeleteRoutes(app: FastifyInstance) {
                 type: "string",
                 enum: ["idle", "pending", "deleting", "done", "failed"],
               },
-              podcast_id: { type: "string" },
+              podcastId: { type: "string" },
               message: { type: "string" },
               error: { type: "string" },
               current_episode: { type: "number" },
@@ -199,7 +206,7 @@ export async function registerDeleteRoutes(app: FastifyInstance) {
       }
       return reply.send({
         status: state.status,
-        podcast_id: podcastId,
+        podcastId,
         message: state.message,
         error: state.error,
         current_episode: state.current,

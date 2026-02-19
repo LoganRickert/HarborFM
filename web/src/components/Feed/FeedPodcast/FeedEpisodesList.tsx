@@ -26,7 +26,7 @@ export function FeedEpisodesList({
             key={ep.id}
             episode={ep}
             podcastSlug={podcastSlug}
-            isSubscriberOnly={ep.subscriber_only === 1 || podcast.public_feed_disabled === 1}
+            isSubscriberOnly={Boolean(ep.subscriberOnly) || Boolean(podcast.publicFeedDisabled)}
             showPlayer={true}
             playingEpisodeId={playingEpisodeId}
             onPlay={onPlay}

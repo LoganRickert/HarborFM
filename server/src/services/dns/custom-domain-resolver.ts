@@ -1,7 +1,9 @@
-import { db } from "../../db/index.js";
+import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { drizzleDb } from "../../db/drizzle.js";
+import { podcasts } from "../../db/schema.js";
 import { readSettings } from "../../modules/settings/index.js";
 import { DOMAIN } from "../../config.js";
-import type { AppSettings } from "../../modules/settings/routes.js";
+import type { AppSettings } from "../../modules/settings/index.js";
 
 /**
  * Get the canonical feed URL for a podcast when it has an active custom domain.
@@ -9,21 +11,21 @@ import type { AppSettings } from "../../modules/settings/routes.js";
  */
 export function getCanonicalFeedUrl(
   row: {
-    link_domain?: string | null;
-    managed_domain?: string | null;
-    managed_sub_domain?: string | null;
+    linkDomain?: string | null;
+    managedDomain?: string | null;
+    managedSubDomain?: string | null;
   },
   settings: AppSettings,
 ): string | null {
-  const link = row.link_domain?.trim();
+  const link = row.linkDomain?.trim();
   if (link && settings.dns_allow_linking_domain) {
     return `https://${link}/`;
   }
-  const managed = row.managed_domain?.trim();
+  const managed = row.managedDomain?.trim();
   if (managed && settings.dns_default_allow_domain) {
     return `https://${managed}/`;
   }
-  const sub = row.managed_sub_domain?.trim();
+  const sub = row.managedSubDomain?.trim();
   const defaultDomain = (settings.dns_default_domain ?? "").trim();
   if (sub && defaultDomain && settings.dns_default_allow_sub_domain) {
     return `https://${sub}.${defaultDomain}/`;
@@ -43,20 +45,34 @@ export function getPodcastByHost(host: string): { id: string; slug: string } | n
 
   const settings = readSettings();
   if (settings.dns_allow_linking_domain) {
-    const linkMatch = db
-      .prepare(
-        "SELECT id, slug FROM podcasts WHERE LOWER(TRIM(link_domain)) = ? AND link_domain IS NOT NULL AND link_domain != ''",
+    const linkMatch = drizzleDb
+      .select({ id: podcasts.id, slug: podcasts.slug })
+      .from(podcasts)
+      .where(
+        and(
+          eq(sql`LOWER(TRIM(${podcasts.linkDomain}))`, raw),
+          isNotNull(podcasts.linkDomain),
+          ne(podcasts.linkDomain, ""),
+        ),
       )
-      .get(raw) as { id: string; slug: string } | undefined;
+      .limit(1)
+      .get();
     if (linkMatch) return linkMatch;
   }
 
   if (settings.dns_default_allow_domain) {
-    const managedMatch = db
-      .prepare(
-        "SELECT id, slug FROM podcasts WHERE LOWER(TRIM(managed_domain)) = ? AND managed_domain IS NOT NULL AND managed_domain != ''",
+    const managedMatch = drizzleDb
+      .select({ id: podcasts.id, slug: podcasts.slug })
+      .from(podcasts)
+      .where(
+        and(
+          eq(sql`LOWER(TRIM(${podcasts.managedDomain}))`, raw),
+          isNotNull(podcasts.managedDomain),
+          ne(podcasts.managedDomain, ""),
+        ),
       )
-      .get(raw) as { id: string; slug: string } | undefined;
+      .limit(1)
+      .get();
     if (managedMatch) return managedMatch;
   }
 
@@ -66,11 +82,18 @@ export function getPodcastByHost(host: string): { id: string; slug: string } | n
   const sub = raw.slice(0, -defaultDomain.length - 1);
   if (sub === "@") return null; // @ is not a valid DNS subdomain label
 
-  const subMatch = db
-    .prepare(
-      "SELECT id, slug FROM podcasts WHERE LOWER(TRIM(managed_sub_domain)) = ? AND managed_sub_domain IS NOT NULL AND managed_sub_domain != ''",
+  const subMatch = drizzleDb
+    .select({ id: podcasts.id, slug: podcasts.slug })
+    .from(podcasts)
+    .where(
+      and(
+        eq(sql`LOWER(TRIM(${podcasts.managedSubDomain}))`, sub),
+        isNotNull(podcasts.managedSubDomain),
+        ne(podcasts.managedSubDomain, ""),
+      ),
     )
-    .get(sub) as { id: string; slug: string } | undefined;
+    .limit(1)
+    .get();
   return subMatch ?? null;
 }
 

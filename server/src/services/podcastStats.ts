@@ -1,6 +1,14 @@
 import { createHash } from "crypto";
+import { sql } from "drizzle-orm";
 import { LISTEN_THRESHOLD_BYTES, STATS_FLUSH_INTERVAL_MS } from "../config.js";
-import { db } from "../db/index.js";
+import { drizzleDb } from "../db/drizzle.js";
+import {
+  podcastStatsEpisodeDaily,
+  podcastStatsEpisodeListensDaily,
+  podcastStatsEpisodeLocationDaily,
+  podcastStatsListenDedup,
+  podcastStatsRssDaily,
+} from "../db/schema.js";
 
 const DEDUP_RETAIN_DAYS = 2;
 
@@ -84,11 +92,18 @@ function tryRecordListenDedup(
   date: string,
   clientKeyVal: string,
 ): boolean {
-  const stmt = db.prepare(
-    `INSERT OR IGNORE INTO podcast_stats_listen_dedup (episode_id, stat_date, client_key) VALUES (?, ?, ?)`,
-  );
-  const result = stmt.run(episodeId, date, clientKeyVal);
-  return result.changes === 1;
+  const result = drizzleDb
+    .insert(podcastStatsListenDedup)
+    .values({ episodeId, statDate: date, clientKey: clientKeyVal })
+    .onConflictDoNothing({
+      target: [
+        podcastStatsListenDedup.episodeId,
+        podcastStatsListenDedup.statDate,
+        podcastStatsListenDedup.clientKey,
+      ],
+    })
+    .run();
+  return (result as { changes: number }).changes === 1;
 }
 
 function incListen(episodeId: string, isBot: boolean): void {
@@ -130,68 +145,115 @@ export function recordEpisodeListenIfNew(
 }
 
 function flushRss(): void {
-  const upsert = db.prepare(`
-    INSERT INTO podcast_stats_rss_daily (podcast_id, stat_date, bot_count, human_count)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(podcast_id, stat_date) DO UPDATE SET
-      bot_count = bot_count + excluded.bot_count,
-      human_count = human_count + excluded.human_count
-  `);
   for (const [key, counts] of rssCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
     const [, podcastId, date] = key.split(":");
-    upsert.run(podcastId, date, counts.bot, counts.human);
+    drizzleDb
+      .insert(podcastStatsRssDaily)
+      .values({
+        podcastId,
+        statDate: date,
+        botCount: counts.bot,
+        humanCount: counts.human,
+      })
+      .onConflictDoUpdate({
+        target: [podcastStatsRssDaily.podcastId, podcastStatsRssDaily.statDate],
+        set: {
+          botCount: sql`${podcastStatsRssDaily.botCount} + ${counts.bot}`,
+          humanCount: sql`${podcastStatsRssDaily.humanCount} + ${counts.human}`,
+        },
+      })
+      .run();
   }
   rssCounters.clear();
 }
 
 function flushEpisode(): void {
-  const upsert = db.prepare(`
-    INSERT INTO podcast_stats_episode_daily (episode_id, stat_date, bot_count, human_count)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(episode_id, stat_date) DO UPDATE SET
-      bot_count = bot_count + excluded.bot_count,
-      human_count = human_count + excluded.human_count
-  `);
   for (const [key, counts] of episodeCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
     const [, episodeId, date] = key.split(":");
-    upsert.run(episodeId, date, counts.bot, counts.human);
+    drizzleDb
+      .insert(podcastStatsEpisodeDaily)
+      .values({
+        episodeId,
+        statDate: date,
+        botCount: counts.bot,
+        humanCount: counts.human,
+      })
+      .onConflictDoUpdate({
+        target: [
+          podcastStatsEpisodeDaily.episodeId,
+          podcastStatsEpisodeDaily.statDate,
+        ],
+        set: {
+          botCount: sql`${podcastStatsEpisodeDaily.botCount} + ${counts.bot}`,
+          humanCount: sql`${podcastStatsEpisodeDaily.humanCount} + ${counts.human}`,
+        },
+      })
+      .run();
   }
   episodeCounters.clear();
 }
 
 function flushEpisodeLocation(): void {
-  const upsert = db.prepare(`
-    INSERT INTO podcast_stats_episode_location_daily (episode_id, stat_date, location, bot_count, human_count)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(episode_id, stat_date, location) DO UPDATE SET
-      bot_count = bot_count + excluded.bot_count,
-      human_count = human_count + excluded.human_count
-  `);
   for (const [key, counts] of episodeLocationCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
     const parts = key.split(":");
     const episodeId = parts[1];
     const date = parts[2];
-    const location = parts.slice(3).join(":"); // location might contain ':'
-    upsert.run(episodeId, date, location, counts.bot, counts.human);
+    const location = parts.slice(3).join(":");
+    drizzleDb
+      .insert(podcastStatsEpisodeLocationDaily)
+      .values({
+        episodeId,
+        statDate: date,
+        location,
+        botCount: counts.bot,
+        humanCount: counts.human,
+      })
+      .onConflictDoUpdate({
+        target: [
+          podcastStatsEpisodeLocationDaily.episodeId,
+          podcastStatsEpisodeLocationDaily.statDate,
+          podcastStatsEpisodeLocationDaily.location,
+        ],
+        set: {
+          botCount:
+            sql`${podcastStatsEpisodeLocationDaily.botCount} + ${counts.bot}`,
+          humanCount:
+            sql`${podcastStatsEpisodeLocationDaily.humanCount} + ${counts.human}`,
+        },
+      })
+      .run();
   }
   episodeLocationCounters.clear();
 }
 
 function flushListens(): void {
-  const upsert = db.prepare(`
-    INSERT INTO podcast_stats_episode_listens_daily (episode_id, stat_date, bot_count, human_count)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(episode_id, stat_date) DO UPDATE SET
-      bot_count = bot_count + excluded.bot_count,
-      human_count = human_count + excluded.human_count
-  `);
   for (const [key, counts] of listenCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
     const [, episodeId, date] = key.split(":");
-    upsert.run(episodeId, date, counts.bot, counts.human);
+    drizzleDb
+      .insert(podcastStatsEpisodeListensDaily)
+      .values({
+        episodeId,
+        statDate: date,
+        botCount: counts.bot,
+        humanCount: counts.human,
+      })
+      .onConflictDoUpdate({
+        target: [
+          podcastStatsEpisodeListensDaily.episodeId,
+          podcastStatsEpisodeListensDaily.statDate,
+        ],
+        set: {
+          botCount:
+            sql`${podcastStatsEpisodeListensDaily.botCount} + ${counts.bot}`,
+          humanCount:
+            sql`${podcastStatsEpisodeListensDaily.humanCount} + ${counts.human}`,
+        },
+      })
+      .run();
   }
   listenCounters.clear();
 }
@@ -222,7 +284,10 @@ export function stopFlushInterval(): void {
  * Call periodically (e.g. daily or on startup).
  */
 export function pruneListenDedup(): void {
-  db.prepare(
-    `DELETE FROM podcast_stats_listen_dedup WHERE stat_date < date('now', ?)`,
-  ).run(`-${DEDUP_RETAIN_DAYS} days`);
+  drizzleDb
+    .delete(podcastStatsListenDedup)
+    .where(
+      sql`${podcastStatsListenDedup.statDate} < date('now', ${`-${DEDUP_RETAIN_DAYS} days`})`,
+    )
+    .run();
 }

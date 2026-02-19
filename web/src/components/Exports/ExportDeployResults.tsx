@@ -5,7 +5,7 @@ const styles = { ...sharedStyles, ...localStyles };
 
 interface ExportDeployResultsProps {
   results?: Array<{
-    export_id: string;
+    exportId: string;
     name: string;
     status: string;
     uploaded?: number;
@@ -25,7 +25,7 @@ export function ExportDeployResults({ results, error, isSuccess, isError }: Expo
       {isSuccess && results && (
         <div className={styles.deployAllResults}>
           {results.map((r) => (
-            <p key={r.export_id} className={r.status === 'success' ? styles.success : styles.error}>
+            <p key={r.exportId} className={r.status === 'success' ? styles.success : styles.error}>
               {r.name}: {r.status === 'success'
                 ? `Uploaded ${r.uploaded} file(s)${r.skipped && r.skipped > 0 ? `, ${r.skipped} unchanged` : ''}.`
                 : (r.errors ?? ['Failed']).join('; ')}

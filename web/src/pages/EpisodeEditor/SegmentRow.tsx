@@ -57,15 +57,15 @@ export function SegmentRow({
   const loadedSegmentIdRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const durationSec = segment.duration_sec ?? 0;
+  const durationSec = segment.durationSec ?? 0;
   const isRecorded = segment.type === 'recorded';
-  const recordFailed = !!segment.record_failed;
-  const inProgress = !!segment.in_progress;
+  const recordFailed = !!segment.recordFailed;
+  const inProgress = !!segment.inProgress;
   const defaultName = recordFailed
     ? 'Recording Failed'
     : isRecorded
       ? 'Recorded section'
-      : (segment.asset_name ?? 'Library clip');
+      : (segment.assetName ?? 'Library clip');
   const [localName, setLocalName] = useState(segment.name ?? (recordFailed ? 'Recording Failed' : ''));
   const waveformData = waveformDataProp;
   const showWaveform = waveformData && waveformData.data?.length;
@@ -77,7 +77,7 @@ export function SegmentRow({
   // Clear loaded segment when episode/segment or audio file path changes (e.g. after trim → new file)
   useEffect(() => {
     loadedSegmentIdRef.current = null;
-  }, [episodeId, segment.id, segment.audio_path]);
+  }, [episodeId, segment.id, segment.audioPath]);
 
   function handleNameBlur() {
     const trimmed = localName.trim();
@@ -96,7 +96,7 @@ export function SegmentRow({
       onPlayRequest(segment.id);
       if (loadedSegmentIdRef.current !== segment.id) {
         loadedSegmentIdRef.current = segment.id;
-        el.src = segmentStreamUrl(episodeId, segment.id, segment.audio_path);
+        el.src = segmentStreamUrl(episodeId, segment.id, segment.audioPath);
       }
       setIsPlaying(true);
       el.play().catch(() => setIsPlaying(false));
@@ -115,7 +115,7 @@ export function SegmentRow({
     return () => unregisterPause(segment.id);
   }, [segment.id, registerPause, unregisterPause]);
 
-  const trimRanges = useMemo(() => segment.trim_ranges ?? [], [segment.trim_ranges]);
+  const trimRanges = useMemo(() => segment.trimRanges ?? [], [segment.trimRanges]);
   const skipTrimmed = trimRanges.length > 0;
   const effectiveDurationSec = skipTrimmed
     ? durationSec - trimRanges.reduce((sum, [s, e]) => sum + (e - s), 0)
@@ -234,7 +234,7 @@ export function SegmentRow({
           <div className={styles.segmentMeta}>
             {recordFailed
               ? 'No audio captured'
-              : `${formatDuration(Math.floor(skipTrimmed ? toEffectiveTime(currentTime, trimRanges) : currentTime))} / ${formatDuration(skipTrimmed ? effectiveDurationSec : segment.duration_sec)}`}
+              : `${formatDuration(Math.floor(skipTrimmed ? toEffectiveTime(currentTime, trimRanges) : currentTime))} / ${formatDuration(skipTrimmed ? effectiveDurationSec : segment.durationSec)}`}
           </div>
         </div>
         <audio ref={audioRef} style={{ display: 'none' }} />

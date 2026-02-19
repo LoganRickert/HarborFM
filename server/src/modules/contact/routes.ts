@@ -1,12 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import { contactBodySchema } from "@harborfm/shared";
-import { db } from "../../db/index.js";
 import { readSettings } from "../settings/index.js";
 import { normalizeHostname } from "../../utils/url.js";
 import { getClientIp } from "../../services/loginAttempts.js";
 import { verifyCaptcha } from "../../services/captcha.js";
 import { sendMail, buildContactNotificationEmail } from "../../services/email.js";
+import {
+  getPodcastIdAndTitleBySlug,
+  getEpisodeIdAndTitleByPodcastAndSlug,
+  isPodcastOwnerReadOnly,
+  insertContactMessage,
+  getContactRecipients,
+} from "./repo.js";
 
 export async function contactRoutes(app: FastifyInstance) {
   app.post(
@@ -59,20 +65,15 @@ export async function contactRoutes(app: FastifyInstance) {
       let episodeTitle: string | null = null;
 
       if (podcastSlug) {
-        const podcast = db
-          .prepare("SELECT id, title FROM podcasts WHERE slug = ?")
-          .get(podcastSlug) as { id: string; title: string } | undefined;
+        const podcast = getPodcastIdAndTitleBySlug(podcastSlug);
         if (podcast) {
           podcastId = podcast.id;
           podcastTitle = podcast.title;
           if (episodeSlug) {
-            const episode = db
-              .prepare(
-                "SELECT id, title FROM episodes WHERE podcast_id = ? AND slug = ?",
-              )
-              .get(podcastId, episodeSlug) as
-              | { id: string; title: string }
-              | undefined;
+            const episode = getEpisodeIdAndTitleByPodcastAndSlug(
+              podcastId,
+              episodeSlug,
+            );
             if (episode) {
               episodeId = episode.id;
               episodeTitle = episode.title;
@@ -112,28 +113,19 @@ export async function contactRoutes(app: FastifyInstance) {
         }
       }
 
-      // If message is for a podcast/episode and the owner is read-only, do not log or send email.
-      let ownerIsReadOnly = false;
-
-      if (podcastId) {
-        const owner = db
-          .prepare(
-            `SELECT COALESCE(u.read_only, 0) AS read_only FROM podcasts p
-           INNER JOIN users u ON p.owner_user_id = u.id
-           WHERE p.id = ?`,
-          )
-          .get(podcastId) as { read_only: number } | undefined;
-        ownerIsReadOnly = owner?.read_only === 1;
-      }
-
-      if (ownerIsReadOnly) {
+      if (podcastId && isPodcastOwnerReadOnly(podcastId)) {
         return reply.send({ ok: true });
       }
 
       const id = nanoid();
-      db.prepare(
-        "INSERT INTO contact_messages (id, name, email, message, podcast_id, episode_id) VALUES (?, ?, ?, ?, ?, ?)",
-      ).run(id, name, email, message, podcastId, episodeId);
+      insertContactMessage({
+        id,
+        name,
+        email,
+        message,
+        podcastId,
+        episodeId,
+      });
 
       if (
         (settings.email_provider === "smtp" ||
@@ -154,27 +146,7 @@ export async function contactRoutes(app: FastifyInstance) {
           },
         );
 
-        let recipients: string[] = [];
-        if (podcastId) {
-          const owner = db
-            .prepare(
-              `SELECT u.email FROM podcasts p
-             INNER JOIN users u ON p.owner_user_id = u.id
-             WHERE p.id = ? AND COALESCE(u.disabled, 0) = 0`,
-            )
-            .get(podcastId) as { email: string } | undefined;
-          if (owner?.email?.trim()) {
-            recipients = [owner.email.trim()];
-          }
-        }
-        if (recipients.length === 0) {
-          const adminRows = db
-            .prepare(
-              "SELECT email FROM users WHERE role = 'admin' AND COALESCE(disabled, 0) = 0",
-            )
-            .all() as Array<{ email: string }>;
-          recipients = adminRows.map((r) => r.email).filter((e) => e?.trim());
-        }
+        const recipients = getContactRecipients(podcastId);
 
         for (const to of recipients) {
           const result = await sendMail({

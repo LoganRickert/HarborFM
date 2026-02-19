@@ -7,11 +7,11 @@ export async function run({ runOne }) {
   await createShow(jar, { title: 'E2E Public Show', slug });
 
   results.push(
-    await runOne('GET /public/config returns public_feeds_enabled', async () => {
+    await runOne('GET /public/config returns publicFeedsEnabled', async () => {
       const res = await fetch(`${baseURL}/public/config`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      if (typeof data.public_feeds_enabled !== 'boolean') throw new Error('Expected public_feeds_enabled');
+      if (typeof data.publicFeedsEnabled !== 'boolean') throw new Error('Expected publicFeedsEnabled');
     })
   );
 
@@ -43,16 +43,16 @@ export async function run({ runOne }) {
   );
 
   results.push(
-    await runOne('When admin disables public feed, GET /public/config returns public_feeds_enabled false', async () => {
+    await runOne('When admin disables public feed, GET /public/config returns publicFeedsEnabled false', async () => {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ public_feeds_enabled: false }),
+        body: JSON.stringify({ publicFeedsEnabled: false }),
       }, jar);
       const res = await fetch(`${baseURL}/public/config`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      if (data.public_feeds_enabled !== false) throw new Error('Expected public_feeds_enabled: false');
+      if (data.publicFeedsEnabled !== false) throw new Error('Expected publicFeedsEnabled: false');
     })
   );
 
@@ -75,12 +75,12 @@ export async function run({ runOne }) {
       await apiFetch('/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ public_feeds_enabled: true }),
+        body: JSON.stringify({ publicFeedsEnabled: true }),
       }, jar);
       const res = await fetch(`${baseURL}/public/config`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      if (data.public_feeds_enabled !== true) throw new Error('Expected public_feeds_enabled true');
+      if (data.publicFeedsEnabled !== true) throw new Error('Expected publicFeedsEnabled true');
     })
   );
 

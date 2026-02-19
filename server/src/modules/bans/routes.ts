@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { eq } from "drizzle-orm";
 import { requireAdmin } from "../../plugins/auth.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/drizzle.js";
+import { ipBans, loginAttempts } from "../../db/schema.js";
+import { bansIpParamSchema } from "@harborfm/shared";
 
 export async function bansRoutes(app: FastifyInstance) {
   app.delete(
@@ -29,14 +32,19 @@ export async function bansRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { ip } = request.params as { ip: string };
-      const trimmed = (ip || "").trim();
-      if (!trimmed) {
-        return reply.status(400).send({ error: "IP is required" });
+      const parsed = bansIpParamSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: parsed.error.issues[0]?.message ?? "Validation failed", details: parsed.error.flatten() });
       }
-      const banResult = db.prepare("DELETE FROM ip_bans WHERE ip = ?").run(trimmed);
-      const failResult = db.prepare("DELETE FROM login_attempts WHERE ip = ?").run(trimmed);
-      console.log(`[ban] Unban IP=${trimmed} bans_deleted=${banResult.changes} failures_cleared=${failResult.changes}`);
+      const trimmed = parsed.data.ip.trim();
+      const banResult = drizzleDb.delete(ipBans).where(eq(ipBans.ip, trimmed)).run();
+      const failResult = drizzleDb.delete(loginAttempts).where(eq(loginAttempts.ip, trimmed)).run();
+      request.log.info(
+        { ip: trimmed, bansDeleted: banResult.changes, failuresCleared: failResult.changes },
+        "[ban] Unban IP",
+      );
       return reply
         .status(200)
         .send({ ok: true, deleted: banResult.changes });

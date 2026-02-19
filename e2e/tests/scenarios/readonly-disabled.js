@@ -14,7 +14,7 @@ export async function run({ runOne }) {
       await apiFetch(`/users/${u.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ read_only: true }),
+        body: JSON.stringify({ readOnly: true }),
       }, adminJar);
       const jar = cookieJar();
       await login(email, password, jar);
@@ -40,7 +40,7 @@ export async function run({ runOne }) {
       await apiFetch(`/users/${u.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ read_only: true }),
+        body: JSON.stringify({ readOnly: true }),
       }, adminJar);
       const jar = cookieJar();
       await login(email, password, jar);
@@ -50,7 +50,7 @@ export async function run({ runOne }) {
   );
 
   results.push(
-    await runOne('Disabled user: login returns 403', async () => {
+    await runOne('Disabled user: login returns 401 (generic to prevent enumeration)', async () => {
       const { email, password } = await createUser({ email: `dis-${Date.now()}@e2e.test` });
       const listRes = await apiFetch('/users?limit=100', {}, adminJar);
       const list = await listRes.json();
@@ -66,9 +66,9 @@ export async function run({ runOne }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      if (res.status !== 403) throw new Error(`Expected 403 for disabled login, got ${res.status}`);
+      if (res.status !== 401) throw new Error(`Expected 401 for disabled login (generic response), got ${res.status}`);
       const data = await res.json();
-      if (!data.error || !data.error.toLowerCase().includes('disabled')) throw new Error('Expected disabled error message');
+      if (!data.error || !data.error.toLowerCase().includes('invalid')) throw new Error('Expected generic invalid credentials message');
     })
   );
 

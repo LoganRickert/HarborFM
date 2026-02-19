@@ -1,20 +1,30 @@
 import type { FastifyInstance } from "fastify";
+import { and, eq, exists, or, sql } from "drizzle-orm";
 import { requireAuth } from "../../plugins/auth.js";
-import { db } from "../../db/index.js";
+import { drizzleDb } from "../../db/index.js";
+import {
+  episodes,
+  podcasts,
+  podcastShares,
+  users,
+} from "../../db/schema.js";
 import {
   CSRF_COOKIE_NAME,
   JWT_COOKIE_NAME,
   MAX_API_KEYS_PER_USER,
+  TWOFA_CHALLENGE_COOKIE_NAME,
 } from "../../config.js";
 
 export async function registerSessionRoutes(app: FastifyInstance) {
   app.post(
     "/auth/logout",
     {
+      preHandler: [requireAuth],
       schema: {
         tags: ["Auth"],
         summary: "Logout",
-        description: "Clear session cookies. No authentication required.",
+        description:
+          "Clear session cookies. Requires authentication and CSRF token to prevent cross-site logout attacks.",
         security: [],
         response: {
           200: {
@@ -22,6 +32,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
             type: "object",
             properties: { ok: { type: "boolean" } },
           },
+          401: { description: "Unauthorized" },
         },
       },
     },
@@ -29,6 +40,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       return reply
         .clearCookie(JWT_COOKIE_NAME, { path: "/" })
         .clearCookie(CSRF_COOKIE_NAME, { path: "/" })
+        .clearCookie(TWOFA_CHALLENGE_COOKIE_NAME, { path: "/" })
         .send({ ok: true });
     },
   );
@@ -50,93 +62,123 @@ export async function registerSessionRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const user = db
-        .prepare(
-          `SELECT id, email, created_at, role, COALESCE(read_only, 0) AS read_only,
-        max_podcasts, max_episodes, max_storage_mb, max_collaborators, max_subscriber_tokens, COALESCE(disk_bytes_used, 0) AS disk_bytes_used,
-        COALESCE(can_transcribe, 0) AS can_transcribe,
-        last_login_at, last_login_ip, last_login_location
-       FROM users WHERE id = ?`,
-        )
-        .get(request.userId) as
-        | {
-            id: string;
-            email: string;
-            created_at: string;
-            role: string;
-            read_only: number;
-            max_podcasts: number | null;
-            max_episodes: number | null;
-            max_storage_mb: number | null;
-            max_collaborators: number | null;
-            max_subscriber_tokens: number | null;
-            disk_bytes_used: number;
-            can_transcribe: number;
-            last_login_at: string | null;
-            last_login_ip: string | null;
-            last_login_location: string | null;
-          }
-        | undefined;
+      const user = drizzleDb
+        .select({
+          id: users.id,
+          email: users.email,
+          username: users.username,
+          hasPassword: sql<number>`(password_hash IS NOT NULL AND TRIM(password_hash) != '')`.as(
+            "hasPassword",
+          ),
+          emailVerified: sql<number>`COALESCE(${users.emailVerified}, 1)`.as(
+            "emailVerified",
+          ),
+          createdAt: users.createdAt,
+          role: users.role,
+          readOnly: sql<number>`COALESCE(${users.readOnly}, 0)`.as("readOnly"),
+          maxPodcasts: users.maxPodcasts,
+          maxEpisodes: users.maxEpisodes,
+          maxStorageMb: users.maxStorageMb,
+          maxCollaborators: users.maxCollaborators,
+          maxSubscriberTokens: users.maxSubscriberTokens,
+          diskBytesUsed: sql<number>`COALESCE(${users.diskBytesUsed}, 0)`.as(
+            "diskBytesUsed",
+          ),
+          canTranscribe: sql<number>`COALESCE(${users.canTranscribe}, 0)`.as(
+            "canTranscribe",
+          ),
+          lastLoginAt: users.lastLoginAt,
+          lastLoginIp: users.lastLoginIp,
+          lastLoginLocation: users.lastLoginLocation,
+        })
+        .from(users)
+        .where(eq(users.id, request.userId))
+        .limit(1)
+        .get();
       if (!user) {
         return reply.status(404).send({ error: "User not found" });
       }
-      const ownedPodcasts = db
-        .prepare(
-          "SELECT COUNT(*) as count FROM podcasts WHERE owner_user_id = ?",
+      const ownedPodcasts = drizzleDb
+        .select({ count: sql<number>`count(*)`.as("count") })
+        .from(podcasts)
+        .where(eq(podcasts.ownerUserId, request.userId))
+        .get();
+      const sharedPodcasts = drizzleDb
+        .select({ count: sql<number>`count(*)`.as("count") })
+        .from(podcastShares)
+        .where(eq(podcastShares.userId, request.userId))
+        .get();
+      const podcastCount = (ownedPodcasts?.count ?? 0) + (sharedPodcasts?.count ?? 0);
+      const episodeCount = drizzleDb
+        .select({ count: sql<number>`count(*)`.as("count") })
+        .from(episodes)
+        .innerJoin(podcasts, eq(podcasts.id, episodes.podcastId))
+        .where(
+          or(
+            eq(podcasts.ownerUserId, request.userId),
+            exists(
+              drizzleDb
+                .select()
+                .from(podcastShares)
+                .where(
+                  and(
+                    eq(podcastShares.podcastId, podcasts.id),
+                    eq(podcastShares.userId, request.userId),
+                  ),
+                ),
+            ),
+          ),
         )
-        .get(request.userId) as { count: number };
-      const sharedPodcasts = db
-        .prepare(
-          "SELECT COUNT(*) as count FROM podcast_shares WHERE user_id = ?",
-        )
-        .get(request.userId) as { count: number };
-      const podcastCount = ownedPodcasts.count + sharedPodcasts.count;
-      const episodeCount = db
-        .prepare(
-          `SELECT COUNT(*) as count FROM episodes e
-         JOIN podcasts p ON p.id = e.podcast_id
-         WHERE p.owner_user_id = ? OR EXISTS (SELECT 1 FROM podcast_shares WHERE podcast_id = p.id AND user_id = ?)`,
-        )
-        .get(request.userId, request.userId) as { count: number };
-      const isReadOnly = user.read_only === 1;
-      const twoFactorRow = db
-        .prepare(
-          "SELECT two_factor_method, totp_secret_enc FROM users WHERE id = ?",
-        )
-        .get(request.userId) as {
-          two_factor_method: string | null;
-          totp_secret_enc: string | null;
-        } | undefined;
-      const twoFactorMethod = twoFactorRow?.two_factor_method?.trim() ?? null;
-      const hasTOTP = Boolean(twoFactorRow?.totp_secret_enc);
+        .get();
+      const isReadOnly = user.readOnly === 1;
+      const twoFactorRow = drizzleDb
+        .select({
+          twoFactorMethod: users.twoFactorMethod,
+          totpSecretEnc: users.totpSecretEnc,
+        })
+        .from(users)
+        .where(eq(users.id, request.userId))
+        .limit(1)
+        .get();
+      const twoFactorMethod = twoFactorRow?.twoFactorMethod?.trim() ?? null;
+      const hasTOTP = Boolean(twoFactorRow?.totpSecretEnc);
       const hasEmail = twoFactorMethod?.includes("email") ?? false;
+      const hasVerifiedEmail =
+        Boolean(user.email?.trim()) && user.emailVerified === 1;
+      const hasUsername = Boolean(user.username?.trim());
+      const needsCompleteAccount = !hasVerifiedEmail && !hasUsername;
+      const hasPassword = Boolean(user.hasPassword);
+
       return {
         id: user.id,
+        needsCompleteAccount,
         twoFactor: twoFactorMethod
           ? { hasTOTP, hasEmail, methods: twoFactorMethod }
           : null,
         user: {
           id: user.id,
           email: user.email,
-          created_at: user.created_at,
+          username: user.username,
+          hasPassword,
+          createdAt: user.createdAt,
           role: user.role,
-          read_only: user.read_only ? 1 : 0,
-          max_podcasts: user.max_podcasts ?? null,
-          max_episodes: user.max_episodes ?? null,
-          max_storage_mb: user.max_storage_mb ?? null,
-          max_collaborators: user.max_collaborators ?? null,
-          max_subscriber_tokens: user.max_subscriber_tokens ?? null,
-          max_api_keys: MAX_API_KEYS_PER_USER,
-          disk_bytes_used: user.disk_bytes_used ?? 0,
-          can_transcribe: user.can_transcribe ? 1 : 0,
-          last_login_at: isReadOnly ? null : (user.last_login_at ?? null),
-          last_login_ip: isReadOnly ? null : (user.last_login_ip ?? null),
-          last_login_location: isReadOnly
+          readOnly: user.readOnly ? 1 : 0,
+          maxPodcasts: user.maxPodcasts ?? null,
+          maxEpisodes: user.maxEpisodes ?? null,
+          maxStorageMb: user.maxStorageMb ?? null,
+          maxCollaborators: user.maxCollaborators ?? null,
+          maxSubscriberTokens: user.maxSubscriberTokens ?? null,
+          maxApiKeys: MAX_API_KEYS_PER_USER,
+          diskBytesUsed: user.diskBytesUsed ?? 0,
+          canTranscribe: user.canTranscribe ? 1 : 0,
+          lastLoginAt: isReadOnly ? null : (user.lastLoginAt ?? null),
+          lastLoginIp: isReadOnly ? null : (user.lastLoginIp ?? null),
+          lastLoginLocation: isReadOnly
             ? null
-            : (user.last_login_location ?? null),
+            : (user.lastLoginLocation ?? null),
         },
-        podcast_count: podcastCount,
-        episode_count: episodeCount.count,
+        podcastCount,
+        episodeCount: episodeCount?.count ?? 0,
       };
     },
   );

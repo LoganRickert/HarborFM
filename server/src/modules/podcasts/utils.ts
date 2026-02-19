@@ -17,11 +17,11 @@ export const PODCAST_LIST_SELECT = `
            (SELECT COUNT(*) FROM episodes WHERE podcast_id = podcasts.id) AS episode_count
     FROM podcasts`;
 
-export function podcastRowWithFilename(
-  row: Record<string, unknown>,
-): Record<string, unknown> {
-  const path = row.artwork_path as string | null | undefined;
-  return { ...row, artwork_filename: path ? basename(path) : null };
+export function podcastRowWithFilename<T extends { artworkPath?: string | null }>(
+  row: T,
+): T & { artworkFilename: string | null } {
+  const path = row.artworkPath ?? null;
+  return { ...row, artworkFilename: path ? basename(path) : null };
 }
 
 export const ARTWORK_FILENAME_REGEX = /^[a-zA-Z0-9_-]+\.(png|webp|jpg)$/i;

@@ -88,7 +88,7 @@ export function SegmentModal({
     mutationFn: async () => {
       if (edit.hasEditUnsavedChanges) {
         await updateSegment(episodeId, segmentId, {
-          trim_ranges: mergeTrimRanges(edit.trimRanges),
+          trimRanges: mergeTrimRanges(edit.trimRanges),
           markers: edit.markers,
         });
       }

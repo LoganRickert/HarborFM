@@ -1,11 +1,15 @@
 import type { FastifyRequest } from "fastify";
+import { sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   CALL_JOIN_FAILURE_THRESHOLD,
   LOGIN_BAN_MINUTES,
   LOGIN_FAILURE_THRESHOLD,
   LOGIN_WINDOW_MINUTES,
 } from "../config.js";
-import { db } from "../db/index.js";
+import { drizzleDb } from "../db/drizzle.js";
+import { ipBans, loginAttempts, userTotpAttempts, users } from "../db/schema.js";
+import { sqlNow } from "../db/utils.js";
 
 export type AttemptContext =
   | "auth_login"
@@ -32,24 +36,24 @@ export function getIpBan(
   ip: string,
   context: AttemptContext,
 ): { banned: boolean; retryAfterSec: number } {
-  const row = db
-    .prepare(
-      `
-      SELECT
-        banned_until,
-        CAST(CEIL((julianday(banned_until) - julianday('now')) * 86400.0) AS INTEGER) AS retry_after_sec
-      FROM ip_bans
-      WHERE ip = ? AND context = ? AND datetime(banned_until) > datetime('now')
-      LIMIT 1
-    `,
+  const row = drizzleDb
+    .select({
+      bannedUntil: ipBans.bannedUntil,
+      retryAfterSec: sql<number>`CAST(CEIL((julianday(${ipBans.bannedUntil}) - julianday('now')) * 86400.0) AS INTEGER)`,
+    })
+    .from(ipBans)
+    .where(
+      and(
+        eq(ipBans.ip, ip),
+        eq(ipBans.context, context),
+        sql`datetime(${ipBans.bannedUntil}) > datetime('now')`,
+      ),
     )
-    .get(ip, context) as
-    | { banned_until: string; retry_after_sec: number }
-    | undefined;
+    .limit(1)
+    .get() as { bannedUntil: string; retryAfterSec: number } | undefined;
 
   if (!row) return { banned: false, retryAfterSec: 0 };
-  const retryAfterSec = Math.max(1, Number(row.retry_after_sec) || 1);
-  console.log(`[ban] IP ${ip} context=${context}: request blocked (already banned)`);
+  const retryAfterSec = Math.max(1, Number(row.retryAfterSec) || 1);
   return { banned: true, retryAfterSec };
 }
 
@@ -67,40 +71,56 @@ export function recordFailureAndMaybeBan(
     ? String(meta.attemptedEmail).trim().toLowerCase()
     : null;
   const userAgent = meta?.userAgent ? String(meta.userAgent).trim() : null;
-  db.prepare(
-    "INSERT INTO login_attempts (ip, context, attempted_email, user_agent) VALUES (?, ?, ?, ?)",
-  ).run(ip, context, attemptedEmail, userAgent);
+  drizzleDb.insert(loginAttempts).values({
+    ip,
+    context,
+    attemptedEmail,
+    userAgent,
+  }).run();
 
   // Count failures in recent window
-  const row = db
-    .prepare(
-      `
-      SELECT COUNT(*) AS count
-      FROM login_attempts
-      WHERE ip = ? AND context = ?
-        AND datetime(created_at) >= datetime('now', ?)
-    `,
+  const countRow = drizzleDb
+    .select({
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(loginAttempts)
+    .where(
+      and(
+        eq(loginAttempts.ip, ip),
+        eq(loginAttempts.context, context),
+        sql`datetime(${loginAttempts.createdAt}) >= datetime('now', ${`-${LOGIN_WINDOW_MINUTES} minutes`})`,
+      ),
     )
-    .get(ip, context, `-${LOGIN_WINDOW_MINUTES} minutes`) as { count: number };
+    .get() as { count: number };
 
-  const failures = Number(row?.count ?? 0);
+  const failures = Number(countRow?.count ?? 0);
   const threshold = getThresholdForContext(context);
-  console.log(`[ban] IP ${ip} context=${context}: recorded failure, failuresInWindow=${failures} (threshold=${threshold})`);
   if (failures <= threshold) {
     return { bannedNow: false, retryAfterSec: 0, failuresInWindow: failures };
   }
 
   // Ban for BAN_MINUTES minutes from now
-  console.log(`[ban] IP ${ip} context=${context}: BANNED for ${LOGIN_BAN_MINUTES} min (failures=${failures})`);
-  db.prepare(
-    `
-    INSERT INTO ip_bans (ip, context, banned_until)
-    VALUES (?, ?, datetime('now', ?))
-    ON CONFLICT(ip, context) DO UPDATE SET
-      banned_until = excluded.banned_until,
-      updated_at = datetime('now')
-  `,
-  ).run(ip, context, `+${LOGIN_BAN_MINUTES} minutes`);
+  const bannedUntilDate = new Date();
+  bannedUntilDate.setMinutes(bannedUntilDate.getMinutes() + LOGIN_BAN_MINUTES);
+  const bannedUntilStr = bannedUntilDate.toISOString().slice(0, 19).replace("T", " ");
+  const now = sqlNow();
+  drizzleDb
+    .insert(ipBans)
+    .values({
+      ip,
+      context,
+      bannedUntil: bannedUntilStr,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [ipBans.ip, ipBans.context],
+      set: {
+        bannedUntil: bannedUntilStr,
+        updatedAt: now,
+      },
+    })
+    .run();
 
   // Compute retry-after from DB for consistency.
   const ban = getIpBan(ip, context);
@@ -111,10 +131,51 @@ export function recordFailureAndMaybeBan(
   };
 }
 
+/** Record TOTP failure, check lockout. Returns { locked, retryAfterSec } when user is locked. */
+export function recordTOTPFailureAndCheckLockout(
+  userId: string,
+  ip: string,
+  userAgent: string,
+): { locked: boolean; retryAfterSec?: number } {
+  drizzleDb.insert(userTotpAttempts).values({
+    userId,
+    createdAt: sqlNow(),
+  }).run();
+
+  const countRow = drizzleDb
+    .select({
+      cnt: sql<number>`COUNT(*)`,
+    })
+    .from(userTotpAttempts)
+    .where(
+      and(
+        eq(userTotpAttempts.userId, userId),
+        sql`datetime(${userTotpAttempts.createdAt}) >= datetime('now', '-15 minutes')`,
+      ),
+    )
+    .get() as { cnt: number };
+
+  const failures = Number(countRow?.cnt ?? 0);
+  if (failures < 5) {
+    return { locked: false };
+  }
+
+  const totpLockedUntilDate = new Date();
+  totpLockedUntilDate.setMinutes(totpLockedUntilDate.getMinutes() + 15);
+  const totpLockedUntilStr = totpLockedUntilDate.toISOString().slice(0, 19).replace("T", " ");
+  drizzleDb
+    .update(users)
+    .set({ totpLockedUntil: totpLockedUntilStr })
+    .where(eq(users.id, userId))
+    .run();
+  recordFailureAndMaybeBan(ip, "auth_totp", { userAgent });
+  return { locked: true, retryAfterSec: 900 };
+}
+
 export function clearFailures(ip: string, context: AttemptContext): void {
   // Best-effort: cleanup old failures for this IP/context after a successful action.
-  db.prepare("DELETE FROM login_attempts WHERE ip = ? AND context = ?").run(
-    ip,
-    context,
-  );
+  drizzleDb
+    .delete(loginAttempts)
+    .where(and(eq(loginAttempts.ip, ip), eq(loginAttempts.context, context)))
+    .run();
 }

@@ -12,7 +12,7 @@ export interface SegmentEditTabProps {
   durationSec: number;
   waveformData: WaveformData | null;
   trimRanges: Array<[number, number]>;
-  markers: Array<{ time: number; title?: string; color?: string; marker_type?: '' | 'chapter' }>;
+  markers: Array<{ time: number; title?: string; color?: string; markerType?: '' | 'chapter' }>;
   selection: { start: number; end: number } | null;
   timelineMode: 'drag' | 'trim';
   selectedMarkerIndex: number | null;
@@ -34,7 +34,7 @@ export interface SegmentEditTabProps {
   onMarkerTypeChange: (index: number, markerType: '' | 'chapter') => void;
   onMarkerDone: () => void;
   onRequestRemoveMarker: (index: number) => void;
-  markerDraft: { title: string; color: string; marker_type: '' | 'chapter' } | null;
+  markerDraft: { title: string; color: string; markerType: '' | 'chapter' } | null;
   onTimelineModeChange: (mode: 'drag' | 'trim') => void;
   onSelectedMarkerIndexChange: (index: number | null) => void;
   onZoomIn: () => void;
@@ -175,7 +175,7 @@ export function SegmentEditTab({
                 type="button"
                 className={`${styles.segmentBtn} ${styles.segmentTimelinePlayBtn}`}
                 onClick={onTogglePlay}
-                disabled={segment.record_failed}
+                disabled={segment.recordFailed}
                 title={isPlaying ? 'Pause' : 'Play'}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
               >
@@ -300,9 +300,9 @@ export function SegmentEditTab({
               <button
                 key={t || 'none'}
                 type="button"
-                className={markerDraft.marker_type === t ? styles.statusToggleActive : styles.statusToggleBtn}
+                className={markerDraft.markerType === t ? styles.statusToggleActive : styles.statusToggleBtn}
                 onClick={() => onMarkerTypeChange(selectedMarkerIndex, t)}
-                aria-pressed={markerDraft.marker_type === t}
+                aria-pressed={markerDraft.markerType === t}
                 aria-label={t === '' ? 'None' : 'Chapter'}
               >
                 {t === '' ? 'None' : 'Chapter'}

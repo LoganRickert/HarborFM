@@ -42,8 +42,8 @@ export function GeoliteSection({
           type="text"
           className={styles.input}
           placeholder="123456"
-          value={form.maxmind_account_id}
-          onChange={(e) => onFormChange({ maxmind_account_id: e.target.value })}
+          value={form.maxmindAccountId}
+          onChange={(e) => onFormChange({ maxmindAccountId: e.target.value })}
           autoComplete="off"
         />
       </label>
@@ -52,9 +52,9 @@ export function GeoliteSection({
         <input
           type="password"
           className={styles.input}
-          placeholder={form.maxmind_license_key === '(set)' ? '(saved)' : 'Enter license key'}
-          value={form.maxmind_license_key === '(set)' ? '' : form.maxmind_license_key}
-          onChange={(e) => onFormChange({ maxmind_license_key: e.target.value })}
+          placeholder={form.maxmindLicenseKey === '(set)' ? '(saved)' : 'Enter license key'}
+          value={form.maxmindLicenseKey === '(set)' ? '' : form.maxmindLicenseKey}
+          onChange={(e) => onFormChange({ maxmindLicenseKey: e.target.value })}
           autoComplete="off"
         />
       </label>
@@ -116,8 +116,8 @@ export function GeoliteSection({
             className={styles.testBtn}
             onClick={onGeoliteTest}
             disabled={
-              !form.maxmind_account_id.trim() ||
-              (form.maxmind_license_key !== '(set)' && !form.maxmind_license_key.trim()) ||
+              !form.maxmindAccountId.trim() ||
+              (form.maxmindLicenseKey !== '(set)' && !form.maxmindLicenseKey.trim()) ||
               geoliteTestMutation.isPending
             }
             aria-busy={geoliteTestMutation.isPending}
@@ -129,8 +129,8 @@ export function GeoliteSection({
             className={styles.testBtn}
             onClick={onGeoliteCheck}
             disabled={
-              !form.maxmind_account_id.trim() ||
-              (form.maxmind_license_key !== '(set)' && !form.maxmind_license_key.trim()) ||
+              !form.maxmindAccountId.trim() ||
+              (form.maxmindLicenseKey !== '(set)' && !form.maxmindLicenseKey.trim()) ||
               geoliteCheckMutation.isPending
             }
             aria-busy={geoliteCheckMutation.isPending}
@@ -142,8 +142,8 @@ export function GeoliteSection({
             className={styles.testBtn}
             onClick={onGeoliteUpdate}
             disabled={
-              !form.maxmind_account_id.trim() ||
-              (form.maxmind_license_key !== '(set)' && !form.maxmind_license_key.trim()) ||
+              !form.maxmindAccountId.trim() ||
+              (form.maxmindLicenseKey !== '(set)' && !form.maxmindLicenseKey.trim()) ||
               geoliteUpdateMutation.isPending
             }
             aria-busy={geoliteUpdateMutation.isPending}

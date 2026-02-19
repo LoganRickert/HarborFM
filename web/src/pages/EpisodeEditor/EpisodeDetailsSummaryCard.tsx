@@ -12,8 +12,8 @@ export interface EpisodeDetailsSummaryCardProps {
   artworkUrl?: string | null;
   /** When undefined, Edit button is hidden (e.g. read-only user). */
   onEditClick?: () => void;
-  /** When 1, episode is subscriber-only. */
-  subscriberOnly?: number;
+  /** When true, episode is subscriber-only. */
+  subscriberOnly?: boolean;
   /** When set, a Share button is shown. */
   shareUrl?: string;
   shareTitle?: string;
@@ -68,7 +68,7 @@ export function EpisodeDetailsSummaryCard({
   if (seasonNumber != null || episodeNumber != null) {
     metaParts.push(`S${seasonNumber ?? '?'} E${episodeNumber ?? '?'}`);
   }
-  const isSubscriberOnly = subscriberOnly === 1;
+  const isSubscriberOnly = subscriberOnly === true;
   const showStartCallBtn = !isCallActive && (onStartGroupCall != null || startGroupCallDisabled);
   const showJoinCallBtn = isCallActive && callJoinUrl; /* collaborator: link to join */
   const showHostJoinCallBtn = isCallActive && onOpenGroupCall && !callPanelOpenInThisTab; /* host in other tab: button to migrate panel */

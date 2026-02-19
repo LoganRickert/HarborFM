@@ -1,86 +1,346 @@
-import { db } from "../../db/index.js";
-import { PODCAST_LIST_SELECT, podcastRowWithFilename } from "./utils.js";
+import { eq, and, sql, asc, desc, count } from "drizzle-orm";
+import { drizzleDb } from "../../db/index.js";
+import { podcasts, podcastShares, users, episodes } from "../../db/schema.js";
+import { podcastRowWithFilename } from "./utils.js";
 
-export function listOwned(userId: string): Record<string, unknown>[] {
-  return db
-    .prepare(
-      `${PODCAST_LIST_SELECT} WHERE owner_user_id = ? ORDER BY created_at DESC`,
-    )
-    .all(userId) as Record<string, unknown>[];
+/** Row shape for podcast list and getById. camelCase per migration convention. */
+export interface PodcastListRow {
+  id: string;
+  ownerUserId: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  subtitle: string | null;
+  summary: string | null;
+  language: string | null;
+  authorName: string | null;
+  ownerName: string | null;
+  email: string | null;
+  categoryPrimary: string | null;
+  categorySecondary: string | null;
+  categoryPrimaryTwo: string | null;
+  categorySecondaryTwo: string | null;
+  categoryPrimaryThree: string | null;
+  categorySecondaryThree: string | null;
+  explicit: number;
+  artworkPath: string | null;
+  artworkUrl: string | null;
+  siteUrl: string | null;
+  copyright: string | null;
+  podcastGuid: string | null;
+  /** 0 = not locked, 1 = locked; null normalized to 0 */
+  locked: number;
+  license: string | null;
+  itunesType: string | null;
+  medium: string | null;
+  fundingUrl: string | null;
+  fundingLabel: string | null;
+  persons: string | null;
+  updateFrequencyRrule: string | null;
+  updateFrequencyLabel: string | null;
+  spotifyRecentCount: number | null;
+  spotifyCountryOfOrigin: string | null;
+  applePodcastsVerify: string | null;
+  applePodcastsUrl: string | null;
+  spotifyUrl: string | null;
+  amazonMusicUrl: string | null;
+  podcastIndexUrl: string | null;
+  listenNotesUrl: string | null;
+  castboxUrl: string | null;
+  xUrl: string | null;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
+  tiktokUrl: string | null;
+  youtubeUrl: string | null;
+  linkDomain: string | null;
+  managedDomain: string | null;
+  managedSubDomain: string | null;
+  /** ISO datetime string from SQLite text column */
+  createdAt: string;
+  /** ISO datetime string from SQLite text column */
+  updatedAt: string;
+  unlisted: number;
+  subscriberOnlyFeedEnabled: number;
+  publicFeedDisabled: number;
+  maxEpisodes: number | null;
+  episodeCount: number;
 }
 
-export function listShared(userId: string): Record<string, unknown>[] {
-  return db
-    .prepare(
-      `${PODCAST_LIST_SELECT}
-         WHERE id IN (SELECT podcast_id FROM podcast_shares WHERE user_id = ?)
-         ORDER BY created_at DESC`,
-    )
-    .all(userId) as Record<string, unknown>[];
+/** Episode count per podcast; single aggregation, joined to podcasts. */
+const episodeCounts = drizzleDb
+  .select({
+    podcastId: episodes.podcastId,
+    cnt: count().as("cnt"),
+  })
+  .from(episodes)
+  .groupBy(episodes.podcastId)
+  .as("episode_counts");
+
+/** Shared selection for podcast list and getById. Requires users join (maxEpisodes) and episode_counts join (episodeCount). */
+function podcastListSelection(epCounts: typeof episodeCounts) {
+  return {
+    id: podcasts.id,
+    ownerUserId: podcasts.ownerUserId,
+    title: podcasts.title,
+    slug: podcasts.slug,
+    description: podcasts.description,
+    subtitle: podcasts.subtitle,
+    summary: podcasts.summary,
+    language: podcasts.language,
+    authorName: podcasts.authorName,
+    ownerName: podcasts.ownerName,
+    email: podcasts.email,
+    categoryPrimary: podcasts.categoryPrimary,
+    categorySecondary: podcasts.categorySecondary,
+    categoryPrimaryTwo: podcasts.categoryPrimaryTwo,
+    categorySecondaryTwo: podcasts.categorySecondaryTwo,
+    categoryPrimaryThree: podcasts.categoryPrimaryThree,
+    categorySecondaryThree: podcasts.categorySecondaryThree,
+    explicit: sql<number>`COALESCE(${podcasts.explicit}, 0)`.as("explicit"),
+    artworkPath: podcasts.artworkPath,
+    artworkUrl: podcasts.artworkUrl,
+    siteUrl: podcasts.siteUrl,
+    copyright: podcasts.copyright,
+    podcastGuid: podcasts.podcastGuid,
+    locked: sql<number>`COALESCE(${podcasts.locked}, 0)`.as("locked"),
+    license: podcasts.license,
+    itunesType: podcasts.itunesType,
+    medium: podcasts.medium,
+    fundingUrl: podcasts.fundingUrl,
+    fundingLabel: podcasts.fundingLabel,
+    persons: podcasts.persons,
+    updateFrequencyRrule: podcasts.updateFrequencyRrule,
+    updateFrequencyLabel: podcasts.updateFrequencyLabel,
+    spotifyRecentCount: podcasts.spotifyRecentCount,
+    spotifyCountryOfOrigin: podcasts.spotifyCountryOfOrigin,
+    applePodcastsVerify: podcasts.applePodcastsVerify,
+    applePodcastsUrl: podcasts.applePodcastsUrl,
+    spotifyUrl: podcasts.spotifyUrl,
+    amazonMusicUrl: podcasts.amazonMusicUrl,
+    podcastIndexUrl: podcasts.podcastIndexUrl,
+    listenNotesUrl: podcasts.listenNotesUrl,
+    castboxUrl: podcasts.castboxUrl,
+    xUrl: podcasts.xUrl,
+    facebookUrl: podcasts.facebookUrl,
+    instagramUrl: podcasts.instagramUrl,
+    tiktokUrl: podcasts.tiktokUrl,
+    youtubeUrl: podcasts.youtubeUrl,
+    linkDomain: podcasts.linkDomain,
+    managedDomain: podcasts.managedDomain,
+    managedSubDomain: podcasts.managedSubDomain,
+    createdAt: podcasts.createdAt,
+    updatedAt: podcasts.updatedAt,
+    unlisted: sql<number>`COALESCE(${podcasts.unlisted}, 0)`.as("unlisted"),
+    subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as(
+      "subscriberOnlyFeedEnabled",
+    ),
+    publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as(
+      "publicFeedDisabled",
+    ),
+    maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as(
+      "maxEpisodes",
+    ),
+    episodeCount: sql<number>`COALESCE(${epCounts.cnt}, 0)`.as("episodeCount"),
+  };
+}
+
+export function listOwned(userId: string): PodcastListRow[] {
+  return drizzleDb
+    .select(podcastListSelection(episodeCounts))
+    .from(podcasts)
+    .innerJoin(users, eq(users.id, podcasts.ownerUserId))
+    .leftJoin(episodeCounts, eq(podcasts.id, episodeCounts.podcastId))
+    .where(eq(podcasts.ownerUserId, userId))
+    .orderBy(desc(podcasts.createdAt))
+    .all();
+}
+
+/** Returns podcasts shared with the user. podcast_shares has unique(podcast_id, user_id) so no duplicates. */
+export function listShared(userId: string): PodcastListRow[] {
+  return drizzleDb
+    .select(podcastListSelection(episodeCounts))
+    .from(podcasts)
+    .innerJoin(users, eq(users.id, podcasts.ownerUserId))
+    .innerJoin(podcastShares, eq(podcastShares.podcastId, podcasts.id))
+    .leftJoin(episodeCounts, eq(podcasts.id, episodeCounts.podcastId))
+    .where(eq(podcastShares.userId, userId))
+    .orderBy(desc(podcasts.createdAt))
+    .all();
 }
 
 export function getShareRole(podcastId: string, userId: string): string | undefined {
-  const row = db
-    .prepare(
-      "SELECT role FROM podcast_shares WHERE podcast_id = ? AND user_id = ?",
+  const row = drizzleDb
+    .select({ role: podcastShares.role })
+    .from(podcastShares)
+    .where(
+      and(
+        eq(podcastShares.podcastId, podcastId),
+        eq(podcastShares.userId, userId),
+      ),
     )
-    .get(podcastId, userId) as { role: string } | undefined;
-  return row?.role;
+    .limit(1)
+    .get();
+  return row?.role ?? undefined;
 }
 
-export function getById(id: string): Record<string, unknown> | undefined {
-  const row = db
-    .prepare(
-      `SELECT podcasts.id, podcasts.owner_user_id, podcasts.title, podcasts.slug, podcasts.description,
-         podcasts.subtitle, podcasts.summary, podcasts.language, podcasts.author_name, podcasts.owner_name, podcasts.email,
-         podcasts.category_primary, podcasts.category_secondary, podcasts.category_primary_two, podcasts.category_secondary_two,
-         podcasts.category_primary_three, podcasts.category_secondary_three, podcasts.explicit, podcasts.artwork_path, podcasts.artwork_url, podcasts.site_url,
-         podcasts.copyright, podcasts.podcast_guid, podcasts.locked, podcasts.license,
-         podcasts.itunes_type, podcasts.medium,
-         podcasts.funding_url, podcasts.funding_label, podcasts.persons, podcasts.update_frequency_rrule, podcasts.update_frequency_label,
-         podcasts.spotify_recent_count, podcasts.spotify_country_of_origin, podcasts.apple_podcasts_verify,
-         podcasts.apple_podcasts_url, podcasts.spotify_url, podcasts.amazon_music_url, podcasts.podcast_index_url,
-         podcasts.listen_notes_url, podcasts.castbox_url, podcasts.x_url, podcasts.facebook_url, podcasts.instagram_url,
-         podcasts.tiktok_url, podcasts.youtube_url,
-         podcasts.link_domain, podcasts.managed_domain, podcasts.managed_sub_domain, podcasts.cloudflare_api_key_enc,
-         podcasts.created_at, podcasts.updated_at, podcasts.max_collaborators, podcasts.max_subscriber_tokens,
-         COALESCE(podcasts.unlisted, 0) AS unlisted, COALESCE(podcasts.subscriber_only_feed_enabled, 0) AS subscriber_only_feed_enabled,
-         COALESCE(podcasts.public_feed_disabled, 0) AS public_feed_disabled,
-         COALESCE(podcasts.max_episodes, (SELECT max_episodes FROM users WHERE id = podcasts.owner_user_id)) AS max_episodes,
-         (SELECT COUNT(*) FROM episodes WHERE podcast_id = podcasts.id) AS episode_count
-         FROM podcasts WHERE podcasts.id = ?`,
-    )
-    .get(id) as Record<string, unknown> | undefined;
+export interface PodcastByIdRow extends PodcastListRow {
+  cloudflareApiKeyEnc: string | null;
+  maxCollaborators: number | null;
+  maxSubscriberTokens: number | null;
+}
+
+export function getById(id: string): PodcastByIdRow | undefined {
+  const row = drizzleDb
+    .select({
+      ...podcastListSelection(episodeCounts),
+      cloudflareApiKeyEnc: podcasts.cloudflareApiKeyEnc,
+      maxCollaborators: podcasts.maxCollaborators,
+      maxSubscriberTokens: podcasts.maxSubscriberTokens,
+    })
+    .from(podcasts)
+    .innerJoin(users, eq(users.id, podcasts.ownerUserId))
+    .leftJoin(episodeCounts, eq(podcasts.id, episodeCounts.podcastId))
+    .where(eq(podcasts.id, id))
+    .limit(1)
+    .get();
+  if (!row) {
+    console.error("getById: no row", { id });
+  }
   return row;
 }
 
-export function getByIdWithFilename(id: string): Record<string, unknown> | undefined {
+export function getByIdWithFilename(
+  id: string,
+): (PodcastByIdRow & { artworkFilename: string | null }) | undefined {
   const row = getById(id);
   return row ? podcastRowWithFilename(row) : undefined;
 }
 
-export function getSlug(id: string): string | undefined {
-  const row = db
-    .prepare("SELECT slug FROM podcasts WHERE id = ?")
-    .get(id) as { slug: string } | undefined;
-  return row?.slug;
+/** Same as getByIdWithFilename but without leftJoin to episodeCounts. Use when the podcast was just created. */
+export function getByIdWithFilenameForCreate(
+  id: string,
+): (PodcastByIdRow & { artworkFilename: string | null }) | undefined {
+  const row = drizzleDb
+    .select({
+      id: podcasts.id,
+      ownerUserId: podcasts.ownerUserId,
+      title: podcasts.title,
+      slug: podcasts.slug,
+      description: podcasts.description,
+      subtitle: podcasts.subtitle,
+      summary: podcasts.summary,
+      language: podcasts.language,
+      authorName: podcasts.authorName,
+      ownerName: podcasts.ownerName,
+      email: podcasts.email,
+      categoryPrimary: podcasts.categoryPrimary,
+      categorySecondary: podcasts.categorySecondary,
+      categoryPrimaryTwo: podcasts.categoryPrimaryTwo,
+      categorySecondaryTwo: podcasts.categorySecondaryTwo,
+      categoryPrimaryThree: podcasts.categoryPrimaryThree,
+      categorySecondaryThree: podcasts.categorySecondaryThree,
+      explicit: sql<number>`COALESCE(${podcasts.explicit}, 0)`.as("explicit"),
+      artworkPath: podcasts.artworkPath,
+      artworkUrl: podcasts.artworkUrl,
+      siteUrl: podcasts.siteUrl,
+      copyright: podcasts.copyright,
+      podcastGuid: podcasts.podcastGuid,
+      locked: sql<number>`COALESCE(${podcasts.locked}, 0)`.as("locked"),
+      license: podcasts.license,
+      itunesType: podcasts.itunesType,
+      medium: podcasts.medium,
+      fundingUrl: podcasts.fundingUrl,
+      fundingLabel: podcasts.fundingLabel,
+      persons: podcasts.persons,
+      updateFrequencyRrule: podcasts.updateFrequencyRrule,
+      updateFrequencyLabel: podcasts.updateFrequencyLabel,
+      spotifyRecentCount: podcasts.spotifyRecentCount,
+      spotifyCountryOfOrigin: podcasts.spotifyCountryOfOrigin,
+      applePodcastsVerify: podcasts.applePodcastsVerify,
+      applePodcastsUrl: podcasts.applePodcastsUrl,
+      spotifyUrl: podcasts.spotifyUrl,
+      amazonMusicUrl: podcasts.amazonMusicUrl,
+      podcastIndexUrl: podcasts.podcastIndexUrl,
+      listenNotesUrl: podcasts.listenNotesUrl,
+      castboxUrl: podcasts.castboxUrl,
+      xUrl: podcasts.xUrl,
+      facebookUrl: podcasts.facebookUrl,
+      instagramUrl: podcasts.instagramUrl,
+      tiktokUrl: podcasts.tiktokUrl,
+      youtubeUrl: podcasts.youtubeUrl,
+      linkDomain: podcasts.linkDomain,
+      managedDomain: podcasts.managedDomain,
+      managedSubDomain: podcasts.managedSubDomain,
+      createdAt: podcasts.createdAt,
+      updatedAt: podcasts.updatedAt,
+      unlisted: sql<number>`COALESCE(${podcasts.unlisted}, 0)`.as("unlisted"),
+      subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as("subscriberOnlyFeedEnabled"),
+      publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as("publicFeedDisabled"),
+      maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as("maxEpisodes"),
+      episodeCount: sql<number>`0`.as("episodeCount"),
+      cloudflareApiKeyEnc: podcasts.cloudflareApiKeyEnc,
+      maxCollaborators: podcasts.maxCollaborators,
+      maxSubscriberTokens: podcasts.maxSubscriberTokens,
+    })
+    .from(podcasts)
+    .innerJoin(users, eq(users.id, podcasts.ownerUserId))
+    .where(eq(podcasts.id, id))
+    .limit(1)
+    .get();
+  if (!row) {
+    console.error("getByIdWithFilenameForCreate: create fetch returned no row", { id });
+    const minimal = drizzleDb
+      .select({ id: podcasts.id })
+      .from(podcasts)
+      .where(eq(podcasts.id, id))
+      .limit(1)
+      .get();
+    console.error("getByIdWithFilenameForCreate: minimal podcast-only query", {
+      id,
+      podcastRowExists: !!minimal,
+    });
+  }
+  return row ? podcastRowWithFilename(row as PodcastByIdRow) : undefined;
 }
 
+export function getSlug(id: string): string | undefined {
+  const row = drizzleDb
+    .select({ slug: podcasts.slug })
+    .from(podcasts)
+    .where(eq(podcasts.id, id))
+    .limit(1)
+    .get();
+  return row?.slug ?? undefined;
+}
+
+/**
+ * Returns the relative artwork path for a podcast.
+ * - `undefined` = podcast not found
+ * - `null` = podcast found, no artwork
+ * - `string` = relative path (e.g. artwork/{podcastId}/{filename}.jpg)
+ */
 export function getArtworkPath(podcastId: string): string | null | undefined {
-  const row = db
-    .prepare("SELECT artwork_path FROM podcasts WHERE id = ?")
-    .get(podcastId) as { artwork_path: string | null } | undefined;
-  return row?.artwork_path;
+  const row = drizzleDb
+    .select({ artworkPath: podcasts.artworkPath })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get();
+  return row ? row.artworkPath : undefined;
 }
 
 export function listByOwnerUserId(
   userId: string,
   sortDir: "ASC" | "DESC",
-): Record<string, unknown>[] {
-  return db
-    .prepare(
-      `${PODCAST_LIST_SELECT} WHERE owner_user_id = ? ORDER BY created_at ${sortDir}`,
-    )
-    .all(userId) as Record<string, unknown>[];
+): PodcastListRow[] {
+  const orderByCol =
+    sortDir === "ASC" ? asc(podcasts.createdAt) : desc(podcasts.createdAt);
+  return drizzleDb
+    .select(podcastListSelection(episodeCounts))
+    .from(podcasts)
+    .innerJoin(users, eq(users.id, podcasts.ownerUserId))
+    .leftJoin(episodeCounts, eq(podcasts.id, episodeCounts.podcastId))
+    .where(eq(podcasts.ownerUserId, userId))
+    .orderBy(orderByCol)
+    .all();
 }
-

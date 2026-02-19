@@ -17,7 +17,7 @@ export async function run({ runOne }) {
       const hostRes = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'List Host', role: 'host', is_public: 1 }),
+        body: JSON.stringify({ name: 'List Host', role: 'host', isPublic: 1 }),
       }, adminJar);
       if (hostRes.status !== 200 && hostRes.status !== 201) {
         throw new Error(`Create host: expected 200/201, got ${hostRes.status}`);
@@ -28,7 +28,7 @@ export async function run({ runOne }) {
       const guestRes = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'List Guest', role: 'guest', is_public: 1 }),
+        body: JSON.stringify({ name: 'List Guest', role: 'guest', isPublic: 1 }),
       }, adminJar);
       if (guestRes.status !== 200 && guestRes.status !== 201) {
         throw new Error(`Create guest: expected 200/201, got ${guestRes.status}`);
@@ -55,7 +55,7 @@ export async function run({ runOne }) {
       const extraRes = await apiFetch(`/podcasts/${podcast.id}/cast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Unassigned Guest', role: 'guest', is_public: 1 }),
+        body: JSON.stringify({ name: 'Unassigned Guest', role: 'guest', isPublic: 1 }),
       }, adminJar);
       if (extraRes.status !== 200 && extraRes.status !== 201) {
         throw new Error(`Create extra cast: expected 200/201, got ${extraRes.status}`);
@@ -71,12 +71,12 @@ export async function run({ runOne }) {
       const assignRes = await apiFetch(`/podcasts/${podcast.id}/episodes/${episode.id}/cast`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cast_ids: assignIds }),
+        body: JSON.stringify({ castIds: assignIds }),
       }, adminJar);
       if (assignRes.status !== 200) throw new Error(`Assign cast: expected 200, got ${assignRes.status}`);
 
       const excludeRes = await apiFetch(
-        `/podcasts/${podcast.id}/cast?limit=20&episode_id=${encodeURIComponent(episode.id)}`,
+        `/podcasts/${podcast.id}/cast?limit=20&episodeId=${encodeURIComponent(episode.id)}`,
         {},
         adminJar
       );
@@ -109,7 +109,7 @@ export async function run({ runOne }) {
       await apiFetch(`/episodes/${episode.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'published', publish_at: null }),
+        body: JSON.stringify({ status: 'published', publishAt: null }),
       }, adminJar);
 
       const listRes = await apiFetch(`/podcasts/${podcast.id}/cast?limit=5`, {}, adminJar);
@@ -120,7 +120,7 @@ export async function run({ runOne }) {
       await apiFetch(`/podcasts/${podcast.id}/episodes/${episode.id}/cast`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cast_ids: [firstCastId] }),
+        body: JSON.stringify({ castIds: [firstCastId] }),
       }, adminJar);
 
       const episodeCastRes = await fetch(

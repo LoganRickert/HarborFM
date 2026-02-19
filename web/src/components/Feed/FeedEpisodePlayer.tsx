@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Play, Pause } from 'lucide-react';
 import { useFeedAudioPlayer } from '../../hooks/useFeedAudioPlayer';
 import { publicEpisodeWaveformUrl, PublicEpisodeWithAuth } from '../../api/public';
@@ -12,10 +13,13 @@ export function FeedEpisodePlayer({
   onPlay,
   onPause,
 }: FeedEpisodePlayerProps) {
+  const [audioLoadFailed, setAudioLoadFailed] = useState(false);
   // Use private URL if available, otherwise fallback to public
   const episodeWithAuth = episode as PublicEpisodeWithAuth;
-  const audioUrl = episodeWithAuth.private_audio_url || episode.audio_url || null;
-  const durationSec = episode.audio_duration_sec ?? 0;
+  const audioUrl = episodeWithAuth.privateAudioUrl || episode.audioUrl || null;
+  const durationSec = episode.audioDurationSec ?? 0;
+
+  useEffect(() => setAudioLoadFailed(false), [audioUrl]);
 
   const {
     audioRef,
@@ -30,12 +34,20 @@ export function FeedEpisodePlayer({
     episodeSlug: episode.slug,
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
-    privateWaveformUrl: episodeWithAuth.private_waveform_url,
+    privateWaveformUrl: episodeWithAuth.privateWaveformUrl,
     onPlay,
     onPause,
   });
 
   if (!audioUrl) return null;
+
+  if (audioLoadFailed) {
+    return (
+      <div className={styles.noAudioCard} aria-label="No audio">
+        <p className={styles.noAudioText}>Audio not available.</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.player}>
@@ -65,8 +77,9 @@ export function FeedEpisodePlayer({
           id={`audio-${episode.id}`}
           preload="metadata"
           style={{ display: 'none' }}
+          onError={() => setAudioLoadFailed(true)}
         >
-          <source src={audioUrl} type={episode.audio_mime || 'audio/mpeg'} />
+          <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
         </audio>
       ) : (
         <audio
@@ -76,6 +89,7 @@ export function FeedEpisodePlayer({
           controls
           className={styles.audio}
           preload="metadata"
+          onError={() => setAudioLoadFailed(true)}
         />
       )}
     </div>

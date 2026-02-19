@@ -36,7 +36,7 @@ export type ExportConfigDecrypted =
 function decryptConfigEnc(
   exp: Record<string, unknown>,
 ): Record<string, unknown> {
-  const configEnc = exp.config_enc as string | null | undefined;
+  const configEnc = (exp.configEnc ?? exp.config_enc) as string | null | undefined;
   if (!configEnc || !isEncryptedSecret(configEnc)) {
     throw new Error("Missing or invalid export config");
   }

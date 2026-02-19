@@ -27,7 +27,7 @@ export function ExportForm({
   const currentMode = (initial?.mode as ExportMode) ?? 'S3';
   const [exportMode, setExportMode] = useState<ExportMode>(currentMode);
   const [name, setName] = useState(initial?.name ?? '');
-  const [publicBaseUrl, setPublicBaseUrl] = useState(initial?.public_base_url ?? '');
+  const [publicBaseUrl, setPublicBaseUrl] = useState(initial?.publicBaseUrl ?? '');
   const [fields, setFields] = useState<Record<string, string | number | boolean>>(() => ({
     bucket: '', prefix: '', region: 'auto', endpoint_url: '',
     access_key_id: '', secret_access_key: '',
@@ -46,11 +46,11 @@ export function ExportForm({
     const mode = (initial?.mode as ExportMode) ?? 'S3';
     setExportMode(mode);
     setName(initial?.name ?? '');
-    setPublicBaseUrl(initial?.public_base_url ?? '');
+    setPublicBaseUrl(initial?.publicBaseUrl ?? '');
     const isEditMode = formMode === 'edit';
     const defaultPort = mode === 'SFTP' ? 22 : 21;
     setFields({
-      bucket: initial?.bucket ?? '', prefix: initial?.prefix ?? '', region: initial?.region ?? 'auto', endpoint_url: initial?.endpoint_url ?? '',
+      bucket: initial?.bucket ?? '', prefix: initial?.prefix ?? '', region: initial?.region ?? 'auto', endpoint_url: initial?.endpointUrl ?? '',
       access_key_id: '', secret_access_key: '',
       host: '', port: isEditMode ? '' : defaultPort, username: '', password: '', path: '', secure: false,
       private_key: '', url: '', api_url: '', api_key: '', gateway_url: '',
@@ -69,10 +69,10 @@ export function ExportForm({
           bucket: String(v('bucket')).trim(),
           prefix: String(v('prefix')).trim(),
           region: String(v('region')).trim(),
-          endpoint_url: String(v('endpoint_url')).trim() || null,
-          access_key_id: String(v('access_key_id')).trim(),
-          secret_access_key: String(v('secret_access_key')).trim(),
-          public_base_url: pub ?? null,
+          endpointUrl: String(v('endpoint_url')).trim() || null,
+          accessKeyId: String(v('access_key_id')).trim(),
+          secretAccessKey: String(v('secret_access_key')).trim(),
+          publicBaseUrl: pub ?? null,
         };
       case 'FTP':
         return {
@@ -84,7 +84,7 @@ export function ExportForm({
           password: String(v('password')).trim(),
           path: String(v('path')).trim(),
           secure: Boolean(v('secure')),
-          public_base_url: pub ?? null,
+          publicBaseUrl: pub ?? null,
         };
       case 'SFTP':
         return {
@@ -94,9 +94,9 @@ export function ExportForm({
           port: Number(v('port')) || 22,
           username: String(v('username')).trim(),
           password: String(v('password')).trim() || undefined,
-          private_key: String(v('private_key')).trim() || undefined,
+          privateKey: String(v('private_key')).trim() || undefined,
           path: String(v('path')).trim(),
-          public_base_url: pub ?? null,
+          publicBaseUrl: pub ?? null,
         };
       case 'WebDAV':
         return {
@@ -106,19 +106,19 @@ export function ExportForm({
           username: String(v('username')).trim(),
           password: String(v('password')).trim(),
           path: String(v('path')).trim(),
-          public_base_url: pub ?? null,
+          publicBaseUrl: pub ?? null,
         };
       case 'IPFS':
         return {
           mode: 'IPFS',
           name: nameTrim,
-          api_url: String(v('api_url')).trim(),
-          api_key: String(v('api_key')).trim() || undefined,
+          apiUrl: String(v('api_url')).trim(),
+          apiKey: String(v('api_key')).trim() || undefined,
           username: String(v('username')).trim() || undefined,
           password: String(v('password')).trim() || undefined,
           path: String(v('path')).trim(),
-          gateway_url: String(v('gateway_url')).trim() || null,
-          public_base_url: pub ?? null,
+          gatewayUrl: String(v('gateway_url')).trim() || null,
+          publicBaseUrl: pub ?? null,
         };
       case 'SMB': {
         const smbPort = v('port');
@@ -132,7 +132,7 @@ export function ExportForm({
           password: String(v('password')).trim(),
           domain: String(v('domain')).trim(),
           path: String(v('path')).trim(),
-          public_base_url: pub ?? null,
+          publicBaseUrl: pub ?? null,
         };
       }
       default:
@@ -142,9 +142,9 @@ export function ExportForm({
           bucket: '',
           prefix: '',
           region: '',
-          endpoint_url: null,
-          access_key_id: '',
-          secret_access_key: '',
+          endpointUrl: null,
+          accessKeyId: '',
+          secretAccessKey: '',
         };
     }
   };
@@ -153,17 +153,17 @@ export function ExportForm({
     const body: ExportUpdate = {
       mode: exportMode,
       name: name.trim(),
-      public_base_url: publicBaseUrl.trim() || null,
-      endpoint_url: null,
+      publicBaseUrl: publicBaseUrl.trim() || null,
+      endpointUrl: null,
     };
     if (exportMode === 'S3') {
       if (String(v('bucket')).trim()) body.bucket = String(v('bucket')).trim();
       if (String(v('region')).trim()) body.region = String(v('region')).trim();
       const ep = String(v('endpoint_url')).trim();
-      body.endpoint_url = ep || null;
+      body.endpointUrl = ep || null;
       if (String(v('access_key_id')).trim() || String(v('secret_access_key')).trim()) {
-        body.access_key_id = String(v('access_key_id')).trim();
-        body.secret_access_key = String(v('secret_access_key')).trim();
+        body.accessKeyId = String(v('access_key_id')).trim();
+        body.secretAccessKey = String(v('secret_access_key')).trim();
       }
       if (String(v('prefix')).trim() !== undefined) body.prefix = String(v('prefix')).trim();
     } else {
@@ -174,15 +174,15 @@ export function ExportForm({
       if (String(v('password')).trim()) body.password = String(v('password')).trim();
       if (String(v('path')).trim() !== undefined) body.path = String(v('path')).trim();
       if (exportMode === 'FTP') body.secure = Boolean(v('secure'));
-      if (exportMode === 'SFTP' && String(v('private_key')).trim()) body.private_key = String(v('private_key')).trim();
+      if (exportMode === 'SFTP' && String(v('private_key')).trim()) body.privateKey = String(v('private_key')).trim();
       if (exportMode === 'WebDAV' && String(v('url')).trim()) body.url = String(v('url')).trim();
       if (exportMode === 'IPFS') {
-        if (String(v('api_url')).trim()) body.api_url = String(v('api_url')).trim();
-        if (String(v('api_key')).trim()) body.api_key = String(v('api_key')).trim();
+        if (String(v('api_url')).trim()) body.apiUrl = String(v('api_url')).trim();
+        if (String(v('api_key')).trim()) body.apiKey = String(v('api_key')).trim();
         if (String(v('username')).trim()) body.username = String(v('username')).trim();
         if (String(v('password')).trim()) body.password = String(v('password')).trim();
         const gw = String(v('gateway_url')).trim();
-        body.gateway_url = gw || null;
+        body.gatewayUrl = gw || null;
       }
       if (exportMode === 'SMB') {
         const smbPortVal = v('port');

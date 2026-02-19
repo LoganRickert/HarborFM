@@ -40,7 +40,7 @@ export function SegmentEditorModal({
   const [waveformData, setWaveformData] = useState<WaveformData | null>(waveformDataProp ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [trimRanges, setTrimRanges] = useState<Array<[number, number]>>(segment.trim_ranges ?? []);
+  const [trimRanges, setTrimRanges] = useState<Array<[number, number]>>(segment.trimRanges ?? []);
   const [markers, setMarkers] = useState<Marker[]>(segment.markers ?? []);
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [timelineMode, setTimelineMode] = useState<TimelineMode>('drag');
@@ -54,7 +54,7 @@ export function SegmentEditorModal({
   const [viewStartSec, setViewStartSec] = useState(0);
   const [viewEndSec, setViewEndSec] = useState(0);
 
-  const durationSec = segment.duration_sec ?? 0;
+  const durationSec = segment.durationSec ?? 0;
 
   useEffect(() => {
     const initialWindow = Math.min(60, Math.max(0.01, durationSec));
@@ -67,26 +67,26 @@ export function SegmentEditorModal({
       : durationSec;
 
   useEffect(() => {
-    setTrimRanges(segment.trim_ranges ?? []);
+    setTrimRanges(segment.trimRanges ?? []);
     setMarkers(segment.markers ?? []);
-  }, [segment.id, segment.trim_ranges, segment.markers]);
+  }, [segment.id, segment.trimRanges, segment.markers]);
 
   useEffect(() => {
     if (waveformDataProp) {
       setWaveformData(waveformDataProp);
       return;
     }
-    if (!segment.waveform_exists || durationSec <= 0) return;
+    if (!segment.waveformExists || durationSec <= 0) return;
     fetchSegmentWaveformsBulk(episodeId, [segment.id])
       .then(({ waveforms }) => {
         const wf = waveforms[segment.id];
         setWaveformData(wf?.data?.length ? (wf as WaveformData) : null);
       })
       .catch(() => setWaveformData(null));
-  }, [episodeId, segment.id, segment.waveform_exists, durationSec, waveformDataProp]);
+  }, [episodeId, segment.id, segment.waveformExists, durationSec, waveformDataProp]);
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { trim_ranges?: Array<[number, number]>; markers?: Marker[] }) =>
+    mutationFn: (payload: { trimRanges?: Array<[number, number]>; markers?: Marker[] }) =>
       updateSegment(episodeId, segment.id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
@@ -136,7 +136,7 @@ export function SegmentEditorModal({
   }, [trimRanges]);
 
   function togglePlay() {
-    if (segment.record_failed) return;
+    if (segment.recordFailed) return;
     const el = audioRef.current;
     if (!el) return;
     if (isPlaying) {
@@ -144,7 +144,7 @@ export function SegmentEditorModal({
       setIsPlaying(false);
     } else {
       setIsPlaying(true);
-      el.src = segmentStreamUrl(episodeId, segment.id, segment.audio_path);
+      el.src = segmentStreamUrl(episodeId, segment.id, segment.audioPath);
       el.play().catch(() => setIsPlaying(false));
     }
   }
@@ -180,7 +180,7 @@ export function SegmentEditorModal({
 
   function handleMarkerTypeChange(index: number, markerType: '' | 'chapter') {
     const next = [...markers];
-    next[index] = { ...next[index]!, marker_type: markerType || undefined };
+    next[index] = { ...next[index]!, markerType: markerType || undefined };
     setMarkers(next);
   }
 
@@ -193,8 +193,8 @@ export function SegmentEditorModal({
   const trimRangesEqual = (a: Array<[number, number]>, b: Array<[number, number]>) =>
     a.length === b.length && a.every((r, i) => r[0] === b[i]![0] && r[1] === b[i]![1]);
   const markersEqual = (a: Marker[], b: Marker[]) =>
-    a.length === b.length && a.every((m, i) => m.time === b[i]!.time && (m.title ?? '') === (b[i]!.title ?? '') && (m.color ?? '') === (b[i]!.color ?? '') && (m.marker_type ?? '') === (b[i]!.marker_type ?? ''));
-  const serverTrimRanges = segment.trim_ranges ?? [];
+    a.length === b.length && a.every((m, i) => m.time === b[i]!.time && (m.title ?? '') === (b[i]!.title ?? '') && (m.color ?? '') === (b[i]!.color ?? '') && (m.markerType ?? '') === (b[i]!.markerType ?? ''));
+  const serverTrimRanges = segment.trimRanges ?? [];
   const serverMarkers = segment.markers ?? [];
   const hasUnsavedChanges =
     !trimRangesEqual(trimRanges, serverTrimRanges) || !markersEqual(markers, serverMarkers);
@@ -220,7 +220,7 @@ export function SegmentEditorModal({
     if (!hasUnsavedChanges) return;
     setError(null);
     const mergedRanges = mergeTrimRanges(trimRanges);
-    updateMutation.mutate({ trim_ranges: mergedRanges, markers });
+    updateMutation.mutate({ trimRanges: mergedRanges, markers });
   }
 
   function handleTrimRangesChange(newRanges: Array<[number, number]>) {
@@ -391,9 +391,9 @@ export function SegmentEditorModal({
                     type="button"
                     className={`${styles.segmentBtn} ${styles.segmentTimelinePlayBtn}`}
                     onClick={togglePlay}
-                    disabled={segment.record_failed}
-                    title={segment.record_failed ? undefined : (isPlaying ? 'Pause' : 'Play')}
-                    aria-label={segment.record_failed ? undefined : (isPlaying ? 'Pause' : 'Play')}
+                    disabled={segment.recordFailed}
+                    title={segment.recordFailed ? undefined : (isPlaying ? 'Pause' : 'Play')}
+                    aria-label={segment.recordFailed ? undefined : (isPlaying ? 'Pause' : 'Play')}
                   >
                     {isPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
                   </button>
@@ -460,7 +460,7 @@ export function SegmentEditorModal({
                   type="button"
                   className={styles.segmentBtn}
                   onClick={togglePlay}
-                  disabled={segment.record_failed}
+                  disabled={segment.recordFailed}
                   aria-label={isPlaying ? 'Pause segment' : 'Play segment'}
                 >
                   {isPlaying ? <Pause size={18} aria-hidden /> : <Play size={18} aria-hidden />}
@@ -532,9 +532,9 @@ export function SegmentEditorModal({
                       <button
                         key={t || 'none'}
                         type="button"
-                        className={(markers[selectedMarkerIndex]!.marker_type ?? '') === t ? styles.statusToggleActive : styles.statusToggleBtn}
+                        className={(markers[selectedMarkerIndex]!.markerType ?? '') === t ? styles.statusToggleActive : styles.statusToggleBtn}
                         onClick={() => handleMarkerTypeChange(selectedMarkerIndex, t)}
-                        aria-pressed={(markers[selectedMarkerIndex]!.marker_type ?? '') === t}
+                        aria-pressed={(markers[selectedMarkerIndex]!.markerType ?? '') === t}
                         aria-label={t === '' ? 'None' : 'Chapter'}
                       >
                         {t === '' ? 'None' : 'Chapter'}
@@ -548,7 +548,7 @@ export function SegmentEditorModal({
                       type="button"
                       className={styles.segmentEditorToolbarBtn}
                       onClick={handleRemoveSilenceClick}
-                      disabled={removingSilence || applyingNoiseSuppression || segment.record_failed}
+                      disabled={removingSilence || applyingNoiseSuppression || segment.recordFailed}
                     >
                       {removingSilence ? 'Removing…' : (
                         <>
@@ -561,7 +561,7 @@ export function SegmentEditorModal({
                       type="button"
                       className={styles.segmentEditorToolbarBtn}
                       onClick={handleNoiseSuppressionClick}
-                      disabled={removingSilence || applyingNoiseSuppression || segment.record_failed}
+                      disabled={removingSilence || applyingNoiseSuppression || segment.recordFailed}
                     >
                       {applyingNoiseSuppression ? 'Applying…' : (
                         <>
