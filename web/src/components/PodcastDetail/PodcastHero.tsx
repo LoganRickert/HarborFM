@@ -42,7 +42,7 @@ export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onL
       )}
       <div className={styles.podcastHeroMain}>
         <div className={centerTitle ? `${styles.podcastHeroTitleRow} ${styles.podcastHeroTitleRowCentered}` : styles.podcastHeroTitleRow}>
-          {podcast.subscriberOnlyFeedEnabled && (
+          {!!podcast.subscriberOnlyFeedEnabled && (
             <Lock
               size={22}
               strokeWidth={2}

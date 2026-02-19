@@ -155,16 +155,14 @@ export function Settings() {
             if (v.trim().startsWith('[')) {
               try {
                 const arr = JSON.parse(v) as unknown;
-                const list = Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string') : [];
-                return JSON.stringify(list);
+                return Array.isArray(arr) ? arr.filter((s): s is string => typeof s === 'string') : [];
               } catch {
-                const list = v.split(',').map((s) => s.trim()).filter(Boolean);
-                return JSON.stringify(list);
+                return v.split(',').map((s) => s.trim()).filter(Boolean);
               }
             }
-            return v;
+            return v.trim() ? v.split(',').map((s) => s.trim()).filter(Boolean) : [];
           }
-          return '[]';
+          return Array.isArray(v) ? v : [];
         })(),
         dnsDefaultAllowCustomKey: form.dnsDefaultAllowCustomKey,
         dnsDefaultAllowSubDomain: form.dnsDefaultAllowSubDomain,

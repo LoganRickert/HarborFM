@@ -44,6 +44,8 @@ export const episodeUpdateSchema = episodeCreateSchema.partial().extend({
   subscriberOnly: subscriberOnlySchema,
   /** Chapter markers for the final audio. Overwrites markers from render. */
   finalMarkers: z.array(finalMarkerSchema).optional().nullable(),
+  /** Override: no default so PATCH with only finalMarkers (e.g. editing chapters) does not reset status to draft. */
+  status: episodeStatusSchema.optional(),
 });
 
 /** Episode as returned by GET /episodes/:id and list endpoints. Includes server-computed fields. */
