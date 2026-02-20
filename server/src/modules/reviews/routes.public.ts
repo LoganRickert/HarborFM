@@ -2,6 +2,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomBytes } from "crypto";
 import { nanoid } from "nanoid";
 import { reviewSubmitBodySchema } from "@harborfm/shared";
+import {
+  REVIEW_SUBMIT_RATE_LIMIT_MAX,
+  REVIEW_SUBMIT_RATE_LIMIT_TIME_WINDOW,
+} from "../../config.js";
 import { readSettings } from "../settings/index.js";
 import { getClientIp } from "../../services/loginAttempts.js";
 import { verifyCaptcha } from "../../services/captcha.js";
@@ -71,8 +75,8 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
     {
       config: {
         rateLimit: {
-          max: 1,
-          timeWindow: "1 minute",
+          max: REVIEW_SUBMIT_RATE_LIMIT_MAX,
+          timeWindow: REVIEW_SUBMIT_RATE_LIMIT_TIME_WINDOW,
         },
       },
       schema: {
