@@ -77,7 +77,7 @@ module "userdata" {
   mediasoup_announced_ip    = var.mediasoup_announced_ip
   data_volume_device        = var.data_volume_size > 0 ? "sdf" : ""
   # When set: fetch script at boot. Empty = use harborfm-user-data.sh from harborfm_repo/branch on GitHub.
-  script_url = var.script_url != "" ? var.script_url : "https://raw.githubusercontent.com/${var.harborfm_repo}/${var.harborfm_branch}/terraform/user-data/harborfm-user-data.sh"
+  script_url = var.script_url != "" ? var.script_url : "https://raw.githubusercontent.com/${var.harborfm_repo}/${var.harborfm_branch}/infrastructure/terraform/user-data/harborfm-user-data.sh"
 }
 
 data "aws_subnets" "selected" {

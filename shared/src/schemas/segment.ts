@@ -211,8 +211,8 @@ export const generateVideoBodySchema = z.object({
   orientation: videoOrientationSchema.optional(),
   /** Waveform type (sine, bars, circle, dots). Optional; default sine. */
   waveformType: videoWaveformTypeSchema.optional(),
-  /** Waveform color: any CSS color (hex, rgb, rgba, or gradient). Optional; overrides style when set. Max length 5000. */
-  color: z.string().max(5000).optional(),
+  /** Waveform color: any CSS color (hex, rgb, rgba, or gradient). Optional; overrides style when set. Max length 100. */
+  color: z.string().max(100).optional(),
 });
 
 /** Response for GET /episodes/:id/video-status. */

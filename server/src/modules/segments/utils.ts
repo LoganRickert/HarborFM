@@ -18,6 +18,9 @@ export const transcriptErrorByEpisode = new Map<string, string>();
 export const videoGenStatusByEpisode = new Map<string, "generating" | "done" | "failed">();
 export const videoGenErrorByEpisode = new Map<string, string>();
 
+/** Episodes currently in video generation (mutex). Removed when generation finishes (success or failure). */
+export const videoGenLockedEpisodes = new Set<string>();
+
 export function transcriptPath(audioPath: string): string {
   return audioPath.replace(/\.[^.]+$/, ".txt");
 }

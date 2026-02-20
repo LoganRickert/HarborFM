@@ -16,7 +16,8 @@ import {
 } from "../../services/paths.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { segmentEpisodeIdParamSchema, generateVideoBodySchema } from "@harborfm/shared";
-import { videoGenStatusByEpisode, videoGenErrorByEpisode } from "./utils.js";
+import { userRateLimitPreHandler } from "../../services/rateLimit.js";
+import { videoGenStatusByEpisode, videoGenErrorByEpisode, videoGenLockedEpisodes } from "./utils.js";
 import * as repo from "./repo.js";
 import * as episodesRepo from "../episodes/repo.js";
 import { sqlNow } from "../../db/utils.js";
@@ -25,6 +26,49 @@ import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB, ALLOW_VIDEO_GENERATION } from "../..
 import { MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 
 const VIDEO_COVER_EXTS = ["jpg", "jpeg", "png", "webp"];
+
+/** Generous rate limit for video operations: 10 requests per 2 minutes per user. */
+const VIDEO_RATE_LIMIT = { bucket: "video", windowMs: 120_000, max: 10 };
+
+/** Validate image magic bytes match claimed extension (jpg, png, webp). Returns true if valid. */
+function validateVideoCoverMagicBytes(buffer: Buffer, ext: string): boolean {
+  const e = ext === "jpeg" ? "jpg" : ext;
+  if (buffer.length < 12) return false;
+  if (e === "jpg") {
+    return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+  if (e === "png") {
+    return (
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    );
+  }
+  if (e === "webp") {
+    return (
+      buffer[0] === 0x52 &&
+      buffer[1] === 0x49 &&
+      buffer[2] === 0x46 &&
+      buffer[3] === 0x46 &&
+      buffer[8] === 0x57 &&
+      buffer[9] === 0x45 &&
+      buffer[10] === 0x42 &&
+      buffer[11] === 0x50
+    );
+  }
+  return false;
+}
+
+/** Safe filename for Content-Disposition: only alphanumeric, hyphen, underscore. Prevents header injection. */
+function safeDownloadFilename(episodeId: string, ext: string): string {
+  const safeId = episodeId.replace(/[^a-zA-Z0-9_-]/g, "") || "video";
+  return `episode-${safeId}${ext}`;
+}
 
 /** Return path to video cover image if one exists in processed dir, else null. */
 function getVideoCoverPath(
@@ -148,7 +192,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
   app.post(
     "/episodes/:id/generate-video",
     {
-      preHandler: [requireAuth, requireNotReadOnly],
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler(VIDEO_RATE_LIMIT)],
       schema: {
         tags: ["Segments"],
         summary: "Start video generation",
@@ -172,7 +216,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             resolution: { type: "string", enum: ["480p", "720p", "1080p"] },
             orientation: { type: "string", enum: ["landscape", "portrait"] },
             waveformType: { type: "string", enum: ["sine", "bars", "circle", "dots"] },
-            color: { type: "string", maxLength: 5000, description: "CSS color (hex, rgb, rgba, or gradient)" },
+            color: { type: "string", maxLength: 100, description: "CSS color (hex, rgb, rgba, or gradient)" },
           },
           required: ["x", "y", "width", "amplitude"],
         },
@@ -250,12 +294,13 @@ export async function registerVideoRoutes(app: FastifyInstance) {
           error: "No background image. Upload episode artwork or a video cover image first.",
         });
       }
-      if (videoGenStatusByEpisode.get(episodeId) === "generating") {
+      if (videoGenLockedEpisodes.has(episodeId) || videoGenStatusByEpisode.get(episodeId) === "generating") {
         return reply.status(409).send({
           status: "generating",
           message: "Video generation is already in progress.",
         });
       }
+      videoGenLockedEpisodes.add(episodeId);
       const options = bodyParsed.data;
       const imagePathForVideo = imagePath;
       videoGenStatusByEpisode.set(episodeId, "generating");
@@ -264,8 +309,8 @@ export async function registerVideoRoutes(app: FastifyInstance) {
       broadcastToEpisode(episodeId, { type: "videoGenerationStarted" });
       setImmediate(() => {
         (async () => {
-          log.info({ episodeId }, "Video generation task started");
           try {
+            log.info({ episodeId }, "Video generation task started");
             if (!existsSync(imagePathForVideo)) {
               throw new Error("Background image not found. Upload a video cover photo first.");
             }
@@ -307,12 +352,15 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             videoGenErrorByEpisode.set(episodeId, msg);
             videoGenStatusByEpisode.set(episodeId, "failed");
             broadcastToEpisode(episodeId, { type: "videoGenerated", status: "failed", error: msg });
+          } finally {
+            videoGenLockedEpisodes.delete(episodeId);
           }
         })().catch((err) => {
           log.error(err, "Video generation threw (unhandled)");
           videoGenErrorByEpisode.set(episodeId, err instanceof Error ? err.message : "Video generation failed");
           videoGenStatusByEpisode.set(episodeId, "failed");
           broadcastToEpisode(episodeId, { type: "videoGenerated", status: "failed", error: err instanceof Error ? err.message : "Video generation failed" });
+          videoGenLockedEpisodes.delete(episodeId);
         });
       });
       return reply.status(202).send({ status: "generating" });
@@ -322,7 +370,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
   app.post(
     "/episodes/:id/video-cover",
     {
-      preHandler: [requireAuth, requireNotReadOnly],
+      preHandler: [requireAuth, requireNotReadOnly, userRateLimitPreHandler(VIDEO_RATE_LIMIT)],
       schema: {
         tags: ["Segments"],
         summary: "Upload video cover image",
@@ -372,6 +420,10 @@ export async function registerVideoRoutes(app: FastifyInstance) {
         return reply
           .status(400)
           .send({ error: `Image too large (max ${ARTWORK_MAX_MB}MB)` });
+      }
+      const extForValidation = ext === "jpeg" ? "jpg" : ext;
+      if (!validateVideoCoverMagicBytes(buffer, extForValidation)) {
+        return reply.status(400).send({ error: "File is not a valid image (invalid or unsupported format)" });
       }
       for (const e of VIDEO_COVER_EXTS) {
         const p = episodeVideoCoverPath(podcastId, episodeId, e);
@@ -429,7 +481,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
       const base = processedDir(access.podcastId, episodeId);
       const safePath = assertPathUnder(p, base);
       const ext = extname(safePath) || ".mp4";
-      const filename = `episode-${episodeId}${ext}`;
+      const filename = safeDownloadFilename(episodeId, ext);
       const result = await send(request.raw, basename(safePath), {
         root: dirname(safePath),
         contentType: false,

@@ -86,7 +86,7 @@ module "userdata" {
   mediasoup_announced_ip    = var.mediasoup_announced_ip
   data_volume_device        = var.data_volume_size > 0 ? "vdb" : ""
   # When set: fetch script at boot. Empty = use GitHub raw URL from harborfm_repo/branch (inline if URL fails).
-  script_url = var.script_url != "" ? var.script_url : "https://raw.githubusercontent.com/${var.harborfm_repo}/${var.harborfm_branch}/terraform/user-data/harborfm-user-data.sh"
+  script_url = var.script_url != "" ? var.script_url : "https://raw.githubusercontent.com/${var.harborfm_repo}/${var.harborfm_branch}/infrastructure/user-data/harborfm-user-data.sh"
 }
 
 resource "vultr_firewall_group" "harborfm" {
