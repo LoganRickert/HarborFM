@@ -36,6 +36,31 @@ function stderrTail(stderr: string, maxChars: number): string {
   return trimmed.slice(-maxChars).replace(/^[^\n]*\n?/, "");
 }
 
+/** Conservative video bitrate (Mbps) for H.264 CRF 23 by resolution. Audio is 0.192 Mbps. */
+const VIDEO_BITRATE_MBPS: Record<VideoResolution, number> = {
+  "480p": 0.7,
+  "720p": 1.2,
+  "1080p": 2.5,
+};
+
+const AUDIO_BITRATE_MBPS = 0.192;
+/** Safety factor so we don't underestimate (1.2 = 20% padding). */
+const ESTIMATE_SAFETY_FACTOR = 1.2;
+
+/**
+ * Estimated output size in bytes for an episode video (libx264 CRF 23, 192k AAC).
+ * Used for disk quota pre-check and reservation.
+ */
+export function estimateEpisodeVideoBytes(
+  durationSec: number,
+  resolution?: VideoResolution,
+): number {
+  const r = resolution ?? "720p";
+  const videoMbps = VIDEO_BITRATE_MBPS[r] ?? VIDEO_BITRATE_MBPS["720p"];
+  const bytesPerSec = ((videoMbps + AUDIO_BITRATE_MBPS) * 1e6) / 8;
+  return Math.ceil(durationSec * bytesPerSec * ESTIMATE_SAFETY_FACTOR);
+}
+
 /** Resolution to dimensions (width, height) for 16:9 landscape. Portrait swaps. */
 function resolutionToDimensions(
   resolution: VideoResolution | undefined,

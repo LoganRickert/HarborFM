@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { existsSync, unlinkSync } from "fs";
+import { existsSync, statSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { nanoid } from "nanoid";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { canAccessEpisode, canEditSegments } from "../../services/access.js";
+import { canAccessEpisode, canEditSegments, getPodcastOwnerId } from "../../services/access.js";
 import {
   getDataDir,
   libraryDir,
@@ -206,6 +206,11 @@ export async function registerRenderRoutes(app: FastifyInstance) {
       const videoPath = episodeVideoPath(podcastId, episodeId);
       if (existsSync(videoPath)) {
         try {
+          const videoSize = statSync(videoPath).size;
+          const videoOwnerId = getPodcastOwnerId(podcastId);
+          if (videoOwnerId && videoSize > 0) {
+            repo.subtractUserDiskBytes(videoOwnerId, videoSize);
+          }
           assertPathUnder(videoPath, DATA_DIR);
           unlinkSync(videoPath);
         } catch (err) {
