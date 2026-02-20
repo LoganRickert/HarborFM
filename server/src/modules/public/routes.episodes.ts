@@ -177,6 +177,9 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
                 episode.private_waveform_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/waveform`;
                 episode.private_srt_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/transcript.srt`;
                 episode.private_chapters_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/chapters.json`;
+                if (row.videoFinalPath) {
+                  episode.private_video_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(row.id))}/video`;
+                }
               }
             }
           }

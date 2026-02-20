@@ -442,6 +442,7 @@ export function getPublishedEpisodeBySlug(podcastId: string, episodeSlug: string
       audioBytes: episodes.audioBytes,
       audioDurationSec: episodes.audioDurationSec,
       audioFinalPath: episodes.audioFinalPath,
+      videoFinalPath: episodes.videoFinalPath,
       finalMarkers: episodes.finalMarkers,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
       createdAt: episodes.createdAt,
@@ -485,6 +486,29 @@ export function getEpisodeForWaveform(
   return row as
     | { id: string; audioFinalPath: string | null; subscriberOnly: number }
     | undefined;
+}
+
+/** Get episode video path for private stream (by episode id and podcast id). */
+export function getEpisodeVideoForPrivate(
+  podcastId: string,
+  episodeId: string,
+): { id: string; videoFinalPath: string | null } | undefined {
+  return drizzleDb
+    .select({
+      id: episodes.id,
+      videoFinalPath: episodes.videoFinalPath,
+    })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.podcastId, podcastId),
+        eq(episodes.id, episodeId),
+        eq(episodes.status, "published"),
+        sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+      ),
+    )
+    .limit(1)
+    .get() as { id: string; videoFinalPath: string | null } | undefined;
 }
 
 /** Get episode audio path for private stream (by episode id and podcast id). */

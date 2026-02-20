@@ -14,6 +14,8 @@ import {
   libraryWaveformUrlForUser,
   listLibrary,
   listLibraryForUser,
+  replaceLibraryAssetAudio,
+  replaceLibraryAssetAudioForUser,
   updateLibraryAsset,
   updateLibraryAssetForUser,
   type LibraryAsset,
@@ -53,7 +55,7 @@ function LibraryItemWaveform({
       return;
     }
     let cancelled = false;
-    fetch(waveformUrl, { credentials: 'include' })
+    fetch(waveformUrl, { credentials: 'include', cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!cancelled && data?.data?.length) setWaveformData(data as WaveformData);
@@ -158,6 +160,10 @@ export function Library() {
   const [editGlobalAsset, setEditGlobalAsset] = useState(false);
   const [assetToDelete, setAssetToDelete] = useState<LibraryAsset | null>(null);
   const [assetToEdit, setAssetToEdit] = useState<LibraryAsset | null>(null);
+  const [editPendingAudioFile, setEditPendingAudioFile] = useState<File | null>(null);
+  const [editReplaceError, setEditReplaceError] = useState<string | null>(null);
+  const [replaceInProgress, setReplaceInProgress] = useState(false);
+  const editAudioInputRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState('');
   const [uploadTag, setUploadTag] = useState('');
@@ -379,6 +385,8 @@ export function Library() {
     setEditCopyright(asset.copyright ?? '');
     setEditLicense(asset.license ?? '');
     setEditGlobalAsset(Boolean(asset.globalAsset));
+    setEditPendingAudioFile(null);
+    setEditReplaceError(null);
     if (!asset.tag) {
       setEditTag('');
       setEditCustomTag('');
@@ -398,13 +406,34 @@ export function Library() {
     setEditCopyright('');
     setEditLicense('');
     setEditGlobalAsset(false);
+    setEditPendingAudioFile(null);
+    setEditReplaceError(null);
     setAssetToEdit(null);
+    if (editAudioInputRef.current) editAudioInputRef.current.value = '';
   }
 
-  function handleEditSave() {
+  async function handleEditSave() {
     if (!assetToEdit) return;
     const name = editName.trim();
     if (!name) return;
+    setEditReplaceError(null);
+    if (editPendingAudioFile) {
+      setReplaceInProgress(true);
+      try {
+        if (userId) {
+          await replaceLibraryAssetAudioForUser(userId, assetToEdit.id, editPendingAudioFile);
+        } else {
+          await replaceLibraryAssetAudio(assetToEdit.id, editPendingAudioFile);
+        }
+      } catch (err) {
+        setEditReplaceError(err instanceof Error ? err.message : 'Failed to replace audio');
+        setReplaceInProgress(false);
+        return;
+      }
+      setReplaceInProgress(false);
+      setEditPendingAudioFile(null);
+      if (editAudioInputRef.current) editAudioInputRef.current.value = '';
+    }
     const tag = editTag === 'Other' ? (editCustomTag.trim() || '') : editTag.trim();
     const copyright = editCopyright.trim() || null;
     const license = editLicense.trim() || null;
@@ -522,9 +551,10 @@ export function Library() {
               </div>
             </>
           ) : (
-            <div className={styles.uploadForm}>
-              <p className={styles.uploadPendingFile}>{pendingFile.name}</p>
-              <label className={styles.uploadLabel}>
+            <div className={styles.uploadPendingCard}>
+              <div className={styles.uploadForm}>
+                <p className={styles.uploadPendingFile}>{pendingFile.name}</p>
+                <label className={styles.uploadLabel}>
                 Name
                 <input
                   type="text"
@@ -592,6 +622,7 @@ export function Library() {
                 >
                   {uploadMutation.isPending ? 'Adding...' : 'Add to Library'}
                 </button>
+              </div>
               </div>
             </div>
           )}
@@ -738,7 +769,7 @@ export function Library() {
                   </div>
                   <LibraryItemWaveform
                     asset={asset}
-                    waveformUrl={userId ? libraryWaveformUrlForUser(userId, asset.id) : libraryWaveformUrl(asset.id)}
+                    waveformUrl={`${userId ? libraryWaveformUrlForUser(userId, asset.id) : libraryWaveformUrl(asset.id)}?v=${asset.durationSec}`}
                     currentTime={playingId === asset.id ? currentTime : 0}
                     isPlaying={isThisPlaying}
                     onSeek={handleSeek}
@@ -812,7 +843,7 @@ export function Library() {
       <Dialog.Root open={!!assetToEdit} onOpenChange={(open) => !open && handleEditCancel()}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={styles.dialogContent}>
+          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentScrollable}`}>
             <div className={styles.dialogHeaderRow}>
               <Dialog.Title className={styles.dialogTitle}>Edit library item</Dialog.Title>
               <Dialog.Close asChild>
@@ -824,6 +855,7 @@ export function Library() {
             <Dialog.Description className={styles.dialogDescription}>
               Update the name and tag for this library item.
             </Dialog.Description>
+            <div className={styles.dialogBodyScroll}>
             <div className={styles.dialogForm}>
               <label className={styles.dialogLabel}>
                 Name
@@ -891,19 +923,75 @@ export function Library() {
                   <span>Global Asset</span>
                 </label>
               )}
+              {assetToEdit && canEditAsset(assetToEdit) && (
+                <>
+                  <input
+                    ref={editAudioInputRef}
+                    type="file"
+                    accept="audio/*"
+                    className={styles.visuallyHidden}
+                    aria-hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      setEditPendingAudioFile(file ?? null);
+                      setEditReplaceError(null);
+                    }}
+                  />
+                  <div className={styles.dialogUploadAudio}>
+                    <span className={styles.dialogLabel}>Upload Audio</span>
+                    {!editPendingAudioFile ? (
+                      <button
+                        type="button"
+                        className={styles.uploadChooseBtn}
+                        onClick={() => editAudioInputRef.current?.click()}
+                        aria-label="Choose audio file to replace library item"
+                        disabled={replaceInProgress}
+                      >
+                        <Upload size={18} strokeWidth={2} aria-hidden />
+                        Upload Audio
+                      </button>
+                    ) : (
+                      <div className={styles.uploadPendingCard}>
+                        <div className={styles.uploadForm}>
+                          <p className={styles.uploadPendingFile}>{editPendingAudioFile.name}</p>
+                          <button
+                            type="button"
+                            className={styles.uploadCancel}
+                            onClick={() => {
+                              setEditPendingAudioFile(null);
+                              setEditReplaceError(null);
+                              if (editAudioInputRef.current) editAudioInputRef.current.value = '';
+                            }}
+                            aria-label="Clear selected file"
+                          >
+                            <X size={18} strokeWidth={2} aria-hidden />
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              {editReplaceError && (
+                <div className={styles.dialogErrorCard} role="alert">
+                  <p className={styles.dialogError}>{editReplaceError}</p>
+                </div>
+              )}
             </div>
-            <div className={styles.dialogActions}>
+            </div>
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
               <Dialog.Close asChild>
                 <button type="button" className={styles.cancel} aria-label="Cancel editing library item">Cancel</button>
               </Dialog.Close>
               <button
                 type="button"
                 className={styles.dialogConfirm}
-                onClick={handleEditSave}
-                disabled={editMutation.isPending || editName.trim() === ''}
+                onClick={() => void handleEditSave()}
+                disabled={replaceInProgress || editMutation.isPending || editName.trim() === ''}
                 aria-label="Save library item"
               >
-                {editMutation.isPending ? 'Saving...' : 'Save'}
+                {replaceInProgress ? 'Replacing...' : editMutation.isPending ? 'Saving...' : 'Save'}
               </button>
             </div>
           </Dialog.Content>

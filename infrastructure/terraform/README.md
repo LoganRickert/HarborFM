@@ -70,7 +70,7 @@ Creates an EC2 instance and security group. The instance runs the chosen user-da
 ### Example
 
 ```bash
-cd terraform/terraform/aws
+cd infrastructure/terraform/aws
 export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...
 
 # Debian 12 + nginx (look up a Debian 12 AMI for your region: aws ec2 describe-images --owners 136693071363 --filters "Name=name,Values=debian-12-*" --query "Images[0].ImageId" --region us-east-1)
@@ -96,7 +96,7 @@ Alternatively, to remove the volume from Terraform without deleting it in AWS (e
 To run a **second instance** (e.g. dev and prod) with the same config, use **Terraform workspaces**. Each workspace has its own state, so you get one instance per workspace.
 
 ```bash
-cd terraform/terraform/aws
+cd infrastructure/terraform/aws
 terraform init
 
 # Create and use a workspace per environment
@@ -160,7 +160,7 @@ Creates a Vultr instance with the chosen user-data script.
 ### Example
 
 ```bash
-cd terraform/terraform/vultr
+cd infrastructure/terraform/vultr
 export VULTR_API_KEY=...
 
 terraform init

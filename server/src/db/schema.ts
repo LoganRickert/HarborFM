@@ -39,6 +39,7 @@ export const users = sqliteTable(
     maxCollaborators: integer("max_collaborators"),
     maxSubscriberTokens: integer("max_subscriber_tokens"),
     canTranscribe: integer("can_transcribe"),
+    canGenerateVideo: integer("can_generate_video"),
     totpSecretEnc: text("totp_secret_enc"),
     twoFactorMethod: text("two_factor_method"),
     totpLockedUntil: text("totp_locked_until"),
@@ -162,6 +163,7 @@ export const episodes = sqliteTable(
     contentEncoded: text("content_encoded"),
     subscriberOnly: integer("subscriber_only", { mode: "boolean" }).default(false),
     finalMarkers: text("final_markers"),
+    videoFinalPath: text("video_final_path"),
   },
   (table) => [
     unique("episodes_podcast_guid").on(table.podcastId, table.guid),

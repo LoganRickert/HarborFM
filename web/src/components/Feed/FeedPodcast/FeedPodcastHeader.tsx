@@ -26,8 +26,8 @@ export function FeedPodcastHeader({
     ? `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(tokenId)}/rss`
     : podcast.rssUrl ?? `/api/public/podcasts/${podcastSlug}/rss`;
   
-  // Disable RSS button if subscriber-only with no public feed and user is not authenticated
-  const shouldDisableRss = isSubscriberOnly && !isAuthenticated;
+  // Hide RSS button if subscriber-only with no public feed and user is not authenticated
+  const showRssButton = !(isSubscriberOnly && !isAuthenticated);
 
   return (
     <>
@@ -76,17 +76,7 @@ export function FeedPodcastHeader({
                 <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
                 Message
               </button>
-              {shouldDisableRss ? (
-                <button
-                  type="button"
-                  className={`${styles.rssButton} ${styles.disabled}`}
-                  disabled
-                  title="Subscriber-only feed. Authenticate to access."
-                  aria-label="RSS Feed (Requires subscription)"
-                >
-                  <Rss size={18} strokeWidth={2.5} aria-hidden />
-                </button>
-              ) : (
+              {showRssButton && (
                 <a
                   href={rssUrl}
                   className={styles.rssButton}

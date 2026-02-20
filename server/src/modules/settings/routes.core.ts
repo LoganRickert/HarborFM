@@ -106,6 +106,30 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       const body = parsed.data;
       const current = repo.readSettings();
 
+      const currentOidc = repo.getSsoOidcProvidersForSettings();
+      const currentSaml = repo.getSsoSamlProvidersForSettings();
+      const resultingOidcCount =
+        body.ssoOidcProviders !== undefined
+          ? body.ssoOidcProviders.length
+          : (currentOidc?.length ?? 0);
+      const resultingSamlCount =
+        body.ssoSamlProviders !== undefined
+          ? body.ssoSamlProviders.length
+          : (currentSaml?.length ?? 0);
+      const totalSsoProviders = resultingOidcCount + resultingSamlCount;
+      const requestedEmailSigninDisabled =
+        body.emailSigninDisabled !== undefined
+          ? Boolean(body.emailSigninDisabled)
+          : current.email_signin_disabled;
+      if (requestedEmailSigninDisabled && totalSsoProviders === 0) {
+        return reply.status(400).send({
+          error:
+            "Cannot disable email sign-in when there are no SSO providers.",
+        });
+      }
+      const email_signin_disabled =
+        totalSsoProviders === 0 ? false : requestedEmailSigninDisabled;
+
       const whisper_asr_url =
         body.whisperAsrUrl !== undefined
           ? normalizeHostname(String(body.whisperAsrUrl))
@@ -142,6 +166,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.defaultCanTranscribe !== undefined
           ? Boolean(body.defaultCanTranscribe)
           : current.default_can_transcribe;
+      const default_can_generate_video =
+        body.defaultCanGenerateVideo !== undefined
+          ? Boolean(body.defaultCanGenerateVideo)
+          : current.default_can_generate_video;
       const llm_provider =
         body.llmProvider === "openai"
           ? "openai"
@@ -463,6 +491,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         openai_transcription_api_key,
         transcription_model,
         default_can_transcribe,
+        default_can_generate_video,
         llm_provider,
         ollama_url,
         openai_api_key,
@@ -530,6 +559,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         two_factor_enabled,
         two_factor_methods,
         two_factor_enforced,
+        email_signin_disabled,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||

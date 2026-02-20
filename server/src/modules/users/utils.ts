@@ -16,6 +16,7 @@ export type RawUserRow = {
   maxCollaborators: number | null;
   maxSubscriberTokens: number | null;
   canTranscribe: number;
+  canGenerateVideo: number;
 };
 
 export interface User {
@@ -36,6 +37,7 @@ export interface User {
   maxCollaborators: number | null;
   maxSubscriberTokens: number | null;
   canTranscribe: number;
+  canGenerateVideo: number;
   federatedIdentities?: Array<{
     providerType: string;
     issuer: string;
@@ -65,6 +67,7 @@ export function toUser(
     maxCollaborators: r.maxCollaborators,
     maxSubscriberTokens: r.maxSubscriberTokens,
     canTranscribe: r.canTranscribe,
+    canGenerateVideo: r.canGenerateVideo,
     federatedIdentities: federatedIdentities ?? [],
   };
 }

@@ -30,9 +30,12 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { SegmentModal } from '../../components/SegmentModal';
 import { EpisodeTranscriptModal } from './EpisodeTranscriptModal';
+import { GenerateVideoModal } from './GenerateVideoModal';
 import {
   startGenerateEpisodeTranscript,
   getTranscriptStatus,
+  getVideoStatus,
+  downloadEpisodeVideoUrl,
 } from '../../api/segments';
 import type { Episode, EpisodeUpdate } from '../../api/episodes';
 import type { Podcast } from '../../api/podcasts';
@@ -97,6 +100,7 @@ export function EpisodeEditorContent({
   const [debouncedArtworkUrl, setDebouncedArtworkUrl] = useState('');
   const [buildAlreadyInProgressMessage, setBuildAlreadyInProgressMessage] = useState<string | null>(null);
   const [showEpisodeTranscript, setShowEpisodeTranscript] = useState(false);
+  const [showGenerateVideoModal, setShowGenerateVideoModal] = useState(false);
   const [startCallError, setStartCallError] = useState<string | null>(null);
   const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
   const [deleteEpisodeConfirmOpen, setDeleteEpisodeConfirmOpen] = useState(false);
@@ -119,6 +123,12 @@ export function EpisodeEditorContent({
     queryFn: () => getRenderStatus(id!),
     enabled: !!id,
     refetchInterval: (query) => (query.state.data?.status === 'building' ? 5000 : false),
+  });
+  const { data: videoStatus } = useQuery({
+    queryKey: ['video-status', id],
+    queryFn: () => getVideoStatus(id!),
+    enabled: !!id,
+    staleTime: 60_000,
   });
   const activeCall = activeSession
     ? {
@@ -584,10 +594,15 @@ export function EpisodeEditorContent({
             : undefined
         }
         canGenerateTranscript={asrAvail?.available === true && meData?.user?.canTranscribe === 1}
+        hasVideo={Boolean((episode as { videoFinalPath?: string | null }).videoFinalPath)}
+        isGeneratingVideo={videoStatus?.status === 'generating'}
+        onOpenGenerateVideo={!segmentReadOnly && meData?.user?.canGenerateVideo === 1 ? () => setShowGenerateVideoModal(true) : undefined}
+        downloadVideoUrl={(episode as { videoFinalPath?: string | null }).videoFinalPath ? downloadEpisodeVideoUrl(id, (episode as { updatedAt?: string }).updatedAt) : undefined}
         error={
           (renderStatus?.status === 'failed' ? (renderStatus.error ?? 'Build failed') : null) ??
           (renderMutation.isError ? renderMutation.error?.message : null) ??
-          (generateTranscriptMutation.isError ? generateTranscriptMutation.error?.message : null)
+          (generateTranscriptMutation.isError ? generateTranscriptMutation.error?.message : null) ??
+          (videoStatus?.status === 'failed' ? (videoStatus.error ?? 'Video generation failed') : null)
         }
       />
 
@@ -602,6 +617,21 @@ export function EpisodeEditorContent({
           episodeId={id}
           onClose={() => setShowEpisodeTranscript(false)}
           canEdit={canEditSegments && !readOnly}
+        />
+      )}
+
+      {showGenerateVideoModal && (
+        <GenerateVideoModal
+          episodeId={id}
+          artworkUrl={
+            episode.artworkUrl
+              ? episode.artworkUrl
+              : episode.artworkFilename && podcastId
+                ? `/api/podcasts/${podcastId}/episodes/${id}/artwork/${encodeURIComponent(episode.artworkFilename)}`
+                : null
+          }
+          onClose={() => setShowGenerateVideoModal(false)}
+          onSuccess={() => setShowGenerateVideoModal(false)}
         />
       )}
 

@@ -5,6 +5,9 @@ const optionalLimitField = z.preprocess(
   z.number().int().min(0).nullable().optional()
 );
 
+/** Coerce null/undefined to empty string so omitted keys still parse as string. */
+const stringOrEmpty = z.preprocess((v) => (v == null ? '' : v), z.string());
+
 /** OIDC provider config for SSO settings. */
 const ssoOidcProviderSchema = z
   .object({
@@ -15,10 +18,16 @@ const ssoOidcProviderSchema = z
     authorizationEndpoint: z.string().optional(),
     tokenEndpoint: z.string().optional(),
     userinfoEndpoint: z.string().optional(),
-    clientId: z.string(),
+    clientId: stringOrEmpty,
     clientSecret: z.string().optional(),
     scopes: z.string().optional(),
     trustEmail: z.boolean().optional(),
+    /** Simple Icons slug for button (e.g. google, microsoft, keycloak). See simpleicons.org */
+    iconSlug: z.string().optional(),
+    /** Background color for login button (hex, rgb, or CSS color) */
+    buttonBgColor: z.string().optional(),
+    /** Text color for login button (hex, rgb, or CSS color) */
+    buttonTextColor: z.string().optional(),
   })
   .passthrough();
 
@@ -28,13 +37,21 @@ const ssoSamlProviderSchema = z
     id: z.string(),
     name: z.string(),
     entryPoint: z.string(),
-    issuer: z.string(),
-    callbackUrl: z.string(),
-    cert: z.string().optional(),
-    idpCert: z.string().optional(),
-    subjectAttribute: z.string().optional(),
-    emailAttribute: z.string().optional(),
+    issuer: stringOrEmpty,
+    callbackUrl: stringOrEmpty,
+    cert: stringOrEmpty,
+    idpCert: z.string(),
+    subjectAttribute: stringOrEmpty,
+    emailAttribute: stringOrEmpty,
     trustEmail: z.boolean().optional(),
+    /** When true, require the IdP to sign the assertion (validate with IdP cert). Default false for compatibility. */
+    wantAssertionsSigned: z.boolean().optional(),
+    /** Simple Icons slug for button (e.g. google, microsoft, keycloak). See simpleicons.org */
+    iconSlug: z.string().optional(),
+    /** Background color for login button (hex, rgb, or CSS color) */
+    buttonBgColor: z.string().optional(),
+    /** Text color for login button (hex, rgb, or CSS color) */
+    buttonTextColor: z.string().optional(),
   })
   .passthrough();
 
@@ -46,6 +63,7 @@ export const settingsPatchBodySchema = z.object({
   openaiTranscriptionApiKey: z.string().optional(),
   transcriptionModel: z.string().optional(),
   defaultCanTranscribe: z.boolean().optional(),
+  defaultCanGenerateVideo: z.boolean().optional(),
   llmProvider: z.enum(['none', 'ollama', 'openai']).optional(),
   ollamaUrl: z.string().optional(),
   openaiApiKey: z.string().optional(),
@@ -113,6 +131,8 @@ export const settingsPatchBodySchema = z.object({
   // SSO providers
   ssoOidcProviders: z.array(ssoOidcProviderSchema).optional(),
   ssoSamlProviders: z.array(ssoSamlProviderSchema).optional(),
+  /** When true, email/password sign-in is disabled (SSO only). */
+  emailSigninDisabled: z.boolean().optional(),
 });
 
 export type SettingsPatchBody = z.infer<typeof settingsPatchBodySchema>;
@@ -125,6 +145,7 @@ export const settingsResponseSchema = z.object({
   openaiTranscriptionApiKey: z.string(),
   transcriptionModel: z.string(),
   defaultCanTranscribe: z.boolean(),
+  defaultCanGenerateVideo: z.boolean(),
   llmProvider: z.enum(['none', 'ollama', 'openai']),
   ollamaUrl: z.string(),
   openaiApiKey: z.string(),
@@ -187,6 +208,7 @@ export const settingsResponseSchema = z.object({
   twoFactorEnabled: z.boolean(),
   twoFactorMethods: z.string(),
   twoFactorEnforced: z.boolean(),
+  emailSigninDisabled: z.boolean(),
   ssoOidcProviders: z.array(z.record(z.string(), z.unknown())).optional(),
   ssoSamlProviders: z.array(z.record(z.string(), z.unknown())).optional(),
 });

@@ -11,6 +11,7 @@ import {
   processedDir,
   assertPathUnder,
   transcriptSrtPath,
+  episodeVideoPath,
   resolveDataPath,
   uploadsDir,
 } from "../../services/paths.js";
@@ -201,6 +202,17 @@ export async function registerRenderRoutes(app: FastifyInstance) {
           request.log.warn({ err, episodeId }, "Failed to delete episode transcript before build");
         }
       }
+
+      const videoPath = episodeVideoPath(podcastId, episodeId);
+      if (existsSync(videoPath)) {
+        try {
+          assertPathUnder(videoPath, DATA_DIR);
+          unlinkSync(videoPath);
+        } catch (err) {
+          request.log.warn({ err, episodeId }, "Failed to delete episode video before build");
+        }
+      }
+      repo.clearEpisodeVideoPath(episodeId);
 
       const log = request.log;
       setImmediate(() => {

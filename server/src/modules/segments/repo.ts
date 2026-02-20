@@ -187,6 +187,19 @@ export function getUserCanTranscribe(userId: string): boolean {
   return row?.canTranscribe === 1;
 }
 
+/** User canGenerateVideo flag for video generation. */
+export function getUserCanGenerateVideo(userId: string): boolean {
+  const row = drizzleDb
+    .select({
+      canGenerateVideo: sql<number>`COALESCE(${users.canGenerateVideo}, 0)`,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+    .get();
+  return row?.canGenerateVideo === 1;
+}
+
 /** Insert reusable segment. */
 export function insertSegmentReusable(values: {
   id: string;
@@ -264,6 +277,18 @@ const updateWhere = (
   eq(episodeSegments.id, segmentId),
   eq(episodeSegments.episodeId, episodeId),
 );
+
+/** Update durationSec for all segments that reference this reusable asset (e.g. after library asset audio replace). */
+export function updateSegmentsDurationForReusableAsset(
+  reusableAssetId: string,
+  durationSec: number,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ durationSec })
+    .where(eq(episodeSegments.reusableAssetId, reusableAssetId))
+    .run();
+}
 
 export function updateSegmentName(
   segmentId: string,
@@ -469,6 +494,15 @@ export function listSegmentsForRender(
     .orderBy(asc(episodeSegments.position), asc(episodeSegments.createdAt))
     .all();
   return rows as Array<Record<string, unknown>>;
+}
+
+/** Clear episode video path (e.g. before a new render so old video is invalidated). */
+export function clearEpisodeVideoPath(episodeId: string): void {
+  drizzleDb
+    .update(episodes)
+    .set({ videoFinalPath: null, updatedAt: sqlNow() })
+    .where(eq(episodes.id, episodeId))
+    .run();
 }
 
 /** Episode row for render: update after build. */

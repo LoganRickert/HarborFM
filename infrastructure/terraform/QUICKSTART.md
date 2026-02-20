@@ -36,7 +36,7 @@ brew install terraform
 Copy the env template and fill in your provider's credentials:
 
 ```bash
-cd terraform/terraform/vultr   # or aws/
+cd infrastructure/terraform/vultr   # or aws/
 
 cp ../.env.example .env
 # Edit .env and uncomment + fill:

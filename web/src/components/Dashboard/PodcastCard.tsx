@@ -50,7 +50,7 @@ export function PodcastCard({
         </div>
         <div className={styles.cardBody}>
           <div className={styles.cardTitleRow}>
-            {podcast.subscriberOnlyFeedEnabled && (
+            {!!podcast.subscriberOnlyFeedEnabled && (
               <Lock
                 size={18}
                 strokeWidth={2}

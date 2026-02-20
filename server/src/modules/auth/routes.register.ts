@@ -168,6 +168,7 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
           ? null
           : settings.default_max_subscriber_tokens;
       const can_transcribe = settings.default_can_transcribe ? 1 : 0;
+      const can_generate_video = settings.default_can_generate_video ? 1 : 0;
 
       const requiresVerification =
         isEmailProviderConfigured(settings) &&
@@ -201,6 +202,7 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
         maxCollaborators: max_collaborators,
         maxSubscriberTokens: max_subscriber_tokens,
         canTranscribe: can_transcribe,
+        canGenerateVideo: can_generate_video,
         emailVerified: email_verified === 1,
         emailVerificationTokenHash: email_verification_token_hash,
         emailVerificationExpiresAt: email_verification_expires_at,

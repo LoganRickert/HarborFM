@@ -95,6 +95,18 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
       <p className={styles.toggleHelp}>
         When enabled, new users get transcription permission by default. When disabled, new users cannot generate transcripts until an admin enables it.
       </p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={form.defaultCanGenerateVideo}
+          onChange={(e) => onFormChange({ defaultCanGenerateVideo: e.target.checked })}
+        />
+        <span className="toggle__track" aria-hidden="true" />
+        <span>Default Can Generate Video</span>
+      </label>
+      <p className={styles.toggleHelp}>
+        When enabled, new users get video generation permission by default. When disabled, new users cannot generate episode videos until an admin enables it.
+      </p>
     </SectionCard>
   );
 }

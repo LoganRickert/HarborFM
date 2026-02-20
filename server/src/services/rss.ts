@@ -15,6 +15,8 @@ import {
   assertResolvedPathUnder,
   chaptersJsonPath,
   getDataDir,
+  processedDir,
+  resolveDataPath,
   rssDir,
 } from "./paths.js";
 import { EXT_DOT_TO_EXT } from "../utils/artwork.js";
@@ -517,6 +519,38 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
           ? ep.audioMime
           : "audio/mpeg";
       out += `      <enclosure url="${escapeXml(enclosureUrl)}" length="${bytes}" type="${escapeXml(enclosureType)}"/>\n`;
+    }
+    let videoUrl = "";
+    if (ep.videoFinalPath && publicBaseNoSlash && ep.id) {
+      const validEpisodeId = String(ep.id).trim();
+      if (validEpisodeId) {
+        if (tokenIdPlaceholder && slugRaw) {
+          videoUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/episodes/${encodeURIComponent(validEpisodeId)}/video`;
+        } else if (exportPrefix == null && podcastId) {
+          const validPodcastId = String(podcastId).trim();
+          if (validPodcastId) {
+            videoUrl = `${publicBaseNoSlash}/${API_PREFIX}/${encodeURIComponent(validPodcastId)}/episodes/${encodeURIComponent(validEpisodeId)}/video`;
+          }
+        }
+      }
+    }
+    let videoBytes = 0;
+    if (videoUrl && ep.videoFinalPath && typeof ep.videoFinalPath === "string") {
+      try {
+        const resolved = resolveDataPath(ep.videoFinalPath);
+        const allowedBase = processedDir(podcastId, String(ep.id));
+        if (existsSync(resolved)) {
+          assertPathUnder(resolved, allowedBase);
+          videoBytes = statSync(resolved).size;
+        }
+      } catch {
+        videoBytes = 0;
+      }
+    }
+    if (videoUrl) {
+      out += `      <podcast:alternateEnclosure type="video/mp4" length="${videoBytes}">
+        <podcast:source uri="${escapeXml(videoUrl)}"/>
+      </podcast:alternateEnclosure>\n`;
     }
     out += `      <guid isPermaLink="${guidIsPermaLink}">${guid}</guid>
 `;

@@ -175,6 +175,52 @@ export const renderStatusResponseSchema = z.object({
   error: z.string().optional(),
 });
 
+/** Spectrum style for video generation (showspectrum color schemes). */
+export const videoSpectrumStyleSchema = z.enum(['spectrum-rainbow', 'spectrum-magma', 'spectrum-viridis']);
+export type VideoSpectrumStyle = z.infer<typeof videoSpectrumStyleSchema>;
+
+/** Resolution for video generation. */
+export const videoResolutionSchema = z.enum(['480p', '720p', '1080p']);
+export type VideoResolution = z.infer<typeof videoResolutionSchema>;
+
+/** Orientation for video generation. */
+export const videoOrientationSchema = z.enum(['landscape', 'portrait']);
+export type VideoOrientation = z.infer<typeof videoOrientationSchema>;
+
+/** Waveform visualization type. */
+export const videoWaveformTypeSchema = z.enum(['sine', 'bars', 'circle', 'dots']);
+export type VideoWaveformType = z.infer<typeof videoWaveformTypeSchema>;
+
+/** JSON body for POST /episodes/:id/generate-video (x, y 0–1 relative, width, amplitude, style). Image is optional multipart. */
+export const generateVideoBodySchema = z.object({
+  /** X position of waveform overlay, 0–1 (0=left, 0.5=center, 1=right). */
+  x: z.coerce.number().min(0).max(1),
+  /** Y position of waveform overlay, 0–1 (0=top, 0.5=center, 1=bottom). */
+  y: z.coerce.number().min(0).max(1),
+  /** Width of waveform overlay, 0–1 (fraction of video width). Mapped to pixels in generateEpisodeVideo. */
+  width: z.coerce.number().min(0).max(1),
+  amplitude: z.coerce.number().min(0).max(2),
+  style: videoSpectrumStyleSchema.optional(),
+  /** Integer 1–30: for sine/circle = stroke width (px); for bars/dots = bar/dot count. Optional; default 3. */
+  strokeWidth: z.coerce.number().int().min(1).max(30).optional(),
+  /** Smoothing 0–1 (0=instant, 1=very smooth). Optional; default 0.7. */
+  smoothing: z.coerce.number().min(0).max(1).optional(),
+  /** Output resolution. Optional; default 720p. */
+  resolution: videoResolutionSchema.optional(),
+  /** Output orientation. Optional; default landscape. */
+  orientation: videoOrientationSchema.optional(),
+  /** Waveform type (sine, bars, circle, dots). Optional; default sine. */
+  waveformType: videoWaveformTypeSchema.optional(),
+  /** Waveform color: any CSS color (hex, rgb, rgba, or gradient). Optional; overrides style when set. Max length 5000. */
+  color: z.string().max(5000).optional(),
+});
+
+/** Response for GET /episodes/:id/video-status. */
+export const videoStatusResponseSchema = z.object({
+  status: z.enum(['idle', 'generating', 'done', 'failed']),
+  error: z.string().optional(),
+});
+
 export type SegmentEpisodeIdParam = z.infer<typeof segmentEpisodeIdParamSchema>;
 export type SegmentEpisodeSegmentIdParam = z.infer<typeof segmentEpisodeSegmentIdParamSchema>;
 export type SegmentEpisodeIdOnlyParam = z.infer<typeof segmentEpisodeIdOnlyParamSchema>;
@@ -195,3 +241,5 @@ export type SegmentsListResponse = z.infer<typeof segmentsListResponseSchema>;
 export type TranscriptTextResponse = z.infer<typeof transcriptTextResponseSchema>;
 export type TranscriptStatusResponse = z.infer<typeof transcriptStatusResponseSchema>;
 export type RenderStatusResponse = z.infer<typeof renderStatusResponseSchema>;
+export type GenerateVideoBody = z.infer<typeof generateVideoBodySchema>;
+export type VideoStatusResponse = z.infer<typeof videoStatusResponseSchema>;

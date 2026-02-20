@@ -50,6 +50,8 @@ import * as m048 from "./migrations/048_email_verification_token_hash.js";
 import * as m049 from "./migrations/049_password_reset_totp_attempts.js";
 import * as m050 from "./migrations/050_auth_2fa_totp_secret_hash.js";
 import * as m051 from "./migrations/051_api_keys_max_per_user_trigger.js";
+import * as m052 from "./migrations/052_episodes_video_final_path.js";
+import * as m053 from "./migrations/053_user_can_generate_video.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -103,6 +105,8 @@ const migrations = [
   { name: "049_password_reset_totp_attempts", ...m049 },
   { name: "050_auth_2fa_totp_secret_hash", ...m050 },
   { name: "051_api_keys_max_per_user_trigger", ...m051 },
+  { name: "052_episodes_video_final_path", ...m052 },
+  { name: "053_user_can_generate_video", ...m053 },
 ];
 
 const MIGRATIONS_TABLE = `
@@ -151,6 +155,7 @@ import("../modules/settings/index.js")
   .then((module) => {
     if (settingsMigrationApplied) module.migrateSettingsFromFile();
     module.migrateWebRtcFromEnv();
+    module.migrateSsoProvidersFromEnv();
   })
   .catch((err) => {
     console.warn("Could not run settings migrations:", err);

@@ -139,6 +139,25 @@ export function useEpisodeWebSocket(
               queryClient.invalidateQueries({ queryKey: ['episode', episodeId] });
               queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
               break;
+            case 'videoGenerationStarted':
+              queryClient.setQueryData(
+                ['video-status', episodeId],
+                { status: 'generating' as const },
+              );
+              queryClient.invalidateQueries({ queryKey: ['episode', episodeId] });
+              break;
+            case 'videoGenerated': {
+              const vMsg = msg as { status?: string; error?: string };
+              queryClient.setQueryData(
+                ['video-status', episodeId],
+                {
+                  status: (vMsg.status === 'done' || vMsg.status === 'failed' ? vMsg.status : 'failed') as 'done' | 'failed',
+                  error: vMsg.error,
+                },
+              );
+              queryClient.invalidateQueries({ queryKey: ['episode', episodeId] });
+              break;
+            }
             case 'castChanged':
               queryClient.invalidateQueries({ queryKey: ['episode-cast', podcastId!, episodeId] });
               queryClient.invalidateQueries({ queryKey: ['cast', podcastId] });

@@ -19,6 +19,7 @@ import {
   CSRF_COOKIE_NAME,
   JWT_COOKIE_NAME,
   JWT_SESSION_EXPIRY,
+  SSO_EMAIL_SIGNIN_DISABLED,
 } from "../../config.js";
 import {
   COOKIE_OPTS,
@@ -57,6 +58,7 @@ export async function registerLoginRoutes(app: FastifyInstance) {
           200: { description: "User and session" },
           400: { description: "Validation or CAPTCHA failed" },
           401: { description: "Invalid credentials" },
+          403: { description: "Email sign-in is disabled" },
           429: { description: "Rate limited" },
         },
       },
@@ -97,6 +99,13 @@ export async function registerLoginRoutes(app: FastifyInstance) {
           : undefined;
 
       const settings = readSettings();
+      const emailSigninDisabled =
+        Boolean(settings.email_signin_disabled) || SSO_EMAIL_SIGNIN_DISABLED;
+      if (emailSigninDisabled) {
+        return reply.status(403).send({
+          error: "Email sign-in is disabled. Use a sign-in provider instead.",
+        });
+      }
       if (settings.captcha_provider && settings.captcha_provider !== "none") {
         if (!captchaToken || !captchaToken.trim()) {
           request.log.warn(

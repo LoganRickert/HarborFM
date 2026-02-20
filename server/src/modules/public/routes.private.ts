@@ -442,6 +442,78 @@ export async function registerPrivateRoutes(app: FastifyInstance) {
   );
 
   app.get(
+    "/public/podcasts/:podcastSlug/private/:token/episodes/:episodeId/video",
+    {
+      schema: {
+        tags: ["Public"],
+        summary: "Stream episode video (token)",
+        description:
+          "Returns episode video when valid subscriber token provided. 404 if invalid. Supports Range.",
+        security: [],
+        params: {
+          type: "object",
+          properties: {
+            podcastSlug: { type: "string" },
+            token: { type: "string" },
+            episodeId: { type: "string" },
+          },
+          required: ["podcastSlug", "token", "episodeId"],
+        },
+        response: {
+          200: { description: "Video" },
+          206: { description: "Partial" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!ensurePublicFeedsEnabled(reply)) return;
+      const {
+        podcastSlug,
+        token,
+        episodeId: rawEpisodeId,
+      } = request.params as {
+        podcastSlug: string;
+        token: string;
+        episodeId: string;
+      };
+      const episodeId = rawEpisodeId.replace(/\.[a-zA-Z0-9]+$/, "") || rawEpisodeId;
+      const resolved = resolvePodcastAndToken(request, podcastSlug, token, reply);
+      if (!resolved) return;
+      const { podcastId } = resolved;
+      const episode = repo.getEpisodeVideoForPrivate(podcastId, episodeId);
+      const videoPath = episode?.videoFinalPath
+        ? resolveDataPath(episode.videoFinalPath)
+        : "";
+      if (!episode?.videoFinalPath || !videoPath || !existsSync(videoPath))
+        return reply.status(404).send({ error: "Not found" });
+      try {
+        const safePath = assertPathUnder(
+          videoPath,
+          processedDir(podcastId, episodeId),
+        );
+        const result = await send(request.raw, basename(safePath), {
+          root: dirname(safePath),
+          contentType: false,
+          maxAge: 3600,
+          acceptRanges: true,
+          cacheControl: true,
+        });
+        if (result.type === "error")
+          return reply.status(404).send({ error: "Not found" });
+        reply.status(result.statusCode as 200 | 206 | 404);
+        (
+          Object.entries(result.headers as Record<string, string>) as [string, string][]
+        ).forEach(([k, v]) => v !== undefined && reply.header(k, v));
+        reply.header("Content-Type", "video/mp4");
+        return reply.send(result.stream);
+      } catch {
+        return reply.status(404).send({ error: "Not found" });
+      }
+    },
+  );
+
+  app.get(
     "/public/podcasts/:podcastSlug/private/:token/rss",
     {
       schema: {

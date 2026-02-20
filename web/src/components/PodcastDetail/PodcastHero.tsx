@@ -68,15 +68,17 @@ export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onL
                   Public Page
                 </Link>
               )}
-              <a
-                href={getPublicRssUrl(podcast.slug)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.podcastDetailsActionLink}
-              >
-                <Rss size={16} strokeWidth={2} aria-hidden />
-                Public RSS
-              </a>
+              {!(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled) && (
+                <a
+                  href={getPublicRssUrl(podcast.slug)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.podcastDetailsActionLink}
+                >
+                  <Rss size={16} strokeWidth={2} aria-hidden />
+                  Public RSS
+                </a>
+              )}
             </div>
           </div>
         )}

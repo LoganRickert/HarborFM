@@ -148,6 +148,7 @@ export async function registerCompleteRoutes(app: FastifyInstance) {
         passwordHash: password_hash,
         role: "admin",
         canTranscribe: 1,
+        canGenerateVideo: 1,
       }).run();
 
       repo.writeSetting("hostname", hostname);

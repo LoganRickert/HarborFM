@@ -82,6 +82,7 @@ export function publicEpisodeDto(
     row.audioBytes != null ? Number(row.audioBytes) : null;
   const hasAudio =
     Boolean(row.audioFinalPath) && (audioBytes == null || audioBytes > 0);
+  const hasVideo = Boolean(row.videoFinalPath);
   const subscriberOnly =
     row.subscriberOnly === 1 || row.subscriberOnly === true;
   const allowPublicAudio = !subscriberOnlyFeed && !subscriberOnly;
@@ -139,6 +140,10 @@ export function publicEpisodeDto(
     audio_url:
       hasAudio && allowPublicAudio
         ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}`
+        : null,
+    video_url:
+      hasVideo && allowPublicAudio
+        ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}/video`
         : null,
     srt_url:
       opts.podcastSlug && allowPublicSrt

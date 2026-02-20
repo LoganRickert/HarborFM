@@ -132,6 +132,28 @@ export function chaptersJsonPath(
   return join(DATA_DIR, "processed", podcastId, episodeId, "chapters.json");
 }
 
+/** Path to generated episode video (processed dir). Does not create dir. */
+export function episodeVideoPath(
+  podcastId: string,
+  episodeId: string,
+): string {
+  assertSafeId(podcastId, "podcastId");
+  assertSafeId(episodeId, "episodeId");
+  return join(DATA_DIR, "processed", podcastId, episodeId, "video.mp4");
+}
+
+/** Path to video cover image (optional upload for video generation). Does not create dir. */
+export function episodeVideoCoverPath(
+  podcastId: string,
+  episodeId: string,
+  ext = "jpg",
+): string {
+  assertSafeId(podcastId, "podcastId");
+  assertSafeId(episodeId, "episodeId");
+  if (!/^[a-zA-Z0-9]+$/.test(ext)) throw new Error("Invalid video cover extension");
+  return join(DATA_DIR, "processed", podcastId, episodeId, `video-cover.${ext}`);
+}
+
 export function rssDir(podcastId: string): string {
   assertSafeId(podcastId, "podcastId");
   const dir = join(DATA_DIR, "rss", podcastId);

@@ -14,6 +14,7 @@ export function setupStatus() {
     twoFactorEnabled: boolean;
     twoFactorEnforced: boolean;
     twoFactorMethods: string;
+    emailSigninDisabled?: boolean;
   }>('/setup/status');
 }
 

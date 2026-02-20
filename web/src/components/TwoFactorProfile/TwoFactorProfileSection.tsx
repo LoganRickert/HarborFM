@@ -300,7 +300,7 @@ export function TwoFactorProfileSection({ twoFactor, hasEmail = true, hasPasswor
                   style={{ marginRight: 8, marginBottom: 8 }}
                 >
                   <Shield size={18} strokeWidth={2} aria-hidden />
-                  Add authenticator app (TOTP)
+                  Add Authenticator App (TOTP)
                 </button>
               )}
               {email2FAAvailable && (
@@ -311,7 +311,7 @@ export function TwoFactorProfileSection({ twoFactor, hasEmail = true, hasPasswor
                   disabled={startEmailMutation.isPending}
                 >
                   <Mail size={18} strokeWidth={2} aria-hidden />
-                  {startEmailMutation.isPending ? 'Sending...' : 'Add email 2FA'}
+                  {startEmailMutation.isPending ? 'Sending...' : 'Add Email 2FA'}
                 </button>
               )}
               {twoFactorEnabled && availableMethods.length === 0 && (

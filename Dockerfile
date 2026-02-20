@@ -1,6 +1,11 @@
 # Build stage: install deps, build shared + server + web
 FROM node:22-bookworm-slim AS builder
 
+# node-canvas (video waveform) needs these to build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 WORKDIR /app
 
@@ -37,6 +42,8 @@ RUN set -eux; \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg tini build-essential python3 ca-certificates wget libmad0 \
     libid3tag0 libboost-program-options1.74.0 geoipupdate smbclient \
+    libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 \
+    libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev \
   && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \

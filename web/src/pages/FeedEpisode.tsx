@@ -25,6 +25,7 @@ import {
   PodcastLinksCard,
   hasPodcastLinks,
   FeedCastList,
+  FeedVideoPlayer,
 } from '../components/Feed';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedEpisode.module.css';
@@ -128,6 +129,16 @@ export function FeedEpisode({
   const embedUrl = `${origin}${isCustomFeed ? `/embed/${episodeSlug}` : `/embed/${podcastSlug}/${episodeSlug}`}`;
   const embedCode = `<iframe src="${embedUrl}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>`;
 
+  const videoUrlRaw = episode.privateVideoUrl ?? episode.videoUrl ?? null;
+  const videoUrl =
+    !videoUrlRaw
+      ? ''
+      : videoUrlRaw.startsWith('http')
+        ? videoUrlRaw
+        : videoUrlRaw.startsWith('/')
+          ? videoUrlRaw
+          : `${origin}/${videoUrlRaw}`;
+
   return (
     <div className={sharedStyles.wrapper}>
       <div className={sharedStyles.container}>
@@ -145,6 +156,28 @@ export function FeedEpisode({
               shareTitle={shareTitle}
               embedCode={embedCode}
             />
+
+            {videoUrl && (
+              <div className={styles.videoWrap}>
+                <FeedVideoPlayer
+                  key={videoUrl}
+                  src={videoUrl}
+                  poster={
+                    episode.artworkUrl
+                      ? episode.artworkUrl
+                      : episode.artworkFilename
+                        ? `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`
+                        : podcast.artworkUrl
+                          ? podcast.artworkUrl
+                          : podcast.artworkFilename
+                            ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`
+                            : undefined
+                  }
+                  ariaLabel={`Video for ${episode.title}`}
+                  className={styles.video}
+                />
+              </div>
+            )}
 
             {audioUrl && !audioLoadFailed && (
               <div className={styles.player}>

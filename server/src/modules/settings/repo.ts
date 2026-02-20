@@ -114,6 +114,7 @@ export function writeSettings(settings: AppSettings): void {
   );
   upsert("transcription_model", settings.transcription_model);
   upsert("default_can_transcribe", String(settings.default_can_transcribe));
+  upsert("default_can_generate_video", String(settings.default_can_generate_video));
   upsert("llm_provider", settings.llm_provider);
   upsert("ollama_url", settings.ollama_url);
   upsert("openai_api_key", settings.openai_api_key);
@@ -218,6 +219,7 @@ export function writeSettings(settings: AppSettings): void {
   upsert("two_factor_enabled", String(settings.two_factor_enabled));
   upsert("two_factor_methods", settings.two_factor_methods ?? DEFAULTS.two_factor_methods);
   upsert("two_factor_enforced", String(settings.two_factor_enforced));
+  upsert("email_signin_disabled", String(settings.email_signin_disabled ?? false));
 }
 
 /**
@@ -415,6 +417,10 @@ export function migrateSettingsFromFile(): void {
     upsertSetting(
       "email_enable_contact",
       String((settings as Partial<AppSettings>).email_enable_contact ?? true),
+    );
+    upsertSetting(
+      "email_signin_disabled",
+      String((settings as Partial<AppSettings>).email_signin_disabled ?? false),
     );
 
     console.log("Migrated settings from file to database");

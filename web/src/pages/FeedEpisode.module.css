@@ -3,6 +3,44 @@
   margin-top: 1rem;
 }
 
+/* Episode video: full width above player (Plyr) */
+.videoWrap {
+  width: 100%;
+  margin-bottom: 1rem;
+  aspect-ratio: 16 / 9;
+  min-height: 200px;
+}
+
+/* Theme Plyr to match feed: accent and radius from design tokens */
+.videoWrap :global(.plyr) {
+  --plyr-color-main: var(--success);
+  --plyr-video-background: var(--bg-elevated);
+  --plyr-control-radius: var(--radius);
+  --plyr-menu-background: var(--bg-elevated);
+  --plyr-menu-radius: var(--radius);
+  --plyr-focus-visible-color: var(--success);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.videoWrap :global(.plyr__video-wrapper) {
+  border-radius: inherit;
+}
+
+.videoWrap :global(.plyr--video .plyr__control:focus-visible),
+.videoWrap :global(.plyr--video .plyr__control:hover),
+.videoWrap :global(.plyr--video .plyr__control[aria-expanded="true"]),
+.videoWrap :global(.plyr__control--overlaid) {
+  background: var(--success);
+}
+
+.video {
+  width: 100%;
+  display: block;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
 /* Player section */
 .player {
   margin-bottom: 1rem;

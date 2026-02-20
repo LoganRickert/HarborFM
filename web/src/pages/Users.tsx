@@ -39,6 +39,7 @@ export function Users() {
   const [editMaxCollaborators, setEditMaxCollaborators] = useState<number | null>(null);
   const [editMaxSubscriberTokens, setEditMaxSubscriberTokens] = useState<number | null>(null);
   const [editCanTranscribe, setEditCanTranscribe] = useState(false);
+  const [editCanGenerateVideo, setEditCanGenerateVideo] = useState(false);
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
@@ -79,6 +80,7 @@ export function Users() {
         max_collaborators?: number | null;
         max_subscriber_tokens?: number | null;
         can_transcribe?: boolean;
+        can_generate_video?: boolean;
       };
     }) => updateUser(userId, data as Parameters<typeof updateUser>[1]),
     onSuccess: () => {
@@ -117,6 +119,7 @@ export function Users() {
     setEditMaxCollaborators(user.maxCollaborators ?? null);
     setEditMaxSubscriberTokens(user.maxSubscriberTokens ?? null);
     setEditCanTranscribe((user as { canTranscribe?: number }).canTranscribe === 1);
+    setEditCanGenerateVideo((user as { canGenerateVideo?: number }).canGenerateVideo === 1);
   }
 
   function handleEditSubmit(e: React.FormEvent) {
@@ -163,6 +166,10 @@ export function Users() {
     const currentCanTranscribe = (userToEdit as { canTranscribe?: number }).canTranscribe === 1;
     if (editCanTranscribe !== currentCanTranscribe) {
       updates.canTranscribe = editCanTranscribe;
+    }
+    const currentCanGenerateVideo = (userToEdit as { canGenerateVideo?: number }).canGenerateVideo === 1;
+    if (editCanGenerateVideo !== currentCanGenerateVideo) {
+      updates.canGenerateVideo = editCanGenerateVideo;
     }
 
     if (Object.keys(updates).length > 0) {
@@ -445,6 +452,20 @@ export function Users() {
                 </label>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
                   When enabled, the user can generate episode and segment transcripts (when a transcription provider is configured).
+                </p>
+              </div>
+              <div className={styles.formGroup}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={editCanGenerateVideo}
+                    onChange={(e) => setEditCanGenerateVideo(e.target.checked)}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Can Generate Video</span>
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
+                  When enabled, the user can generate episode videos (when video generation is enabled on the server).
                 </p>
               </div>
               <div className={styles.formGroup}>

@@ -9,6 +9,7 @@ import {
 } from "../../plugins/auth.js";
 import { isAdmin, canReadLibraryAsset } from "../../services/access.js";
 import { broadcastToUser } from "../../services/episodeBroadcast.js";
+import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import {
   libraryDir,
   libraryAssetPath,
@@ -27,10 +28,12 @@ import { LIBRARY_UPLOAD_MAX_BYTES } from "../../config.js";
 import { contentTypeFromAudioPath } from "../../utils/audio.js";
 import {
   ALLOWED_MIME,
+  libraryWaveformPath,
   sendLibraryWaveform,
   sendLibraryStream,
 } from "./utils.js";
 import * as repo from "./repo.js";
+import { updateSegmentsDurationForReusableAsset } from "../segments/repo.js";
 
 export async function registerCoreRoutes(app: FastifyInstance) {
   app.get(
@@ -242,6 +245,180 @@ export async function registerCoreRoutes(app: FastifyInstance) {
 
       const row = repo.getById(id);
       return reply.send(row as Record<string, unknown>);
+    },
+  );
+
+  app.put(
+    "/library/:id/audio",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "libraryReplaceAudio",
+          windowMs: 60000,
+          max: 1,
+        }),
+      ],
+      schema: {
+        tags: ["Library"],
+        summary: "Replace library asset audio",
+        description:
+          "Replace the audio file for a library asset. Multipart upload. Rate limited to once per minute per user.",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        response: {
+          200: { description: "Updated asset" },
+          400: { description: "No file or invalid type" },
+          403: { description: "Storage limit or not allowed" },
+          404: { description: "Not found" },
+          429: { description: "Rate limited" },
+          500: { description: "Upload or process failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const row = repo.getById(id);
+      if (!row) return reply.status(404).send({ error: "Asset not found" });
+
+      const userIsAdmin = isAdmin(request.userId as string);
+      const isOwner = row.ownerUserId === request.userId;
+      if (!isOwner && !userIsAdmin) {
+        return reply.status(403).send({
+          error: "Only the owner or an administrator can replace this asset's audio.",
+        });
+      }
+
+      const data = await request.file();
+      if (!data) return reply.status(400).send({ error: "No file uploaded" });
+      const mimetype = data.mimetype || "";
+      if (!ALLOWED_MIME.includes(mimetype) && !mimetype.startsWith("audio/")) {
+        return reply
+          .status(400)
+          .send({ error: "Invalid file type. Use WAV, MP3, or WebM." });
+      }
+
+      const ownerId = row.ownerUserId;
+      const ext = extensionFromAudioMimetype(mimetype);
+      const destPath = libraryAssetPath(ownerId, id, ext);
+      let bytesWritten = 0;
+      try {
+        bytesWritten = await streamToFileWithLimit(
+          data.file,
+          destPath,
+          LIBRARY_UPLOAD_MAX_BYTES,
+        );
+      } catch (err) {
+        if (err instanceof FileTooLargeError) {
+          return reply.status(400).send({ error: "File too large" });
+        }
+        request.log.error(err);
+        return reply.status(500).send({ error: "Upload failed" });
+      }
+
+      const oldPath = row.audioPath ? resolveDataPath(row.audioPath) : "";
+      let oldBytes = 0;
+      if (oldPath && existsSync(oldPath)) {
+        try {
+          oldBytes = statSync(oldPath).size;
+        } catch {
+          oldBytes = 0;
+        }
+      }
+      const delta = bytesWritten - oldBytes;
+      if (wouldExceedStorageLimit(drizzleDb, ownerId, delta)) {
+        try {
+          unlinkSync(destPath);
+        } catch {
+          /* ignore */
+        }
+        return reply.status(403).send({
+          error:
+            "You have reached your storage limit. Delete some content to free space.",
+        });
+      }
+
+      const dir = libraryDir(ownerId);
+      let finalPath = destPath;
+      try {
+        const normalized = await audioService.normalizeUploadToMp3OrWav(
+          destPath,
+          ext,
+          dir,
+        );
+        finalPath = normalized.path;
+        bytesWritten = statSync(finalPath).size;
+      } catch (err) {
+        request.log.error(err);
+        try {
+          unlinkSync(destPath);
+        } catch {
+          /* ignore */
+        }
+        return reply
+          .status(500)
+          .send({ error: "Failed to process audio file" });
+      }
+
+      try {
+        await audioService.generateWaveformFile(finalPath, dir);
+      } catch (err) {
+        request.log.warn(
+          { err, finalPath },
+          "Waveform generation failed (replace succeeded)",
+        );
+      }
+
+      let durationSec = 0;
+      try {
+        const probe = await audioService.probeAudio(finalPath, dir);
+        durationSec = probe.durationSec;
+      } catch {
+        // keep 0
+      }
+
+      if (oldPath && existsSync(oldPath)) {
+        const base = libraryDir(ownerId);
+        assertPathUnder(oldPath, base);
+        try {
+          unlinkSync(oldPath);
+        } catch (e) {
+          request.log.warn({ err: e, oldPath }, "Could not delete old audio file");
+        }
+        const oldWaveformPath = libraryWaveformPath(oldPath);
+        if (existsSync(oldWaveformPath)) {
+          try {
+            assertPathUnder(oldWaveformPath, base);
+            unlinkSync(oldWaveformPath);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+
+      const set: Record<string, string | number> = {
+        audioPath: pathRelativeToData(finalPath),
+        durationSec,
+      };
+      if (isOwner) {
+        repo.updateAssetByIdAndOwner(id, request.userId as string, set);
+      } else {
+        repo.updateAsset(id, set);
+      }
+
+      if (oldBytes > 0) {
+        repo.subtractUserDiskBytes(ownerId, oldBytes);
+      }
+      repo.addUserDiskBytes(ownerId, bytesWritten);
+
+      updateSegmentsDurationForReusableAsset(id, durationSec);
+
+      const updated = repo.getById(id);
+      return reply.send(updated as Record<string, unknown>);
     },
   );
 

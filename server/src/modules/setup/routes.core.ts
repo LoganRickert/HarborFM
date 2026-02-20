@@ -40,6 +40,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
               twoFactorEnabled: { type: "boolean" },
               twoFactorEnforced: { type: "boolean" },
               twoFactorMethods: { type: "string" },
+              emailSigninDisabled: { type: "boolean" },
             },
           },
         },
@@ -59,6 +60,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           twoFactorEnabled: false,
           twoFactorEnforced: false,
           twoFactorMethods: "totp",
+          emailSigninDisabled: false,
         };
       }
       try {
@@ -77,6 +79,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           twoFactorEnabled: false,
           twoFactorEnforced: false,
           twoFactorMethods: "totp",
+          emailSigninDisabled: false,
         };
       }
     },

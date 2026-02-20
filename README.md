@@ -35,6 +35,7 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 - [Local Testing](#local-testing)
 - [Troubleshooting](#troubleshooting)
 - [Backup and upgrading](#backup-and-upgrading)
+- [Single Sign-On (SSO)](#single-sign-on-sso)
 
 ## Overview
 
@@ -65,12 +66,12 @@ Use Terraform to provision a VM (AWS EC2 or Vultr) that runs Harbor FM via user-
 
 #### AWS (EC2)
 
-1. **Install Terraform** – see [terraform/terraform/QUICKSTART.md](terraform/terraform/QUICKSTART.md) (macOS, Debian, CentOS).
+1. **Install Terraform** – see [infrastructure/terraform/QUICKSTART.md](infrastructure/terraform/QUICKSTART.md) (macOS, Debian, CentOS).
 2. **Configure AWS** – set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (or use `aws configure`).
 3. **Apply** from the AWS Terraform directory:
 
    ```bash
-   cd terraform/terraform/aws
+   cd infrastructure/terraform/aws
    cp terraform.tfvars.example terraform.tfvars
    # Edit terraform.tfvars: deploy_type, ami_id (Debian 12 for your region), domain, admin_email, admin_password, etc.
    ./run.sh init
@@ -81,12 +82,12 @@ Use Terraform to provision a VM (AWS EC2 or Vultr) that runs Harbor FM via user-
 
 #### Vultr
 
-1. **Install Terraform** – see [terraform/terraform/QUICKSTART.md](terraform/terraform/QUICKSTART.md).
-2. **Set** `VULTR_API_KEY` in `.env` (copy from `terraform/terraform/.env.example`).
+1. **Install Terraform** – see [infrastructure/terraform/QUICKSTART.md](infrastructure/terraform/QUICKSTART.md).
+2. **Set** `VULTR_API_KEY` in `.env` (copy from `infrastructure/terraform/.env.example`).
 3. **Apply** from the Vultr directory:
 
    ```bash
-   cd terraform/terraform/vultr
+   cd infrastructure/terraform/vultr
    cp terraform.tfvars.example terraform.tfvars
    # Edit terraform.tfvars: deploy_type, region, os_id, plan, domain, etc.
    ./run.sh init
@@ -101,7 +102,7 @@ List available OS images:
 curl -s -H "Authorization: Bearer $VULTR_API_KEY" https://api.vultr.com/v2/os | jq '.os[] | {id, name}'
 ```
 
-Common mappings: Debian 11 `477`, Debian 12 `2136`, Debian 13 `2625`; Ubuntu 22 `1743`, Ubuntu 24 `2285`, Ubuntu 25 `2657`; CentOS 9 `542`, CentOS 10 `2467`. Vultr derives the `os` variable from `os_id` via [terraform/terraform/vultr/scripts/os-from-id.sh](terraform/terraform/vultr/scripts/os-from-id.sh).
+Common mappings: Debian 11 `477`, Debian 12 `2136`, Debian 13 `2625`; Ubuntu 22 `1743`, Ubuntu 24 `2285`, Ubuntu 25 `2657`; CentOS 9 `542`, CentOS 10 `2467`. Vultr derives the `os` variable from `os_id` via [infrastructure/terraform/vultr/scripts/os-from-id.sh](infrastructure/terraform/vultr/scripts/os-from-id.sh).
 
 #### Getting AWS AMI IDs
 
@@ -115,7 +116,7 @@ aws ec2 describe-images --region us-east-2 --owners 136693071363 \
 
 Change `us-east-2` to your region. The Terraform `os` variable (e.g. `debian-12`) must match the image.
 
-Full variable reference, optional persistent data volume (survives destroy+apply), and multi-environment (dev/prod) details: **[terraform/terraform/README.md](terraform/terraform/README.md)**.
+Full variable reference, optional persistent data volume (survives destroy+apply), and multi-environment (dev/prod) details: **[infrastructure/terraform/README.md](infrastructure/terraform/README.md)**.
 
 ### WebRTC (group calls)
 
@@ -280,6 +281,7 @@ Lastly, there is an analytics page that has the statistics for views/listens tha
 - **pnpm** (recommended; the repo uses pnpm workspaces)
 - **ffmpeg**
 - **audiowaveform** ([bbc/audiowaveform](https://github.com/bbc/audiowaveform)) - e.g. on macOS: `brew install audiowaveform`; on Linux, build from source or use a package if available
+- **node-canvas** (used for episode video waveform): on macOS `brew install pkg-config cairo pango libpng jpeg giflib librsvg`; on Debian/Ubuntu `apt-get install libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev` (needed to build the `canvas` npm package, `pnpm -C node_modules/.pnpm/canvas@3.2.1/node_modules/canvas run install`)
 
 ## Quick start (local)
 
@@ -393,6 +395,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | `FFMPEG_PATH` | `ffmpeg` | Path to ffmpeg binary |
 | `FFPROBE_PATH` | `ffprobe` | Path to ffprobe binary |
 | `AUDIOWAVEFORM_PATH` | `audiowaveform` | Path to audiowaveform binary |
+| `ALLOW_VIDEO_GENERATION` | (false) | Set to `1` or `true` to enable episode video generation (requires node-canvas). When false, dev server runs without canvas. |
 | `GEOIPUPDATE_PATH` | `geoipupdate` | Path to geoipupdate binary (MaxMind GeoIP) |
 | `SMBCLIENT_PATH` | `smbclient` | Path to smbclient binary (SMB export) |
 | **GeoIP** | | |
@@ -894,6 +897,117 @@ networks:
 ## Backup and upgrading
 
 Before upgrading, back up **DATA_DIR** (SQLite database, uploads, processed audio, RSS files, artwork, library). Optionally back up **SECRETS_DIR** if you rely on the persisted JWT or secrets key files. Migrations run automatically on server start; no separate migration step is required for upgrades.
+
+## Single Sign-On (SSO)
+
+HarborFM supports Single Sign-On via **OIDC** (OpenID Connect) and **SAML**. Configured providers appear as sign-in options on the login page. Add and edit providers under **Settings → SSO (OIDC / SAML)**. Use the list to add a provider, then open it to set endpoints, client credentials, and optional attributes. Use `(set)` in password or certificate fields when editing to keep existing secrets without re-entering them.
+
+The examples below assume your HarborFM instance is at **https://app.harborfm.com** and you are using **Keycloak** as the identity provider.
+
+### Connecting OIDC (Keycloak)
+
+1. **Keycloak realm and client**
+   - In Keycloak Admin: create or select a realm (e.g. `harborfm`).
+   - Create a client: **Clients → Create client**.
+   - Client ID: e.g. `harborfm`.
+   - Client authentication: **On**.
+   - Valid redirect URIs: `https://app.harborfm.com/api/auth/sso/oidc/callback/harborfm` (use your provider ID in the path).
+   - Save, then open the client **Credentials** tab and copy the **Client secret**.
+
+2. **HarborFM Settings**
+   - Go to **Settings → SSO (OIDC / SAML)** and ensure **Hostname** is set to `app.harborfm.com` (or `https://app.harborfm.com`).
+   - Under **OIDC providers**, click **Add Provider**.
+   - **Provider ID**: `harborfm` (must match the path segment in the callback URL).
+   - **Display Name**: e.g. `Keycloak` or your org name.
+   - **Discovery URL**: your Keycloak OpenID configuration URL, e.g. `https://keycloak.example.com/realms/harborfm` (no path suffix; HarborFM fetches `/.well-known/openid-configuration`).
+   - **Client ID**: same as in Keycloak (e.g. `harborfm`).
+   - **Client Secret**: paste the Keycloak client secret.
+   - **Scopes**: default `openid profile email` is usually sufficient.
+   - Leave **Trust email from provider** enabled if you want account linking by email.
+   - Save the provider, then click **Save** at the bottom of the Settings page.
+
+3. **Verify**
+   - Open the login page; you should see a sign-in option for your OIDC provider. Use it to sign in; the first time, an account may be created or linked by email.
+
+If you see “issuer does not match”, set **Issuer Override** in the provider to the exact `issuer` value from Keycloak’s `/.well-known/openid-configuration` (e.g. `https://keycloak.example.com/realms/harborfm`).
+
+### Connecting SAML (Keycloak)
+
+SAML is a way for your app to send users to Keycloak to log in; Keycloak then sends them back to your app with proof they authenticated. You register HarborFM as a "client" in Keycloak and tell HarborFM how to talk to Keycloak. The two sides must agree on a few exact strings (an identifier and a callback URL).
+
+**Pick a Provider ID** (e.g. `keycloak`) and use it in the callback URL. HarborFM’s SAML entity ID is always your app base URL + `/api/auth/sso/saml`; set that as **Client ID** in Keycloak.
+
+Replace `keycloak.example.com` and `harborfm` below with your Keycloak host and realm name.
+
+---
+
+#### Step 1: Create the SAML client in Keycloak
+
+1. Log into the Keycloak Admin Console and select your realm (e.g. **harborfm**).
+2. In the left sidebar, click **Clients**.
+3. Click **Create client**.
+4. **General settings** (first page):
+   - **Client type**: choose **SAML**.
+   - **Client ID**: enter HarborFM’s SAML entity ID, which is your app base URL + `/api/auth/sso/saml`, e.g. `https://app.harborfm.com/api/auth/sso/saml`. Keycloak matches this to the issuer HarborFM sends in the SAML request.
+   - **Name**: optional; e.g. `HarborFM`.
+5. Click **Next** (or **Save**). You'll land on the client **Settings** tab.
+
+6. On the **Settings** tab, under **Access settings**:
+   - **Root URL**: `https://app.harborfm.com` (your HarborFM base URL).
+   - **Valid redirect URIs**: click **Add** and enter your callback URL exactly:
+     ```
+     https://app.harborfm.com/api/auth/sso/saml/callback/keycloak
+     ```
+     (If you used a different Provider ID, replace `keycloak` in that URL with your Provider ID.) This is where Keycloak is allowed to send the user after login (the "callback" or ACS URL). HarborFM sends this URL in the SAML request; Keycloak checks it against Valid redirect URIs.
+   - If your Keycloak version shows **Master SAML Processing URL** in the same section, set it to the same callback URL. If you don't see that field, **Valid redirect URIs** is enough.
+7. On the **Keys** tab (only needed if "Want AuthnRequests signed" is ON for this client):
+   - Keycloak needs your **SP public certificate** so it can verify signed requests from HarborFM.
+   - If you don't have a key pair yet, generate one on your machine:
+     - `openssl genrsa -out sp-key.pem 2048`
+     - `openssl req -x509 -new -key sp-key.pem -out sp-cert.pem -days 3650 -subj "/CN=harbor-sp"`
+   - Inside HarborFM (Step 3) you will paste the contents of **sp-key.pem** (private key) into **SP private key (PEM)**.
+   - Here in Keycloak, import only the **certificate** (**sp-cert.pem**): choose **Certificate (PEM)** if available and upload the sp-cert.pem or paste the contents of sp-cert.pem (including `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----`).
+8. Click **Save**.
+
+---
+
+#### Step 2: Get Keycloak's IdP certificate and SSO URL
+
+HarborFM needs Keycloak's public certificate to verify SAML responses, and the URL where users are sent to log in.
+
+1. **IdP certificate (PEM)**  
+   - In the left sidebar, open **Realm settings** (for your realm), then open the **Keys** tab.  
+   - Find the **RS256** key with **SIG** (signing) in the **Use** column.  
+   - Open **Certificate** and copy the certificate (PEM form, including `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----`). You'll paste it into HarborFM in Step 3.
+
+2. **IdP Entry Point URL (where users log in)**  
+   This is your realm's SAML endpoint. It has the form:
+   ```
+   https://keycloak.example.com/realms/harborfm/protocol/saml
+   ```
+   Replace the host with your Keycloak URL and `harborfm` with your realm name. You'll paste this into HarborFM as **IdP Entry Point URL**.
+
+---
+
+#### Step 3: Add the SAML provider in HarborFM
+
+1. In HarborFM, go to **Settings** and find **SSO (OIDC / SAML)**.
+2. Under **SAML providers**, click **Add Provider** and fill in the popup:
+   - **Provider ID**: the slug you use in the callback URL (e.g. `keycloak`). The form shows the **Callback URL (ACS URL)** read-only — copy that into Keycloak’s Valid redirect URIs.
+   - **Display Name**: e.g. `Keycloak` (shown on the login page).
+   - **IdP Entry Point URL**: the Keycloak SAML URL from Step 2 (e.g. `https://keycloak.example.com/realms/harborfm/protocol/saml`).
+   - **IdP certificate (PEM)**: paste the PEM from Step 2 above (the IdP’s certificate). HarborFM uses it to verify SAML responses from Keycloak.
+   - **SP certificate (PEM)** (optional): leave blank unless your IdP requires the client to sign SAML requests. In Keycloak, that’s **Clients** → your SAML client → **Settings** → **Client Signature Required** = ON. If you enable it: generate a key pair for HarborFM (the SP), paste the **SP private key** (PEM, e.g. `-----BEGIN PRIVATE KEY-----` … `-----END PRIVATE KEY-----`) into this field, and add the matching **public certificate** to Keycloak’s client **Keys** tab so Keycloak can verify the signature. Most setups leave **Client Signature Required** OFF and leave this blank.
+   HarborFM derives the entity ID and callback URL from Hostname and Provider ID. Use the **Callback URL** shown in the form when configuring Keycloak; set **Client ID** in Keycloak to your base URL + `/api/auth/sso/saml` (e.g. `https://app.harborfm.com/api/auth/sso/saml`).
+3. Save the provider, then click **Save** at the bottom of the Settings page.
+
+---
+
+#### Step 4: Test it
+
+Open HarborFM's login page. You should see an option to sign in with your SAML provider (e.g. "Keycloak"). Click it; you should be sent to Keycloak to log in and then back to HarborFM, logged in.
+
+**If it doesn't work:** Double-check that **Client ID** in Keycloak is exactly your HarborFM base URL + `/api/auth/sso/saml` (e.g. `https://app.harborfm.com/api/auth/sso/saml`), and that the callback URL in both places is exactly the same.
 
 ## License
 

@@ -102,6 +102,11 @@ export const FFPROBE_PATH = process.env.FFPROBE_PATH ?? "ffprobe";
 export const AUDIOWAVEFORM_PATH =
   process.env.AUDIOWAVEFORM_PATH ?? "audiowaveform";
 
+/** When true, episode video generation (node-canvas + ffmpeg) is enabled. Requires canvas native deps. Env: ALLOW_VIDEO_GENERATION. Default false. */
+export const ALLOW_VIDEO_GENERATION =
+  process.env.ALLOW_VIDEO_GENERATION?.trim() === "1" ||
+  process.env.ALLOW_VIDEO_GENERATION?.trim() === "true";
+
 /** When false, WebRTC/group calls are disabled (e.g. Terraform webrtc_enabled=0). Env: WEBRTC_ENABLED. Default false when unset or invalid. */
 export const WEBRTC_ENABLED =
   process.env.WEBRTC_ENABLED?.trim() === "1" ||
@@ -406,6 +411,23 @@ export const DNS_SECRETS_AAD =
 /** AAD for SSO-related encrypted secrets (OIDC client secrets, SAML certs). Env: SSO_SECRETS_AAD. */
 export const SSO_SECRETS_AAD =
   process.env.SSO_SECRETS_AAD?.trim() || `${APP_NAME}-sso`;
+
+/** When true, email/password sign-in is disabled (SSO only). Terraform can set SSO_EMAIL_SIGNIN_DISABLED=1. Env: SSO_EMAIL_SIGNIN_DISABLED. Default false. Applied at read time (does not write to DB). */
+export const SSO_EMAIL_SIGNIN_DISABLED =
+  process.env.SSO_EMAIL_SIGNIN_DISABLED?.trim() === "1" ||
+  process.env.SSO_EMAIL_SIGNIN_DISABLED?.trim() === "true";
+
+/** Path to JSON file with initial SSO providers: { "oidc": [...], "saml": [...] }. Terraform can write this (e.g. from templatefile). Env: SSO_PROVIDERS_INIT_JSON_PATH. */
+export const SSO_PROVIDERS_INIT_JSON_PATH =
+  process.env.SSO_PROVIDERS_INIT_JSON_PATH?.trim() || null;
+
+/** Initial OIDC providers as JSON string. Merged by provider id; existing IDs are not overwritten. Env: SSO_OIDC_PROVIDERS_INIT. */
+export const SSO_OIDC_PROVIDERS_INIT =
+  process.env.SSO_OIDC_PROVIDERS_INIT?.trim() || null;
+
+/** Initial SAML providers as JSON string. Merged by provider id; existing IDs are not overwritten. Env: SSO_SAML_PROVIDERS_INIT. */
+export const SSO_SAML_PROVIDERS_INIT =
+  process.env.SSO_SAML_PROVIDERS_INIT?.trim() || null;
 
 /** Initial setup token for /setup?id=... URL. Env: SETUP_ID or SETUP_TOKEN. When set, used instead of file. */
 export const SETUP_ID =

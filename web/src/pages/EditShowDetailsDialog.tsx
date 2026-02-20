@@ -226,7 +226,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       title: currentForm.title,
       slug: currentForm.slug,
       description: currentForm.description,
-      subtitle: currentForm.subtitle ?? null,
+      subtitle: currentForm.subtitle?.trim() || null,
       summary: currentForm.summary ?? null,
       language: currentForm.language,
       authorName: currentForm.authorName,
@@ -398,7 +398,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     <input
                       type="text"
                       value={form.slug ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value.replace(/[^a-zA-Z0-9-]/g, '') }))}
                       className={styles.input}
                       placeholder="e.g. my-awesome-podcast"
                       style={{ flex: '1 1 200px' }}
@@ -485,7 +485,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   <input
                     type="text"
                     value={form.subtitle ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value.trim() || null }))}
+                    onChange={(e) => setForm((f) => ({ ...f, subtitle: e.target.value || null }))}
                     className={styles.input}
                     placeholder="e.g. A weekly show about technology"
                   />

@@ -1,6 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { statSync, unlinkSync, existsSync, mkdirSync } from "fs";
+import { statSync, unlinkSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join, dirname, extname, basename, resolve, sep } from "path";
 import { tmpdir } from "os";
 import {
@@ -210,6 +210,67 @@ export async function generateWaveformFile(
     { maxBuffer: 4 * 1024 * 1024 },
   );
   return assertPathUnder(outPath, allowedBaseDir);
+}
+
+/** Waveform data for video: amplitude min/max pairs over time (from audiowaveform JSON). */
+export interface WaveformDataForVideo {
+  data: number[];
+  length: number;
+  sample_rate: number;
+  samples_per_pixel: number;
+  bits: number;
+  /** 1 or 2; used to index into data (mono: 2 values per index, stereo: 4 per index). */
+  channels: number;
+}
+
+/**
+ * Generate high-resolution waveform JSON for video generation and return parsed data.
+ * Output file is written to allowedBaseDir/video-waveform.json (e.g. processedDir(podcastId, episodeId)).
+ * Uses --pixels-per-second 25 (or custom) so we have ~1 sample per frame at 25fps.
+ */
+export async function generateWaveformDataForVideo(
+  audioPath: string,
+  allowedBaseDir: string,
+  options?: { pixelsPerSecond?: number },
+): Promise<WaveformDataForVideo> {
+  const safeIn = assertPathUnder(audioPath, allowedBaseDir);
+  const outPath = join(allowedBaseDir, "video-waveform.json");
+  assertResolvedPathUnder(outPath, allowedBaseDir);
+  ensureDir(allowedBaseDir);
+  const pixelsPerSecond = options?.pixelsPerSecond ?? 25;
+  await exec(
+    AUDIOWAVEFORM_PATH,
+    [
+      "-i",
+      safeIn,
+      "-o",
+      outPath,
+      "--pixels-per-second",
+      String(pixelsPerSecond),
+      "--bits",
+      "8",
+    ],
+    { maxBuffer: 8 * 1024 * 1024 },
+  );
+  const raw = readFileSync(outPath, "utf-8");
+  const json = JSON.parse(raw) as {
+    version?: number;
+    channels?: number;
+    sample_rate: number;
+    samples_per_pixel: number;
+    length: number;
+    bits: number;
+    data: number[];
+  };
+  const channels = json.channels ?? 1;
+  return {
+    data: json.data,
+    length: json.length,
+    sample_rate: json.sample_rate,
+    samples_per_pixel: json.samples_per_pixel,
+    bits: json.bits,
+    channels,
+  };
 }
 
 export function getFinalOutputPath(

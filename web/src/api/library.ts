@@ -115,6 +115,34 @@ export function updateLibraryAssetForUser(userId: string, id: string, data: Libr
   });
 }
 
+export function replaceLibraryAssetAudio(id: string, file: File): Promise<LibraryAsset> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`${BASE}/library/${id}/audio`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json().then((data: Record<string, unknown>) => toLibraryAsset(data));
+  });
+}
+
+export function replaceLibraryAssetAudioForUser(userId: string, id: string, file: File): Promise<LibraryAsset> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`${BASE}/library/user/${userId}/${id}/audio`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json().then((data: Record<string, unknown>) => toLibraryAsset(data));
+  });
+}
+
 export function deleteLibraryAsset(id: string): Promise<void> {
   return fetch(`${BASE}/library/${id}`, { method: 'DELETE', credentials: 'include', headers: csrfHeaders() }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });

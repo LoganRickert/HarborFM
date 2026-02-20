@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Phone } from 'lucide-react';
+import { SsoButtonIcon } from '../components/SsoButtonIcon';
 import { OtpInput } from '../components/OtpInput/OtpInput';
 import { useAuthStore } from '../store/auth';
 import { login, verify2FA, send2FAEmailCode, getSsoProviders } from '../api/auth';
@@ -50,6 +51,9 @@ export function Login() {
   const ssoProviders = ssoData?.providers ?? [];
   const webrtcEnabled = publicConfig?.webrtcEnabled === true;
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const emailSigninDisabled = setup?.emailSigninDisabled === true;
+  const ssoOnly = emailSigninDisabled && ssoProviders.length > 0;
+  const ssoOnlyNoProviders = emailSigninDisabled && ssoProviders.length === 0;
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -156,6 +160,33 @@ export function Login() {
           <h2 className={styles.setupHeaderTitle}>Sign in to your account</h2>
         </div>
         <form onSubmit={handleSubmit} className={styles.form}>
+          {ssoOnlyNoProviders ? (
+            <p className={styles.toggleHelp}>Sign-in is not available. No sign-in providers are configured.</p>
+          ) : ssoOnly ? (
+            <>
+              <p className={styles.toggleHelp} style={{ marginBottom: 12, textAlign: 'center', margin: 0 }}>Sign in with a provider below.</p>
+              <div className={styles.ssoButtons}>
+                {ssoProviders.map((p) => (
+                  <a
+                    key={`${p.type}-${p.id}`}
+                    href={`/api/auth/sso/${p.type}/${p.id}`}
+                    className={styles.ssoButton}
+                    style={{
+                      ...(p.buttonBgColor && { backgroundColor: p.buttonBgColor }),
+                      ...(p.buttonTextColor && { color: p.buttonTextColor }),
+                      ...(p.buttonBgColor || p.buttonTextColor
+                        ? { borderColor: 'transparent' }
+                        : {}),
+                    }}
+                  >
+                    <SsoButtonIcon slug={p.iconSlug} size={18} />
+                    Sign in with {p.name}
+                  </a>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
           {!pending2FA ? (
             <>
           <label className={styles.label}>
@@ -272,14 +303,25 @@ export function Login() {
                     key={`${p.type}-${p.id}`}
                     href={`/api/auth/sso/${p.type}/${p.id}`}
                     className={styles.ssoButton}
+                    style={{
+                      ...(p.buttonBgColor && { backgroundColor: p.buttonBgColor }),
+                      ...(p.buttonTextColor && { color: p.buttonTextColor }),
+                      ...(p.buttonBgColor || p.buttonTextColor
+                        ? { borderColor: 'transparent' }
+                        : {}),
+                    }}
                   >
+                    <SsoButtonIcon slug={p.iconSlug} size={18} />
                     Sign in with {p.name}
                   </a>
                 ))}
               </div>
             </>
           )}
+            </>
+          )}
         </form>
+        {!ssoOnly && !ssoOnlyNoProviders && (
         <div className={styles.footerActions}>
           <div className={styles.footerAction}>
             <span className={styles.footerActionIcon} aria-hidden>
@@ -306,6 +348,7 @@ export function Login() {
             </div>
           )}
         </div>
+        )}
         </div>
         {setup?.welcomeBanner?.trim() && (
           <div className={styles.welcomeBanner} role="status">

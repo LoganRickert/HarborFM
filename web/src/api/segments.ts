@@ -1,4 +1,4 @@
-import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse } from '@harborfm/shared';
+import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
@@ -250,6 +250,63 @@ export function startRenderEpisode(episodeId: string): Promise<{ status: 'buildi
 
 export function getRenderStatus(episodeId: string): Promise<RenderStatusResponse> {
   return fetch(`${BASE}/episodes/${episodeId}/render-status`, { method: 'GET', credentials: 'include' }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json();
+  });
+}
+
+/** Start video generation. Returns when job is started (202) or already in progress (409). Status updates are sent over the episode WebSocket (videoGenerationStarted / videoGenerated). */
+export function startGenerateVideo(episodeId: string, options: GenerateVideoBody): Promise<{ status: 'generating' | 'already_generating'; message?: string }> {
+  return fetch(`${BASE}/episodes/${episodeId}/generate-video`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify(options),
+  }).then(async (r) => {
+    const body = await r.json().catch(() => ({}));
+    if (r.status === 202) return { status: 'generating' as const };
+    if (r.status === 409) return { status: 'already_generating' as const, message: (body as { message?: string }).message ?? 'Video generation is already in progress.' };
+    if (!r.ok) {
+      const err = body as { error?: string; message?: string };
+      throw new Error((err.error ?? err.message ?? r.statusText) || 'Request failed');
+    }
+    return body;
+  });
+}
+
+export function getVideoStatus(episodeId: string): Promise<VideoStatusResponse> {
+  return fetch(`${BASE}/episodes/${episodeId}/video-status`, { method: 'GET', credentials: 'include' }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json();
+  });
+}
+
+/** URL to download the generated episode video (use in <a href={...} download> or <video src={...}>). Pass cacheBuster (e.g. episode.updatedAt) so the browser fetches a new file when the video is regenerated. */
+export function downloadEpisodeVideoUrl(episodeId: string, cacheBuster?: string | number | null): string {
+  const url = `${BASE}/episodes/${episodeId}/download-video`;
+  if (cacheBuster == null) return url;
+  const v = typeof cacheBuster === 'string' ? new Date(cacheBuster).getTime() : cacheBuster;
+  return `${url}?v=${v}`;
+}
+
+/** URL for the episode's video cover image (last thumbnail). Use in <img src={...} /> for preview. Returns 404 if no cover; add cacheBuster to avoid stale cache. */
+export function getVideoCoverUrl(episodeId: string, cacheBuster?: string | number | null): string {
+  const url = `${BASE}/episodes/${episodeId}/video-cover`;
+  if (cacheBuster == null) return url;
+  const v = typeof cacheBuster === 'string' ? new Date(cacheBuster).getTime() : cacheBuster;
+  return `${url}?v=${v}`;
+}
+
+/** Upload a video cover image for use when generating the episode video. */
+export function uploadEpisodeVideoCover(episodeId: string, file: File): Promise<{ ok: boolean }> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`${BASE}/episodes/${episodeId}/video-cover`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
     return r.json();
   });

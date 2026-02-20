@@ -10,6 +10,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 }
 
 export { readSettings, migrateSettingsFromFile, migrateWebRtcFromEnv } from "./repo.js";
+export { migrateSsoProvidersFromEnv } from "../../services/ssoProviderSettings.js";
 export {
   isEmailProviderConfigured,
   isTranscriptionProviderConfigured,

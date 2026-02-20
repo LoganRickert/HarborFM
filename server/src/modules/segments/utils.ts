@@ -14,6 +14,10 @@ export const renderErrorByEpisode = new Map<string, string>();
 export const transcriptStatusByEpisode = new Map<string, "transcribing" | "done" | "failed">();
 export const transcriptErrorByEpisode = new Map<string, string>();
 
+/** In-memory video generation status per episode. Cleared when returning 'done' or 'failed'. */
+export const videoGenStatusByEpisode = new Map<string, "generating" | "done" | "failed">();
+export const videoGenErrorByEpisode = new Map<string, string>();
+
 export function transcriptPath(audioPath: string): string {
   return audioPath.replace(/\.[^.]+$/, ".txt");
 }

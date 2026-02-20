@@ -1,6 +1,7 @@
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import type { AppSettings } from "../settings/index.js";
+import { SSO_EMAIL_SIGNIN_DISABLED } from "../../config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -44,5 +45,8 @@ export function buildSetupStatusResponse(settings: AppSettings) {
       settings.two_factor_enabled && settings.two_factor_enforced,
     ),
     twoFactorMethods: String(settings.two_factor_methods ?? "totp"),
+    emailSigninDisabled: Boolean(
+      settings.email_signin_disabled || SSO_EMAIL_SIGNIN_DISABLED,
+    ),
   };
 }

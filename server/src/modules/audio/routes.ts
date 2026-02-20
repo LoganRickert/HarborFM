@@ -549,4 +549,86 @@ export async function audioRoutes(app: FastifyInstance) {
       return reply.send(result.stream);
     },
   );
+
+  // Public episode video stream (same access as public audio: published, not subscriber-only)
+  app.get(
+    "/:podcastId/episodes/:episodeId/video",
+    {
+      schema: {
+        tags: ["Audio"],
+        summary: "Stream episode video (public)",
+        description:
+          "Stream episode video for public feed. Same visibility as public audio. Supports Range.",
+        security: [],
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            episodeId: { type: "string" },
+          },
+          required: ["podcastId", "episodeId"],
+        },
+        response: {
+          200: { description: "Video stream" },
+          206: { description: "Partial content" },
+          400: { description: "Invalid ID" },
+          404: { description: "Not found" },
+          500: { description: "Server error" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const settings = readSettings();
+      if (!settings.public_feeds_enabled) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const { podcastId, episodeId: rawEpisodeId } = request.params as {
+        podcastId: string;
+        episodeId: string;
+      };
+      const episodeId = rawEpisodeId.replace(/\.[a-zA-Z0-9]+$/, "") || rawEpisodeId;
+      try {
+        assertSafeId(podcastId.trim(), "podcastId");
+        assertSafeId(episodeId.trim(), "episodeId");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid podcast or episode ID" });
+      }
+      if (!podcastId?.trim() || !episodeId?.trim()) {
+        return reply.status(400).send({ error: "Invalid podcast or episode ID" });
+      }
+      const podcast = getPublicPodcastForStream(podcastId.trim());
+      if (!podcast || podcast.publicFeedDisabled) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const episode = getPublishedEpisodeForStream(podcastId.trim(), episodeId.trim());
+      if (!episode || episode.subscriberOnly || !episode.videoFinalPath) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const path = resolveDataPath(episode.videoFinalPath);
+      if (!path || !existsSync(path)) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      const allowedBase = processedDir(podcastId.trim(), episodeId.trim());
+      const safePath = assertPathUnder(path, allowedBase);
+      const result = await send(request.raw, basename(safePath), {
+        root: dirname(safePath),
+        contentType: false,
+        maxAge: 3600,
+        acceptRanges: true,
+        cacheControl: true,
+      });
+      if (result.type === "error") {
+        const err = result.metadata.error as Error & { status?: number };
+        const errStatus = (err.status ?? 404) as 404 | 500;
+        return reply.status(errStatus).send({ error: "Not found" });
+      }
+      reply.status(result.statusCode as 200 | 206 | 404 | 500);
+      const headers = result.headers as Record<string, string>;
+      for (const [key, value] of Object.entries(headers)) {
+        if (value !== undefined) reply.header(key, value);
+      }
+      reply.header("Content-Type", "video/mp4");
+      return reply.send(result.stream);
+    },
+  );
 }

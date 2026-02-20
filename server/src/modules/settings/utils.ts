@@ -26,6 +26,7 @@ export interface AppSettings {
   openai_transcription_api_key: string;
   transcription_model: string;
   default_can_transcribe: boolean;
+  default_can_generate_video: boolean;
   llm_provider: "none" | "ollama" | "openai";
   ollama_url: string;
   openai_api_key: string;
@@ -136,6 +137,8 @@ export interface AppSettings {
   two_factor_methods: string;
   /** When true and 2FA enabled, users without 2FA must add it after password login. */
   two_factor_enforced: boolean;
+  /** When true, email/password sign-in is disabled; only SSO is allowed. */
+  email_signin_disabled: boolean;
 }
 
 export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -149,6 +152,7 @@ export const DEFAULTS: AppSettings = {
   openai_transcription_api_key: "",
   transcription_model: TRANSCRIPTION_DEFAULT_MODEL,
   default_can_transcribe: true,
+  default_can_generate_video: true,
   llm_provider: "none",
   ollama_url: "http://localhost:11434",
   openai_api_key: "",
@@ -210,6 +214,7 @@ export const DEFAULTS: AppSettings = {
   two_factor_enabled: false,
   two_factor_methods: "totp",
   two_factor_enforced: false,
+  email_signin_disabled: false,
 };
 
 export const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -263,6 +268,8 @@ export function buildAppSettingsFromRows(
       settings.transcription_model = row.value;
     else if (row.key === "default_can_transcribe")
       settings.default_can_transcribe = parseBool(row.value);
+    else if (row.key === "default_can_generate_video")
+      settings.default_can_generate_video = parseBool(row.value);
     else if (row.key === "llm_provider")
       settings.llm_provider = row.value as AppSettings["llm_provider"];
     else if (row.key === "ollama_url") settings.ollama_url = row.value;
@@ -402,6 +409,9 @@ export function buildAppSettingsFromRows(
     else if (row.key === "two_factor_enforced")
       (settings as Partial<AppSettings>).two_factor_enforced =
         row.value === "true";
+    else if (row.key === "email_signin_disabled")
+      (settings as Partial<AppSettings>).email_signin_disabled =
+        row.value === "true";
   }
 
   return {
@@ -419,6 +429,8 @@ export function buildAppSettingsFromRows(
       settings.transcription_model ?? DEFAULTS.transcription_model,
     default_can_transcribe:
       settings.default_can_transcribe ?? DEFAULTS.default_can_transcribe,
+    default_can_generate_video:
+      settings.default_can_generate_video ?? DEFAULTS.default_can_generate_video,
     model:
       settings.model ??
       (settings.llm_provider === "openai"
@@ -530,6 +542,9 @@ export function buildAppSettingsFromRows(
     two_factor_enforced:
       (settings as Partial<AppSettings>).two_factor_enforced ??
       DEFAULTS.two_factor_enforced,
+    email_signin_disabled:
+      (settings as Partial<AppSettings>).email_signin_disabled ??
+      DEFAULTS.email_signin_disabled,
   };
 }
 
@@ -573,6 +588,7 @@ export function settingsToApiResponse(
     openaiTranscriptionApiKey: settings.openai_transcription_api_key ? "(set)" : "",
     transcriptionModel: settings.transcription_model,
     defaultCanTranscribe: settings.default_can_transcribe,
+    defaultCanGenerateVideo: settings.default_can_generate_video,
     llmProvider: settings.llm_provider,
     ollamaUrl: settings.ollama_url,
     openaiApiKey: settings.openai_api_key ? "(set)" : "",
@@ -638,6 +654,7 @@ export function settingsToApiResponse(
     twoFactorEnabled: settings.two_factor_enabled,
     twoFactorMethods: settings.two_factor_methods,
     twoFactorEnforced: settings.two_factor_enforced,
+    emailSigninDisabled: Boolean(settings.email_signin_disabled),
     ssoOidcProviders: ssoOidc,
     ssoSamlProviders: ssoSaml,
   };

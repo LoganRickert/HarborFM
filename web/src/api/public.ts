@@ -56,12 +56,14 @@ export interface PublicEpisode {
   audioBytes: number | null;
   audioDurationSec: number | null;
   audioUrl: string | null;
+  videoUrl?: string | null;
   srtUrl?: string | null;
   subscriberOnly?: boolean;
   createdAt: string;
   updatedAt: string;
   privateAudioUrl?: string | null;
   privateWaveformUrl?: string | null;
+  privateVideoUrl?: string | null;
   privateSrtUrl?: string | null;
   markers?: Array<{ time: number; title?: string; color?: string }> | null;
 }
@@ -117,12 +119,14 @@ function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
     audioBytes: r.audio_bytes != null ? Number(r.audio_bytes) : null,
     audioDurationSec: r.audio_duration_sec != null ? Number(r.audio_duration_sec) : null,
     audioUrl: r.audio_url != null ? String(r.audio_url) : null,
+    videoUrl: (r.video_url as string | null) ?? null,
     srtUrl: r.srt_url != null ? String(r.srt_url) : null,
     subscriberOnly: r.subscriber_only === 1 || r.subscriber_only === true,
     createdAt: String(r.created_at ?? ''),
     updatedAt: String(r.updated_at ?? ''),
     privateAudioUrl: (r.private_audio_url as string | null) ?? null,
     privateWaveformUrl: (r.private_waveform_url as string | null) ?? null,
+    privateVideoUrl: (r.private_video_url as string | null) ?? null,
     privateSrtUrl: (r.private_srt_url as string | null) ?? null,
     markers: r.markers as PublicEpisode['markers'],
   };

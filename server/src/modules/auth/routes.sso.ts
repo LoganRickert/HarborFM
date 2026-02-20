@@ -63,6 +63,9 @@ interface OIDCProviderConfig {
   clientSecret?: string;
   scopes?: string;
   trustEmail?: boolean;
+  iconSlug?: string;
+  buttonBgColor?: string;
+  buttonTextColor?: string;
 }
 
 interface SAMLProviderConfig {
@@ -81,6 +84,11 @@ interface SAMLProviderConfig {
   emailVerifiedAttribute?: string;
   /** When true, allows auto-linking by email. For SAML: only enable with trusted IdPs that verify emails. Consider emailVerifiedAttribute for defense-in-depth. */
   trustEmail?: boolean;
+  /** When true, require the IdP to sign the assertion and validate with idpCert. Default false for compatibility (e.g. Keycloak). */
+  wantAssertionsSigned?: boolean;
+  iconSlug?: string;
+  buttonBgColor?: string;
+  buttonTextColor?: string;
 }
 
 function discoveryUrlToIssuer(discoveryUrl: string): URL {
@@ -120,6 +128,47 @@ function getSsoSamlProviders(): SAMLProviderConfig[] {
   }
 }
 
+/** Turn raw base64 private key into PEM. Uses RSA PRIVATE KEY (PKCS#1) for decryption (xml-encryption). */
+function normalizePrivateKeyToPem(raw: string): string {
+  const base64 = raw.replace(/\s/g, "").replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!base64.length) return raw;
+  const lines = base64.match(/.{1,64}/g) ?? [base64];
+  return `-----BEGIN RSA PRIVATE KEY-----\n${lines.join("\n")}\n-----END RSA PRIVATE KEY-----`;
+}
+
+/** Turn raw base64 private key into PEM with PRIVATE KEY (PKCS#8). Use for signing; Node's Sign and node-saml expect this. */
+function normalizePrivateKeyToPemPkcs8(raw: string): string {
+  const base64 = raw.replace(/\s/g, "").replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!base64.length) return raw;
+  const lines = base64.match(/.{1,64}/g) ?? [base64];
+  return `-----BEGIN PRIVATE KEY-----\n${lines.join("\n")}\n-----END PRIVATE KEY-----`;
+}
+
+/** Normalize certificate PEM (e.g. from X509Certificate in XML) to canonical form for signature verification. */
+function normalizeCertToPem(raw: string): string {
+  const trimmed = raw.trim();
+  const base64 = trimmed
+    .replace(/-----BEGIN CERTIFICATE-----/gi, "")
+    .replace(/-----END CERTIFICATE-----/gi, "")
+    .replace(/\s/g, "")
+    .replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!base64.length) return trimmed;
+  const lines = base64.match(/.{1,64}/g) ?? [base64];
+  return `-----BEGIN CERTIFICATE-----\n${lines.join("\n")}\n-----END CERTIFICATE-----`;
+}
+
+/** Parse IdP cert field into array of PEMs (supports pasting both signing + encryption certs from descriptor). */
+function parseIdpCerts(raw: string): string[] {
+  const out: string[] = [];
+  const re = /-----BEGIN\s+CERTIFICATE-----[\s\S]*?-----END\s+CERTIFICATE-----/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) out.push(normalizeCertToPem(m[0]));
+  if (out.length > 0) return out;
+  const single = raw.replace(/\s/g, "").replace(/[^A-Za-z0-9+/=]/g, "");
+  if (single.length > 0) return [normalizeCertToPem(raw)];
+  return [];
+}
+
 function getCallbackBaseUrl(): string {
   return getBaseUrl();
 }
@@ -147,6 +196,9 @@ export async function registerSsoRoutes(app: FastifyInstance) {
                     id: { type: "string" },
                     name: { type: "string" },
                     type: { type: "string", enum: ["oidc", "saml"] },
+                    iconSlug: { type: "string" },
+                    buttonBgColor: { type: "string" },
+                    buttonTextColor: { type: "string" },
                   },
                 },
               },
@@ -160,11 +212,17 @@ export async function registerSsoRoutes(app: FastifyInstance) {
         id: p.id,
         name: p.name,
         type: "oidc" as const,
+        ...(p.iconSlug && { iconSlug: p.iconSlug }),
+        ...(p.buttonBgColor && { buttonBgColor: p.buttonBgColor }),
+        ...(p.buttonTextColor && { buttonTextColor: p.buttonTextColor }),
       }));
       const saml = getSsoSamlProviders().map((p) => ({
         id: p.id,
         name: p.name,
         type: "saml" as const,
+        ...(p.iconSlug && { iconSlug: p.iconSlug }),
+        ...(p.buttonBgColor && { buttonBgColor: p.buttonBgColor }),
+        ...(p.buttonTextColor && { buttonTextColor: p.buttonTextColor }),
       }));
       return reply.send({ providers: [...oidc, ...saml] });
     },
@@ -616,26 +674,89 @@ export async function registerSsoRoutes(app: FastifyInstance) {
         providerId,
       }).run();
 
-      const samlOptions: SamlConfig = {
+      const defaultIssuer = `${baseUrl}/${API_PREFIX}/auth/sso/saml`;
+      const issuer = (provider.issuer && provider.issuer.trim()) ? provider.issuer.trim() : defaultIssuer;
+
+      const rawKey = cert?.trim();
+      const keyWasRaw = Boolean(rawKey && !/-----BEGIN\s/i.test(rawKey));
+      const privateKeyPem =
+        rawKey && keyWasRaw
+          ? normalizePrivateKeyToPemPkcs8(rawKey)
+          : rawKey;
+
+      const buildSamlOptions = (keyPem: string | undefined): SamlConfig => ({
         callbackUrl,
         entryPoint: provider.entryPoint,
-        issuer: provider.issuer,
+        issuer,
         idpCert,
-        ...(cert && { privateKey: cert }),
-        validateInResponseTo: ValidateInResponseTo.always,
+        identifierFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
+        ...(keyPem
+          ? {
+              privateKey: keyPem,
+              signatureAlgorithm: "sha256" as const,
+            }
+          : {}),
+        validateInResponseTo: ValidateInResponseTo.ifPresent,
         requestIdExpirationPeriodMs: SAML_STATE_MAX_AGE_MINUTES * 60 * 1000,
         cacheProvider: samlDbCacheProvider,
+      });
+
+      const samlOptions = buildSamlOptions(privateKeyPem);
+
+      request.log.info(
+        {
+          providerId,
+          issuer,
+          callbackUrl,
+          entryPoint: provider.entryPoint,
+          hasSigningKey: Boolean(privateKeyPem),
+          signingKeyLength: privateKeyPem?.length ?? 0,
+          signingKeyFormat: keyWasRaw ? "normalized-from-raw" : (rawKey ? "PEM" : "none"),
+          keyWasRaw,
+          idpCertPresent: Boolean(idpCert?.trim()),
+          idpCertLength: idpCert?.trim().length ?? 0,
+          relayStatePrefix: relayState.slice(0, 8),
+        },
+        "SAML initiate: values sent in request (match these in Keycloak)",
+      );
+
+      const isKeyFormatError = (e: unknown) => {
+        const code = e && typeof e === "object" && "code" in e ? (e as NodeJS.ErrnoException).code : undefined;
+        const msg = e && typeof e === "object" && "message" in e ? String((e as Error).message) : "";
+        return code === "ERR_OSSL_UNSUPPORTED" || /DECODER routines|unsupported|decod/i.test(msg);
       };
 
       try {
+        request.log.info(
+          { providerId, hasPrivateKey: Boolean(samlOptions.privateKey), hasIdpCert: Boolean(samlOptions.idpCert) },
+          "SAML initiate: building auth URL",
+        );
         const saml = new SAML(samlOptions);
         const authUrl = await saml.getAuthorizeUrlAsync(
           relayState,
           undefined,
           {},
         );
+        request.log.info({ providerId, authUrlLength: authUrl?.length }, "SAML initiate: redirecting to IdP");
         return reply.redirect(authUrl);
       } catch (err) {
+        if (isKeyFormatError(err) && keyWasRaw && rawKey) {
+          try {
+            const pkcs1Pem = normalizePrivateKeyToPem(rawKey);
+            const samlRetry = new SAML(buildSamlOptions(pkcs1Pem));
+            const authUrl = await samlRetry.getAuthorizeUrlAsync(relayState, undefined, {});
+            request.log.info({ providerId, authUrlLength: authUrl?.length }, "SAML initiate: redirecting to IdP (PKCS#1 key)");
+            return reply.redirect(authUrl);
+          } catch (retryErr) {
+            request.log.warn({ err: retryErr, providerId }, "SAML initiate: PKCS#1 fallback failed");
+          }
+        }
+        if (isKeyFormatError(err)) {
+          request.log.warn({ err, providerId }, "SAML initiate failed: SP private key format unsupported");
+          return reply.status(400).send({
+            error: "SAML signing failed: SP private key format unsupported. Use an unencrypted PEM key (e.g. -----BEGIN PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----). If the key is password-protected, export it without a passphrase: openssl pkcs8 -topk8 -nocrypt -in key.pem -out key-nocrypt.pem",
+          });
+        }
         request.log.error({ err, providerId }, "SAML initiate failed");
         return reply.status(500).send({ error: "Failed to initiate SAML login" });
       }
@@ -658,9 +779,11 @@ export async function registerSsoRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { providerId } = request.params as { providerId: string };
+      request.log.info({ providerId, bodyKeys: Object.keys((request.body as object) || {}) }, "SAML callback: request received");
       const providers = getSsoSamlProviders();
       const provider = providers.find((p) => p.id === providerId);
       if (!provider) {
+        request.log.warn({ providerId }, "SAML callback: provider not found");
         return reply.status(404).send({ error: "SSO provider not found" });
       }
 
@@ -671,7 +794,40 @@ export async function registerSsoRoutes(app: FastifyInstance) {
       const samlResponse = body?.SAMLResponse;
       const relayState = (body?.RelayState ?? "").trim();
 
+      let samlResponsePreview: Record<string, unknown> = {};
+      try {
+        if (samlResponse) {
+          const decoded = Buffer.from(samlResponse, "base64").toString("utf8");
+          const allAlgorithms = decoded.match(/Algorithm="([^"]+)"/g) ?? [];
+          const allDigestMethods = decoded.match(/DigestMethod[^>]*Algorithm="([^"]+)"/g) ?? [];
+          samlResponsePreview = {
+            decodedLength: decoded.length,
+            hasEncryptedAssertion: /EncryptedAssertion/i.test(decoded),
+            hasEncryptedData: /EncryptedData/i.test(decoded),
+            keyEncryptionAlgMatch: decoded.match(/Algorithm="([^"]*xmlenc[^"]*)"/)?.[1] ?? null,
+            digestMethodMatch: decoded.match(/DigestMethod[^>]*Algorithm="([^"]+)"/)?.[1] ?? null,
+            allAlgorithmAttrs: allAlgorithms.slice(0, 10),
+            allDigestMethodAlgorithms: allDigestMethods.slice(0, 5),
+            decodedSnippet: decoded.replace(/\s+/g, " ").trim().slice(0, 380) + (decoded.length > 380 ? "..." : ""),
+          };
+        }
+      } catch {
+        samlResponsePreview = { decodeError: true };
+      }
+      request.log.info(
+        {
+          providerId,
+          hasSamlResponse: Boolean(samlResponse),
+          samlResponseLength: samlResponse?.length ?? 0,
+          hasRelayState: Boolean(relayState),
+          relayStateLength: relayState.length,
+          ...samlResponsePreview,
+        },
+        "SAML callback: body parsed",
+      );
+
       if (!samlResponse) {
+        request.log.warn({ providerId }, "SAML callback: missing SAMLResponse in body");
         return reply.redirect(`/login?error=sso`);
       }
 
@@ -710,21 +866,36 @@ export async function registerSsoRoutes(app: FastifyInstance) {
             hasRelayState: Boolean(relayState),
             hasStoredState: Boolean(stateRow),
             providerMatch: stateRow?.providerId === providerId,
+            relayStateExpired,
           },
           "SAML callback: invalid or expired RelayState",
         );
         return reply.redirect(`/login?error=sso`);
       }
 
-      const idpCert =
+      request.log.info({ providerId, relayStateValid: true }, "SAML callback: RelayState valid");
+
+      const idpCertRaw =
         provider.idpCert ??
         (provider.idpCertEnc && provider.idpCertEnc.startsWith("v1:")
           ? (await import("../../services/secrets.js")).decryptSecret(provider.idpCertEnc, SSO_SECRETS_AAD)
           : undefined);
-      if (!idpCert?.trim()) {
+      if (!idpCertRaw?.trim()) {
         request.log.warn({ providerId }, "SAML provider missing idpCert");
         return reply.status(500).send({ error: "SAML provider misconfigured" });
       }
+      const idpCerts = parseIdpCerts(idpCertRaw.trim());
+      const idpCert: string | string[] =
+        idpCerts.length === 0
+          ? normalizeCertToPem(idpCertRaw.trim())
+          : idpCerts.length === 1
+            ? idpCerts[0]
+            : idpCerts;
+
+      request.log.info(
+        { providerId, idpCertsCount: idpCerts.length, idpCertLength: typeof idpCert === "string" ? idpCert.length : idpCert.map((c) => c.length) },
+        "SAML callback: IdP cert resolved",
+      );
 
       const cert =
         provider.cert ??
@@ -732,16 +903,35 @@ export async function registerSsoRoutes(app: FastifyInstance) {
           ? (await import("../../services/secrets.js")).decryptSecret(provider.certEnc, SSO_SECRETS_AAD)
           : undefined);
 
+      const defaultIssuerCallback = `${baseUrl}/${API_PREFIX}/auth/sso/saml`;
+      const issuerForValidation = (provider.issuer && provider.issuer.trim()) ? provider.issuer.trim() : defaultIssuerCallback;
+
       const samlOptions: SamlConfig = {
         callbackUrl,
         entryPoint: provider.entryPoint,
-        issuer: provider.issuer,
+        issuer: issuerForValidation,
         idpCert,
+        identifierFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
+        wantAuthnResponseSigned: false,
+        wantAssertionsSigned: provider.wantAssertionsSigned ?? false,
         ...(cert && { privateKey: cert }),
-        validateInResponseTo: ValidateInResponseTo.always,
+        validateInResponseTo: ValidateInResponseTo.ifPresent,
         requestIdExpirationPeriodMs: SAML_STATE_MAX_AGE_MINUTES * 60 * 1000,
         cacheProvider: samlDbCacheProvider,
       };
+
+      request.log.info(
+        {
+          providerId,
+          callbackUrl,
+          issuerForValidation,
+          wantAssertionsSigned: provider.wantAssertionsSigned ?? false,
+          hasSigningKey: Boolean(cert),
+          samlResponseLength: samlResponse?.length ?? 0,
+          relayStateLength: relayState.length,
+        },
+        "SAML callback: validating response",
+      );
 
       try {
         const saml = new SAML(samlOptions);
@@ -751,11 +941,28 @@ export async function registerSsoRoutes(app: FastifyInstance) {
         });
 
         if (response.loggedOut || !response.profile) {
+          request.log.warn(
+            { providerId, loggedOut: response.loggedOut, hasProfile: Boolean(response.profile) },
+            "SAML callback: loggedOut or no profile in response",
+          );
           return reply.redirect(`/login?error=sso`);
         }
 
         const profile = response.profile;
-        const issuer = profile?.issuer ?? provider.issuer ?? provider.entryPoint;
+        request.log.info(
+          {
+            providerId,
+            profileIssuer: profile?.issuer,
+            hasNameID: Boolean(profile?.nameID),
+            profileKeys: profile ? Object.keys(profile as object).filter((k) => typeof (profile as Record<string, unknown>)[k] !== "function") : [],
+          },
+          "SAML callback: profile received",
+        );
+        const resolvedIssuer =
+          profile?.issuer ??
+          ((provider.issuer && provider.issuer.trim()) || defaultIssuerCallback) ??
+          provider.entryPoint;
+        const issuer = typeof resolvedIssuer === "string" ? resolvedIssuer.trim() : String(resolvedIssuer ?? "");
         if (!profile?.issuer) {
           request.log.warn(
             { providerId, issuer },
@@ -767,19 +974,43 @@ export async function registerSsoRoutes(app: FastifyInstance) {
           const p = profile as Record<string, unknown> | undefined;
           if (!p) return null;
           const v = p[key] ?? (p.attributes as Record<string, unknown>)?.[key];
-          if (Array.isArray(v)) return String(v[0] ?? "");
-          return typeof v === "string" ? v : null;
+          if (Array.isArray(v)) return String(v[0] ?? "").trim();
+          if (typeof v === "string") return v.trim() || null;
+          if (v && typeof v === "object" && "_" in v && typeof (v as { _: unknown })._ === "string")
+            return ((v as { _: string })._).trim() || null;
+          return null;
         };
 
-        let subject =
-          (provider.subjectAttribute && getProfileAttr(provider.subjectAttribute)) ??
-          profile?.nameID ??
-          getProfileAttr("nameID") ??
-          "";
-        subject = String(subject).trim();
+        const rawNameId = profile?.nameID;
+        const nameIdStr =
+          typeof rawNameId === "string"
+            ? rawNameId.trim()
+            : rawNameId && typeof rawNameId === "object" && "_" in rawNameId && typeof (rawNameId as { _: unknown })._ === "string"
+              ? String((rawNameId as { _: string })._).trim()
+              : getProfileAttr("nameID");
+
+        const fromSubjectAttr =
+          provider.subjectAttribute ? getProfileAttr(provider.subjectAttribute) : null;
+        const subjectRaw =
+          (fromSubjectAttr && fromSubjectAttr.trim()) ? fromSubjectAttr.trim() : (nameIdStr ?? "");
+        const subject = String(subjectRaw).trim();
+
+        request.log.info(
+          {
+            providerId,
+            rawNameIdType: rawNameId == null ? "null" : typeof rawNameId,
+            nameIdStr: nameIdStr ?? null,
+            fromSubjectAttr: fromSubjectAttr ?? null,
+            subjectPresent: Boolean(subject),
+          },
+          "SAML callback: subject resolved",
+        );
 
         if (!subject) {
-          request.log.warn({ providerId }, "SAML callback: no subject");
+          request.log.warn(
+            { providerId, profileKeys: profile ? Object.keys(profile as object) : [] },
+            "SAML callback: no subject (nameID or subjectAttribute)",
+          );
           return reply.redirect(`/login?error=sso`);
         }
 
@@ -805,6 +1036,7 @@ export async function registerSsoRoutes(app: FastifyInstance) {
         const existing = lookupIdentity(issuer, subject);
         if (existing) {
           userId = existing;
+          request.log.info({ providerId, userId: existing, email: emailStr ?? null }, "SAML callback: existing user");
         } else {
           const result = resolveOrCreateUser("saml", issuer, subject, {
             email: emailStr?.trim() || null,
@@ -813,6 +1045,10 @@ export async function registerSsoRoutes(app: FastifyInstance) {
           });
           userId = result.userId;
           needsCompleteAccount = result.needsCompleteAccount;
+          request.log.info(
+            { providerId, userId: result.userId, needsCompleteAccount: result.needsCompleteAccount, email: emailStr ?? null },
+            "SAML callback: user resolved or created",
+          );
         }
 
         if (needsCompleteAccount) {
@@ -917,12 +1153,43 @@ export async function registerSsoRoutes(app: FastifyInstance) {
           }),
           { expiresIn: JWT_SESSION_EXPIRY },
         );
+        request.log.info(
+          { providerId, userId: row.id, username: row.username },
+          "SAML callback: login success, redirecting to /",
+        );
         return reply
           .setCookie(JWT_COOKIE_NAME, token, COOKIE_OPTS)
           .setCookie(CSRF_COOKIE_NAME, newCsrfToken(), CSRF_COOKIE_OPTS)
           .redirect("/");
       } catch (err) {
-        request.log.error({ err, providerId }, "SAML callback failed");
+        const errMsg = err && typeof err === "object" && "message" in err ? String((err as Error).message) : String(err);
+        const xmlStatus = err && typeof err === "object" && "xmlStatus" in err ? (err as { xmlStatus?: string }).xmlStatus : undefined;
+        const errCode = err && typeof err === "object" && "code" in err ? (err as NodeJS.ErrnoException).code : undefined;
+        const errLibrary = err && typeof err === "object" && "library" in err ? (err as { library?: string }).library : undefined;
+        const errReason = err && typeof err === "object" && "reason" in err ? (err as { reason?: string }).reason : undefined;
+        const opensslStack = err && typeof err === "object" && "opensslErrorStack" in err ? (err as { opensslErrorStack?: string[] }).opensslErrorStack : undefined;
+        const hint =
+          /invalid signature/i.test(errMsg)
+            ? " IdP certificate (PEM) must match the key Keycloak uses to sign the assertion. Get it from Keycloak Admin → Realm settings → Keys → click the RS256 (SIG) key → Certificate (copy PEM). In the SAML client, ensure 'Sign assertions' (or similar) is ON."
+            : /oaep decoding|ERR_OSSL_RSA_OAEP/i.test(errMsg)
+              ? " Key encryption may use a different OAEP hash (SHA-1 vs SHA-256). Ensure the SP decryption key matches the cert uploaded to Keycloak for encryption."
+              : "";
+        const errStack = err && typeof err === "object" && "stack" in err ? String((err as Error).stack) : undefined;
+        request.log.error(
+          {
+            err,
+            providerId,
+            message: errMsg,
+            code: errCode,
+            library: errLibrary,
+            reason: errReason,
+            xmlStatus,
+            name: err && typeof err === "object" && "name" in err ? (err as Error).name : undefined,
+            stack: errStack ? errStack.split("\n").slice(0, 12).join("\n") : undefined,
+            opensslErrorStack: opensslStack,
+          },
+          `SAML callback failed.${hint}`,
+        );
         return reply.redirect(`/login?error=sso`);
       }
     },

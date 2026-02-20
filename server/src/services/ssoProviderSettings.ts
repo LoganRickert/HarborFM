@@ -1,8 +1,14 @@
+import { readFileSync, existsSync } from "fs";
 import { drizzleDb } from "../db/drizzle.js";
 import { settings } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { sqlNow } from "../db/utils.js";
-import { SSO_SECRETS_AAD } from "../config.js";
+import {
+  SSO_SECRETS_AAD,
+  SSO_PROVIDERS_INIT_JSON_PATH,
+  SSO_OIDC_PROVIDERS_INIT,
+  SSO_SAML_PROVIDERS_INIT,
+} from "../config.js";
 import { encryptSecret } from "./secrets.js";
 
 /** Validate and persist SSO OIDC providers; encrypt client secrets. */
@@ -101,10 +107,10 @@ export function writeSsoSamlProviders(
     const entryPoint = String(p.entryPoint ?? "").trim();
     const issuer = String(p.issuer ?? "").trim();
     const callbackUrl = String(p.callbackUrl ?? "").trim();
-    if (!id || !name || !entryPoint || !issuer || !callbackUrl) {
+    if (!id || !name || !entryPoint) {
       return {
         ok: false,
-        error: `SAML provider ${i}: id, name, entryPoint, issuer, callbackUrl required`,
+        error: `SAML provider ${i}: id, name, entryPoint required`,
       };
     }
     const out: Record<string, unknown> = {
@@ -112,12 +118,15 @@ export function writeSsoSamlProviders(
       id,
       name,
       entryPoint,
-      issuer,
-      callbackUrl,
+      ...(issuer && { issuer }),
+      ...(callbackUrl && { callbackUrl }),
     };
     for (const key of ["cert", "idpCert"] as const) {
+      const encKey =
+        key === "cert"
+          ? "certEnc"
+          : "idpCertEnc";
       const val = String(p[key] ?? "").trim();
-      const encKey = key === "cert" ? "certEnc" : "idpCertEnc";
       if (val && val !== "(set)") {
         out[encKey] = encryptSecret(val, SSO_SECRETS_AAD);
         delete out[key];
@@ -165,4 +174,132 @@ export function writeSsoSamlProviders(
     })
     .run();
   return { ok: true };
+}
+
+function getRawOidcProviders(): Array<Record<string, unknown>> {
+  try {
+    const row = drizzleDb
+      .select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, "sso_oidc_providers"))
+      .limit(1)
+      .get() as { value: string } | undefined;
+    if (!row?.value?.trim()) return [];
+    const arr = JSON.parse(row.value) as Array<Record<string, unknown>>;
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function getRawSamlProviders(): Array<Record<string, unknown>> {
+  try {
+    const row = drizzleDb
+      .select({ value: settings.value })
+      .from(settings)
+      .where(eq(settings.key, "sso_saml_providers"))
+      .limit(1)
+      .get() as { value: string } | undefined;
+    if (!row?.value?.trim()) return [];
+    const arr = JSON.parse(row.value) as Array<Record<string, unknown>>;
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Merge initial SSO providers from env (or file) into DB. For each provider from init,
+ * if a provider with the same id already exists in DB, skip it; otherwise add it (secrets encrypted).
+ * Call after DB is ready (e.g. from migrate step).
+ */
+export function migrateSsoProvidersFromEnv(): void {
+  let initOidc: Array<Record<string, unknown>> = [];
+  let initSaml: Array<Record<string, unknown>> = [];
+
+  if (SSO_PROVIDERS_INIT_JSON_PATH && existsSync(SSO_PROVIDERS_INIT_JSON_PATH)) {
+    try {
+      const raw = readFileSync(SSO_PROVIDERS_INIT_JSON_PATH, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        oidc?: Array<Record<string, unknown>>;
+        saml?: Array<Record<string, unknown>>;
+      };
+      if (Array.isArray(parsed.oidc)) initOidc = parsed.oidc;
+      if (Array.isArray(parsed.saml)) initSaml = parsed.saml;
+    } catch (err) {
+      console.warn("Could not parse SSO_PROVIDERS_INIT_JSON_PATH:", err);
+      return;
+    }
+  } else {
+    if (SSO_OIDC_PROVIDERS_INIT) {
+      try {
+        const arr = JSON.parse(SSO_OIDC_PROVIDERS_INIT) as unknown;
+        initOidc = Array.isArray(arr) ? arr : [];
+      } catch (err) {
+        console.warn("Could not parse SSO_OIDC_PROVIDERS_INIT:", err);
+      }
+    }
+    if (SSO_SAML_PROVIDERS_INIT) {
+      try {
+        const arr = JSON.parse(SSO_SAML_PROVIDERS_INIT) as unknown;
+        initSaml = Array.isArray(arr) ? arr : [];
+      } catch (err) {
+        console.warn("Could not parse SSO_SAML_PROVIDERS_INIT:", err);
+      }
+    }
+  }
+
+  if (initOidc.length === 0 && initSaml.length === 0) return;
+
+  try {
+    const currentOidc = getRawOidcProviders();
+    const currentSaml = getRawSamlProviders();
+    const existingOidcIds = new Set(
+      currentOidc.map((p) => String(p.id ?? "").trim()),
+    );
+    const existingSamlIds = new Set(
+      currentSaml.map((p) => String(p.id ?? "").trim()),
+    );
+    const toAddOidc = initOidc.filter(
+      (p) => !existingOidcIds.has(String(p.id ?? "").trim()),
+    );
+    const toAddSaml = initSaml.filter(
+      (p) => !existingSamlIds.has(String(p.id ?? "").trim()),
+    );
+    if (toAddOidc.length > 0) {
+      const currentForWrite = currentOidc.map((p) => ({
+        ...p,
+        clientSecret: (p.clientSecretEnc ?? p.clientSecret) ? "(set)" : undefined,
+      }));
+      const merged = [...currentForWrite, ...toAddOidc];
+      const result = writeSsoOidcProviders(merged);
+      if (result.ok) {
+        console.log(
+          `Migrated ${toAddOidc.length} initial OIDC provider(s) from env to database`,
+        );
+      } else {
+        console.warn("migrateSsoProvidersFromEnv OIDC:", result.error);
+      }
+    }
+    if (toAddSaml.length > 0) {
+      const currentForWrite = currentSaml.map((p) => {
+        const out = { ...p };
+        if (out.certEnc || out.cert) out.cert = "(set)";
+        if (out.idpCertEnc || out.idpCert) out.idpCert = "(set)";
+        return out;
+      });
+      const merged = [...currentForWrite, ...toAddSaml];
+      const result = writeSsoSamlProviders(merged);
+      if (result.ok) {
+        console.log(
+          `Migrated ${toAddSaml.length} initial SAML provider(s) from env to database`,
+        );
+      } else {
+        console.warn("migrateSsoProvidersFromEnv SAML:", result.error);
+      }
+    }
+  } catch (err) {
+    if ((err as Error).message?.includes("no such table")) return;
+    console.warn("Could not migrate SSO providers from env:", err);
+  }
 }

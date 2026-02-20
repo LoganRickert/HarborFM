@@ -4,6 +4,7 @@ export { FeedSiteHeader } from './FeedSiteHeader';
 export { PodcastLinks, PodcastLinksCard, hasPodcastLinks } from './PodcastLinks';
 export { FeedSearchControls } from './FeedSearchControls';
 export { FeedEpisodePlayer } from './FeedEpisodePlayer';
+export { FeedVideoPlayer } from './FeedVideoPlayer';
 export { FeedPodcastCard } from './FeedPodcastCard';
 export { FeedEpisodeCard } from './FeedEpisodeCard';
 export { FeedPagination } from './FeedPagination';

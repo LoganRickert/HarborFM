@@ -11,6 +11,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   openaiTranscriptionApiKey: '',
   transcriptionModel: 'whisper-1',
   defaultCanTranscribe: true,
+  defaultCanGenerateVideo: true,
   llmProvider: 'none',
   ollamaUrl: 'http://localhost:11434',
   openaiApiKey: '',
@@ -71,6 +72,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   twoFactorEnabled: false,
   twoFactorMethods: 'totp',
   twoFactorEnforced: false,
+  emailSigninDisabled: false,
   ssoOidcProviders: [],
   ssoSamlProviders: [],
 };

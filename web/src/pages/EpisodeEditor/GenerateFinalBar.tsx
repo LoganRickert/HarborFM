@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, FileAudio, FileText, FilePlus2, TriangleAlert } from 'lucide-react';
+import { Play, Pause, FileAudio, FileText, FilePlus2, TriangleAlert, Video, Download } from 'lucide-react';
 import { downloadEpisodeUrl, finalEpisodeWaveformUrl } from '../../api/audio';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import { formatDuration } from './utils';
@@ -36,6 +36,14 @@ export interface GenerateFinalBarProps {
   finalMarkers?: Array<{ time: number; title?: string; color?: string }>;
   /** Called when user edits chapters (add/edit/delete). Parent should PATCH episode with finalMarkers. */
   onMarkersChange?: (markers: Array<{ time: number; title?: string; color?: string }>) => void;
+  /** When true, episode has a generated video (show Download Video link). */
+  hasVideo?: boolean;
+  /** When true, video generation is in progress (disable Generate Video button). */
+  isGeneratingVideo?: boolean;
+  /** Called when user clicks Generate Video (open modal). */
+  onOpenGenerateVideo?: () => void;
+  /** URL for downloading the episode video (when hasVideo). */
+  downloadVideoUrl?: string;
 }
 
 export function GenerateFinalBar({
@@ -57,6 +65,10 @@ export function GenerateFinalBar({
   canGenerateTranscript = true,
   finalMarkers,
   onMarkersChange,
+  hasVideo = false,
+  isGeneratingVideo = false,
+  onOpenGenerateVideo,
+  downloadVideoUrl,
 }: GenerateFinalBarProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastLoadedUrlRef = useRef<string | null>(null);
@@ -174,13 +186,38 @@ export function GenerateFinalBar({
   return (
     <div className={styles.generateBar}>
       <div className={styles.generateBarHeader}>
-        <h2 className={styles.generateBarTitle}>Generate Final Episode</h2>
-        <p className={styles.generateBarSub}>
-          Build the final MP3 from your sections. When done, you can play it here or download it for your feed.
-        </p>
+        <div>
+          <h2 className={styles.generateBarTitle}>Generate Final Episode</h2>
+          <p className={styles.generateBarSub}>
+            Build the final MP3 from your sections. When done, you can play it here or download it for your feed.
+          </p>
+        </div>
+        {hasFinalAudio && downloadUrl && !isBuilding && (
+          <a
+            href={downloadUrl}
+            download
+            className={styles.generateBarHeaderDownload}
+            title="Download Final Audio"
+            aria-label="Download Final Audio"
+          >
+            <Download size={20} strokeWidth={2} aria-hidden />
+          </a>
+        )}
       </div>
       {error && (
         <p className={styles.error} style={{ marginTop: 0, marginBottom: '1.25rem' }} role="alert">{error}</p>
+      )}
+      {hasVideo && downloadVideoUrl && !isGeneratingVideo && (
+        <div className={styles.generateBarVideoWrap}>
+          <video
+            src={downloadVideoUrl}
+            controls
+            playsInline
+            className={styles.generateBarVideoEmbed}
+          >
+            Your browser does not support the video tag.
+          </video>
+        </div>
       )}
       {hasFinalAudio && durationSec > 0 && (
         <div className={styles.generateBarPlayback}>
@@ -233,10 +270,10 @@ export function GenerateFinalBar({
             onClick={onBuild}
             disabled={segmentCount === 0 || isBuilding || readOnly}
             title={readOnly ? 'Read-only account' : undefined}
-            aria-label={readOnly ? 'Make Final Episode (read-only)' : isBuilding ? 'Building...' : 'Make Final Episode'}
+            aria-label={readOnly ? 'MGenerate Episode Audio (read-only)' : isBuilding ? 'Building...' : 'Generate Episode Audio'}
           >
             <FileAudio size={20} strokeWidth={2} aria-hidden />
-            <span>{isBuilding ? 'Building...' : 'Make Final Episode'}</span>
+            <span>{isBuilding ? 'Building...' : 'Generate Episode Audio'}</span>
           </button>
           {((hasTranscript && onOpenTranscript) || (!hasTranscript && (hasFinalAudio && !isBuilding) && (onGenerateTranscript || onOpenTranscript))) && (
             <button
@@ -293,10 +330,18 @@ export function GenerateFinalBar({
               )}
             </button>
           )}
-          {hasFinalAudio && downloadUrl && !isBuilding && (
-            <a href={downloadUrl} download className={styles.renderDownload}>
-              Download Final Audio
-            </a>
+          {hasFinalAudio && onOpenGenerateVideo && !readOnly && (
+            <button
+              type="button"
+              className={styles.generateBarGenerateTranscriptBtn}
+              onClick={onOpenGenerateVideo}
+              disabled={isBuilding || isGeneratingVideo}
+              title={isGeneratingVideo ? 'Video is generating…' : 'Generate a video version with spectrum overlay'}
+              aria-label={isGeneratingVideo ? 'Generating video' : 'Generate Video'}
+            >
+              <Video size={18} strokeWidth={2} aria-hidden />
+              <span>{isGeneratingVideo ? 'Generating video…' : 'Generate Video'}</span>
+            </button>
           )}
           </div>
         </div>

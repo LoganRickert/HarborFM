@@ -87,6 +87,9 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           canTranscribe: sql<number>`COALESCE(${users.canTranscribe}, 0)`.as(
             "canTranscribe",
           ),
+          canGenerateVideo: sql<number>`COALESCE(${users.canGenerateVideo}, 0)`.as(
+            "canGenerateVideo",
+          ),
           lastLoginAt: users.lastLoginAt,
           lastLoginIp: users.lastLoginIp,
           lastLoginLocation: users.lastLoginLocation,
@@ -171,6 +174,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
           maxApiKeys: MAX_API_KEYS_PER_USER,
           diskBytesUsed: user.diskBytesUsed ?? 0,
           canTranscribe: user.canTranscribe ? 1 : 0,
+          canGenerateVideo: user.canGenerateVideo ? 1 : 0,
           lastLoginAt: isReadOnly ? null : (user.lastLoginAt ?? null),
           lastLoginIp: isReadOnly ? null : (user.lastLoginIp ?? null),
           lastLoginLocation: isReadOnly

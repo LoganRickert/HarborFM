@@ -15,6 +15,7 @@ export interface User {
   maxApiKeys?: number | null;
   diskBytesUsed?: number;
   canTranscribe?: number; // 0 = false, 1 = true
+  canGenerateVideo?: number; // 0 = false, 1 = true
   lastLoginAt?: string | null;
   lastLoginIp?: string | null;
   lastLoginLocation?: string | null;
@@ -165,6 +166,9 @@ export interface SsoProvider {
   id: string;
   name: string;
   type: 'oidc' | 'saml';
+  iconSlug?: string;
+  buttonBgColor?: string;
+  buttonTextColor?: string;
 }
 
 export function getSsoProviders() {

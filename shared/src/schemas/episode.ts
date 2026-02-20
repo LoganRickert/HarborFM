@@ -83,6 +83,8 @@ export const episodeResponseSchema = z.object({
   subscriberOnly: z.boolean().optional(),
   /** Chapter markers from segments (marker_type === 'chapter'); time in seconds of final audio. */
   finalMarkers: z.array(z.object({ time: z.number(), title: z.string().optional(), color: z.string().optional() })).optional().nullable(),
+  /** Path to generated video (relative to data dir). Present when video has been generated. */
+  videoFinalPath: z.string().nullable().optional(),
 });
 
 /** Response for GET /podcasts/:podcastId/episodes (list). */
