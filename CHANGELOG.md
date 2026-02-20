@@ -2,7 +2,7 @@
 
 ## v1.5 - 2026-02-20
 
-
+- **Reviews:** Podcast and episode reviews with public submit (name, email, rating, body); optional CAPTCHA and subscriber-only per podcast; verification email with verify and delete links; public list with verified/approved filtering and delete-own or admin delete; admin list, approve, and hide (manager/owner); optional LLM spam check; rate limit 1 review per minute per IP (configurable via `REVIEW_SUBMIT_RATE_LIMIT_MAX`, e.g. 100 for e2e).
 
 ## v1.4 - 2026-02-18
 

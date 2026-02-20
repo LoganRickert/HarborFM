@@ -117,10 +117,12 @@ export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onL
                 Public RSS
               </a>
             )}
-            <Link to={`/podcasts/${podcast.id}/reviews`} className={styles.podcastDetailsActionLink}>
-              <MessageSquare size={16} strokeWidth={2} aria-hidden />
-              Reviews
-            </Link>
+            {canManageShow && (
+              <Link to={`/podcasts/${podcast.id}/reviews`} className={styles.podcastDetailsActionLink}>
+                <MessageSquare size={16} strokeWidth={2} aria-hidden />
+                Reviews
+              </Link>
+            )}
           </div>
         </div>
       )}
