@@ -2,14 +2,14 @@
 
 ## v1.5 - 2026-02-20
 
-- **Reviews:** Podcast and episode reviews with public submit (name, email, rating, body); optional CAPTCHA and subscriber-only per podcast; verification email with verify and delete links; public list with verified/approved filtering and delete-own or admin delete; admin list, approve, and hide (manager/owner); optional LLM spam check; rate limit 1 review per minute per IP (configurable via `REVIEW_SUBMIT_RATE_LIMIT_MAX`, e.g. 100 for e2e).
+- **Reviews:** Podcast and episode reviews with public submit (name, email, rating, body); optional CAPTCHA and subscriber-only per podcast; verification email with verify and delete links; public list with verified/approved filtering and delete-own or admin delete; admin list, approve, and hide (manager/owner); optional LLM spam check;
+- **Admin settings (tabbed):** Settings page redesigned with a tabbed layout; each section (Access & General, Default Limits, Final Output, etc.) is a tab; first tab is System (version, command status, memory/CPU/disk from new system-stats API); global search filters tabs and scrolls to matching controls (e.g. “Account Registration” → Enable Account Registration); single form and one Save across all tabs; vertical sidebar on desktop, drawer on mobile; keyboard navigation (arrows, Home/End) and Escape to close drawer;
 
 ## v1.4 - 2026-02-18
 
 - **Federation (SAML & OIDC):** Single sign-on with configurable OIDC and SAML providers; admin-configurable providers in settings (`ssoOidcProviders`, `ssoSamlProviders`) with encrypted client/cert secrets; OIDC discovery and authorization-code flow with PKCE; SAML IdP flow with state and optional in-response-to validation; user identities linked to local accounts; resolve-or-create and login-by-identity flows; SAML request-id cache and OAuth state/nonce tables for security.
 - **Database: Drizzle ORM:** Migrated from raw better-sqlite3 usage to Drizzle ORM; SQLite remains the default store (via `drizzle-orm/better-sqlite3`); typed schema and queries across auth, episodes, podcasts, segments, tokens, and other modules; Drizzle Kit for migrations, studio, and optional MySQL push (`db:generate`, `db:studio`, `db:push-mysql`).
 - **Video generation:** Generate videos from final episode audio and a background image (episode artwork or optional uploaded video cover); configurable spectrum/waveform (position, width, amplitude, style, waveform type, color, smoothing), resolution (480p/720p/1080p), and orientation (landscape/portrait); status via polling and episode WebSocket (videoGenerationStarted / videoGenerated); per-user permission (`canGenerateVideo`); optional video cover upload (max 5MB); download and playback on public feed; requires `ALLOW_VIDEO_GENERATION` and FFmpeg.
-
 
 ## v1.3 - 2026-02-17
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSettings, updateSettings, getCommands } from '../api/settings';
+import { getSettings, updateSettings, getCommands, getSystemStats } from '../api/settings';
 import { getVersion } from '../api/version';
 import { FullPageLoading } from '../components/Loading';
 import { useSettingsForm } from '../hooks/useSettingsForm';
@@ -8,6 +8,7 @@ import { useSettingsMutations } from '../hooks/useSettingsMutations';
 import { useFormDirtyTracking } from '../hooks/useFormDirtyTracking';
 import { OLLAMA_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from '../hooks/useSettingsForm';
 import {
+  SystemSection,
   AccessGeneralSection,
   DefaultLimitsSection,
   FinalOutputSection,
@@ -24,6 +25,13 @@ import {
   ReviewSettingsSection,
 } from '../components/Settings';
 import { FailedToLoadCard } from '../components/FailedToLoadCard';
+import {
+  SETTINGS_TABS,
+  filterTabsBySearch,
+  normalizeSearchQuery,
+  type SettingsTabId,
+} from './Settings/tabs';
+import { Search, X, Menu } from 'lucide-react';
 import styles from './Settings.module.css';
 
 export function Settings() {
@@ -45,10 +53,20 @@ export function Settings() {
     staleTime: 2 * 60 * 1000,
   });
 
+  const { data: systemStatsData } = useQuery({
+    queryKey: ['settings', 'system-stats'],
+    queryFn: getSystemStats,
+    staleTime: 30 * 1000,
+  });
+
   const [saveNotice, setSaveNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [activeTabId, setActiveTabId] = useState<SettingsTabId>('system');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const saveFromFloatingBarRef = useRef(false);
   const lastSavedRef = useRef<string | null>(null);
   const welcomeBannerRef = useRef<HTMLTextAreaElement>(null);
+  const tabPanelRef = useRef<HTMLDivElement>(null);
 
   // Use custom hooks
   const { form, updateForm, setForm } = useSettingsForm(settings);
@@ -63,6 +81,34 @@ export function Settings() {
     geoliteCheckMutation,
     geoliteUpdateMutation,
   } = useSettingsMutations({ form });
+
+  // Filter tabs by search; when current tab not in list, switch to first match
+  const matchingTabIds = filterTabsBySearch(SETTINGS_TABS, searchQuery);
+  const visibleTabs = searchQuery.trim()
+    ? SETTINGS_TABS.filter((t) => matchingTabIds.includes(t.id))
+    : SETTINGS_TABS;
+
+  useEffect(() => {
+    if (searchQuery.trim() && !matchingTabIds.includes(activeTabId) && matchingTabIds.length > 0) {
+      setActiveTabId(matchingTabIds[0]);
+    }
+  }, [searchQuery, matchingTabIds, activeTabId]);
+
+  // Scroll to first matching control when tab is shown with a search query
+  useEffect(() => {
+    if (!searchQuery.trim() || !tabPanelRef.current) return;
+    const normalized = normalizeSearchQuery(searchQuery);
+    const candidates = tabPanelRef.current.querySelectorAll<HTMLElement>('[data-settings-label]');
+    for (const el of candidates) {
+      const label = el.getAttribute('data-settings-label');
+      if (label && label.toLowerCase().includes(normalized)) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add(styles.highlightControl);
+        const t = setTimeout(() => el.classList.remove(styles.highlightControl), 2000);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [activeTabId, searchQuery]);
 
   // Track last saved state
   useEffect(() => {
@@ -234,6 +280,32 @@ export function Settings() {
     [updateForm, form]
   );
 
+  function selectTab(id: SettingsTabId) {
+    setActiveTabId(id);
+    setDrawerOpen(false);
+  }
+
+  function handleTabListKeyDown(e: React.KeyboardEvent) {
+    const list = visibleTabs;
+    const currentIndex = list.findIndex((t) => t.id === activeTabId);
+    if (currentIndex < 0) return;
+    let nextIndex = currentIndex;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      nextIndex = Math.min(currentIndex + 1, list.length - 1);
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      nextIndex = Math.max(currentIndex - 1, 0);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      nextIndex = 0;
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      nextIndex = list.length - 1;
+    } else return;
+    if (nextIndex !== currentIndex) setActiveTabId(list[nextIndex].id);
+  }
+
   if (isLoading || (!settings && isFetching)) return <FullPageLoading />;
   if (isError) {
     return (
@@ -246,6 +318,8 @@ export function Settings() {
       </div>
     );
   }
+
+  const activeTabLabel = SETTINGS_TABS.find((t) => t.id === activeTabId)?.label ?? 'Settings';
 
   return (
     <div className={styles.page}>
@@ -267,113 +341,235 @@ export function Settings() {
         </div>
       )}
 
-      {(versionData?.version != null || commandsData != null) && (
-        <div className={styles.versionCard}>
-          <div className={styles.versionCommands}>
-            {commandsData != null &&
-              Object.entries(commandsData)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([name]) => (
-                  <span key={name} className={styles.commandBadge} title={commandsData[name] ? 'Present' : 'Not found'}>
-                    <span
-                      className={styles.commandDot}
-                      style={{ background: commandsData[name] ? 'var(--accent)' : 'var(--error)' }}
-                      aria-hidden
-                    />
-                    <code className={styles.commandName}>{name}</code>
-                  </span>
-              ))}
-          </div>
-          {versionData?.version && (
-            <div className={styles.versionBlock}>
-              <span className={styles.versionLabel}>Version</span>
-              <span className={styles.versionValue}>{versionData.version}</span>
-            </div>
-          )}
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className={styles.form}>
-        <AccessGeneralSection
-          form={form}
-          onFormChange={updateForm}
-          welcomeBannerRef={welcomeBannerRef}
-          onResizeWelcomeBanner={resizeWelcomeBanner}
-        />
+        <div className={styles.searchWrap}>
+          <div className={styles.searchInputWrap}>
+            <Search className={styles.searchIcon} size={18} aria-hidden />
+            <input
+              type="search"
+              className={styles.searchInput}
+              placeholder="Search settings…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search settings"
+              autoComplete="off"
+            />
+            {searchQuery.length > 0 && (
+              <button
+                type="button"
+                className={styles.searchClear}
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        </div>
 
-        <DefaultLimitsSection form={form} onFormChange={updateForm} />
+        <button
+          type="button"
+          className={styles.tabDrawerTrigger}
+          onClick={() => setDrawerOpen(true)}
+          aria-expanded={drawerOpen}
+          aria-haspopup="dialog"
+          aria-label="Open sections menu"
+          aria-controls="settings-tab-drawer"
+        >
+          <span>{activeTabLabel}</span>
+          <Menu className={styles.tabDrawerTriggerIcon} size={20} aria-hidden />
+        </button>
 
-        <FinalOutputSection form={form} onFormChange={updateForm} />
+        <div className={styles.settingsLayout}>
+          <nav className={styles.tabListWrap} aria-label="Settings sections">
+            <ul
+              className={styles.tabList}
+              role="tablist"
+              aria-label="Settings sections"
+              onKeyDown={handleTabListKeyDown}
+            >
+              {visibleTabs.length === 0 ? (
+                <li className={styles.tabListEmpty} role="status">
+                  No sections match your search.
+                </li>
+              ) : (
+                visibleTabs.map((tab) => (
+                  <li key={tab.id} role="presentation">
+                    <button
+                      type="button"
+                      role="tab"
+                      id={`settings-tab-${tab.id}`}
+                      aria-selected={activeTabId === tab.id}
+                      aria-controls={`settings-panel-${tab.id}`}
+                      tabIndex={activeTabId === tab.id ? 0 : -1}
+                      className={styles.tab}
+                      onClick={() => selectTab(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </nav>
 
-        <GeoliteSection
-          form={form}
-          onFormChange={updateForm}
-          geoliteTestMutation={geoliteTestMutation}
-          geoliteCheckMutation={geoliteCheckMutation}
-          geoliteUpdateMutation={geoliteUpdateMutation}
-          onGeoliteTest={() =>
-            geoliteTestMutation.mutate({
-              maxmindAccountId: form.maxmindAccountId.trim(),
-              maxmindLicenseKey:
-                form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey.trim() || undefined,
-            })
-          }
-          onGeoliteCheck={() => geoliteCheckMutation.mutate()}
-          onGeoliteUpdate={() =>
-            geoliteUpdateMutation.mutate({
-              maxmindAccountId: form.maxmindAccountId.trim(),
-              maxmindLicenseKey:
-                form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey.trim() || undefined,
-            })
-          }
-        />
+          <div
+            ref={tabPanelRef}
+            className={styles.tabPanel}
+            role="tabpanel"
+            id={`settings-panel-${activeTabId}`}
+            aria-labelledby={`settings-tab-${activeTabId}`}
+          >
+            {activeTabId === 'system' && (
+              <SystemSection
+                version={versionData?.version ?? null}
+                commands={commandsData ?? null}
+                systemStats={systemStatsData ?? null}
+              />
+            )}
+            {activeTabId === 'access' && (
+              <AccessGeneralSection
+                form={form}
+                onFormChange={updateForm}
+                welcomeBannerRef={welcomeBannerRef}
+                onResizeWelcomeBanner={resizeWelcomeBanner}
+              />
+            )}
+            {activeTabId === 'default-limits' && (
+              <DefaultLimitsSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'final-output' && (
+              <FinalOutputSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'geolite' && (
+              <GeoliteSection
+                form={form}
+                onFormChange={updateForm}
+                geoliteTestMutation={geoliteTestMutation}
+                geoliteCheckMutation={geoliteCheckMutation}
+                geoliteUpdateMutation={geoliteUpdateMutation}
+                onGeoliteTest={() =>
+                  geoliteTestMutation.mutate({
+                    maxmindAccountId: form.maxmindAccountId.trim(),
+                    maxmindLicenseKey:
+                      form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey.trim() || undefined,
+                  })
+                }
+                onGeoliteCheck={() => geoliteCheckMutation.mutate()}
+                onGeoliteUpdate={() =>
+                  geoliteUpdateMutation.mutate({
+                    maxmindAccountId: form.maxmindAccountId.trim(),
+                    maxmindLicenseKey:
+                      form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey.trim() || undefined,
+                  })
+                }
+              />
+            )}
+            {activeTabId === 'transcription' && (
+              <WhisperSection
+                form={form}
+                onFormChange={updateForm}
+                whisperTestMutation={whisperTestMutation}
+                onWhisperTest={() => whisperTestMutation.mutate()}
+                transcriptionOpenaiTestMutation={transcriptionOpenaiTestMutation}
+                onTranscriptionOpenaiTest={() => transcriptionOpenaiTestMutation.mutate()}
+              />
+            )}
+            {activeTabId === 'llm' && (
+              <LLMSection
+                form={form}
+                onFormChange={updateForm}
+                testMutation={testMutation}
+                onTest={() => testMutation.mutate()}
+                onProviderChange={handleLLMProviderChange}
+              />
+            )}
+            {activeTabId === 'captcha' && (
+              <CaptchaSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'webrtc' && (
+              <WebRTCSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'email' && (
+              <EmailSection
+                form={form}
+                onFormChange={updateForm}
+                smtpTestMutation={smtpTestMutation}
+                sendgridTestMutation={sendgridTestMutation}
+                onSmtpTest={() => smtpTestMutation.mutate()}
+                onSendGridTest={() => sendgridTestMutation.mutate()}
+              />
+            )}
+            {activeTabId === 'two-factor' && (
+              <TwoFactorSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'sso' && (
+              <SsoSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'dns' && (
+              <DnsConfigurationSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'custom-legal' && (
+              <CustomLegalSection form={form} onFormChange={updateForm} />
+            )}
+            {activeTabId === 'reviews' && (
+              <ReviewSettingsSection form={form} onFormChange={updateForm} />
+            )}
 
-        <WhisperSection
-          form={form}
-          onFormChange={updateForm}
-          whisperTestMutation={whisperTestMutation}
-          onWhisperTest={() => whisperTestMutation.mutate()}
-          transcriptionOpenaiTestMutation={transcriptionOpenaiTestMutation}
-          onTranscriptionOpenaiTest={() => transcriptionOpenaiTestMutation.mutate()}
-        />
-
-        <LLMSection
-          form={form}
-          onFormChange={updateForm}
-          testMutation={testMutation}
-          onTest={() => testMutation.mutate()}
-          onProviderChange={handleLLMProviderChange}
-        />
-
-        <CaptchaSection form={form} onFormChange={updateForm} />
-
-        <WebRTCSection form={form} onFormChange={updateForm} />
-
-        <EmailSection
-          form={form}
-          onFormChange={updateForm}
-          smtpTestMutation={smtpTestMutation}
-          sendgridTestMutation={sendgridTestMutation}
-          onSmtpTest={() => smtpTestMutation.mutate()}
-          onSendGridTest={() => sendgridTestMutation.mutate()}
-        />
-
-        <TwoFactorSection form={form} onFormChange={updateForm} />
-
-        <SsoSection form={form} onFormChange={updateForm} />
-
-        <DnsConfigurationSection form={form} onFormChange={updateForm} />
-
-        <CustomLegalSection form={form} onFormChange={updateForm} />
-
-        <ReviewSettingsSection form={form} onFormChange={updateForm} />
-
-        <div className={styles.actions}>
-          <button type="submit" className={styles.submit} disabled={mutation.isPending} aria-label="Save settings">
-            {mutation.isPending ? 'Saving...' : 'Save'}
-          </button>
+            <div className={styles.actions}>
+              <button type="submit" className={styles.submit} disabled={mutation.isPending} aria-label="Save settings">
+                {mutation.isPending ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
         </div>
       </form>
+
+      {/* Mobile drawer for tab list */}
+      {drawerOpen && (
+        <>
+          <div
+            className={styles.tabDrawerOverlay}
+            role="presentation"
+            aria-hidden
+            onClick={() => setDrawerOpen(false)}
+          />
+          <div
+            id="settings-tab-drawer"
+            className={styles.tabDrawerContent}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings sections"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setDrawerOpen(false);
+              else handleTabListKeyDown(e as React.KeyboardEvent<HTMLDivElement>);
+            }}
+          >
+            <h2 className={styles.tabDrawerTitle}>Sections</h2>
+            <ul className={styles.tabDrawerList} role="tablist">
+              {visibleTabs.length === 0 ? (
+                <li className={styles.tabListEmpty} role="status">
+                  No sections match your search.
+                </li>
+              ) : (
+                visibleTabs.map((tab) => (
+                  <li key={tab.id} className={styles.tabDrawerItem} role="presentation">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeTabId === tab.id}
+                      className={styles.tab}
+                      onClick={() => selectTab(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        </>
+      )}
 
       <div
         className={styles.floatingSaveWrap}

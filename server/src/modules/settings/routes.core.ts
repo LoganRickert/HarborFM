@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { statfsSync } from "fs";
+import { totalmem, freemem, cpus } from "os";
 import { getDataDir } from "../../services/paths.js";
 import { requireAdmin } from "../../plugins/auth.js";
 import { normalizeHostname } from "../../utils/url.js";
@@ -74,6 +76,68 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         ),
       );
       return reply.send({ commands });
+    },
+  );
+
+  app.get(
+    "/settings/system-stats",
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ["Settings"],
+        summary: "Get system stats",
+        description:
+          "Returns system resource usage (memory, CPU count, disk for data dir). Admin only.",
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              memory: {
+                type: "object",
+                properties: {
+                  usedBytes: { type: "number" },
+                  totalBytes: { type: "number" },
+                },
+                required: ["usedBytes", "totalBytes"],
+              },
+              cpus: { type: "number" },
+              disk: {
+                type: "object",
+                properties: {
+                  usedBytes: { type: "number" },
+                  totalBytes: { type: "number" },
+                },
+                required: ["usedBytes", "totalBytes"],
+              },
+            },
+            required: ["memory", "cpus"],
+          },
+        },
+      },
+    },
+    async (_request, reply) => {
+      const totalBytes = totalmem();
+      const freeBytes = freemem();
+      const usedBytes = totalBytes - freeBytes;
+      const memory = { usedBytes, totalBytes };
+      const cpusCount = cpus().length;
+
+      let disk: { usedBytes: number; totalBytes: number } | undefined;
+      try {
+        const dataDir = getDataDir();
+        const stats = statfsSync(dataDir);
+        const bsize = Number(stats.bsize ?? 4096);
+        const totalBytesDisk = Number(stats.blocks) * bsize;
+        const freeBytesDisk = Number(stats.bfree) * bsize;
+        disk = {
+          totalBytes: totalBytesDisk,
+          usedBytes: totalBytesDisk - freeBytesDisk,
+        };
+      } catch {
+        disk = undefined;
+      }
+
+      return reply.send({ memory, cpus: cpusCount, ...(disk && { disk }) });
     },
   );
 
