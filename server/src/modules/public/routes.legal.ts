@@ -89,10 +89,12 @@ export async function registerLegalRoutes(app: FastifyInstance) {
         customFeedSlug?: string;
         gdprConsentBannerEnabled: boolean;
         webrtcEnabled?: boolean;
+        reviewsEnabled?: boolean;
       } = {
         publicFeedsEnabled: Boolean(settings.public_feeds_enabled),
         gdprConsentBannerEnabled: Boolean(settings.gdpr_consent_banner_enabled),
         webrtcEnabled: webrtcConfigured && WEBRTC_ENABLED,
+        reviewsEnabled: Boolean((settings as { reviews_enabled?: boolean }).reviews_enabled ?? true),
       };
       if (match) payload.customFeedSlug = match.slug;
       return reply.send(payload);

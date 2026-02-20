@@ -52,6 +52,10 @@ import * as m050 from "./migrations/050_auth_2fa_totp_secret_hash.js";
 import * as m051 from "./migrations/051_api_keys_max_per_user_trigger.js";
 import * as m052 from "./migrations/052_episodes_video_final_path.js";
 import * as m053 from "./migrations/053_user_can_generate_video.js";
+import * as m054 from "./migrations/054_reviews.js";
+import * as m055 from "./migrations/055_podcast_review_fields.js";
+import * as m056 from "./migrations/056_reviews_user_id.js";
+import * as m057 from "./migrations/057_reviews_delete_token.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -107,6 +111,10 @@ const migrations = [
   { name: "051_api_keys_max_per_user_trigger", ...m051 },
   { name: "052_episodes_video_final_path", ...m052 },
   { name: "053_user_can_generate_video", ...m053 },
+  { name: "054_reviews", ...m054 },
+  { name: "055_podcast_review_fields", ...m055 },
+  { name: "056_reviews_user_id", ...m056 },
+  { name: "057_reviews_delete_token", ...m057 },
 ];
 
 const MIGRATIONS_TABLE = `

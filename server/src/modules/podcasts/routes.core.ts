@@ -834,6 +834,12 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.publicFeedDisabled !== undefined) {
         set.publicFeedDisabled = Boolean(data.publicFeedDisabled);
       }
+      if (data.allowUnapprovedReviews !== undefined) {
+        set.allowUnapprovedReviews = Boolean(data.allowUnapprovedReviews);
+      }
+      if (data.subscriberOnlyReviews !== undefined) {
+        set.subscriberOnlyReviews = Boolean(data.subscriberOnlyReviews);
+      }
       if (data.fundingUrl !== undefined) set.fundingUrl = data.fundingUrl;
       if (data.fundingLabel !== undefined) set.fundingLabel = data.fundingLabel;
       if (data.persons !== undefined) set.persons = data.persons;

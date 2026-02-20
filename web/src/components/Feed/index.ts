@@ -9,6 +9,9 @@ export { FeedPodcastCard } from './FeedPodcastCard';
 export { FeedEpisodeCard } from './FeedEpisodeCard';
 export { FeedPagination } from './FeedPagination';
 export { SubscriptionInfoDialog } from './SubscriptionInfoDialog';
+export { ReviewStars } from './ReviewStars';
+export { ReviewSubmitModal } from './ReviewSubmitModal';
+export { ReviewsCard } from './ReviewsCard';
 
 // Page-specific components
 export * from './FeedHome';

@@ -225,7 +225,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         podcastSlug: string;
         episodeSlug: string;
       };
-      const podcastId = repo.getPodcastIdBySlugUnlistedFalse(podcastSlug);
+      const podcastId = repo.getPodcastIdBySlug(podcastSlug);
       if (!podcastId) {
         return reply.status(404).send({ error: "Podcast not found" });
       }

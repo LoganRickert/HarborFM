@@ -6,6 +6,7 @@ import {
   getPublicPodcast,
   getPublicEpisode,
   getPublicEpisodeCast,
+  getPublicConfig,
   publicEpisodeWaveformUrl,
   type PublicEpisodeWithAuth,
 } from '../api/public';
@@ -26,7 +27,9 @@ import {
   hasPodcastLinks,
   FeedCastList,
   FeedVideoPlayer,
+  ReviewsCard,
 } from '../components/Feed';
+import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedEpisode.module.css';
 
@@ -61,11 +64,18 @@ export function FeedEpisode({
     queryFn: () => getPublicEpisode(podcastSlug!, episodeSlug!) as Promise<PublicEpisodeWithAuth>,
     enabled: !!podcastSlug && !!episodeSlug,
   });
+  const { data: publicConfig } = useQuery({
+    queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
+    queryFn: getPublicConfig,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: episodeCast } = useQuery({
     queryKey: ['public-episode-cast', podcastSlug, episodeSlug],
     queryFn: () => getPublicEpisodeCast(podcastSlug!, episodeSlug!),
     enabled: !!podcastSlug && !!episodeSlug,
   });
+  const { isAuthenticatedForPodcast } = useSubscriberAuth();
   const episodeHosts = episodeCast?.cast?.filter((c) => c.role === 'host') ?? [];
   const episodeGuests = episodeCast?.cast?.filter((c) => c.role === 'guest') ?? [];
 
@@ -122,6 +132,8 @@ export function FeedEpisode({
   if (episodeError || !episode || !podcast) {
     return feedErrorLayout(<div className={sharedStyles.error}>Episode not found</div>);
   }
+
+  const canWriteReview = !podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const shareUrl = `${origin}${isCustomFeed ? `/${episodeSlug}` : `/feed/${podcastSlug}/${episodeSlug}`}`;
@@ -246,6 +258,10 @@ export function FeedEpisode({
                 </section>
               )}
             </div>
+          )}
+
+          {publicConfig?.reviewsEnabled === true && (
+            <ReviewsCard podcastSlug={podcastSlug} episodeSlug={episodeSlug} enabled showWriteButton={canWriteReview} />
           )}
 
           {hasPodcastLinks(podcast) && (

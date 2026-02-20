@@ -177,7 +177,7 @@ export async function registerPodcastsRoutes(app: FastifyInstance) {
       const limit = Math.min(parseInt(query.limit || "10", 10) || 10, 100);
       const offset = Math.max(parseInt(query.offset || "0", 10) || 0, 0);
 
-      const podcastId = repo.getPodcastIdBySlugUnlistedFalse(podcastSlug);
+      const podcastId = repo.getPodcastIdBySlug(podcastSlug);
       if (!podcastId) {
         return reply.status(404).send({ error: "Podcast not found" });
       }

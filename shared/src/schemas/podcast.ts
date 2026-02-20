@@ -62,6 +62,10 @@ export const podcastUpdateSchema = podcastCreateSchema.partial().extend({
   subscriberOnlyFeedEnabled: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
   /** When true, public RSS and public episode list/page do not load (subscriber-only show). Accept boolean or 0/1. */
   publicFeedDisabled: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  /** When true, show unapproved reviews on the public feed (default true). */
+  allowUnapprovedReviews: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  /** When true, only subscribers can leave reviews (requires subscriberOnlyFeedEnabled). Accept boolean or 0/1. */
+  subscriberOnlyReviews: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
   /** DNS: link domain (hostname only, no https://). */
   linkDomain: z.string().nullable().optional(),
   /** DNS: managed domain (hostname only, no https://). */

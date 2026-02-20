@@ -100,6 +100,8 @@ export const publicConfigSchema = z.object({
   gdprConsentBannerEnabled: z.boolean().optional(),
   /** When true, WebRTC group calls are configured (service + public WS URL). */
   webrtcEnabled: z.boolean().optional(),
+  /** When true, public feed pages show reviews and accept submissions (subject to podcast settings). */
+  reviewsEnabled: z.boolean().optional(),
 });
 
 export type PublicPodcast = z.infer<typeof publicPodcastSchema>;

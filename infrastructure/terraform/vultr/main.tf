@@ -167,7 +167,7 @@ resource "vultr_block_storage" "data" {
   region                 = var.region
   size_gb                = var.data_volume_size
   label                  = local.label
-  attached_to_instance   = vultr_instance.harborfm.id
+  attached_to_instance   = var.attach_data_volume ? vultr_instance.harborfm.id : null
 
   lifecycle {
     prevent_destroy = true

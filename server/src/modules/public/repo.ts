@@ -56,6 +56,7 @@ export function getPodcastBySlug(slug: string) {
       explicit: podcasts.explicit,
       publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as("publicFeedDisabled"),
       subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as("subscriberOnlyFeedEnabled"),
+      subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
       linkDomain: podcasts.linkDomain,
       managedDomain: podcasts.managedDomain,
       managedSubDomain: podcasts.managedSubDomain,
@@ -209,7 +210,7 @@ export function getCastPhotoPath(
   return row?.photoPath ?? undefined;
 }
 
-/** Get podcast id by slug where unlisted=0 (for cast and episode cast). */
+/** Get podcast id by slug where unlisted=0 (for listing/discovery only; cast uses getPodcastIdBySlug). */
 export function getPodcastIdBySlugUnlistedFalse(slug: string): string | undefined {
   const row = drizzleDb
     .select({ id: podcasts.id })
@@ -285,17 +286,12 @@ export function getPodcastCastGuests(
   return { rows, total };
 }
 
-/** Get episode cast (public) by podcast slug and episode slug. */
+/** Get episode cast (public) by podcast slug and episode slug. Includes unlisted podcasts (by direct link). */
 export function getEpisodeCastBySlugs(podcastSlug: string, episodeSlug: string) {
   const podcast = drizzleDb
     .select({ id: podcasts.id })
     .from(podcasts)
-    .where(
-      and(
-        eq(podcasts.slug, podcastSlug),
-        sql`COALESCE(${podcasts.unlisted}, 0) = 0`,
-      ),
-    )
+    .where(eq(podcasts.slug, podcastSlug))
     .limit(1)
     .get();
   if (!podcast) return [];

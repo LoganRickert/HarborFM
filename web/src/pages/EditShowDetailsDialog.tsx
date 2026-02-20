@@ -98,6 +98,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         artworkUrl: podcast.artworkUrl ?? null,
         subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
         publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
+        allowUnapprovedReviews: podcast.allowUnapprovedReviews !== undefined ? Boolean(podcast.allowUnapprovedReviews) : true,
+        subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
       });
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setCoverMode(podcast.artworkFilename ? 'upload' : 'url');
@@ -112,6 +114,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         artworkUrl: podcast.artworkUrl ?? null,
         subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
         publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
+        allowUnapprovedReviews: podcast.allowUnapprovedReviews !== undefined ? Boolean(podcast.allowUnapprovedReviews) : true,
+        subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
       });
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setPendingArtworkFile(null);
@@ -258,6 +262,8 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       unlisted: currentForm.unlisted !== undefined ? (currentForm.unlisted === 1 ? 1 : 0) : undefined,
       subscriberOnlyFeedEnabled: currentForm.subscriberOnlyFeedEnabled !== undefined ? currentForm.subscriberOnlyFeedEnabled : undefined,
       publicFeedDisabled: currentForm.publicFeedDisabled !== undefined ? currentForm.publicFeedDisabled : undefined,
+      allowUnapprovedReviews: currentForm.allowUnapprovedReviews !== undefined ? currentForm.allowUnapprovedReviews : undefined,
+      subscriberOnlyReviews: currentForm.subscriberOnlyReviews !== undefined ? currentForm.subscriberOnlyReviews : undefined,
     } as PodcastUpdate;
     if (podcast?.myRole === 'owner' && podcast?.dnsConfig) {
       const dc = podcast.dnsConfig;
@@ -433,6 +439,18 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                 <p id="unlisted-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                   Unlisted shows do not appear on the public /feed page or in the sitemap. Use a secret slug to share the feed link only with subscribers.
                 </p>
+                <label className="toggle" aria-describedby="allow-unapproved-reviews-desc">
+                  <input
+                    type="checkbox"
+                    checked={form.allowUnapprovedReviews !== false}
+                    onChange={(e) => setForm((f) => ({ ...f, allowUnapprovedReviews: e.target.checked }))}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Allow Unapproved Reviews</span>
+                </label>
+                <p id="allow-unapproved-reviews-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                  When on, reviews that have not yet been approved by you can be shown on the public feed (if server settings allow).
+                </p>
                 <label className="toggle" aria-describedby="subscribers-enabled-desc">
                   <input
                     type="checkbox"
@@ -465,6 +483,18 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     </label>
                     <p id="subscriber-only-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                       When on, the public feed does not load at all. The show is only available to people with a subscriber link.
+                    </p>
+                    <label className="toggle" aria-describedby="subscriber-only-reviews-desc">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.subscriberOnlyReviews)}
+                        onChange={(e) => setForm((f) => ({ ...f, subscriberOnlyReviews: e.target.checked }))}
+                      />
+                      <span className="toggle__track" aria-hidden="true" />
+                      <span>Subscriber Only Reviews</span>
+                    </label>
+                    <p id="subscriber-only-reviews-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                      When on, only people signed in with a subscriber link for this show can leave a podcast or episode review.
                     </p>
                   </>
                 )}

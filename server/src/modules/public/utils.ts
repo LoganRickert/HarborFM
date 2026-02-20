@@ -58,6 +58,7 @@ export function publicPodcastDto(
     explicit: row.explicit ?? 0,
     subscriber_only_feed_enabled: row.subscriberOnlyFeedEnabled ?? 0,
     public_feed_disabled: row.publicFeedDisabled ?? 0,
+    subscriber_only_reviews: (row as { subscriberOnlyReviews?: number | boolean | null }).subscriberOnlyReviews ?? 0,
     apple_podcasts_url: row.applePodcastsUrl ?? null,
     spotify_url: row.spotifyUrl ?? null,
     amazon_music_url: row.amazonMusicUrl ?? null,

@@ -23,6 +23,8 @@ export interface PublicPodcast {
   createdAt?: string;
   subscriberOnlyFeedEnabled?: boolean;
   publicFeedDisabled?: boolean;
+  /** When true, only subscribers (signed in with subscriber link) can leave reviews. */
+  subscriberOnlyReviews?: boolean;
   canonicalFeedUrl?: string;
   applePodcastsUrl?: string | null;
   spotifyUrl?: string | null;
@@ -85,6 +87,7 @@ function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
     createdAt: r.created_at != null ? String(r.created_at) : undefined,
     subscriberOnlyFeedEnabled: r.subscriber_only_feed_enabled === 1 || r.subscriber_only_feed_enabled === true,
     publicFeedDisabled: r.public_feed_disabled === 1 || r.public_feed_disabled === true,
+    subscriberOnlyReviews: r.subscriber_only_reviews === 1 || r.subscriber_only_reviews === true,
     canonicalFeedUrl: r.canonical_feed_url != null ? String(r.canonical_feed_url) : undefined,
     applePodcastsUrl: r.apple_podcasts_url != null ? String(r.apple_podcasts_url) : null,
     spotifyUrl: r.spotify_url != null ? String(r.spotify_url) : null,

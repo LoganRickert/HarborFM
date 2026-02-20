@@ -199,6 +199,7 @@ async function main() {
     join(E2E_DIR, 'tests', 'Docs', 'docs.js'),
     join(E2E_DIR, 'tests', 'Contact', 'contact.js'),
     join(E2E_DIR, 'tests', 'Messages', 'messages.js'),
+    join(E2E_DIR, 'tests', 'Reviews', 'reviews.js'),
     join(E2E_DIR, 'tests', 'LLM', 'llm.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'subscriptions.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'collaboration.js'),

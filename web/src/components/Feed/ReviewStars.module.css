@@ -1,0 +1,37 @@
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent, #00d4aa);
+}
+
+.stars.empty {
+  color: var(--border, #2a2f3d);
+}
+
+.stars button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: default;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stars.interactive button {
+  cursor: pointer;
+}
+
+.stars.interactive button:hover {
+  opacity: 0.9;
+}
+
+.stars .filled {
+  color: var(--accent, #00d4aa);
+}
+
+.stars .empty {
+  color: var(--text-muted, #8b92a3);
+}

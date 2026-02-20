@@ -21,6 +21,7 @@ import {
   SsoSection,
   DnsConfigurationSection,
   CustomLegalSection,
+  ReviewSettingsSection,
 } from '../components/Settings';
 import { FailedToLoadCard } from '../components/FailedToLoadCard';
 import styles from './Settings.module.css';
@@ -136,6 +137,10 @@ export function Settings() {
         emailEnableNewShow: form.emailEnableNewShow,
         emailEnableInvite: form.emailEnableInvite,
         emailEnableContact: form.emailEnableContact,
+        emailEnableReviewVerification: form.emailEnableReviewVerification,
+        reviewsEnabled: form.reviewsEnabled,
+        reviewsPublishNonVerified: form.reviewsPublishNonVerified,
+        reviewsLlmSpamCheck: form.reviewsLlmSpamCheck,
         welcomeBanner: form.welcomeBanner,
         customTerms: form.customTerms,
         customPrivacy: form.customPrivacy,
@@ -360,6 +365,8 @@ export function Settings() {
         <DnsConfigurationSection form={form} onFormChange={updateForm} />
 
         <CustomLegalSection form={form} onFormChange={updateForm} />
+
+        <ReviewSettingsSection form={form} onFormChange={updateForm} />
 
         <div className={styles.actions}>
           <button type="submit" className={styles.submit} disabled={mutation.isPending} aria-label="Save settings">

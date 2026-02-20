@@ -14,3 +14,4 @@ export { TwoFactorSection } from './TwoFactorSection';
 export { SsoSection } from './SsoSection';
 export { DnsConfigurationSection } from './DnsConfigurationSection';
 export { CustomLegalSection } from './CustomLegalSection';
+export { ReviewSettingsSection } from './ReviewSettingsSection';
