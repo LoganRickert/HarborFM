@@ -683,7 +683,7 @@ if $IS_DEB; then
   done
   # Upgrade base packages (reduces "X packages can be updated" motd on login)
   apt-get upgrade -y
-  apt-get install -y build-essential ca-certificates curl git gnupg ufw wget fail2ban
+  apt-get install -y build-essential ca-certificates curl git gnupg ufw wget fail2ban libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev
   if [ "$REVERSE_PROXY" = "caddy" ]; then
     apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
@@ -763,6 +763,7 @@ else
   $DNF install -y https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-${EL_VER}.noarch.rpm https://mirrors.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-${EL_VER}.noarch.rpm 2>/dev/null || \
   $DNF install -y https://download1.rpmfusion.org/free/el/rpmfusion-free-release-${EL_VER}.noarch.rpm https://download1.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-${EL_VER}.noarch.rpm
   $DNF install -y ffmpeg samba-client
+  $DNF install -y cairo-devel pango-devel libjpeg-turbo-devel giflib-devel
   ARCH=$(uname -m)
   # geoipupdate: not in EPEL/RPM Fusion for EL9; install from MaxMind official release
   if ! command -v geoipupdate &>/dev/null; then
