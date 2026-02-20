@@ -3601,6 +3601,16 @@
   width: 100%;
   min-width: 0;
 }
+.generateVideoStep .error {
+  max-height: 50px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  word-break: break-all;
+}
 .generateVideoLabel {
   font-size: 0.9375rem;
   font-weight: 500;
