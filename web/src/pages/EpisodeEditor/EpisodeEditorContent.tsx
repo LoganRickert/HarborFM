@@ -598,6 +598,13 @@ export function EpisodeEditorContent({
         isGeneratingVideo={videoStatus?.status === 'generating'}
         onOpenGenerateVideo={!segmentReadOnly && meData?.user?.canGenerateVideo === 1 ? () => setShowGenerateVideoModal(true) : undefined}
         downloadVideoUrl={(episode as { videoFinalPath?: string | null }).videoFinalPath ? downloadEpisodeVideoUrl(id, (episode as { updatedAt?: string }).updatedAt) : undefined}
+        videoPosterUrl={
+          episode.artworkUrl
+            ? episode.artworkUrl
+            : episode.artworkFilename && podcastId
+              ? `/api/podcasts/${podcastId}/episodes/${id}/artwork/${encodeURIComponent(episode.artworkFilename)}`
+              : undefined
+        }
         error={
           (renderStatus?.status === 'failed' ? (renderStatus.error ?? 'Build failed') : null) ??
           (renderMutation.isError ? renderMutation.error?.message : null) ??

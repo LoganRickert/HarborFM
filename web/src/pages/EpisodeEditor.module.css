@@ -826,6 +826,11 @@
   gap: 1rem;
   margin-bottom: 1rem;
 }
+.generateBarHeaderDownloads {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 .generateBarHeaderDownload {
   display: flex;
   align-items: center;
@@ -3573,6 +3578,7 @@
   display: flex;
   justify-content: center;
   margin-bottom: 1rem;
+  max-height: 400px;
 }
 .generateBarVideoWrap .generateBarVideoEmbed {
   max-width: 100%;
@@ -3581,7 +3587,6 @@
   display: block;
   border-radius: var(--radius);
   background: var(--bg-elevated);
-  max-height: 280px;
 }
 
 /* Generate Video two-step wizard */

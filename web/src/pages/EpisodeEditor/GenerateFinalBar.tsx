@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, FileAudio, FileText, FilePlus2, TriangleAlert, Video, Download } from 'lucide-react';
+import { Play, Pause, FileAudio, FileText, FilePlus2, TriangleAlert, Video } from 'lucide-react';
 import { downloadEpisodeUrl, finalEpisodeWaveformUrl } from '../../api/audio';
+import { FeedVideoPlayer } from '../../components/Feed/FeedVideoPlayer';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import { formatDuration } from './utils';
 import { ChaptersCard } from './ChaptersCard';
@@ -44,6 +45,8 @@ export interface GenerateFinalBarProps {
   onOpenGenerateVideo?: () => void;
   /** URL for downloading the episode video (when hasVideo). */
   downloadVideoUrl?: string;
+  /** Optional poster/thumbnail URL for the video (e.g. episode artwork). */
+  videoPosterUrl?: string | null;
 }
 
 export function GenerateFinalBar({
@@ -69,6 +72,7 @@ export function GenerateFinalBar({
   isGeneratingVideo = false,
   onOpenGenerateVideo,
   downloadVideoUrl,
+  videoPosterUrl,
 }: GenerateFinalBarProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastLoadedUrlRef = useRef<string | null>(null);
@@ -192,31 +196,44 @@ export function GenerateFinalBar({
             Build the final MP3 from your sections. When done, you can play it here or download it for your feed.
           </p>
         </div>
-        {hasFinalAudio && downloadUrl && !isBuilding && (
-          <a
-            href={downloadUrl}
-            download
-            className={styles.generateBarHeaderDownload}
-            title="Download Final Audio"
-            aria-label="Download Final Audio"
-          >
-            <Download size={20} strokeWidth={2} aria-hidden />
-          </a>
-        )}
+        {(hasFinalAudio && downloadUrl && !isBuilding) || (hasVideo && downloadVideoUrl && !isGeneratingVideo) ? (
+          <div className={styles.generateBarHeaderDownloads}>
+            {hasFinalAudio && downloadUrl && !isBuilding && (
+              <a
+                href={downloadUrl}
+                download
+                className={styles.generateBarHeaderDownload}
+                title="Download Final Audio"
+                aria-label="Download Final Audio"
+              >
+                <FileAudio size={20} strokeWidth={2} aria-hidden />
+              </a>
+            )}
+            {hasVideo && downloadVideoUrl && !isGeneratingVideo && (
+              <a
+                href={downloadVideoUrl}
+                download
+                className={styles.generateBarHeaderDownload}
+                title="Download Video"
+                aria-label="Download Video"
+              >
+                <Video size={20} strokeWidth={2} aria-hidden />
+              </a>
+            )}
+          </div>
+        ) : null}
       </div>
       {error && (
         <p className={styles.error} style={{ marginTop: 0, marginBottom: '1.25rem' }} role="alert">{error}</p>
       )}
       {hasVideo && downloadVideoUrl && !isGeneratingVideo && (
         <div className={styles.generateBarVideoWrap}>
-          <video
+          <FeedVideoPlayer
             src={downloadVideoUrl}
-            controls
-            playsInline
+            poster={videoPosterUrl ?? undefined}
+            ariaLabel="Episode video"
             className={styles.generateBarVideoEmbed}
-          >
-            Your browser does not support the video tag.
-          </video>
+          />
         </div>
       )}
       {hasFinalAudio && durationSec > 0 && (
