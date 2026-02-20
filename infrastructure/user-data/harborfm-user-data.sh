@@ -856,6 +856,9 @@ else
   cp -R web/dist server/public
 fi
 
+# node-canvas: ensure native bindings build (needed for video generation)
+COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm -C node_modules/.pnpm/canvas@3.2.1/node_modules/canvas run install 2>/dev/null || true
+
 # argon2: rebuild from source on older glibc
 if ! strings "$LIBC_PATH" 2>/dev/null | grep -q 'GLIBC_2.34'; then
   ARGON2_DIR="$(find node_modules -path '*/argon2/package.json' 2>/dev/null | head -1 | xargs dirname)"

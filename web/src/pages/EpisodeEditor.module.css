@@ -3014,6 +3014,10 @@
   border-radius: var(--radius);
   cursor: pointer;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .episodeTranscriptUploadBtn:hover {
   border-color: var(--accent);

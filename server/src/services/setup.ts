@@ -98,6 +98,7 @@ export function bootstrapIfNeeded(): boolean {
     passwordHash,
     role: "admin",
     canTranscribe: 1,
+    canGenerateVideo: 1,
   }).run();
 
   const hostnameRaw = getAdminHostnameFromEnv();
