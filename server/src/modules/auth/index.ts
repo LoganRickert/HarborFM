@@ -10,6 +10,7 @@ import { registerTwoFactorProfileRoutes } from "./routes.twoFactorProfile.js";
 import { registerSsoRoutes } from "./routes.sso.js";
 import { registerCompleteAccountRoutes } from "./routes.completeAccount.js";
 import { registerProfileUpdateRoutes } from "./routes.profileUpdate.js";
+import { registerDisableAccountRoutes } from "./routes.disableAccount.js";
 
 export async function authRoutes(app: FastifyInstance) {
   await app.register(registerRegisterRoutes);
@@ -23,4 +24,5 @@ export async function authRoutes(app: FastifyInstance) {
   await app.register(registerSsoRoutes);
   await app.register(registerCompleteAccountRoutes);
   await app.register(registerProfileUpdateRoutes);
+  await app.register(registerDisableAccountRoutes);
 }

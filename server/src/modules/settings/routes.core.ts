@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { statfsSync } from "fs";
+import { totalmem, freemem, cpus } from "os";
 import { getDataDir } from "../../services/paths.js";
 import { requireAdmin } from "../../plugins/auth.js";
 import { normalizeHostname } from "../../utils/url.js";
@@ -74,6 +76,68 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         ),
       );
       return reply.send({ commands });
+    },
+  );
+
+  app.get(
+    "/settings/system-stats",
+    {
+      preHandler: [requireAdmin],
+      schema: {
+        tags: ["Settings"],
+        summary: "Get system stats",
+        description:
+          "Returns system resource usage (memory, CPU count, disk for data dir). Admin only.",
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              memory: {
+                type: "object",
+                properties: {
+                  usedBytes: { type: "number" },
+                  totalBytes: { type: "number" },
+                },
+                required: ["usedBytes", "totalBytes"],
+              },
+              cpus: { type: "number" },
+              disk: {
+                type: "object",
+                properties: {
+                  usedBytes: { type: "number" },
+                  totalBytes: { type: "number" },
+                },
+                required: ["usedBytes", "totalBytes"],
+              },
+            },
+            required: ["memory", "cpus"],
+          },
+        },
+      },
+    },
+    async (_request, reply) => {
+      const totalBytes = totalmem();
+      const freeBytes = freemem();
+      const usedBytes = totalBytes - freeBytes;
+      const memory = { usedBytes, totalBytes };
+      const cpusCount = cpus().length;
+
+      let disk: { usedBytes: number; totalBytes: number } | undefined;
+      try {
+        const dataDir = getDataDir();
+        const stats = statfsSync(dataDir);
+        const bsize = Number(stats.bsize ?? 4096);
+        const totalBytesDisk = Number(stats.blocks) * bsize;
+        const freeBytesDisk = Number(stats.bfree) * bsize;
+        disk = {
+          totalBytes: totalBytesDisk,
+          usedBytes: totalBytesDisk - freeBytesDisk,
+        };
+      } catch {
+        disk = undefined;
+      }
+
+      return reply.send({ memory, cpus: cpusCount, ...(disk && { disk }) });
     },
   );
 
@@ -375,6 +439,22 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.emailEnableContact !== undefined
           ? Boolean(body.emailEnableContact)
           : current.email_enable_contact;
+      const email_enable_review_verification =
+        body.emailEnableReviewVerification !== undefined
+          ? Boolean(body.emailEnableReviewVerification)
+          : (current as { email_enable_review_verification?: boolean }).email_enable_review_verification ?? true;
+      const reviews_enabled =
+        body.reviewsEnabled !== undefined
+          ? Boolean(body.reviewsEnabled)
+          : (current as { reviews_enabled?: boolean }).reviews_enabled ?? true;
+      const reviews_publish_non_verified =
+        body.reviewsPublishNonVerified !== undefined
+          ? Boolean(body.reviewsPublishNonVerified)
+          : (current as { reviews_publish_non_verified?: boolean }).reviews_publish_non_verified ?? false;
+      const reviews_llm_spam_check =
+        body.reviewsLlmSpamCheck !== undefined
+          ? Boolean(body.reviewsLlmSpamCheck)
+          : (current as { reviews_llm_spam_check?: boolean }).reviews_llm_spam_check ?? false;
       const welcome_banner =
         body.welcomeBanner !== undefined
           ? String(body.welcomeBanner)
@@ -538,6 +618,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         email_enable_new_show,
         email_enable_invite,
         email_enable_contact,
+        email_enable_review_verification,
+        reviews_enabled,
+        reviews_publish_non_verified,
+        reviews_llm_spam_check,
         welcome_banner,
         custom_terms,
         custom_privacy,

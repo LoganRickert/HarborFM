@@ -1,4 +1,4 @@
-import { Play, Pause, Trash2, Scissors, MapPin, ZoomIn, ZoomOut, Move, RotateCcw, FastForward, Check } from 'lucide-react';
+import { Play, Pause, Trash2, Scissors, MapPin, ZoomIn, ZoomOut, Move, RotateCcw, FastForward, Check, Music2 } from 'lucide-react';
 
 const MARKER_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899'] as const;
 import { TimelineWaveform } from '../../../pages/EpisodeEditor/TimelineWaveform';
@@ -6,6 +6,7 @@ import { formatDuration } from '../../../pages/EpisodeEditor/utils';
 import type { EpisodeSegment } from '../../../api/segments';
 import type { WaveformData } from '../../../pages/EpisodeEditor/WaveformCanvas';
 import styles from '../../../pages/EpisodeEditor.module.css';
+import sharedStyles from '../../PodcastDetail/shared.module.css';
 
 export interface SegmentEditTabProps {
   segment: EpisodeSegment;
@@ -42,6 +43,13 @@ export interface SegmentEditTabProps {
   onBackToStart: () => void;
   onFastForwardToggle: () => void;
   isFastForward: boolean;
+  audioEditActive: boolean;
+  draftAudioEq: { lowDb: number; midDb: number; highDb: number };
+  appliedAudioEq: { lowDb: number; midDb: number; highDb: number };
+  onDraftAudioEqChange: (eq: { lowDb: number; midDb: number; highDb: number }) => void;
+  onAudioEditActiveChange: (active: boolean) => void;
+  onApplyAudioEq: () => void;
+  onCancelAudioEq: () => void;
 }
 
 export function SegmentEditTab({
@@ -79,6 +87,13 @@ export function SegmentEditTab({
   onBackToStart,
   onFastForwardToggle,
   isFastForward,
+  audioEditActive,
+  draftAudioEq,
+  appliedAudioEq,
+  onDraftAudioEqChange,
+  onAudioEditActiveChange,
+  onApplyAudioEq,
+  onCancelAudioEq,
 }: SegmentEditTabProps) {
   return (
     <>
@@ -88,21 +103,21 @@ export function SegmentEditTab({
             <div className={styles.timelineToolbarGroup}>
               <button
                 type="button"
-                className={`${styles.segmentBtn} ${styles.timelineToolbarModeBtn} ${timelineMode === 'drag' ? styles.timelineToolbarBtnActive : ''}`}
+                className={`${styles.segmentBtn} ${styles.timelineToolbarModeBtn} ${timelineMode === 'drag' && !audioEditActive ? styles.timelineToolbarBtnActive : ''}`}
                 onClick={() => onTimelineModeChange('drag')}
                 title="Drag mode: click to seek, drag to pan"
                 aria-label="Drag mode"
-                aria-pressed={timelineMode === 'drag'}
+                aria-pressed={timelineMode === 'drag' && !audioEditActive}
               >
                 <Move size={16} aria-hidden />
               </button>
               <button
                 type="button"
-                className={`${styles.segmentBtn} ${styles.timelineToolbarModeBtn} ${timelineMode === 'trim' ? styles.timelineToolbarBtnActive : ''}`}
+                className={`${styles.segmentBtn} ${styles.timelineToolbarModeBtn} ${timelineMode === 'trim' && !audioEditActive ? styles.timelineToolbarBtnActive : ''}`}
                 onClick={() => onTimelineModeChange('trim')}
                 title="Trim mode: click to add trim points, drag handles to adjust, click X to remove"
                 aria-label="Trim mode"
-                aria-pressed={timelineMode === 'trim'}
+                aria-pressed={timelineMode === 'trim' && !audioEditActive}
               >
                 <Scissors size={16} aria-hidden />
               </button>
@@ -128,6 +143,19 @@ export function SegmentEditTab({
                 aria-label="Zoom out"
               >
                 <ZoomOut size={16} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className={`${styles.segmentBtn} ${styles.timelineToolbarModeBtn} ${audioEditActive ? styles.timelineToolbarBtnActive : ''}`}
+                onClick={() => {
+                  onAudioEditActiveChange(true);
+                  onDraftAudioEqChange(appliedAudioEq);
+                }}
+                title="Audio: adjust low, mids, and highs"
+                aria-pressed={audioEditActive}
+                aria-label="Audio EQ"
+              >
+                <Music2 size={16} aria-hidden />
               </button>
             </div>
             <div className={styles.timelineToolbarSeparator} />
@@ -199,7 +227,7 @@ export function SegmentEditTab({
                 onSelectionChange={onSelectionChange}
                 onAddMarker={onAddMarker}
                 onRemoveTrimRange={onRemoveTrimRange}
-                mode={timelineMode}
+                mode={audioEditActive ? 'drag' : timelineMode}
                 readOnly={false}
               />
             </div>
@@ -308,6 +336,77 @@ export function SegmentEditTab({
                 {t === '' ? 'None' : 'Chapter'}
               </button>
             ))}
+          </div>
+        </div>
+      )}
+      {audioEditActive && selectedMarkerIndex == null && (
+        <div className={styles.segmentEditorToolbar}>
+          <div className={styles.audioEqRow}>
+            <label className={styles.audioEqLabel}>
+              <span>Low</span>
+              <input
+                type="range"
+                min={-12}
+                max={12}
+                step={0.5}
+                value={draftAudioEq.lowDb}
+                onChange={(e) =>
+                  onDraftAudioEqChange({ ...draftAudioEq, lowDb: Number(e.target.value) })
+                }
+                aria-label="Low (bass) gain dB"
+              />
+              <span className={styles.audioEqValue}>{draftAudioEq.lowDb} dB</span>
+            </label>
+            <label className={styles.audioEqLabel}>
+              <span>Mids</span>
+              <input
+                type="range"
+                min={-12}
+                max={12}
+                step={0.5}
+                value={draftAudioEq.midDb}
+                onChange={(e) =>
+                  onDraftAudioEqChange({ ...draftAudioEq, midDb: Number(e.target.value) })
+                }
+                aria-label="Mids gain dB"
+              />
+              <span className={styles.audioEqValue}>{draftAudioEq.midDb} dB</span>
+            </label>
+            <label className={styles.audioEqLabel}>
+              <span>High</span>
+              <input
+                type="range"
+                min={-12}
+                max={12}
+                step={0.5}
+                value={draftAudioEq.highDb}
+                onChange={(e) =>
+                  onDraftAudioEqChange({ ...draftAudioEq, highDb: Number(e.target.value) })
+                }
+                aria-label="High (treble) gain dB"
+              />
+              <span className={styles.audioEqValue}>{draftAudioEq.highDb} dB</span>
+            </label>
+          </div>
+          <div className={styles.audioEqActions}>
+            <button
+              type="button"
+              className={styles.cancel}
+              onClick={onCancelAudioEq}
+              aria-label="Cancel audio changes"
+            >
+              Cancel
+            </button>
+            <div style={{ flex: 1 }} />
+            <button
+              type="button"
+              className={sharedStyles.dialogConfirm}
+              onClick={onApplyAudioEq}
+              aria-label="Apply audio EQ"
+            >
+              <Check size={18} strokeWidth={2} aria-hidden />
+              Apply
+            </button>
           </div>
         </div>
       )}

@@ -106,6 +106,12 @@ export function logout() {
   return apiPost<{ ok: boolean }>('/auth/logout');
 }
 
+export function disableAccount(password?: string) {
+  return apiPost<{ ok: boolean }>('/auth/me/disable-account', {
+    ...(password != null && password !== '' ? { password } : {}),
+  });
+}
+
 export function verifyEmail(token: string) {
   return apiGet<{ ok: boolean }>(`/auth/verify-email?token=${encodeURIComponent(token)}`);
 }

@@ -52,6 +52,14 @@ import * as m050 from "./migrations/050_auth_2fa_totp_secret_hash.js";
 import * as m051 from "./migrations/051_api_keys_max_per_user_trigger.js";
 import * as m052 from "./migrations/052_episodes_video_final_path.js";
 import * as m053 from "./migrations/053_user_can_generate_video.js";
+import * as m054 from "./migrations/054_reviews.js";
+import * as m055 from "./migrations/055_podcast_review_fields.js";
+import * as m056 from "./migrations/056_reviews_user_id.js";
+import * as m057 from "./migrations/057_reviews_delete_token.js";
+import * as m058 from "./migrations/058_segment_audio_eq.js";
+import * as m059 from "./migrations/059_segment_disabled.js";
+import * as m060 from "./migrations/060_podcast_subscriber_only_messages.js";
+import * as m061 from "./migrations/061_podcast_show_scheduled_episodes.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -107,6 +115,14 @@ const migrations = [
   { name: "051_api_keys_max_per_user_trigger", ...m051 },
   { name: "052_episodes_video_final_path", ...m052 },
   { name: "053_user_can_generate_video", ...m053 },
+  { name: "054_reviews", ...m054 },
+  { name: "055_podcast_review_fields", ...m055 },
+  { name: "056_reviews_user_id", ...m056 },
+  { name: "057_reviews_delete_token", ...m057 },
+  { name: "058_segment_audio_eq", ...m058 },
+  { name: "059_segment_disabled", ...m059 },
+  { name: "060_podcast_subscriber_only_messages", ...m060 },
+  { name: "061_podcast_show_scheduled_episodes", ...m061 },
 ];
 
 const MIGRATIONS_TABLE = `

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Play, Pause, Mic, Library, Info, Trash2, Loader2, Scissors } from 'lucide-react';
+import { Play, Pause, Mic, Library, Info, Trash2, Loader2, Scissors, Eye, EyeOff } from 'lucide-react';
 import { segmentStreamUrl } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { formatDuration } from './utils';
@@ -22,6 +22,7 @@ export interface SegmentRowProps {
   onPlayRequest: (segmentId: string) => void;
   onMoreInfo?: () => void;
   onEdit?: () => void;
+  onToggleDisabled?: () => void;
   registerPause: (id: string, pause: () => void) => void;
   unregisterPause: (id: string) => void;
   readOnly?: boolean;
@@ -46,6 +47,7 @@ export function SegmentRow({
   onPlayRequest,
   onMoreInfo,
   onEdit,
+  onToggleDisabled,
   registerPause,
   unregisterPause,
   readOnly = false,
@@ -55,6 +57,13 @@ export function SegmentRow({
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressTrackRef = useRef<HTMLDivElement>(null);
   const loadedSegmentIdRef = useRef<string | null>(null);
+  const audioGraphRef = useRef<{
+    context: AudioContext;
+    source: MediaElementAudioSourceNode;
+    lowShelf: BiquadFilterNode;
+    peaking: BiquadFilterNode;
+    highShelf: BiquadFilterNode;
+  } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const durationSec = segment.durationSec ?? 0;
@@ -85,6 +94,32 @@ export function SegmentRow({
     if (trimmed !== current) onUpdateName(segment.id, trimmed || null);
   }
 
+  function ensureAudioGraph() {
+    const el = audioRef.current;
+    if (!el || audioGraphRef.current) return audioGraphRef.current;
+    const Ctx =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const context = new Ctx();
+    const source = context.createMediaElementSource(el);
+    const lowShelf = context.createBiquadFilter();
+    lowShelf.type = 'lowshelf';
+    lowShelf.frequency.value = 200;
+    const peaking = context.createBiquadFilter();
+    peaking.type = 'peaking';
+    peaking.frequency.value = 1000;
+    peaking.Q.value = 1;
+    const highShelf = context.createBiquadFilter();
+    highShelf.type = 'highshelf';
+    highShelf.frequency.value = 4000;
+    source.connect(lowShelf);
+    lowShelf.connect(peaking);
+    peaking.connect(highShelf);
+    highShelf.connect(context.destination);
+    audioGraphRef.current = { context, source, lowShelf, peaking, highShelf };
+    return audioGraphRef.current;
+  }
+
   function togglePlay() {
     if (recordFailed) return;
     const el = audioRef.current;
@@ -93,6 +128,19 @@ export function SegmentRow({
       el.pause();
       setIsPlaying(false);
     } else {
+      const lowDb = segment.audioEq?.lowDb ?? 0;
+      const midDb = segment.audioEq?.midDb ?? 0;
+      const highDb = segment.audioEq?.highDb ?? 0;
+      const hasEq = lowDb !== 0 || midDb !== 0 || highDb !== 0;
+      if (hasEq) {
+        const g = ensureAudioGraph();
+        if (g) {
+          g.context.resume().then(() => {});
+          g.lowShelf.gain.value = lowDb;
+          g.peaking.gain.value = midDb;
+          g.highShelf.gain.value = highDb;
+        }
+      }
       onPlayRequest(segment.id);
       if (loadedSegmentIdRef.current !== segment.id) {
         loadedSegmentIdRef.current = segment.id;
@@ -196,8 +244,10 @@ export function SegmentRow({
     );
   }
 
+  const isDisabled = !!(segment as EpisodeSegment & { disabled?: boolean }).disabled;
+
   return (
-    <li className={styles.segmentBlock}>
+    <li className={`${styles.segmentBlock} ${isDisabled ? styles.segmentBlockDisabled : ''}`.trim()}>
       <div className={styles.segmentBlockTop}>
         <span className={styles.segmentIcon} title={isRecorded ? 'Recorded' : 'From library'}>
           {isRecorded ? <Mic size={18} strokeWidth={2} aria-hidden /> : <Library size={18} strokeWidth={2} aria-hidden />}
@@ -243,6 +293,17 @@ export function SegmentRow({
           {onEdit && (
             <button type="button" className={styles.segmentBtn} onClick={onEdit} title="Edit timeline" aria-label="Edit segment timeline">
               <Scissors size={18} aria-hidden />
+            </button>
+          )}
+          {onToggleDisabled && (
+            <button
+              type="button"
+              className={styles.segmentBtn}
+              onClick={onToggleDisabled}
+              title={isDisabled ? 'Include in final episode' : 'Exclude from final episode'}
+              aria-label={isDisabled ? 'Include in final episode' : 'Exclude from final episode'}
+            >
+              {isDisabled ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
             </button>
           )}
           {onMoreInfo && (

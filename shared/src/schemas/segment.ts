@@ -65,6 +65,16 @@ export const markerSchema = z.object({
 /** Array of markers. */
 export const markersSchema = z.array(markerSchema);
 
+/** Optional 3-band EQ gains in dB (-20..+20). Stored per segment; applied at render. */
+export const audioEqSchema = z
+  .object({
+    lowDb: z.number().min(-20).max(20).optional(),
+    midDb: z.number().min(-20).max(20).optional(),
+    highDb: z.number().min(-20).max(20).optional(),
+  })
+  .optional()
+  .nullable();
+
 /** Marker type for use in TS  */
 export interface Marker {
   time: number;
@@ -83,6 +93,8 @@ export const segmentUpdateBodySchema = z.object({
   name: z.union([z.string(), z.null()]).optional(),
   trimRanges: trimRangesSchema.optional().nullable(),
   markers: markersSchema.optional().nullable(),
+  audioEq: audioEqSchema,
+  disabled: z.boolean().optional(),
 });
 
 /** Body for POST /episodes/:episodeId/segments/:segmentId/trim. */
@@ -151,6 +163,10 @@ export const segmentResponseSchema = z.object({
   trimRanges: z.array(z.tuple([z.number(), z.number()])).optional().nullable(),
   /** Markers [{time, title?, color?}, ...]. */
   markers: markersSchema.optional().nullable(),
+  /** Optional 3-band EQ (low/mids/high) in dB; applied at render. */
+  audioEq: audioEqSchema,
+  /** When true, segment is excluded from the final generated episode. */
+  disabled: z.boolean().optional(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */
@@ -227,6 +243,7 @@ export type SegmentEpisodeIdOnlyParam = z.infer<typeof segmentEpisodeIdOnlyParam
 export type SegmentCreateReusableBody = z.infer<typeof segmentCreateReusableBodySchema>;
 export type SegmentReorderBody = z.infer<typeof segmentReorderBodySchema>;
 export type SegmentUpdateNameBody = z.infer<typeof segmentUpdateNameBodySchema>;
+export type AudioEq = z.infer<typeof audioEqSchema>;
 export type SegmentUpdateBody = z.infer<typeof segmentUpdateBodySchema>;
 export type TrimRange = z.infer<typeof trimRangeSchema>;
 export type SegmentTrimBody = z.infer<typeof segmentTrimBodySchema>;

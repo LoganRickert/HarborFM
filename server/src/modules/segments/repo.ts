@@ -35,7 +35,9 @@ export type SegmentListRow = {
   recordFailed: boolean;
   trimRanges: string | null;
   markers: string | null;
+  audioEq: string | null;
   assetName: string | null;
+  disabled: boolean;
 };
 
 /** List segments for episode with leftJoin reusableAssets for assetName. */
@@ -55,7 +57,9 @@ export function listSegmentsForEpisode(episodeId: string): SegmentListRow[] {
       recordFailed: episodeSegments.recordFailed,
       trimRanges: episodeSegments.trimRanges,
       markers: episodeSegments.markers,
+      audioEq: episodeSegments.audioEq,
       assetName: reusableAssets.name,
+      disabled: episodeSegments.disabled,
     })
     .from(episodeSegments)
     .leftJoin(
@@ -322,6 +326,30 @@ export function updateSegmentMarkers(
   drizzleDb
     .update(episodeSegments)
     .set({ markers })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentAudioEq(
+  segmentId: string,
+  episodeId: string,
+  audioEq: string | null,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ audioEq })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentDisabled(
+  segmentId: string,
+  episodeId: string,
+  disabled: boolean,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ disabled })
     .where(updateWhere(segmentId, episodeId))
     .run();
 }

@@ -118,6 +118,10 @@ export const podcasts = sqliteTable(
     instagramUrl: text("instagram_url"),
     tiktokUrl: text("tiktok_url"),
     youtubeUrl: text("youtube_url"),
+    allowUnapprovedReviews: integer("allow_unapproved_reviews", { mode: "boolean" }).default(true),
+    subscriberOnlyReviews: integer("subscriber_only_reviews", { mode: "boolean" }).default(false),
+    subscriberOnlyMessages: integer("subscriber_only_messages", { mode: "boolean" }).default(false),
+    showScheduledEpisodes: integer("show_scheduled_episodes", { mode: "boolean" }).default(false),
   },
   (table) => [
     unique("users_podcasts_owner_slug").on(table.ownerUserId, table.slug),
@@ -263,6 +267,8 @@ export const episodeSegments = sqliteTable(
     recordFailed: integer("record_failed", { mode: "boolean" }).notNull().default(false),
     trimRanges: text("trim_ranges"),
     markers: text("markers"),
+    audioEq: text("audio_eq"),
+    disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
   },
   (table) => [index("idx_episode_segments_episode").on(table.episodeId)],
 );
@@ -447,6 +453,42 @@ export const contactMessages = sqliteTable(
     index("idx_contact_messages_created_at").on(table.createdAt),
     index("idx_contact_messages_podcast_id").on(table.podcastId),
     index("idx_contact_messages_episode_id").on(table.episodeId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Reviews (054)
+// ---------------------------------------------------------------------------
+export const reviews = sqliteTable(
+  "reviews",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    episodeId: text("episode_id").references(() => episodes.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    rating: integer("rating").notNull(),
+    body: text("body").notNull(),
+    verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+    approved: integer("approved", { mode: "boolean" }).notNull().default(false),
+    spam: integer("spam", { mode: "boolean" }).notNull().default(false),
+    hidden: integer("hidden", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    emailVerificationTokenHash: text("email_verification_token_hash"),
+    emailVerificationExpiresAt: text("email_verification_expires_at"),
+    deleteTokenHash: text("delete_token_hash"),
+    deleteTokenExpiresAt: text("delete_token_expires_at"),
+  },
+  (table) => [
+    index("idx_reviews_podcast_id").on(table.podcastId),
+    index("idx_reviews_episode_id").on(table.episodeId),
+    index("idx_reviews_created_at").on(table.createdAt),
+    index("idx_reviews_email_verification_token_hash").on(table.emailVerificationTokenHash),
+    index("idx_reviews_delete_token_hash").on(table.deleteTokenHash),
+    index("idx_reviews_user_id").on(table.userId),
   ],
 );
 

@@ -58,6 +58,11 @@ declare module "fastify" {
       request: FastifyRequest,
       reply: FastifyReply,
     ) => Promise<void>;
+    /** Like requireAuth but allows disabled users (e.g. so they can call logout after disabling). */
+    requireAuthAllowDisabled: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => Promise<void>;
     requireAdmin: (
       request: FastifyRequest,
       reply: FastifyReply,
@@ -199,6 +204,67 @@ export async function requireAuth(
   }
 }
 
+/** Same as requireAuth but does not reject disabled users. Use only for logout so disabled users can clear their session. */
+export async function requireAuthAllowDisabled(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const apiKeyResult = authViaApiKey(request);
+  if (typeof apiKeyResult === "string" && apiKeyResult !== "expired") {
+    request.userId = apiKeyResult;
+    request.authViaApiKey = true;
+    return;
+  }
+  if (apiKeyResult === "expired") {
+    return reply.status(401).send({ error: "Unauthorized" });
+  }
+  const token = getBearerToken(request);
+  if (token != null && token.startsWith(API_KEY_PREFIX)) {
+    const ip = getClientIp(request);
+    request.log.warn({ ip }, "Bad/unknown API key attempt");
+    const userAgent = getUserAgent(request);
+    recordFailureAndMaybeBan(ip, AUTH_APIKEY_CONTEXT, { userAgent });
+    const ban = getIpBan(ip, AUTH_APIKEY_CONTEXT);
+    if (ban.banned) {
+      return reply
+        .status(429)
+        .header("Retry-After", String(ban.retryAfterSec))
+        .send({ error: "Too many failed attempts. Try again later." });
+    }
+    return reply.status(401).send({ error: "Unauthorized" });
+  }
+
+  try {
+    await request.jwtVerify();
+    const payload = request.user as JWTPayload;
+    const userId = payload.sub;
+
+    // Do not check disabled here so that disabled users can still call logout.
+
+    const cookies = (
+      request as unknown as { cookies?: Record<string, string | undefined> }
+    ).cookies;
+    const csrfCookie = cookies?.[CSRF_COOKIE_NAME];
+    if (!csrfCookie) {
+      reply.setCookie(CSRF_COOKIE_NAME, newCsrfToken(), CSRF_COOKIE_OPTS);
+      if (isUnsafeMethod(request.method)) {
+        return reply
+          .status(403)
+          .send({ error: "CSRF token missing. Refresh and try again." });
+      }
+    } else if (isUnsafeMethod(request.method)) {
+      const header = getHeaderValue(request.headers["x-csrf-token"]);
+      if (!header || header !== csrfCookie) {
+        return reply.status(403).send({ error: "CSRF token invalid" });
+      }
+    }
+
+    request.userId = userId;
+  } catch {
+    return reply.status(401).send({ error: "Unauthorized" });
+  }
+}
+
 /** Require admin role */
 export async function requireAdmin(
   request: FastifyRequest,
@@ -240,6 +306,7 @@ export async function requireNotReadOnly(
 
 export async function authPlugin(app: FastifyInstance) {
   app.decorate("requireAuth", requireAuth);
+  app.decorate("requireAuthAllowDisabled", requireAuthAllowDisabled);
   app.decorate("requireAdmin", requireAdmin);
   app.decorate("requireNotReadOnly", requireNotReadOnly);
 }

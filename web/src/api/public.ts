@@ -23,6 +23,12 @@ export interface PublicPodcast {
   createdAt?: string;
   subscriberOnlyFeedEnabled?: boolean;
   publicFeedDisabled?: boolean;
+  /** When true, only subscribers (signed in with subscriber link) can leave reviews. */
+  subscriberOnlyReviews?: boolean;
+  /** When true, only subscribers can see/use Message button and submit contact. */
+  subscriberOnlyMessages?: boolean;
+  /** When true, future-dated scheduled/published episodes appear on the public feed with a placeholder. */
+  showScheduledEpisodes?: boolean;
   canonicalFeedUrl?: string;
   applePodcastsUrl?: string | null;
   spotifyUrl?: string | null;
@@ -66,6 +72,8 @@ export interface PublicEpisode {
   privateVideoUrl?: string | null;
   privateSrtUrl?: string | null;
   markers?: Array<{ time: number; title?: string; color?: string }> | null;
+  /** When true, episode is scheduled for a future date and audio/markers are not available yet. */
+  scheduledNotReleased?: boolean;
 }
 
 function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
@@ -85,6 +93,9 @@ function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
     createdAt: r.created_at != null ? String(r.created_at) : undefined,
     subscriberOnlyFeedEnabled: r.subscriber_only_feed_enabled === 1 || r.subscriber_only_feed_enabled === true,
     publicFeedDisabled: r.public_feed_disabled === 1 || r.public_feed_disabled === true,
+    subscriberOnlyReviews: r.subscriber_only_reviews === 1 || r.subscriber_only_reviews === true,
+    subscriberOnlyMessages: r.subscriber_only_messages === 1 || r.subscriber_only_messages === true,
+    showScheduledEpisodes: r.show_scheduled_episodes === 1 || r.show_scheduled_episodes === true,
     canonicalFeedUrl: r.canonical_feed_url != null ? String(r.canonical_feed_url) : undefined,
     applePodcastsUrl: r.apple_podcasts_url != null ? String(r.apple_podcasts_url) : null,
     spotifyUrl: r.spotify_url != null ? String(r.spotify_url) : null,
@@ -128,7 +139,8 @@ function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
     privateWaveformUrl: (r.private_waveform_url as string | null) ?? null,
     privateVideoUrl: (r.private_video_url as string | null) ?? null,
     privateSrtUrl: (r.private_srt_url as string | null) ?? null,
-    markers: r.markers as PublicEpisode['markers'],
+    markers: Array.isArray(r.markers) ? r.markers : [],
+    scheduledNotReleased: r.scheduled_not_released === 1 || r.scheduled_not_released === true,
   };
 }
 

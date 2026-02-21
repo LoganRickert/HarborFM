@@ -105,3 +105,51 @@ export async function askOpenai(
   const content = data?.choices?.[0]?.message?.content;
   return typeof content === "string" ? content.trim() : "(No response)";
 }
+
+/**
+ * Ask the LLM if the given review text is spam. Strict prompt for consistent YES/NO.
+ * Returns true only if the model clearly answers YES (spam). Fail open: on error or unclear, return false.
+ */
+export async function spamCheckReview(
+  text: string,
+  askFn: (prompt: string) => Promise<string>,
+): Promise<boolean> {
+  const prompt = `You are a STRICT review quality + spam detector.
+
+Output EXACTLY one token: YES or NO.
+
+Answer YES if the review is any of the following:
+- nonsense / gibberish / keyboard smash (random letters, meaningless filler)
+- repeated words/phrases with no meaningful content
+- off-topic (not about the product/service)
+- promotional, link, coupon, contact info, solicitation
+- abusive/hate/harassment
+- scam/phishing or requests for money
+
+Answer NO only if it is a genuine review with meaningful feedback.
+
+Examples:
+Review: "asdfasdf asdf asdf qwerqwer" -> YES
+Review: "👍👍👍" -> YES
+Review: "Great pizza, fast delivery." -> NO
+Review: "Buy followers at example.com" -> YES
+Review: "Terrible service, waiter was rude." -> NO
+
+Review text:
+---
+${text.slice(0, 2000)}
+---
+
+Answer (YES or NO):`;
+  console.log("spamCheckReview prompt", prompt);
+  try {
+    const answer = await askFn(prompt);
+    console.log("spamCheckReview answer", answer);
+    const normalized = answer.toUpperCase().trim().replace(/\s+/g, " ");
+    console.log("spamCheckReview normalized", normalized);
+    return normalized.startsWith("YES");
+  } catch {
+    console.log("spamCheckReview error");
+    return false;
+  }
+}

@@ -21,6 +21,7 @@ import { Dashboard } from './pages/Dashboard';
 import { PodcastNew } from './pages/PodcastNew';
 import { PodcastDetail } from './pages/PodcastDetail';
 import { PodcastAnalytics } from './pages/PodcastAnalytics';
+import { PodcastReviews } from './pages/PodcastReviews';
 import { EpisodesList } from './pages/EpisodesList';
 import { EpisodeNew } from './pages/EpisodeNew';
 import { EpisodeEditor } from './pages/EpisodeEditor';
@@ -324,6 +325,7 @@ export default function App() {
           <Route path="podcasts/new" element={<PodcastNew />} />
           <Route path="podcasts/:id" element={<PodcastDetail />} />
           <Route path="podcasts/:id/analytics" element={<PodcastAnalytics />} />
+          <Route path="podcasts/:id/reviews" element={<PodcastReviews />} />
           <Route path="podcasts/:id/episodes" element={<EpisodesList />} />
           <Route path="podcasts/:id/episodes/new" element={<EpisodeNew />} />
           <Route path="episodes/:id" element={<EpisodeEditor />} />

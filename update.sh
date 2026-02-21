@@ -134,6 +134,30 @@ fi
 echo "Pulling images..."
 docker compose pull
 
+# Remove old HarborFM / HarborFM-webrtc images (keeps only :latest for each repo to free disk)
+clean_old_harborfm_images() {
+  for repo in ghcr.io/loganrickert/harborfm ghcr.io/loganrickert/harborfm-webrtc; do
+    latest_id=$(docker images "$repo:latest" --format '{{.ID}}' 2>/dev/null | head -n1) || true
+    [ -z "$latest_id" ] && continue
+    docker images "$repo" --format '{{.ID}} {{.Tag}}' | while read -r id tag; do
+      [ "$id" = "$latest_id" ] && continue
+      echo "  Removing old image: $repo ($tag) $id"
+      docker rmi "$id" 2>/dev/null || true
+    done
+  done
+}
+if [ "$NON_INTERACTIVE" = true ]; then
+  prune_harborfm="n"
+else
+  read -r -p "Prune harborfm images? [y/N] " prune_harborfm </dev/tty || true
+fi
+if [[ "$prune_harborfm" =~ ^[yY] ]]; then
+  echo "Cleaning old HarborFM / HarborFM-webrtc images (keeping :latest)..."
+  clean_old_harborfm_images
+else
+  echo "Skipping HarborFM image prune."
+fi
+
 COMPOSE_PROFILES="$REVERSE_PROXY"
 [ "${WEBRTC_ENABLED:-0}" = "1" ] && COMPOSE_PROFILES="$COMPOSE_PROFILES webrtc"
 echo "Starting containers (profile: $COMPOSE_PROFILES)..."

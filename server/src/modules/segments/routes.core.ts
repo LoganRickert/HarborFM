@@ -353,7 +353,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       schema: {
         tags: ["Segments"],
         summary: "Update segment",
-        description: "Update segment name, trimRanges, and/or markers. Partial update supported.",
+        description: "Update segment name, trimRanges, markers, and/or audioEq. Partial update supported.",
         params: {
           type: "object",
           properties: {
@@ -368,6 +368,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             name: { type: ["string", "null"] },
             trimRanges: { type: "array", items: { type: "array", items: { type: "number" } } },
             markers: { type: "array", items: { type: "object", properties: { time: { type: "number" }, title: { type: "string" } } } },
+            audioEq: {
+              type: ["object", "null"],
+              properties: { lowDb: { type: "number" }, midDb: { type: "number" }, highDb: { type: "number" } },
+            },
           },
         },
         response: {
@@ -400,9 +404,14 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           .send({ error: bodyParsed.error.issues[0]?.message ?? "Validation failed", details: bodyParsed.error.flatten() });
       }
       const body = bodyParsed.data;
-      const hasUpdates = body.name !== undefined || body.trimRanges !== undefined || body.markers !== undefined;
+      const hasUpdates =
+        body.name !== undefined ||
+        body.trimRanges !== undefined ||
+        body.markers !== undefined ||
+        body.audioEq !== undefined ||
+        body.disabled !== undefined;
       if (!hasUpdates) {
-        return reply.status(400).send({ error: "At least one of name, trimRanges, or markers must be provided" });
+        return reply.status(400).send({ error: "At least one of name, trimRanges, markers, audioEq, or disabled must be provided" });
       }
       const row = repo.getSegmentDuration(segmentId, episodeId);
       if (!row) return reply.status(404).send({ error: "Segment not found" });
@@ -434,6 +443,23 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         }
       }
 
+      let audioEqJson: string | null = null;
+      if (body.audioEq !== undefined) {
+        if (body.audioEq === null) {
+          audioEqJson = null;
+        } else {
+          const eq = body.audioEq as { lowDb?: number; midDb?: number; highDb?: number };
+          for (const key of ["lowDb", "midDb", "highDb"] as const) {
+            const v = eq[key];
+            if (v !== undefined && (typeof v !== "number" || v < -20 || v > 20)) {
+              return reply.status(400).send({ error: `Invalid audioEq.${key}: must be a number between -20 and 20` });
+            }
+          }
+          const hasAny = eq.lowDb !== undefined || eq.midDb !== undefined || eq.highDb !== undefined;
+          audioEqJson = hasAny ? JSON.stringify(eq) : null;
+        }
+      }
+
       const name =
         body.name === undefined
           ? undefined
@@ -449,6 +475,12 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
       if (markersJson !== null) {
         repo.updateSegmentMarkers(segmentId, episodeId, markersJson);
+      }
+      if (body.audioEq !== undefined) {
+        repo.updateSegmentAudioEq(segmentId, episodeId, audioEqJson);
+      }
+      if (body.disabled !== undefined) {
+        repo.updateSegmentDisabled(segmentId, episodeId, body.disabled);
       }
 
       broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });

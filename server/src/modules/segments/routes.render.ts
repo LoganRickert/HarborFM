@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { existsSync, unlinkSync } from "fs";
+import { existsSync, statSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { nanoid } from "nanoid";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { canAccessEpisode, canEditSegments } from "../../services/access.js";
+import { canAccessEpisode, canEditSegments, getPodcastOwnerId } from "../../services/access.js";
 import {
   getDataDir,
   libraryDir,
@@ -156,15 +156,18 @@ export async function registerRenderRoutes(app: FastifyInstance) {
 
       const { podcastId } = access;
       const segments = repo.listSegmentsForRender(episodeId);
-      if (segments.length === 0) {
+      const enabledCount = segments.filter(
+        (s) => !(s.disabled || s.inProgress || s.recordFailed),
+      ).length;
+      if (enabledCount === 0) {
         return reply
           .status(400)
-          .send({ error: "Add at least one section before rendering." });
+          .send({ error: "Add or enable at least one section before rendering." });
       }
       const DATA_DIR = getDataDir();
       const copyrightLines: string[] = [];
       for (const s of segments) {
-        if (s.inProgress || s.recordFailed) continue;
+        if (s.disabled || s.inProgress || s.recordFailed) continue;
         if (s.type === "reusable" && s.reusableAssetId) {
           const asset = repo.getReusableAssetNameAndCopyright(s.reusableAssetId as string);
           if (asset) {
@@ -206,6 +209,11 @@ export async function registerRenderRoutes(app: FastifyInstance) {
       const videoPath = episodeVideoPath(podcastId, episodeId);
       if (existsSync(videoPath)) {
         try {
+          const videoSize = statSync(videoPath).size;
+          const videoOwnerId = getPodcastOwnerId(podcastId);
+          if (videoOwnerId && videoSize > 0) {
+            repo.subtractUserDiskBytes(videoOwnerId, videoSize);
+          }
           assertPathUnder(videoPath, DATA_DIR);
           unlinkSync(videoPath);
         } catch (err) {
@@ -223,7 +231,7 @@ export async function registerRenderRoutes(app: FastifyInstance) {
             const finalMarkers: Array<{ time: number; title?: string; color?: string }> = [];
             let offsetSec = 0;
             for (const s of segments) {
-              if (s.inProgress || s.recordFailed) continue;
+              if (s.disabled || s.inProgress || s.recordFailed) continue;
               let sourcePath: string | null = null;
               let baseDir: string = uploadsDir(podcastId, episodeId);
               if (s.type === "recorded" && s.audioPath) {
@@ -299,6 +307,7 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               }
               offsetSec += effectiveDuration;
 
+              let segmentPath: string;
               if (ranges.length > 0) {
                 const tempPath = join(tmpdir(), `render_trim_${nanoid()}.wav`);
                 tempPathsToClean.push(tempPath);
@@ -308,9 +317,37 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                   ranges,
                   tempPath,
                 );
-                paths.push(tempPath);
+                segmentPath = tempPath;
               } else {
-                paths.push(sourcePath);
+                segmentPath = sourcePath;
+              }
+
+              const audioEqRaw = s.audioEq;
+              let audioEq: { lowDb?: number; midDb?: number; highDb?: number } | null = null;
+              if (typeof audioEqRaw === "string" && audioEqRaw) {
+                try {
+                  const parsed = JSON.parse(audioEqRaw) as unknown;
+                  if (typeof parsed === "object" && parsed != null) {
+                    const o = parsed as Record<string, unknown>;
+                    const low = typeof o.lowDb === "number" ? o.lowDb : 0;
+                    const mid = typeof o.midDb === "number" ? o.midDb : 0;
+                    const high = typeof o.highDb === "number" ? o.highDb : 0;
+                    if (low !== 0 || mid !== 0 || high !== 0) {
+                      audioEq = { lowDb: low, midDb: mid, highDb: high };
+                    }
+                  }
+                } catch {
+                  /* ignore invalid JSON */
+                }
+              }
+              if (audioEq) {
+                const eqPath = join(tmpdir(), `render_eq_${nanoid()}.wav`);
+                tempPathsToClean.push(eqPath);
+                const segmentBaseDir = segmentPath.startsWith(tmpdir()) ? tmpdir() : baseDir;
+                await audioService.applyEqToWav(segmentPath, eqPath, segmentBaseDir, audioEq);
+                paths.push(eqPath);
+              } else {
+                paths.push(segmentPath);
               }
             }
             if (paths.length === 0) {

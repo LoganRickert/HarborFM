@@ -198,6 +198,16 @@ export function writeSettings(settings: AppSettings): void {
   upsert("email_enable_new_show", String(settings.email_enable_new_show));
   upsert("email_enable_invite", String(settings.email_enable_invite));
   upsert("email_enable_contact", String(settings.email_enable_contact));
+  upsert(
+    "email_enable_review_verification",
+    String(settings.email_enable_review_verification),
+  );
+  upsert("reviews_enabled", String(settings.reviews_enabled));
+  upsert(
+    "reviews_publish_non_verified",
+    String(settings.reviews_publish_non_verified),
+  );
+  upsert("reviews_llm_spam_check", String(settings.reviews_llm_spam_check));
   upsert("welcome_banner", settings.welcome_banner);
   upsert("custom_terms", settings.custom_terms);
   upsert("custom_privacy", settings.custom_privacy);

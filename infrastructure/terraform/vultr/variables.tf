@@ -33,3 +33,10 @@ variable "backups" {
   type        = string
   default     = "enabled"
 }
+
+# Internal: set to false by run.sh destroy to detach block storage before destroying instance (volume stays in state for next apply).
+variable "attach_data_volume" {
+  description = "Attach block storage to instance (default true). Set false only when detaching before destroy."
+  type        = bool
+  default     = true
+}

@@ -70,6 +70,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
 
       const includeSubscriberOnlyEpisodes = podcast.subscriberOnlyFeedEnabled === 1;
       const subscriberOnlyFeed = podcast.publicFeedDisabled === 1;
+      const includeScheduledEpisodes = podcast.showScheduledEpisodes === 1;
       const searchPattern = searchQ ? `%${likeEscape(searchQ)}%` : null;
 
       const { rows, total } = repo.listPublishedEpisodes(podcast.id, {
@@ -78,6 +79,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         sort,
         searchPattern,
         includeSubscriberOnly: includeSubscriberOnlyEpisodes,
+        includeScheduledEpisodes,
       });
 
       let episodesList = rows.map((r) =>
@@ -93,13 +95,17 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
             if (token) {
               const tokenRow = validateSubscriberTokenByValue(token);
               if (tokenRow && tokenRow.podcastId === podcast.id) {
-                episodesList = episodesList.map((ep) => ({
-                  ...ep,
-                  private_audio_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.id))}`,
-                  private_waveform_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/waveform`,
-                  private_srt_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/transcript.srt`,
-                  private_chapters_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/chapters.json`,
-                }));
+                episodesList = episodesList.map((ep) => {
+                  const scheduledNotReleased = (ep as { scheduled_not_released?: number }).scheduled_not_released === 1;
+                  if (scheduledNotReleased) return ep;
+                  return {
+                    ...ep,
+                    private_audio_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.id))}`,
+                    private_waveform_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/waveform`,
+                    private_srt_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/transcript.srt`,
+                    private_chapters_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/chapters.json`,
+                  };
+                });
               }
             }
           }
@@ -107,6 +113,15 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
           // Invalid cookie, ignore
         }
       }
+
+      // Don't send chapter markers for subscriber-only episodes when user has no access
+      episodesList = episodesList.map((ep) => ({
+        ...ep,
+        markers:
+          ep.subscriber_only === 1 && !(ep as Record<string, unknown>).private_audio_url
+            ? []
+            : ep.markers,
+      }));
 
       return {
         episodes: episodesList,
@@ -156,7 +171,11 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
       )
         return reply.status(404).send({ error: "Podcast not found" });
 
-      const row = repo.getPublishedEpisodeBySlug(podcast.id, episodeSlug);
+      const row = repo.getPublicEpisodeBySlug(
+        podcast.id,
+        episodeSlug,
+        podcast.showScheduledEpisodes === 1,
+      );
       if (!row) return reply.status(404).send({ error: "Episode not found" });
 
       const episode = publicEpisodeDto(podcast.id, row, {
@@ -164,8 +183,9 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         podcastSlug,
       }) as Record<string, unknown>;
 
+      const scheduledNotReleased = episode.scheduled_not_released === 1;
       const cookieValue = request.cookies[SUBSCRIBER_TOKENS_COOKIE];
-      if (cookieValue) {
+      if (cookieValue && !scheduledNotReleased) {
         try {
           const tokenMap = JSON.parse(cookieValue);
           if (typeof tokenMap === "object" && !Array.isArray(tokenMap)) {
@@ -186,6 +206,14 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         } catch {
           // Invalid cookie, ignore
         }
+      }
+
+      // Don't send chapter markers for subscriber-only episodes when user has no access
+      if (
+        episode.subscriber_only === 1 &&
+        !(episode as Record<string, unknown>).private_audio_url
+      ) {
+        episode.markers = [];
       }
 
       return episode;
@@ -225,7 +253,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         podcastSlug: string;
         episodeSlug: string;
       };
-      const podcastId = repo.getPodcastIdBySlugUnlistedFalse(podcastSlug);
+      const podcastId = repo.getPodcastIdBySlug(podcastSlug);
       if (!podcastId) {
         return reply.status(404).send({ error: "Podcast not found" });
       }

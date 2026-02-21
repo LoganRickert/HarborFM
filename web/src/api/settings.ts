@@ -17,6 +17,17 @@ export function getCommands(): Promise<{ commands: Record<string, boolean> }> {
   return apiGet<{ commands: Record<string, boolean> }>('/settings/commands');
 }
 
+export interface SystemStatsResponse {
+  memory: { usedBytes: number; totalBytes: number };
+  cpus: number;
+  disk?: { usedBytes: number; totalBytes: number };
+}
+
+/** Admin only. Returns system resource usage (memory, CPU count, optional disk for data dir). */
+export function getSystemStats(): Promise<SystemStatsResponse> {
+  return apiGet<SystemStatsResponse>('/settings/system-stats');
+}
+
 /** Public endpoint: custom terms/privacy if set. No auth. Used by /terms and /privacy to choose custom vs default. */
 export function getPublicLegal(): Promise<{ terms: string | null; privacy: string | null }> {
   return fetch('/api/public/legal', { method: 'GET', credentials: 'include' }).then((r) => {

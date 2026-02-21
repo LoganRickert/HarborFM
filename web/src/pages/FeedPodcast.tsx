@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useParams } from 'react-router-dom';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublicPodcast, getPublicEpisodes } from '../api/public';
+import { getPublicPodcast, getPublicEpisodes, getPublicConfig } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
 import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
@@ -16,7 +16,9 @@ import {
   FeedSearchControls,
   FeedEpisodesList,
   FeedCastCard,
+  ReviewsCard,
 } from '../components/Feed';
+import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedPodcast.module.css';
 
@@ -35,6 +37,14 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     queryClient.cancelQueries({ queryKey: ['activeImport'] });
     queryClient.removeQueries({ queryKey: ['activeImport'] });
   }, [queryClient]);
+
+  const { isAuthenticatedForPodcast } = useSubscriberAuth();
+
+  const { data: publicConfig } = useQuery({
+    queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
+    queryFn: getPublicConfig,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { data: podcast, isLoading: podcastLoading, isError: podcastError, error: podcastQueryError, refetch: refetchPodcast } = useQuery({
     queryKey: ['public-podcast', podcastSlug],
@@ -132,6 +142,8 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   }
 
   const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
+  const canWriteReview = !podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug);
+  const canShowMessage = !podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug);
 
   return (
     <div className={sharedStyles.wrapper}>
@@ -142,7 +154,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
             <FeedPodcastHeader
               podcast={podcast}
               podcastSlug={podcastSlug}
-              onMessageClick={() => setFeedbackOpen(true)}
+              onMessageClick={canShowMessage ? () => setFeedbackOpen(true) : undefined}
               shareUrl={
                 podcast?.canonicalFeedUrl ??
                 (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined)
@@ -193,6 +205,9 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
           </div>
 
           <FeedCastCard podcastSlug={podcastSlug} />
+          {publicConfig?.reviewsEnabled === true && (
+            <ReviewsCard podcastSlug={podcastSlug} enabled showWriteButton={canWriteReview} />
+          )}
         </main>
       </div>
 

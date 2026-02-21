@@ -1,11 +1,21 @@
 # Changelog
 
+## v1.5 - 2026-02-20
+
+- **Reviews:** Podcast and episode reviews with public submit (name, email, rating, body); optional CAPTCHA and subscriber-only per podcast; verification email with verify and delete links; public list with verified/approved filtering and delete-own or admin delete; admin list, approve, and hide (manager/owner); optional LLM spam check;
+- **Admin settings (tabbed):** Settings page redesigned with a tabbed layout; each section (Access & General, Default Limits, Final Output, etc.) is a tab; first tab is System (version, command status, memory/CPU/disk from new system-stats API); global search filters tabs and scrolls to matching controls (e.g. “Account Registration” → Enable Account Registration); single form and one Save across all tabs; vertical sidebar on desktop, drawer on mobile; keyboard navigation (arrows, Home/End) and Escape to close drawer;
+- **Custom domain feed:** HarborFM header (name and logo) is hidden on podcast and episode feed pages when viewed on a custom domain (link/managed domain).
+- **Segment audio EQ:** Per-segment equalizer in the segment editor: Audio button (right of Zoom Out) with Low / Mids / High sliders (-20 to +20 dB); live Web Audio preview; Apply stores EQ locally until Save, Cancel reverts; same EQ applied when rendering the final episode (ffmpeg bass, equalizer, treble); segment list playback uses saved EQ when present.
+- **Segment enable/disable:** Owners, admins, and editors/managers can exclude segments from the final episode via an Eye button to the right of the segment editor (Scissors) button on the episode details page; disabled segments show a black row and EyeOff icon; toggling again re-enables; disabled segments are omitted when building the final episode; "Generate Episode Audio" is disabled when all segments are disabled.
+- **Disable account:** Profile page has a "Disable Account" card at the bottom; users can disable their own account (password confirmation for password accounts, "Are you sure?" popup for federated); 2FA must be disabled first; read-only and sole-admin accounts cannot disable; logout succeeds after disable so the user is signed out.
+- **Subscriber Only Messages:** In Edit Podcast Details, when Subscribers Enabled is on, a new toggle "Subscriber Only Messages" (off by default) restricts the Message button on the public podcast and episode pages to visitors signed in as subscribers; contact API returns 403 for that podcast when the request is not from an authenticated subscriber; e2e scenario tests cover setting persistence and contact enforcement.
+- **Show Scheduled Episodes:** In Edit Podcast Details, a new toggle "Show Scheduled Episodes" (off by default) below Allow Unapproved Reviews; when on, episodes that are scheduled or published with a future publish date appear on the public feed and episode pages with a "Premiering [date]" placeholder instead of the player; markers, waveforms, and audio are not loaded or served for anyone until the release date.
+
 ## v1.4 - 2026-02-18
 
 - **Federation (SAML & OIDC):** Single sign-on with configurable OIDC and SAML providers; admin-configurable providers in settings (`ssoOidcProviders`, `ssoSamlProviders`) with encrypted client/cert secrets; OIDC discovery and authorization-code flow with PKCE; SAML IdP flow with state and optional in-response-to validation; user identities linked to local accounts; resolve-or-create and login-by-identity flows; SAML request-id cache and OAuth state/nonce tables for security.
 - **Database: Drizzle ORM:** Migrated from raw better-sqlite3 usage to Drizzle ORM; SQLite remains the default store (via `drizzle-orm/better-sqlite3`); typed schema and queries across auth, episodes, podcasts, segments, tokens, and other modules; Drizzle Kit for migrations, studio, and optional MySQL push (`db:generate`, `db:studio`, `db:push-mysql`).
 - **Video generation:** Generate videos from final episode audio and a background image (episode artwork or optional uploaded video cover); configurable spectrum/waveform (position, width, amplitude, style, waveform type, color, smoothing), resolution (480p/720p/1080p), and orientation (landscape/portrait); status via polling and episode WebSocket (videoGenerationStarted / videoGenerated); per-user permission (`canGenerateVideo`); optional video cover upload (max 5MB); download and playback on public feed; requires `ALLOW_VIDEO_GENERATION` and FFmpeg.
-
 
 ## v1.3 - 2026-02-17
 

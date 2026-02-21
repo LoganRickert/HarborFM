@@ -176,6 +176,11 @@ export const twoFactorTotpSetupBodySchema = z.object({
   code: z.string().optional(),
 });
 
+/** Body for POST auth/me/disable-account (password optional for federated users). */
+export const disableAccountBodySchema = z.object({
+  password: z.string().optional(),
+});
+
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 export type LoginBody = z.infer<typeof loginBodySchema>;
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordBodySchema>;
@@ -195,3 +200,4 @@ export type CompleteAccountBody = z.infer<typeof completeAccountBodySchema>;
 export type ProfileUpdateBody = z.infer<typeof profileUpdateBodySchema>;
 export type TwoFactorDisableBody = z.infer<typeof twoFactorDisableBodySchema>;
 export type TwoFactorTotpSetupBody = z.infer<typeof twoFactorTotpSetupBodySchema>;
+export type DisableAccountBody = z.infer<typeof disableAccountBodySchema>;

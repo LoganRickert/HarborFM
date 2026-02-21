@@ -13,7 +13,7 @@ export function AccessGeneralSection({
       title="Access & General"
       subtitle="Control who can sign up, whether public feeds are visible, and general server settings."
     >
-      <label className="toggle">
+      <label className="toggle" data-settings-label="Enable Account Registration">
         <input
           type="checkbox"
           checked={form.registrationEnabled}
@@ -26,7 +26,7 @@ export function AccessGeneralSection({
         When enabled, new users can create accounts. When disabled, only existing users can log in.
       </p>
 
-      <label className="toggle">
+      <label className="toggle" data-settings-label="Enable Public Feeds">
         <input
           type="checkbox"
           checked={form.publicFeedsEnabled}
@@ -39,7 +39,7 @@ export function AccessGeneralSection({
         When disabled, public feed pages and RSS endpoints are hidden and require login to access the app.
       </p>
 
-      <label className="toggle">
+      <label className="toggle" data-settings-label="Enable Cookie / Tracking Consent Banner">
         <input
           type="checkbox"
           checked={form.gdprConsentBannerEnabled}
@@ -52,7 +52,7 @@ export function AccessGeneralSection({
         Show cookie/tracking consent banner on public feed and embed pages. When enabled, visitors see a GDPR-style banner before optional analytics/tracking. Off by default.
       </p>
 
-      <label className={styles.label}>
+      <label className={styles.label} data-settings-label="Hostname">
         Hostname
         <input
           type="url"
@@ -66,7 +66,7 @@ export function AccessGeneralSection({
         </p>
       </label>
 
-      <label className="toggle">
+      <label className="toggle" data-settings-label="Enable WebSub Discovery">
         <input
           type="checkbox"
           checked={form.websubDiscoveryEnabled}
@@ -92,7 +92,7 @@ export function AccessGeneralSection({
         </label>
       )}
 
-      <label className={styles.label}>
+      <label className={styles.label} data-settings-label="Welcome Banner">
         Welcome Banner
         <textarea
           ref={welcomeBannerRef}

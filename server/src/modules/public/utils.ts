@@ -58,6 +58,9 @@ export function publicPodcastDto(
     explicit: row.explicit ?? 0,
     subscriber_only_feed_enabled: row.subscriberOnlyFeedEnabled ?? 0,
     public_feed_disabled: row.publicFeedDisabled ?? 0,
+    subscriber_only_reviews: (row as { subscriberOnlyReviews?: number | boolean | null }).subscriberOnlyReviews ?? 0,
+    subscriber_only_messages: (row as { subscriberOnlyMessages?: number | boolean | null }).subscriberOnlyMessages ?? 0,
+    show_scheduled_episodes: (row as { showScheduledEpisodes?: number | boolean | null }).showScheduledEpisodes ?? 0,
     apple_podcasts_url: row.applePodcastsUrl ?? null,
     spotify_url: row.spotifyUrl ?? null,
     amazon_music_url: row.amazonMusicUrl ?? null,
@@ -85,7 +88,13 @@ export function publicEpisodeDto(
   const hasVideo = Boolean(row.videoFinalPath);
   const subscriberOnly =
     row.subscriberOnly === 1 || row.subscriberOnly === true;
-  const allowPublicAudio = !subscriberOnlyFeed && !subscriberOnly;
+  const publishAtRaw = row.publishAt;
+  const isScheduledNotReleased =
+    publishAtRaw != null &&
+    typeof publishAtRaw === "string" &&
+    new Date(publishAtRaw) > new Date();
+  const allowPublicAudio =
+    !subscriberOnlyFeed && !subscriberOnly && !isScheduledNotReleased;
   const path = row.artworkPath as string | null | undefined;
   const baseDesc = String(row.description ?? "");
   const snapshotVal = row.descriptionCopyrightSnapshot;
@@ -101,22 +110,28 @@ export function publicEpisodeDto(
       : null;
   const hasSrt = srtPath && existsSync(srtPath);
   const allowPublicSrt =
-    hasSrt && !subscriberOnlyFeed && !subscriberOnly;
+    hasSrt && !subscriberOnlyFeed && !subscriberOnly && !isScheduledNotReleased;
   const chaptersPath =
     opts.podcastSlug && row.slug
       ? chaptersJsonPath(podcastId, String(row.id))
       : null;
   const hasChapters = chaptersPath && existsSync(chaptersPath);
   const allowPublicChapters =
-    hasChapters && !subscriberOnlyFeed && !subscriberOnly;
+    hasChapters && !subscriberOnlyFeed && !subscriberOnly && !isScheduledNotReleased;
 
   const rawMarkers = row.finalMarkers as string | null | undefined;
-  let markers: Array<{ time: number; title?: string; color?: string }> | null = null;
-  if (rawMarkers != null && typeof rawMarkers === "string" && rawMarkers.trim()) {
+  let markers: Array<{ time: number; title?: string; color?: string }> = [];
+  if (!isScheduledNotReleased && rawMarkers != null && typeof rawMarkers === "string" && rawMarkers.trim()) {
     try {
-      markers = JSON.parse(rawMarkers) as Array<{ time: number; title?: string; color?: string }>;
+      const parsed = JSON.parse(rawMarkers) as unknown;
+      if (Array.isArray(parsed)) {
+        markers = parsed.filter(
+          (m): m is { time: number; title?: string; color?: string } =>
+            typeof m === "object" && m != null && typeof (m as { time?: number }).time === "number"
+        );
+      }
     } catch {
-      markers = null;
+      /* leave markers as [] */
     }
   }
 
@@ -154,6 +169,7 @@ export function publicEpisodeDto(
         ? `/${API_PREFIX}/public/podcasts/${encodeURIComponent(opts.podcastSlug)}/episodes/${encodeURIComponent(String(row.slug))}/chapters.json`
         : null,
     subscriber_only: subscriberOnly ? 1 : 0,
+    scheduled_not_released: isScheduledNotReleased ? 1 : 0,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
     markers,

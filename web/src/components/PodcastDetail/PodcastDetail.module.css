@@ -3,9 +3,15 @@
 /* Podcast Hero Section */
 .podcastHero {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 1.5rem;
+}
+
+.podcastHeroTop {
+  display: flex;
   gap: 1.25rem;
   align-items: flex-start;
-  margin-bottom: 1.5rem;
 }
 
 .podcastHeroArtwork {
@@ -21,19 +27,20 @@
 .podcastHeroMain {
   flex: 1;
   min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto auto;
-  gap: 0.5rem 1rem;
+}
+
+.podcastHeroHeader {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .podcastHeroTitleRow {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  grid-column: 1;
-  grid-row: 1;
   min-width: 0;
 }
 
@@ -59,8 +66,7 @@
 }
 
 .podcastHeroMain .podcastHeroDescription {
-  grid-column: 1 / -1;
-  grid-row: 2;
+  margin-top: 0.5rem;
 }
 
 .podcastHeroFeedRow {
@@ -69,22 +75,15 @@
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  grid-column: 1;
-  grid-row: 3;
-  justify-self: start;
-  align-self: end;
-  margin-top: 0.75rem;
+  margin-top: 1rem;
+  width: 100%;
 }
 
 .podcastHeroFeedRow .podcastDetailsActions {
-  flex-grow: 1;
-  justify-content: center;
-}
-
-.podcastHeroMain .cardHeaderActions {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .podcastHeroDescription {
@@ -443,7 +442,7 @@
     font-size: 0.8125rem;
   }
 
-  .podcastHero {
+  .podcastHeroTop {
     flex-direction: column;
     align-items: stretch;
     gap: 1rem;
@@ -456,57 +455,43 @@
     align-self: center;
   }
 
-  .podcastHeroMain {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
+  .podcastHeroHeader {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
   }
 
-  .podcastHeroMain .podcastHeroTitleRow {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .podcastHeroMain .podcastHeroDescription {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .podcastHeroMain .cardHeaderActions {
-    grid-column: 1;
-    grid-row: 3;
-    justify-self: stretch;
+  .podcastHeroHeader .cardHeaderActions {
     width: 100%;
+  }
+
+  .podcastHeroHeader .cardHeaderActions .cardHeaderPrimary,
+  .podcastHeroHeader .cardHeaderActions .cardHeaderSecondary {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .podcastHeroFeedRow {
     width: 100%;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    grid-column: 1;
-    grid-row: 4;
-    justify-self: start;
-    margin-top: 1rem;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .podcastHeroFeedRow .podcastDetailsActions {
-    flex-grow: 1;
-    flex-direction: row;
+    flex-direction: column;
     flex-wrap: nowrap;
+    width: 100%;
   }
 
   .podcastHeroFeedRow .podcastDetailsActionLink {
+    flex: 0 0 auto;
+    width: 100%;
     justify-content: center;
     text-align: center;
   }
 
   .podcastDetailsToggle {
     align-self: center;
-  }
-
-  .podcastHeroMain .cardHeaderActions .cardHeaderPrimary,
-  .podcastHeroMain .cardHeaderActions .cardHeaderSecondary {
-    flex: 1 1 0;
-    min-width: 0;
   }
 
   .cardHeader {

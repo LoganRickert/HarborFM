@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import send from "@fastify/send";
-import { createReadStream, existsSync, unlinkSync, writeFileSync } from "fs";
+import { createReadStream, existsSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { basename, dirname, extname } from "path";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
-import { canAccessEpisode, canEditSegments } from "../../services/access.js";
+import { canAccessEpisode, canEditSegments, getPodcastOwnerId } from "../../services/access.js";
 import {
   getDataDir,
   processedDir,
@@ -21,7 +21,9 @@ import { videoGenStatusByEpisode, videoGenErrorByEpisode, videoGenLockedEpisodes
 import * as repo from "./repo.js";
 import * as episodesRepo from "../episodes/repo.js";
 import { sqlNow } from "../../db/utils.js";
-import { generateEpisodeVideo } from "../../services/videoGeneration.js";
+import { drizzleDb } from "../../db/index.js";
+import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
+import { generateEpisodeVideo, estimateEpisodeVideoBytes } from "../../services/videoGeneration.js";
 import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB, ALLOW_VIDEO_GENERATION } from "../../config.js";
 import { MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 
@@ -227,7 +229,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             properties: { status: { type: "string", enum: ["generating"] } },
             required: ["status"],
           },
-          400: { description: "Missing image or final audio" },
+          400: { description: "Missing image or final audio, or not enough disk space" },
           403: { description: "Permission denied" },
           404: { description: "Episode not found" },
           409: {
@@ -280,10 +282,10 @@ export async function registerVideoRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "Final audio file not found." });
       }
       const podcastId = row.podcastId;
+      const episode = episodesRepo.getById(episodeId);
       let imagePath: string | null = getVideoCoverPath(podcastId, episodeId);
       if (!imagePath) {
-        const episodeRow = episodesRepo.getById(episodeId);
-        const artworkPath = episodeRow?.artworkPath;
+        const artworkPath = episode?.artworkPath;
         if (artworkPath) {
           imagePath = resolveDataPath(artworkPath);
           if (!existsSync(imagePath)) imagePath = null;
@@ -300,9 +302,35 @@ export async function registerVideoRoutes(app: FastifyInstance) {
           message: "Video generation is already in progress.",
         });
       }
-      videoGenLockedEpisodes.add(episodeId);
+
+      const durationSec = episode?.audioDurationSec ?? 3600;
       const options = bodyParsed.data;
+      const estimatedBytes = estimateEpisodeVideoBytes(durationSec, options.resolution);
+      let existingSize = 0;
+      if (episode?.videoFinalPath) {
+        const existingPath = resolveDataPath(episode.videoFinalPath);
+        if (existsSync(existingPath)) {
+          existingSize = statSync(existingPath).size;
+        }
+      }
+      const bytesToReserve = Math.max(0, estimatedBytes - existingSize);
+      const ownerId = getPodcastOwnerId(podcastId);
+      if (ownerId && wouldExceedStorageLimit(drizzleDb, ownerId, bytesToReserve)) {
+        return reply.status(400).send({
+          error: "Not enough disk space to generate the video. Free up space and try again.",
+        });
+      }
+      if (ownerId) {
+        if (existingSize > 0) {
+          repo.subtractUserDiskBytes(ownerId, existingSize);
+        }
+        repo.addUserDiskBytes(ownerId, estimatedBytes);
+      }
+
+      videoGenLockedEpisodes.add(episodeId);
       const imagePathForVideo = imagePath;
+      const estimatedBytesForTask = estimatedBytes;
+      const existingVideoBytes = existingSize;
       videoGenStatusByEpisode.set(episodeId, "generating");
       videoGenErrorByEpisode.delete(episodeId);
       const log = request.log;
@@ -333,6 +361,15 @@ export async function registerVideoRoutes(app: FastifyInstance) {
               color: options.color,
             });
             const outPath = episodeVideoPath(podcastId, episodeId);
+            const actualSize = statSync(outPath).size;
+            if (ownerId) {
+              const delta = actualSize - estimatedBytesForTask;
+              if (delta > 0) {
+                repo.addUserDiskBytes(ownerId, delta);
+              } else if (delta < 0) {
+                repo.subtractUserDiskBytes(ownerId, -delta);
+              }
+            }
             const relativePath = pathRelativeToData(outPath);
             episodesRepo.updateEpisode(episodeId, {
               videoFinalPath: relativePath,
@@ -342,6 +379,12 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             broadcastToEpisode(episodeId, { type: "videoGenerated", status: "done" });
             log.info({ episodeId }, "Video generation done");
           } catch (err) {
+            if (ownerId) {
+              repo.subtractUserDiskBytes(ownerId, estimatedBytesForTask);
+              if (existingVideoBytes > 0) {
+                repo.addUserDiskBytes(ownerId, existingVideoBytes);
+              }
+            }
             const ffmpegStderr = (err as { ffmpegStderr?: string })?.ffmpegStderr;
             if (ffmpegStderr != null) {
               log.error({ err, ffmpegStderr }, "Video generation failed");
@@ -356,6 +399,12 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             videoGenLockedEpisodes.delete(episodeId);
           }
         })().catch((err) => {
+          if (ownerId) {
+            repo.subtractUserDiskBytes(ownerId, estimatedBytesForTask);
+            if (existingVideoBytes > 0) {
+              repo.addUserDiskBytes(ownerId, existingVideoBytes);
+            }
+          }
           log.error(err, "Video generation threw (unhandled)");
           videoGenErrorByEpisode.set(episodeId, err instanceof Error ? err.message : "Video generation failed");
           videoGenStatusByEpisode.set(episodeId, "failed");

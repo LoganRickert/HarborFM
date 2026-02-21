@@ -1,6 +1,7 @@
 export { SectionCard } from './SectionCard';
 export { ProviderToggle } from './ProviderToggle';
 export { TestBlock } from './TestBlock';
+export { SystemSection } from './SystemSection';
 export { AccessGeneralSection } from './AccessGeneralSection';
 export { DefaultLimitsSection } from './DefaultLimitsSection';
 export { FinalOutputSection } from './FinalOutputSection';
@@ -14,3 +15,4 @@ export { TwoFactorSection } from './TwoFactorSection';
 export { SsoSection } from './SsoSection';
 export { DnsConfigurationSection } from './DnsConfigurationSection';
 export { CustomLegalSection } from './CustomLegalSection';
+export { ReviewSettingsSection } from './ReviewSettingsSection';

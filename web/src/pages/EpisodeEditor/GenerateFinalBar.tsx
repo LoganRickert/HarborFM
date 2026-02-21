@@ -81,13 +81,14 @@ export function GenerateFinalBar({
   const [currentTime, setCurrentTime] = useState(0);
   const [isGeneratingTranscript, setIsGeneratingTranscript] = useState(false);
 
+  const waveformCacheKey = finalUpdatedAt ?? episodeId ?? '';
   const waveformUrl =
     hasFinalAudio && episodeId
-      ? `${finalEpisodeWaveformUrl(episodeId)}${finalUpdatedAt ? `?v=${encodeURIComponent(finalUpdatedAt)}` : ''}`
+      ? `${finalEpisodeWaveformUrl(episodeId)}?v=${encodeURIComponent(waveformCacheKey)}`
       : '';
   const downloadUrl =
     hasFinalAudio && episodeId
-      ? `${downloadEpisodeUrl(episodeId, 'final')}${finalUpdatedAt ? `&v=${encodeURIComponent(finalUpdatedAt)}` : ''}`
+      ? `${downloadEpisodeUrl(episodeId, 'final')}&v=${encodeURIComponent(waveformCacheKey)}`
       : '';
 
   useEffect(() => {

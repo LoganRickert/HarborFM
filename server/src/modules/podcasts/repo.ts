@@ -62,6 +62,10 @@ export interface PodcastListRow {
   unlisted: number;
   subscriberOnlyFeedEnabled: number;
   publicFeedDisabled: number;
+  allowUnapprovedReviews: number;
+  subscriberOnlyReviews: number;
+  subscriberOnlyMessages: number;
+  showScheduledEpisodes: number;
   maxEpisodes: number | null;
   episodeCount: number;
 }
@@ -137,6 +141,10 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
     publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as(
       "publicFeedDisabled",
     ),
+    allowUnapprovedReviews: sql<number>`COALESCE(${podcasts.allowUnapprovedReviews}, 1)`.as("allowUnapprovedReviews"),
+    subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
+    subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
+    showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
     maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as(
       "maxEpisodes",
     ),
@@ -276,6 +284,10 @@ export function getByIdWithFilenameForCreate(
       unlisted: sql<number>`COALESCE(${podcasts.unlisted}, 0)`.as("unlisted"),
       subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as("subscriberOnlyFeedEnabled"),
       publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as("publicFeedDisabled"),
+      allowUnapprovedReviews: sql<number>`COALESCE(${podcasts.allowUnapprovedReviews}, 1)`.as("allowUnapprovedReviews"),
+      subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
+      subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
+      showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
       maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as("maxEpisodes"),
       episodeCount: sql<number>`0`.as("episodeCount"),
       cloudflareApiKeyEnc: podcasts.cloudflareApiKeyEnc,

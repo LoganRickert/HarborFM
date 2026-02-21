@@ -71,6 +71,14 @@ export interface Podcast {
   subscriberOnlyFeedEnabled?: boolean;
   /** Public feed disabled (only tokenized subscriber feed works). */
   publicFeedDisabled?: boolean;
+  /** Allow unapproved reviews to be shown on public feed (default true). */
+  allowUnapprovedReviews?: number | boolean;
+  /** Only subscribers can leave reviews (requires subscriberOnlyFeedEnabled). */
+  subscriberOnlyReviews?: number | boolean;
+  /** Only subscribers can see/use Message button and submit contact (requires subscriberOnlyFeedEnabled). */
+  subscriberOnlyMessages?: number | boolean;
+  /** When true, future-dated scheduled/published episodes appear on the public feed with a placeholder. */
+  showScheduledEpisodes?: number | boolean;
   /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
   ownerCanTranscribe?: number;
   /** DNS: link domain (hostname). */

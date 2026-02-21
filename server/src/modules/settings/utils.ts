@@ -139,6 +139,14 @@ export interface AppSettings {
   two_factor_enforced: boolean;
   /** When true, email/password sign-in is disabled; only SSO is allowed. */
   email_signin_disabled: boolean;
+  /** When true, public feed pages show reviews and accept submissions. */
+  reviews_enabled: boolean;
+  /** When true, public feed may show approved but non-verified reviews. */
+  reviews_publish_non_verified: boolean;
+  /** When true and LLM provider set, run spam check on new reviews (fail open). */
+  reviews_llm_spam_check: boolean;
+  /** When true and email configured, send review verification email to unauthenticated submitters. */
+  email_enable_review_verification: boolean;
 }
 
 export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -215,6 +223,10 @@ export const DEFAULTS: AppSettings = {
   two_factor_methods: "totp",
   two_factor_enforced: false,
   email_signin_disabled: false,
+  reviews_enabled: true,
+  reviews_publish_non_verified: false,
+  reviews_llm_spam_check: false,
+  email_enable_review_verification: true,
 };
 
 export const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -412,6 +424,17 @@ export function buildAppSettingsFromRows(
     else if (row.key === "email_signin_disabled")
       (settings as Partial<AppSettings>).email_signin_disabled =
         row.value === "true";
+    else if (row.key === "reviews_enabled")
+      (settings as Partial<AppSettings>).reviews_enabled = row.value === "true";
+    else if (row.key === "reviews_publish_non_verified")
+      (settings as Partial<AppSettings>).reviews_publish_non_verified =
+        row.value === "true";
+    else if (row.key === "reviews_llm_spam_check")
+      (settings as Partial<AppSettings>).reviews_llm_spam_check =
+        row.value === "true";
+    else if (row.key === "email_enable_review_verification")
+      (settings as Partial<AppSettings>).email_enable_review_verification =
+        row.value === "true";
   }
 
   return {
@@ -545,6 +568,17 @@ export function buildAppSettingsFromRows(
     email_signin_disabled:
       (settings as Partial<AppSettings>).email_signin_disabled ??
       DEFAULTS.email_signin_disabled,
+    reviews_enabled:
+      (settings as Partial<AppSettings>).reviews_enabled ?? DEFAULTS.reviews_enabled,
+    reviews_publish_non_verified:
+      (settings as Partial<AppSettings>).reviews_publish_non_verified ??
+      DEFAULTS.reviews_publish_non_verified,
+    reviews_llm_spam_check:
+      (settings as Partial<AppSettings>).reviews_llm_spam_check ??
+      DEFAULTS.reviews_llm_spam_check,
+    email_enable_review_verification:
+      (settings as Partial<AppSettings>).email_enable_review_verification ??
+      DEFAULTS.email_enable_review_verification,
   };
 }
 
@@ -629,6 +663,10 @@ export function settingsToApiResponse(
     emailEnableNewShow: settings.email_enable_new_show,
     emailEnableInvite: settings.email_enable_invite,
     emailEnableContact: settings.email_enable_contact,
+    emailEnableReviewVerification: settings.email_enable_review_verification,
+    reviewsEnabled: settings.reviews_enabled,
+    reviewsPublishNonVerified: settings.reviews_publish_non_verified,
+    reviewsLlmSpamCheck: settings.reviews_llm_spam_check,
     welcomeBanner: settings.welcome_banner,
     customTerms: settings.custom_terms ?? "",
     customPrivacy: settings.custom_privacy ?? "",

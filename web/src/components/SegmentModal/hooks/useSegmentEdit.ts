@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { segmentStreamUrl, updateSegment, fetchSegmentWaveformsBulk } from '../../../api/segments';
 import type { EpisodeSegment } from '../../../api/segments';
-import type { Marker } from '@harborfm/shared';
+import type { Marker, AudioEq } from '@harborfm/shared';
 import type { WaveformData } from '../../../pages/EpisodeEditor/WaveformCanvas';
 import type { TimelineMode } from '../../../pages/EpisodeEditor/TimelineWaveform';
 import { useSegmentAudio } from './useSegmentAudio';
@@ -32,6 +32,22 @@ export function useSegmentEdit(
   const [viewStartSec, setViewStartSec] = useState(0);
   const [viewEndSec, setViewEndSec] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+
+  const defaultEq = () => ({
+    lowDb: segment.audioEq?.lowDb ?? 0,
+    midDb: segment.audioEq?.midDb ?? 0,
+    highDb: segment.audioEq?.highDb ?? 0,
+  });
+  const [appliedAudioEq, setAppliedAudioEq] = useState(defaultEq);
+  const [draftAudioEq, setDraftAudioEq] = useState(defaultEq);
+  const [audioEditActive, setAudioEditActive] = useState(false);
+  const audioGraphRef = useRef<{
+    context: AudioContext;
+    source: MediaElementAudioSourceNode;
+    lowShelf: BiquadFilterNode;
+    peaking: BiquadFilterNode;
+    highShelf: BiquadFilterNode;
+  } | null>(null);
 
   const durationSec = segment.durationSec ?? 0;
   useSegmentAudio(segmentEditAudioRef, trimRanges, setCurrentTime, setIsPlaying, isEditTabVisible);
@@ -82,6 +98,16 @@ export function useSegmentEdit(
   }, [segment.id, segment.trimRanges, segment.markers, segment.durationSec]);
 
   useEffect(() => {
+    const eq = {
+      lowDb: segment.audioEq?.lowDb ?? 0,
+      midDb: segment.audioEq?.midDb ?? 0,
+      highDb: segment.audioEq?.highDb ?? 0,
+    };
+    setAppliedAudioEq(eq);
+    if (!audioEditActive) setDraftAudioEq(eq);
+  }, [segment.id, segment.audioEq, audioEditActive]);
+
+  useEffect(() => {
     if (segmentWaveformData) {
       setWaveformData(segmentWaveformData);
       return;
@@ -121,13 +147,26 @@ export function useSegmentEdit(
       (m.title ?? '') === (b[i]!.title ?? '') &&
       (m.color ?? '') === (b[i]!.color ?? '') &&
       (m.markerType ?? '') === (b[i]!.markerType ?? ''));
+  const audioEqEqual = (
+    a: { lowDb: number; midDb: number; highDb: number },
+    b: AudioEq | null | undefined
+  ) => {
+    const bl = b?.lowDb ?? 0;
+    const bm = b?.midDb ?? 0;
+    const bh = b?.highDb ?? 0;
+    return a.lowDb === bl && a.midDb === bm && a.highDb === bh;
+  };
   const hasEditUnsavedChanges =
     !trimRangesEqual(trimRanges, segment.trimRanges ?? []) ||
-    !markersEqual(markers, segment.markers ?? []);
+    !markersEqual(markers, segment.markers ?? []) ||
+    !audioEqEqual(appliedAudioEq, segment.audioEq);
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { trimRanges?: Array<[number, number]>; markers?: Marker[] }) =>
-      updateSegment(episodeId, segment.id, payload),
+    mutationFn: (payload: {
+      trimRanges?: Array<[number, number]>;
+      markers?: Marker[];
+      audioEq?: AudioEq | null;
+    }) => updateSegment(episodeId, segment.id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
     },
@@ -136,8 +175,57 @@ export function useSegmentEdit(
 
   function handleSave() {
     if (!hasEditUnsavedChanges) return;
-    updateMutation.mutate({ trimRanges: mergeTrimRanges(trimRanges), markers });
+    const audioEqPayload =
+      appliedAudioEq.lowDb === 0 && appliedAudioEq.midDb === 0 && appliedAudioEq.highDb === 0
+        ? null
+        : appliedAudioEq;
+    updateMutation.mutate({
+      trimRanges: mergeTrimRanges(trimRanges),
+      markers,
+      audioEq: audioEqPayload,
+    });
   }
+
+  function ensureAudioGraph() {
+    const el = segmentEditAudioRef.current;
+    if (!el || audioGraphRef.current) return audioGraphRef.current;
+    const Ctx =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const context = new Ctx();
+    const source = context.createMediaElementSource(el);
+    const lowShelf = context.createBiquadFilter();
+    lowShelf.type = 'lowshelf';
+    lowShelf.frequency.value = 200;
+    const peaking = context.createBiquadFilter();
+    peaking.type = 'peaking';
+    peaking.frequency.value = 1000;
+    peaking.Q.value = 1;
+    const highShelf = context.createBiquadFilter();
+    highShelf.type = 'highshelf';
+    highShelf.frequency.value = 4000;
+    source.connect(lowShelf);
+    lowShelf.connect(peaking);
+    peaking.connect(highShelf);
+    highShelf.connect(context.destination);
+    audioGraphRef.current = { context, source, lowShelf, peaking, highShelf };
+    return audioGraphRef.current;
+  }
+
+  useEffect(() => {
+    const g = audioGraphRef.current;
+    if (!g) return;
+    const { lowShelf, peaking, highShelf } = g;
+    if (audioEditActive) {
+      lowShelf.gain.value = draftAudioEq.lowDb;
+      peaking.gain.value = draftAudioEq.midDb;
+      highShelf.gain.value = draftAudioEq.highDb;
+    } else {
+      lowShelf.gain.value = appliedAudioEq.lowDb;
+      peaking.gain.value = appliedAudioEq.midDb;
+      highShelf.gain.value = appliedAudioEq.highDb;
+    }
+  }, [audioEditActive, draftAudioEq.lowDb, draftAudioEq.midDb, draftAudioEq.highDb, appliedAudioEq.lowDb, appliedAudioEq.midDb, appliedAudioEq.highDb]);
 
   function toggleSegmentPlay() {
     if (segment.recordFailed) return;
@@ -147,6 +235,23 @@ export function useSegmentEdit(
       el.pause();
       setIsPlaying(false);
     } else {
+      const hasAppliedEq =
+        appliedAudioEq.lowDb !== 0 || appliedAudioEq.midDb !== 0 || appliedAudioEq.highDb !== 0;
+      if (audioEditActive || hasAppliedEq) {
+        const g = ensureAudioGraph();
+        if (g) {
+          g.context.resume().then(() => {});
+          if (audioEditActive) {
+            g.lowShelf.gain.value = draftAudioEq.lowDb;
+            g.peaking.gain.value = draftAudioEq.midDb;
+            g.highShelf.gain.value = draftAudioEq.highDb;
+          } else {
+            g.lowShelf.gain.value = appliedAudioEq.lowDb;
+            g.peaking.gain.value = appliedAudioEq.midDb;
+            g.highShelf.gain.value = appliedAudioEq.highDb;
+          }
+        }
+      }
       const startAt = currentTime;
       const url = segmentStreamUrl(episodeId, segment.id, segment.audioPath);
       const applySeekAndPlay = () => {
@@ -315,5 +420,11 @@ export function useSegmentEdit(
     handleFastForwardToggle,
     playbackRate,
     updateMutation,
+    appliedAudioEq,
+    setAppliedAudioEq,
+    draftAudioEq,
+    setDraftAudioEq,
+    audioEditActive,
+    setAudioEditActive,
   };
 }

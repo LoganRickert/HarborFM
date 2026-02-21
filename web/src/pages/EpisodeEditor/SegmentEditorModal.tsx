@@ -8,9 +8,9 @@ import {
   fetchSegmentWaveformsBulk,
 } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
-import type { Marker } from '@harborfm/shared';
+import type { Marker, AudioEq } from '@harborfm/shared';
 import type { WaveformData } from './WaveformCanvas';
-import { Play, Pause, X, Scissors, Eraser, Volume2, MapPin, ZoomIn, ZoomOut, Move, Trash2, Check, Save } from 'lucide-react';
+import { Play, Pause, X, Scissors, Eraser, Volume2, MapPin, ZoomIn, ZoomOut, Move, Trash2, Check, Save, Music2 } from 'lucide-react';
 
 const MARKER_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899'] as const;
 import { RemoveMarkerConfirmDialog } from '../../components/SegmentModal/dialogs/RemoveMarkerConfirmDialog';
@@ -54,6 +54,22 @@ export function SegmentEditorModal({
   const [viewStartSec, setViewStartSec] = useState(0);
   const [viewEndSec, setViewEndSec] = useState(0);
 
+  const defaultEq = (): { lowDb: number; midDb: number; highDb: number } => ({
+    lowDb: segment.audioEq?.lowDb ?? 0,
+    midDb: segment.audioEq?.midDb ?? 0,
+    highDb: segment.audioEq?.highDb ?? 0,
+  });
+  const [appliedAudioEq, setAppliedAudioEq] = useState(() => defaultEq());
+  const [draftAudioEq, setDraftAudioEq] = useState(() => defaultEq());
+  const [audioEditActive, setAudioEditActive] = useState(false);
+  const audioGraphRef = useRef<{
+    context: AudioContext;
+    source: MediaElementAudioSourceNode;
+    lowShelf: BiquadFilterNode;
+    peaking: BiquadFilterNode;
+    highShelf: BiquadFilterNode;
+  } | null>(null);
+
   const durationSec = segment.durationSec ?? 0;
 
   useEffect(() => {
@@ -72,6 +88,16 @@ export function SegmentEditorModal({
   }, [segment.id, segment.trimRanges, segment.markers]);
 
   useEffect(() => {
+    const eq = {
+      lowDb: segment.audioEq?.lowDb ?? 0,
+      midDb: segment.audioEq?.midDb ?? 0,
+      highDb: segment.audioEq?.highDb ?? 0,
+    };
+    setAppliedAudioEq(eq);
+    if (!audioEditActive) setDraftAudioEq(eq);
+  }, [segment.id, segment.audioEq, audioEditActive]);
+
+  useEffect(() => {
     if (waveformDataProp) {
       setWaveformData(waveformDataProp);
       return;
@@ -86,7 +112,7 @@ export function SegmentEditorModal({
   }, [episodeId, segment.id, segment.waveformExists, durationSec, waveformDataProp]);
 
   const updateMutation = useMutation({
-    mutationFn: (payload: { trimRanges?: Array<[number, number]>; markers?: Marker[] }) =>
+    mutationFn: (payload: { trimRanges?: Array<[number, number]>; markers?: Marker[]; audioEq?: AudioEq | null }) =>
       updateSegment(episodeId, segment.id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
@@ -135,6 +161,45 @@ export function SegmentEditorModal({
     };
   }, [trimRanges]);
 
+  function ensureAudioGraph() {
+    const el = audioRef.current;
+    if (!el || audioGraphRef.current) return audioGraphRef.current;
+    const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const context = new Ctx();
+    const source = context.createMediaElementSource(el);
+    const lowShelf = context.createBiquadFilter();
+    lowShelf.type = 'lowshelf';
+    lowShelf.frequency.value = 200;
+    const peaking = context.createBiquadFilter();
+    peaking.type = 'peaking';
+    peaking.frequency.value = 1000;
+    peaking.Q.value = 1;
+    const highShelf = context.createBiquadFilter();
+    highShelf.type = 'highshelf';
+    highShelf.frequency.value = 4000;
+    source.connect(lowShelf);
+    lowShelf.connect(peaking);
+    peaking.connect(highShelf);
+    highShelf.connect(context.destination);
+    audioGraphRef.current = { context, source, lowShelf, peaking, highShelf };
+    return audioGraphRef.current;
+  }
+
+  useEffect(() => {
+    const g = audioGraphRef.current;
+    if (!g) return;
+    const { lowShelf, peaking, highShelf } = g;
+    if (audioEditActive) {
+      lowShelf.gain.value = draftAudioEq.lowDb;
+      peaking.gain.value = draftAudioEq.midDb;
+      highShelf.gain.value = draftAudioEq.highDb;
+    } else {
+      lowShelf.gain.value = 0;
+      peaking.gain.value = 0;
+      highShelf.gain.value = 0;
+    }
+  }, [audioEditActive, draftAudioEq.lowDb, draftAudioEq.midDb, draftAudioEq.highDb]);
+
   function togglePlay() {
     if (segment.recordFailed) return;
     const el = audioRef.current;
@@ -143,6 +208,15 @@ export function SegmentEditorModal({
       el.pause();
       setIsPlaying(false);
     } else {
+      if (audioEditActive) {
+        const g = ensureAudioGraph();
+        if (g) {
+          g.context.resume().then(() => {});
+          g.lowShelf.gain.value = draftAudioEq.lowDb;
+          g.peaking.gain.value = draftAudioEq.midDb;
+          g.highShelf.gain.value = draftAudioEq.highDb;
+        }
+      }
       setIsPlaying(true);
       el.src = segmentStreamUrl(episodeId, segment.id, segment.audioPath);
       el.play().catch(() => setIsPlaying(false));
@@ -194,10 +268,18 @@ export function SegmentEditorModal({
     a.length === b.length && a.every((r, i) => r[0] === b[i]![0] && r[1] === b[i]![1]);
   const markersEqual = (a: Marker[], b: Marker[]) =>
     a.length === b.length && a.every((m, i) => m.time === b[i]!.time && (m.title ?? '') === (b[i]!.title ?? '') && (m.color ?? '') === (b[i]!.color ?? '') && (m.markerType ?? '') === (b[i]!.markerType ?? ''));
+  const audioEqEqual = (a: { lowDb: number; midDb: number; highDb: number }, b: AudioEq | null | undefined) => {
+    const bl = b?.lowDb ?? 0;
+    const bm = b?.midDb ?? 0;
+    const bh = b?.highDb ?? 0;
+    return a.lowDb === bl && a.midDb === bm && a.highDb === bh;
+  };
   const serverTrimRanges = segment.trimRanges ?? [];
   const serverMarkers = segment.markers ?? [];
   const hasUnsavedChanges =
-    !trimRangesEqual(trimRanges, serverTrimRanges) || !markersEqual(markers, serverMarkers);
+    !trimRangesEqual(trimRanges, serverTrimRanges) ||
+    !markersEqual(markers, serverMarkers) ||
+    !audioEqEqual(appliedAudioEq, segment.audioEq);
 
   /** Merge overlapping or adjacent trim ranges. E.g. [[0,5],[4,10],[15,20]] → [[0,10],[15,20]]. */
   function mergeTrimRanges(ranges: Array<[number, number]>): Array<[number, number]> {
@@ -220,7 +302,11 @@ export function SegmentEditorModal({
     if (!hasUnsavedChanges) return;
     setError(null);
     const mergedRanges = mergeTrimRanges(trimRanges);
-    updateMutation.mutate({ trimRanges: mergedRanges, markers });
+    const audioEqPayload =
+      appliedAudioEq.lowDb === 0 && appliedAudioEq.midDb === 0 && appliedAudioEq.highDb === 0
+        ? null
+        : appliedAudioEq;
+    updateMutation.mutate({ trimRanges: mergedRanges, markers, audioEq: audioEqPayload });
   }
 
   function handleTrimRangesChange(newRanges: Array<[number, number]>) {
@@ -347,6 +433,18 @@ export function SegmentEditorModal({
                     >
                       <Scissors size={16} aria-hidden />
                     </button>
+                    <button
+                      type="button"
+                      className={`${styles.segmentBtn} ${styles.timelineToolbarModeBtn} ${audioEditActive ? styles.timelineToolbarBtnActive : ''}`}
+                      onClick={() => {
+                        setAudioEditActive(true);
+                        setDraftAudioEq(appliedAudioEq);
+                      }}
+                      title="Audio: adjust low, mids, and highs"
+                      aria-pressed={audioEditActive}
+                    >
+                      <Music2 size={16} aria-hidden />
+                    </button>
                   </div>
                   <div className={styles.timelineToolbarSeparator} />
                   <div className={styles.timelineToolbarGroup}>
@@ -415,7 +513,7 @@ export function SegmentEditorModal({
                     onSelectionChange={readOnly ? undefined : setSelection}
                     onAddMarker={readOnly ? undefined : handleAddMarker}
                     onRemoveTrimRange={readOnly ? undefined : handleRemoveTrimRange}
-                    mode={timelineMode}
+                    mode={audioEditActive ? 'drag' : timelineMode}
                     readOnly={readOnly}
                   />
                 </div>
@@ -542,6 +640,82 @@ export function SegmentEditorModal({
                     ))}
                   </div>
                   </>
+                ) : audioEditActive ? (
+                  <>
+                    <div className={styles.audioEqRow}>
+                      <label className={styles.audioEqLabel}>
+                        <span>Low</span>
+                        <input
+                          type="range"
+                          min={-12}
+                          max={12}
+                          step={0.5}
+                          value={draftAudioEq.lowDb}
+                          onChange={(e) =>
+                            setDraftAudioEq((prev) => ({ ...prev, lowDb: Number(e.target.value) }))
+                          }
+                          aria-label="Low (bass) gain dB"
+                        />
+                        <span className={styles.audioEqValue}>{draftAudioEq.lowDb} dB</span>
+                      </label>
+                      <label className={styles.audioEqLabel}>
+                        <span>Mids</span>
+                        <input
+                          type="range"
+                          min={-12}
+                          max={12}
+                          step={0.5}
+                          value={draftAudioEq.midDb}
+                          onChange={(e) =>
+                            setDraftAudioEq((prev) => ({ ...prev, midDb: Number(e.target.value) }))
+                          }
+                          aria-label="Mids gain dB"
+                        />
+                        <span className={styles.audioEqValue}>{draftAudioEq.midDb} dB</span>
+                      </label>
+                      <label className={styles.audioEqLabel}>
+                        <span>High</span>
+                        <input
+                          type="range"
+                          min={-12}
+                          max={12}
+                          step={0.5}
+                          value={draftAudioEq.highDb}
+                          onChange={(e) =>
+                            setDraftAudioEq((prev) => ({ ...prev, highDb: Number(e.target.value) }))
+                          }
+                          aria-label="High (treble) gain dB"
+                        />
+                        <span className={styles.audioEqValue}>{draftAudioEq.highDb} dB</span>
+                      </label>
+                    </div>
+                    <div className={styles.audioEqActions}>
+                      <button
+                        type="button"
+                        className={styles.cancel}
+                        onClick={() => {
+                          setDraftAudioEq(appliedAudioEq);
+                          setAudioEditActive(false);
+                        }}
+                        aria-label="Cancel audio changes"
+                      >
+                        Cancel
+                      </button>
+                      <div style={{ flex: 1 }} />
+                      <button
+                        type="button"
+                        className={sharedStyles.dialogConfirm}
+                        onClick={() => {
+                          setAppliedAudioEq(draftAudioEq);
+                          setAudioEditActive(false);
+                        }}
+                        aria-label="Apply audio EQ"
+                      >
+                        <Check size={18} strokeWidth={2} aria-hidden />
+                        Apply
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <button
@@ -575,7 +749,7 @@ export function SegmentEditorModal({
               </div>
             )}
           </div>
-          {!readOnly && selectedMarkerIndex == null && (
+          {!readOnly && selectedMarkerIndex == null && !audioEditActive && (
             <div className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}>
               <button type="button" className={styles.cancel} onClick={onClose} aria-label="Close">
                 <X size={18} strokeWidth={2} aria-hidden />

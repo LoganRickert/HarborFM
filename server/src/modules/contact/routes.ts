@@ -5,7 +5,9 @@ import { readSettings } from "../settings/index.js";
 import { normalizeHostname } from "../../utils/url.js";
 import { getClientIp } from "../../services/loginAttempts.js";
 import { verifyCaptcha } from "../../services/captcha.js";
+import { validateSubscriberTokenByValue } from "../../services/subscriberTokens.js";
 import { sendMail, buildContactNotificationEmail } from "../../services/email.js";
+import { SUBSCRIBER_TOKENS_COOKIE } from "../public/utils.js";
 import {
   getPodcastIdAndTitleBySlug,
   getEpisodeIdAndTitleByPodcastAndSlug,
@@ -43,6 +45,7 @@ export async function contactRoutes(app: FastifyInstance) {
             properties: { ok: { type: "boolean" } },
           },
           400: { description: "Validation or CAPTCHA error" },
+          403: { description: "Subscriber-only messages: not authenticated as subscriber" },
         },
       },
     },
@@ -63,12 +66,14 @@ export async function contactRoutes(app: FastifyInstance) {
       let episodeId: string | null = null;
       let podcastTitle: string | null = null;
       let episodeTitle: string | null = null;
+      let subscriberOnlyMessages = false;
 
       if (podcastSlug) {
         const podcast = getPodcastIdAndTitleBySlug(podcastSlug);
         if (podcast) {
           podcastId = podcast.id;
           podcastTitle = podcast.title;
+          subscriberOnlyMessages = podcast.subscriberOnlyMessages === 1;
           if (episodeSlug) {
             const episode = getEpisodeIdAndTitleByPodcastAndSlug(
               podcastId,
@@ -110,6 +115,27 @@ export async function contactRoutes(app: FastifyInstance) {
           return reply
             .status(400)
             .send({ error: verify.error ?? "CAPTCHA verification failed" });
+        }
+      }
+
+      if (subscriberOnlyMessages && podcastId && podcastSlug) {
+        const cookies = (request as unknown as { cookies?: Record<string, string> }).cookies;
+        const cookieVal = cookies?.[SUBSCRIBER_TOKENS_COOKIE];
+        let tokenMap: Record<string, string> = {};
+        if (cookieVal) {
+          try {
+            tokenMap = JSON.parse(cookieVal);
+          } catch {
+            // ignore
+          }
+        }
+        const rawToken = tokenMap[podcastSlug];
+        const tokenRow = rawToken ? validateSubscriberTokenByValue(rawToken) : null;
+        if (!tokenRow || tokenRow.podcastId !== podcastId) {
+          return reply.status(403).send({
+            error:
+              "Only subscribers can send messages for this show. Use your subscriber link to sign in.",
+          });
         }
       }
 

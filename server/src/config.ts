@@ -313,6 +313,16 @@ export const REGISTRATION_RATE_LIMIT_MAX =
     ? Number(process.env.REGISTRATION_RATE_LIMIT_MAX)
     : 5;
 
+/** Review submit rate limit: max POST /public/reviews per time window per IP. Env: REVIEW_SUBMIT_RATE_LIMIT_MAX. Default 1. Set higher (e.g. 100) for e2e. */
+export const REVIEW_SUBMIT_RATE_LIMIT_MAX =
+  process.env.REVIEW_SUBMIT_RATE_LIMIT_MAX !== undefined
+    ? Number(process.env.REVIEW_SUBMIT_RATE_LIMIT_MAX)
+    : 1;
+
+/** Review submit rate limit: time window. Env: REVIEW_SUBMIT_RATE_LIMIT_TIME_WINDOW. Default "1 minute". */
+export const REVIEW_SUBMIT_RATE_LIMIT_TIME_WINDOW =
+  process.env.REVIEW_SUBMIT_RATE_LIMIT_TIME_WINDOW?.trim() || "1 minute";
+
 /** Global rate limit: time window (e.g. "1 minute"). Env: RATE_LIMIT_TIME_WINDOW. Default "1 minute". */
 export const RATE_LIMIT_TIME_WINDOW =
   process.env.RATE_LIMIT_TIME_WINDOW?.trim() || "1 minute";
