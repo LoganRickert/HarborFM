@@ -230,7 +230,7 @@ export function Users() {
           ) : (
             <div className={styles.userList}>
               {users.map((user) => {
-                const displayLabel = user.email ?? (user.username ? `@${user.username}` : null) ?? '—';
+                const displayLabel = user.email ?? (user.username ? `@${user.username}` : null) ?? '-';
                 const hasBoth = user.email && user.username;
                 return (
                   <div key={user.id} className={styles.userCard}>

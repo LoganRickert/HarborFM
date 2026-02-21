@@ -377,6 +377,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
     });
 
     return () => {
+      leaveRoom();
       cancelled = true;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       const wsToClose = wsRef.current;
@@ -390,7 +391,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       }, END_CALL_DELAY_MS);
       pendingEndCallTimeouts.set(sessionId, timeoutId);
     };
-  }, [sessionId, onCallEnded, onSegmentRecorded, onRecordingStateChange, setMuted]);
+  }, [sessionId, onCallEnded, onSegmentRecorded, onRecordingStateChange, setMuted, leaveRoom]);
 
   const showMediaUnavailable = mediaUnavailable && !effectiveWebrtcUrl && !effectiveRoomId;
   const showChatView = isMobile && chatOpen;

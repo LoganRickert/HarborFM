@@ -995,7 +995,7 @@ HarborFM needs Keycloak's public certificate to verify SAML responses, and the U
 
 1. In HarborFM, go to **Settings** and find **SSO (OIDC / SAML)**.
 2. Under **SAML providers**, click **Add Provider** and fill in the popup:
-   - **Provider ID**: the slug you use in the callback URL (e.g. `keycloak`). The form shows the **Callback URL (ACS URL)** read-only — copy that into Keycloak’s Valid redirect URIs.
+   - **Provider ID**: the slug you use in the callback URL (e.g. `keycloak`). The form shows the **Callback URL (ACS URL)** read-only - copy that into Keycloak’s Valid redirect URIs.
    - **Display Name**: e.g. `Keycloak` (shown on the login page).
    - **IdP Entry Point URL**: the Keycloak SAML URL from Step 2 (e.g. `https://keycloak.example.com/realms/harborfm/protocol/saml`).
    - **IdP certificate (PEM)**: paste the PEM from Step 2 above (the IdP’s certificate). HarborFM uses it to verify SAML responses from Keycloak.

@@ -195,6 +195,7 @@ export function useMediasoupRoom(
         const micTrack = micStream.getAudioTracks()[0];
         if (!micTrack) throw new Error('No audio track');
         micTrackRef.current = micTrack;
+        mediaStreamsRef.current = { micStream, localStream: null };
 
         const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         const ctx = new AudioCtx();
