@@ -203,11 +203,11 @@ export function EpisodeEditorContent({
   );
 
   const handleEndGroupCallConfirmed = useCallback(() => {
+    endCallFnRef.current?.();
     setEndCallConfirmOpen(false);
     setWsPendingSegmentIds(null);
     setWsRecordingActive(null);
     setCallPanelOpenInThisTab(false);
-    endCallFnRef.current?.();
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
   }, [queryClient, id]);
 
