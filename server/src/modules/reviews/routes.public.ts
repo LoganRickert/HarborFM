@@ -41,19 +41,27 @@ function getBaseUrl(hostname: string): string {
   return raw.startsWith("http") ? raw : `https://${raw}`;
 }
 
-/** Optional auth: return userId, role, and user email/name if JWT valid. */
+/** Optional auth: return userId, role, user email/name, readOnly, and disabled if JWT valid. */
 async function optionalAuth(request: FastifyRequest): Promise<{
   userId: string | null;
   userEmail: string | null;
   userName: string | null;
   role: string | null;
+  readOnly: boolean;
+  disabled: boolean;
 }> {
   try {
     await request.jwtVerify();
     const payload = request.user as { sub: string };
     const userId = payload.sub;
     const row = drizzleDb
-      .select({ email: users.email, username: users.username, role: users.role })
+      .select({
+        email: users.email,
+        username: users.username,
+        role: users.role,
+        readOnly: users.readOnly,
+        disabled: users.disabled,
+      })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
@@ -63,9 +71,18 @@ async function optionalAuth(request: FastifyRequest): Promise<{
       userEmail: row?.email?.trim() ?? null,
       userName: row?.username?.trim() ?? null,
       role: row?.role?.trim() ?? null,
+      readOnly: Boolean(row?.readOnly),
+      disabled: Boolean(row?.disabled),
     };
   } catch {
-    return { userId: null, userEmail: null, userName: null, role: null };
+    return {
+      userId: null,
+      userEmail: null,
+      userName: null,
+      role: null,
+      readOnly: false,
+      disabled: false,
+    };
   }
 }
 
@@ -162,6 +179,11 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
       }
 
       const auth = await optionalAuth(request);
+      if (auth.userId && (auth.readOnly || auth.disabled)) {
+        return reply.status(403).send({
+          error: "Read-only and disabled accounts cannot leave reviews.",
+        });
+      }
       const email: string =
         auth.userEmail ?? bodyEmail ?? "";
       const displayName = (name || "").trim() || (auth.userName ?? "Anonymous");
@@ -480,7 +502,10 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
         createdAt: r.createdAt,
         episodeTitle: r.episodeTitle,
         canDelete: Boolean(
-          auth.userId && (r.userId === auth.userId || auth.role === "admin"),
+          auth.userId &&
+            !auth.readOnly &&
+            !auth.disabled &&
+            (r.userId === auth.userId || auth.role === "admin"),
         ),
       }));
       return reply.send({ reviews: reviewsList });
@@ -514,6 +539,11 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
       const auth = await optionalAuth(request);
       if (!auth.userId) {
         return reply.status(401).send({ error: "Sign in to delete a review." });
+      }
+      if (auth.readOnly || auth.disabled) {
+        return reply.status(403).send({
+          error: "Read-only and disabled accounts cannot delete reviews.",
+        });
       }
       const review = getReviewById(reviewId);
       if (!review) {

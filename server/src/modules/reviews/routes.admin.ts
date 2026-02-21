@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { requireAuth } from "../../plugins/auth.js";
+import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { getPodcastRole, canManageCollaborators } from "../../services/access.js";
 import {
   listReviewsForPodcast,
@@ -12,7 +12,7 @@ export async function registerReviewAdminRoutes(app: FastifyInstance) {
   app.get(
     "/podcasts/:id/reviews",
     {
-      preHandler: [requireAuth],
+      preHandler: [requireAuth, requireNotReadOnly],
       schema: {
         tags: ["Reviews"],
         summary: "List reviews for a podcast",
@@ -83,7 +83,7 @@ export async function registerReviewAdminRoutes(app: FastifyInstance) {
   app.patch(
     "/podcasts/:id/reviews/:reviewId/approve",
     {
-      preHandler: [requireAuth],
+      preHandler: [requireAuth, requireNotReadOnly],
       schema: {
         tags: ["Reviews"],
         summary: "Approve a review",
@@ -114,7 +114,7 @@ export async function registerReviewAdminRoutes(app: FastifyInstance) {
   app.delete(
     "/podcasts/:id/reviews/:reviewId",
     {
-      preHandler: [requireAuth],
+      preHandler: [requireAuth, requireNotReadOnly],
       schema: {
         tags: ["Reviews"],
         summary: "Delete (hide) a review",
