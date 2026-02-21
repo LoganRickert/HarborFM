@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { me, updateProfile, send2FAEmailCode, type ProfileUpdateResponse } from '../api/auth';
+import * as Dialog from '@radix-ui/react-dialog';
+import { me, updateProfile, send2FAEmailCode, disableAccount, logout, type ProfileUpdateResponse } from '../api/auth';
 import { USERNAME_REGEX } from '@harborfm/shared';
 import { listApiKeys, updateApiKey, revokeApiKey, type ApiKeyCreateResponse, type ApiKeyRecord } from '../api/apiKeys';
 import { ApiKeyCreatedCard } from '../components/ApiKeys/ApiKeyCreatedCard';
@@ -14,7 +15,7 @@ import { SubscriberTokenControls } from '../components/SubscriberTokens/Subscrib
 import { SubscriberTokenPagination } from '../components/SubscriberTokens/SubscriberTokenPagination';
 import { TwoFactorProfileSection } from '../components/TwoFactorProfile/TwoFactorProfileSection';
 import { OtpInput } from '../components/OtpInput/OtpInput';
-import { Key, Edit2 } from 'lucide-react';
+import { Key, Edit2, X } from 'lucide-react';
 import { TokenListRow, type TokenStatus } from '../components/TokenListRow';
 import { formatDate as formatDateUtil, formatDateTime as formatDateTimeUtil } from '../utils/format';
 import { formatDateForInput } from '../utils/datetime';
@@ -45,8 +46,12 @@ function formatBytes(bytes: number): string {
 
 export function Profile() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
   const [newKeyResult, setNewKeyResult] = useState<ApiKeyCreateResponse | null>(null);
+  const [disableAccountPassword, setDisableAccountPassword] = useState('');
+  const [disableAccountStep, setDisableAccountStep] = useState<'idle' | 'password'>('idle');
+  const [disableAccountDialogOpen, setDisableAccountDialogOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileEmail, setProfileEmail] = useState('');
   const [profileUsername, setProfileUsername] = useState('');
@@ -158,6 +163,15 @@ export function Profile() {
 
   const sendEmailCodeMutation = useMutation({
     mutationFn: () => send2FAEmailCode(),
+  });
+
+  const disableAccountMutation = useMutation({
+    mutationFn: (password?: string) => disableAccount(password),
+    onSuccess: async () => {
+      await logout();
+      setUser(null);
+      navigate('/login');
+    },
   });
 
   useEffect(() => {
@@ -688,6 +702,139 @@ export function Profile() {
           </>
         )}
       </section>
+
+      {!user.readOnly && (
+        <section className={styles.card}>
+          <h2 className={styles.cardTitle}>Disable Account</h2>
+          <p className={styles.cardSub}>
+            Disabling your account will log you out immediately. You will not be able to sign in until an administrator re-enables your account. Disabled accounts may be deleted from the site in the future.
+          </p>
+          {data.twoFactor?.methods != null && data.twoFactor.methods !== '' ? (
+            <>
+              <p className={styles.cardNote} style={{ marginBottom: '1rem' }}>
+                Disable two-factor authentication first before you can disable your account.
+              </p>
+              <button type="button" className={styles.dangerBtn} disabled aria-label="Disable account (disabled until 2FA is off)">
+                Disable My Account
+              </button>
+            </>
+          ) : user?.hasPassword !== false ? (
+            disableAccountStep === 'idle' ? (
+              <button
+                type="button"
+                className={styles.dangerBtn}
+                onClick={() => setDisableAccountStep('password')}
+                aria-label="Disable my account"
+              >
+                Disable My Account
+              </button>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (disableAccountPassword.trim()) {
+                    disableAccountMutation.mutate(disableAccountPassword);
+                  }
+                }}
+              >
+                <label className={styles.label}>
+                  Enter your password to confirm
+                  <input
+                    type="password"
+                    value={disableAccountPassword}
+                    onChange={(e) => setDisableAccountPassword(e.target.value)}
+                    className={styles.input}
+                    placeholder="Password"
+                    autoComplete="current-password"
+                  />
+                </label>
+                {(disableAccountMutation.error as Error | null) && (
+                  <div className={styles.errorCard} role="alert">
+                    <p className={styles.errorCardText}>
+                      {(disableAccountMutation.error as Error).message}
+                    </p>
+                  </div>
+                )}
+                <div className={styles.twoFactorBtnRow}>
+                  <button
+                    type="button"
+                    className={styles.secondaryBtn}
+                    onClick={() => {
+                      setDisableAccountStep('idle');
+                      setDisableAccountPassword('');
+                      disableAccountMutation.reset();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className={styles.dangerBtn}
+                    disabled={!disableAccountPassword.trim() || disableAccountMutation.isPending}
+                  >
+                    {disableAccountMutation.isPending ? 'Disabling...' : 'Disable My Account'}
+                  </button>
+                </div>
+              </form>
+            )
+          ) : (
+            <>
+              <button
+                type="button"
+                className={styles.dangerBtn}
+                onClick={() => setDisableAccountDialogOpen(true)}
+                aria-label="Disable my account"
+              >
+                Disable My Account
+              </button>
+              <Dialog.Root open={disableAccountDialogOpen} onOpenChange={(open) => !open && setDisableAccountDialogOpen(false)}>
+                <Dialog.Portal>
+                  <Dialog.Overlay className={apiKeySectionStyles.dialogOverlay} />
+                  <Dialog.Content className={apiKeySectionStyles.dialogContent}>
+                    <div className={apiKeySectionStyles.dialogHeaderRow}>
+                      <Dialog.Title className={apiKeySectionStyles.dialogTitle}>Are you sure?</Dialog.Title>
+                      <Dialog.Close asChild>
+                        <button type="button" className={apiKeySectionStyles.dialogClose} aria-label="Close">
+                          <X size={18} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                      </Dialog.Close>
+                    </div>
+                    <Dialog.Description className={apiKeySectionStyles.dialogDescription}>
+                      You will be logged out. Your account will be disabled until an admin re-enables it.
+                    </Dialog.Description>
+                    {disableAccountMutation.error && (
+                      <div className={styles.errorCard} role="alert">
+                        <p className={styles.errorCardText}>
+                          {(disableAccountMutation.error as Error).message}
+                        </p>
+                      </div>
+                    )}
+                    <div className={`${apiKeySectionStyles.dialogActions} ${apiKeySectionStyles.dialogActionsCancelLeft}`}>
+                      <Dialog.Close asChild>
+                        <button type="button" className={apiKeySectionStyles.subscriberDialogCancelBtn} aria-label="Cancel">
+                          Cancel
+                        </button>
+                      </Dialog.Close>
+                      <button
+                        type="button"
+                        className={apiKeySectionStyles.dialogConfirmRemove}
+                        onClick={() => {
+                          disableAccountMutation.mutate(undefined);
+                          setDisableAccountDialogOpen(false);
+                        }}
+                        disabled={disableAccountMutation.isPending}
+                        aria-label="Confirm disable account"
+                      >
+                        {disableAccountMutation.isPending ? 'Disabling...' : 'Disable account'}
+                      </button>
+                    </div>
+                  </Dialog.Content>
+                </Dialog.Portal>
+              </Dialog.Root>
+            </>
+          )}
+        </section>
+      )}
 
       <ApiKeyRevokeDialog
         apiKey={keyToRevoke}

@@ -204,6 +204,7 @@ async function main() {
     join(E2E_DIR, 'tests', 'scenarios', 'subscriptions.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'collaboration.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'readonly-disabled.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'disable-account.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'public-feed-episodes-audio.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'max-podcasts.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'max-episodes.js'),

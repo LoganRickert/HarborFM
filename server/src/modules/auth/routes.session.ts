@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq, exists, or, sql } from "drizzle-orm";
-import { requireAuth } from "../../plugins/auth.js";
+import { requireAuth, requireAuthAllowDisabled } from "../../plugins/auth.js";
 import { drizzleDb } from "../../db/index.js";
 import {
   episodes,
@@ -19,7 +19,7 @@ export async function registerSessionRoutes(app: FastifyInstance) {
   app.post(
     "/auth/logout",
     {
-      preHandler: [requireAuth],
+      preHandler: [requireAuthAllowDisabled],
       schema: {
         tags: ["Auth"],
         summary: "Logout",
