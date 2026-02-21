@@ -131,7 +131,7 @@ function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
     privateWaveformUrl: (r.private_waveform_url as string | null) ?? null,
     privateVideoUrl: (r.private_video_url as string | null) ?? null,
     privateSrtUrl: (r.private_srt_url as string | null) ?? null,
-    markers: r.markers as PublicEpisode['markers'],
+    markers: Array.isArray(r.markers) ? r.markers : [],
   };
 }
 

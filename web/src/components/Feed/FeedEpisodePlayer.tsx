@@ -66,6 +66,7 @@ export function FeedEpisodePlayer({
             data={waveformData!}
             durationSec={durationSec}
             currentTime={currentTime}
+            markers={episode.markers ?? []}
             onSeek={seek}
             className={styles.waveform}
           />

@@ -108,6 +108,15 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         }
       }
 
+      // Don't send chapter markers for subscriber-only episodes when user has no access
+      episodesList = episodesList.map((ep) => ({
+        ...ep,
+        markers:
+          ep.subscriber_only === 1 && !(ep as Record<string, unknown>).private_audio_url
+            ? []
+            : ep.markers,
+      }));
+
       return {
         episodes: episodesList,
         total,
@@ -186,6 +195,14 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         } catch {
           // Invalid cookie, ignore
         }
+      }
+
+      // Don't send chapter markers for subscriber-only episodes when user has no access
+      if (
+        episode.subscriber_only === 1 &&
+        !(episode as Record<string, unknown>).private_audio_url
+      ) {
+        episode.markers = [];
       }
 
       return episode;

@@ -112,12 +112,18 @@ export function publicEpisodeDto(
     hasChapters && !subscriberOnlyFeed && !subscriberOnly;
 
   const rawMarkers = row.finalMarkers as string | null | undefined;
-  let markers: Array<{ time: number; title?: string; color?: string }> | null = null;
+  let markers: Array<{ time: number; title?: string; color?: string }> = [];
   if (rawMarkers != null && typeof rawMarkers === "string" && rawMarkers.trim()) {
     try {
-      markers = JSON.parse(rawMarkers) as Array<{ time: number; title?: string; color?: string }>;
+      const parsed = JSON.parse(rawMarkers) as unknown;
+      if (Array.isArray(parsed)) {
+        markers = parsed.filter(
+          (m): m is { time: number; title?: string; color?: string } =>
+            typeof m === "object" && m != null && typeof (m as { time?: number }).time === "number"
+        );
+      }
     } catch {
-      markers = null;
+      /* leave markers as [] */
     }
   }
 
