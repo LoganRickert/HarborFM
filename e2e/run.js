@@ -211,6 +211,7 @@ async function main() {
     join(E2E_DIR, 'tests', 'scenarios', 'max-storage.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'max-collaborators.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'max-subscriber-tokens.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'show-scheduled-episodes.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'subscriber-only-messages.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'unlisted-sitemap.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'sitemap-cache.js'),

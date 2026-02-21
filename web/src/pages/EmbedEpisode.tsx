@@ -183,7 +183,8 @@ export function EmbedEpisode() {
   const seasonEpisodeLong = formatSeasonEpisodeLong(episode.seasonNumber, episode.episodeNumber);
   const seasonEpisodeShort = formatSeasonEpisode(episode.seasonNumber, episode.episodeNumber);
 
-  const isSubscriberOnly = !audioUrl && !audioLoadFailed && Boolean(episode.subscriberOnly);
+  const scheduledNotReleased = Boolean(episode.scheduledNotReleased);
+  const isSubscriberOnly = !audioUrl && !audioLoadFailed && Boolean(episode.subscriberOnly) && !scheduledNotReleased;
 
   let artworkSrc: string | null = null;
   if (episode.artworkUrl) {
@@ -237,7 +238,13 @@ export function EmbedEpisode() {
             </a>
           </div>
 
-          {isSubscriberOnly ? (
+          {scheduledNotReleased ? (
+            <div className={styles.scheduledPlaceholder} aria-label="Scheduled for future release">
+              <p className={styles.noAudioText}>
+                {episode.publishAt ? `Premiering ${new Date(episode.publishAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}` : 'Premiering soon'}
+              </p>
+            </div>
+          ) : isSubscriberOnly ? (
             <>
               <a
                 href={shareUrl}

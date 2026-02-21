@@ -142,7 +142,8 @@ export function FeedEpisode({
   const embedUrl = `${origin}${isCustomFeed ? `/embed/${episodeSlug}` : `/embed/${podcastSlug}/${episodeSlug}`}`;
   const embedCode = `<iframe src="${embedUrl}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>`;
 
-  const videoUrlRaw = episode.privateVideoUrl ?? episode.videoUrl ?? null;
+  const scheduledNotReleased = Boolean(episode.scheduledNotReleased);
+  const videoUrlRaw = scheduledNotReleased ? null : (episode.privateVideoUrl ?? episode.videoUrl ?? null);
   const videoUrl =
     !videoUrlRaw
       ? ''
@@ -229,7 +230,13 @@ export function FeedEpisode({
             )}
 
             {(!audioUrl || audioLoadFailed) && (
-              audioLoadFailed || !episode.subscriberOnly ? (
+              scheduledNotReleased ? (
+                <div className={styles.scheduledPlaceholder} aria-label="Scheduled for future release">
+                  <p className={styles.noAudioText}>
+                    {episode.publishAt ? `Premiering ${new Date(episode.publishAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}` : 'Premiering soon'}
+                  </p>
+                </div>
+              ) : audioLoadFailed || !episode.subscriberOnly ? (
                 <p className={styles.noAudioText}>Audio not available.</p>
               ) : (
                 <FeedSubscriberOnlyMessage />

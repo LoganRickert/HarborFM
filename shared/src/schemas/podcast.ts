@@ -68,6 +68,8 @@ export const podcastUpdateSchema = podcastCreateSchema.partial().extend({
   subscriberOnlyReviews: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
   /** When true, only subscribers can see/use Message button and submit contact for this show (requires subscriberOnlyFeedEnabled). Accept boolean or 0/1. */
   subscriberOnlyMessages: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+  /** When true, episodes scheduled for a future date appear on the public feed with a placeholder. Accept boolean or 0/1. */
+  showScheduledEpisodes: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
   /** DNS: link domain (hostname only, no https://). */
   linkDomain: z.string().nullable().optional(),
   /** DNS: managed domain (hostname only, no https://). */

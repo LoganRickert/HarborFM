@@ -101,6 +101,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         allowUnapprovedReviews: podcast.allowUnapprovedReviews !== undefined ? Boolean(podcast.allowUnapprovedReviews) : true,
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
         subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
+        showScheduledEpisodes: podcast.showScheduledEpisodes !== undefined ? Boolean(podcast.showScheduledEpisodes) : false,
       });
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setCoverMode(podcast.artworkFilename ? 'upload' : 'url');
@@ -118,6 +119,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         allowUnapprovedReviews: podcast.allowUnapprovedReviews !== undefined ? Boolean(podcast.allowUnapprovedReviews) : true,
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
         subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
+        showScheduledEpisodes: podcast.showScheduledEpisodes !== undefined ? Boolean(podcast.showScheduledEpisodes) : false,
       });
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setPendingArtworkFile(null);
@@ -191,8 +193,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
 
   const mutation = useMutation({
     mutationFn: (payload: Parameters<typeof updatePodcast>[1]) => updatePodcast(podcastId!, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['podcast', podcastId] });
+    onSuccess: (data) => {
+      queryClient.setQueryData(['podcast', podcastId], (prev: Podcast | undefined) =>
+        prev ? { ...prev, ...data } : data
+      );
       queryClient.invalidateQueries({ queryKey: ['podcasts'] });
       onClose();
     },
@@ -267,6 +271,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       allowUnapprovedReviews: currentForm.allowUnapprovedReviews !== undefined ? currentForm.allowUnapprovedReviews : undefined,
       subscriberOnlyReviews: currentForm.subscriberOnlyReviews !== undefined ? currentForm.subscriberOnlyReviews : undefined,
       subscriberOnlyMessages: currentForm.subscriberOnlyMessages !== undefined ? currentForm.subscriberOnlyMessages : undefined,
+      showScheduledEpisodes: currentForm.showScheduledEpisodes !== undefined ? currentForm.showScheduledEpisodes : undefined,
     } as PodcastUpdate;
     if (podcast?.myRole === 'owner' && podcast?.dnsConfig) {
       const dc = podcast.dnsConfig;
@@ -453,6 +458,18 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                 </label>
                 <p id="allow-unapproved-reviews-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                   When on, reviews that have not yet been approved by you can be shown on the public feed (if server settings allow).
+                </p>
+                <label className="toggle" aria-describedby="show-scheduled-episodes-desc">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.showScheduledEpisodes)}
+                    onChange={(e) => setForm((f) => ({ ...f, showScheduledEpisodes: e.target.checked }))}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Show Scheduled Episodes</span>
+                </label>
+                <p id="show-scheduled-episodes-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                  When on, episodes scheduled for a future date appear on the public feed with a placeholder until the release date.
                 </p>
                 <label className="toggle" aria-describedby="subscribers-enabled-desc">
                   <input

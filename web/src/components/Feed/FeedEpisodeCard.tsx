@@ -22,6 +22,7 @@ export function FeedEpisodeCard({
   // Check for both private and public audio URLs
   const episodeWithAuth = episode as PublicEpisodeWithAuth;
   const hasAudio = !!(episodeWithAuth.privateAudioUrl || episode.audioUrl);
+  const scheduledNotReleased = Boolean(episode.scheduledNotReleased);
 
   return (
     <li
@@ -66,6 +67,13 @@ export function FeedEpisodeCard({
           onPlay={() => onPlay(episode.id)}
           onPause={onPause}
         />
+      ) : scheduledNotReleased && !hasAudio ? (
+        <div className={styles.lockedCard} aria-label="Scheduled for future release">
+          <Lock size={20} strokeWidth={2} className={styles.lockedIcon} aria-hidden />
+          <span className={styles.lockedLabel}>
+            {episode.publishAt ? `Premiering ${formatDate(episode.publishAt)}` : 'Premiering soon'}
+          </span>
+        </div>
       ) : isSubscriberOnly && !hasAudio ? (
         <div className={styles.lockedCard} aria-label="Subscriber only">
           <Lock size={20} strokeWidth={2} className={styles.lockedIcon} aria-hidden />

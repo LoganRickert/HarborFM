@@ -121,6 +121,7 @@ export const podcasts = sqliteTable(
     allowUnapprovedReviews: integer("allow_unapproved_reviews", { mode: "boolean" }).default(true),
     subscriberOnlyReviews: integer("subscriber_only_reviews", { mode: "boolean" }).default(false),
     subscriberOnlyMessages: integer("subscriber_only_messages", { mode: "boolean" }).default(false),
+    showScheduledEpisodes: integer("show_scheduled_episodes", { mode: "boolean" }).default(false),
   },
   (table) => [
     unique("users_podcasts_owner_slug").on(table.ownerUserId, table.slug),

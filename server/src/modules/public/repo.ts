@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { drizzleDb } from "../../db/index.js";
 import {
   episodeCast,
@@ -24,19 +24,21 @@ export function getPodcastMetaForFeed(slug: string): {
   id: string;
   publicFeedDisabled: number;
   subscriberOnlyFeedEnabled: number;
+  showScheduledEpisodes: number;
 } | undefined {
   const row = drizzleDb
     .select({
       id: podcasts.id,
       publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as("publicFeedDisabled"),
       subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as("subscriberOnlyFeedEnabled"),
+      showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
     })
     .from(podcasts)
     .where(eq(podcasts.slug, slug))
     .limit(1)
     .get();
   return row as
-    | { id: string; publicFeedDisabled: number; subscriberOnlyFeedEnabled: number }
+    | { id: string; publicFeedDisabled: number; subscriberOnlyFeedEnabled: number; showScheduledEpisodes: number }
     | undefined;
 }
 
@@ -58,6 +60,7 @@ export function getPodcastBySlug(slug: string) {
       subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as("subscriberOnlyFeedEnabled"),
       subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
       subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
+      showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
       linkDomain: podcasts.linkDomain,
       managedDomain: podcasts.managedDomain,
       managedSubDomain: podcasts.managedSubDomain,
@@ -342,6 +345,8 @@ export type ListPublishedEpisodesOptions = {
   /** Pre-escaped LIKE pattern or null. Use utils.likeEscape. */
   searchPattern: string | null;
   includeSubscriberOnly: boolean;
+  /** When true, include scheduled/published episodes with future publishAt (shown as placeholder). */
+  includeScheduledEpisodes: boolean;
 };
 
 const publishedEpisodeWhereBase = and(
@@ -354,14 +359,17 @@ export function listPublishedEpisodes(
   podcastId: string,
   options: ListPublishedEpisodesOptions,
 ) {
-  const { limit, offset, sort, searchPattern: likePattern, includeSubscriberOnly } = options;
+  const { limit, offset, sort, searchPattern: likePattern, includeSubscriberOnly, includeScheduledEpisodes } = options;
+  const scheduledOrPublishedBase = and(
+    eq(episodes.podcastId, podcastId),
+    inArray(episodes.status, ["scheduled", "published"]),
+  );
+  const baseWhere = includeScheduledEpisodes
+    ? scheduledOrPublishedBase
+    : and(eq(episodes.podcastId, podcastId), publishedEpisodeWhereBase);
   const episodeWhereSubscriber = includeSubscriberOnly
-    ? and(eq(episodes.podcastId, podcastId), publishedEpisodeWhereBase)
-    : and(
-        eq(episodes.podcastId, podcastId),
-        publishedEpisodeWhereBase,
-        eq(episodes.subscriberOnly, false),
-      );
+    ? baseWhere
+    : and(baseWhere, eq(episodes.subscriberOnly, false));
   const episodeWhereSearch = likePattern
     ? and(
         episodeWhereSubscriber,
@@ -454,6 +462,55 @@ export function getPublishedEpisodeBySlug(podcastId: string, episodeSlug: string
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
       ),
     )
+    .limit(1)
+    .get();
+}
+
+/** Get a single episode by slug for public page; when includeScheduled is true, includes scheduled/published with future publishAt. */
+export function getPublicEpisodeBySlug(
+  podcastId: string,
+  episodeSlug: string,
+  includeScheduled: boolean,
+) {
+  const strictWhere = and(
+    eq(episodes.podcastId, podcastId),
+    eq(episodes.slug, episodeSlug),
+    eq(episodes.status, "published"),
+    sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+  );
+  const relaxedWhere = and(
+    eq(episodes.podcastId, podcastId),
+    eq(episodes.slug, episodeSlug),
+    inArray(episodes.status, ["scheduled", "published"]),
+  );
+  return drizzleDb
+    .select({
+      id: episodes.id,
+      podcastId: episodes.podcastId,
+      title: episodes.title,
+      slug: episodes.slug,
+      description: episodes.description,
+      descriptionCopyrightSnapshot: episodes.descriptionCopyrightSnapshot,
+      guid: episodes.guid,
+      seasonNumber: episodes.seasonNumber,
+      episodeNumber: episodes.episodeNumber,
+      episodeType: episodes.episodeType,
+      explicit: episodes.explicit,
+      publishAt: episodes.publishAt,
+      artworkUrl: episodes.artworkUrl,
+      artworkPath: episodes.artworkPath,
+      audioMime: episodes.audioMime,
+      audioBytes: episodes.audioBytes,
+      audioDurationSec: episodes.audioDurationSec,
+      audioFinalPath: episodes.audioFinalPath,
+      videoFinalPath: episodes.videoFinalPath,
+      finalMarkers: episodes.finalMarkers,
+      subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
+      createdAt: episodes.createdAt,
+      updatedAt: episodes.updatedAt,
+    })
+    .from(episodes)
+    .where(includeScheduled ? relaxedWhere : strictWhere)
     .limit(1)
     .get();
 }

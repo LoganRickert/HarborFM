@@ -77,6 +77,8 @@ export interface Podcast {
   subscriberOnlyReviews?: number | boolean;
   /** Only subscribers can see/use Message button and submit contact (requires subscriberOnlyFeedEnabled). */
   subscriberOnlyMessages?: number | boolean;
+  /** When true, future-dated scheduled/published episodes appear on the public feed with a placeholder. */
+  showScheduledEpisodes?: number | boolean;
   /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
   ownerCanTranscribe?: number;
   /** DNS: link domain (hostname). */

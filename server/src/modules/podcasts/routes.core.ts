@@ -843,6 +843,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.subscriberOnlyMessages !== undefined) {
         set.subscriberOnlyMessages = Boolean(data.subscriberOnlyMessages);
       }
+      if (data.showScheduledEpisodes !== undefined) {
+        set.showScheduledEpisodes = Boolean(data.showScheduledEpisodes);
+      }
       if (data.fundingUrl !== undefined) set.fundingUrl = data.fundingUrl;
       if (data.fundingLabel !== undefined) set.fundingLabel = data.fundingLabel;
       if (data.persons !== undefined) set.persons = data.persons;
