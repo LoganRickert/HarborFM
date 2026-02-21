@@ -67,15 +67,17 @@ export function FeedPodcastHeader({
                   />
                 </button>
               )}
-              <button
-                type="button"
-                className={styles.messageBtn}
-                onClick={onMessageClick}
-                aria-label="Send message"
-              >
-                <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
-                Message
-              </button>
+              {onMessageClick && (
+                <button
+                  type="button"
+                  className={styles.messageBtn}
+                  onClick={onMessageClick}
+                  aria-label="Send message"
+                >
+                  <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
+                  Message
+                </button>
+              )}
               {showRssButton && (
                 <a
                   href={rssUrl}

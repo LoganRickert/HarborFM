@@ -54,7 +54,7 @@ export interface FeedEmptyStateProps {
 export interface FeedPodcastHeaderProps {
   podcast: PublicPodcast;
   podcastSlug: string;
-  onMessageClick: () => void;
+  onMessageClick?: () => void;
   /** When set, a Share button (icon only) is shown. Embed option is hidden in ShareDialog. */
   shareUrl?: string;
   shareTitle?: string;
@@ -84,7 +84,7 @@ export interface FeedBreadcrumbsProps {
 export interface FeedEpisodeHeaderProps {
   episode: PublicEpisode;
   podcast: PublicPodcast;
-  onMessageClick: () => void;
+  onMessageClick?: () => void;
   onLockClick?: () => void;
   /** When set, a Share button is shown that opens ShareDialog with this URL and optional title/embedCode. */
   shareUrl?: string;

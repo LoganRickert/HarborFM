@@ -840,6 +840,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.subscriberOnlyReviews !== undefined) {
         set.subscriberOnlyReviews = Boolean(data.subscriberOnlyReviews);
       }
+      if (data.subscriberOnlyMessages !== undefined) {
+        set.subscriberOnlyMessages = Boolean(data.subscriberOnlyMessages);
+      }
       if (data.fundingUrl !== undefined) set.fundingUrl = data.fundingUrl;
       if (data.fundingLabel !== undefined) set.fundingLabel = data.fundingLabel;
       if (data.persons !== undefined) set.persons = data.persons;

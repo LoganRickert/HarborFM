@@ -100,6 +100,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
         allowUnapprovedReviews: podcast.allowUnapprovedReviews !== undefined ? Boolean(podcast.allowUnapprovedReviews) : true,
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
+        subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
       });
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setCoverMode(podcast.artworkFilename ? 'upload' : 'url');
@@ -116,6 +117,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
         allowUnapprovedReviews: podcast.allowUnapprovedReviews !== undefined ? Boolean(podcast.allowUnapprovedReviews) : true,
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
+        subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
       });
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setPendingArtworkFile(null);
@@ -264,6 +266,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       publicFeedDisabled: currentForm.publicFeedDisabled !== undefined ? currentForm.publicFeedDisabled : undefined,
       allowUnapprovedReviews: currentForm.allowUnapprovedReviews !== undefined ? currentForm.allowUnapprovedReviews : undefined,
       subscriberOnlyReviews: currentForm.subscriberOnlyReviews !== undefined ? currentForm.subscriberOnlyReviews : undefined,
+      subscriberOnlyMessages: currentForm.subscriberOnlyMessages !== undefined ? currentForm.subscriberOnlyMessages : undefined,
     } as PodcastUpdate;
     if (podcast?.myRole === 'owner' && podcast?.dnsConfig) {
       const dc = podcast.dnsConfig;
@@ -460,7 +463,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                       setForm((f) => ({
                         ...f,
                         subscriberOnlyFeedEnabled: on,
-                        ...(on ? {} : { publicFeedDisabled: false }),
+                        ...(on ? {} : { publicFeedDisabled: false, subscriberOnlyMessages: false }),
                       }));
                     }}
                   />
@@ -495,6 +498,18 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                     </label>
                     <p id="subscriber-only-reviews-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                       When on, only people signed in with a subscriber link for this show can leave a podcast or episode review.
+                    </p>
+                    <label className="toggle" aria-describedby="subscriber-only-messages-desc">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.subscriberOnlyMessages)}
+                        onChange={(e) => setForm((f) => ({ ...f, subscriberOnlyMessages: e.target.checked }))}
+                      />
+                      <span className="toggle__track" aria-hidden="true" />
+                      <span>Subscriber Only Messages</span>
+                    </label>
+                    <p id="subscriber-only-messages-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                      When on, only people signed in with a subscriber link for this show can see and use the Message button on the public podcast and episode pages.
                     </p>
                   </>
                 )}

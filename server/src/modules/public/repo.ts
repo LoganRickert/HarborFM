@@ -57,6 +57,7 @@ export function getPodcastBySlug(slug: string) {
       publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as("publicFeedDisabled"),
       subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as("subscriberOnlyFeedEnabled"),
       subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
+      subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
       linkDomain: podcasts.linkDomain,
       managedDomain: podcasts.managedDomain,
       managedSubDomain: podcasts.managedSubDomain,

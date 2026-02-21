@@ -143,6 +143,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
 
   const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
   const canWriteReview = !podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug);
+  const canShowMessage = !podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug);
 
   return (
     <div className={sharedStyles.wrapper}>
@@ -153,7 +154,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
             <FeedPodcastHeader
               podcast={podcast}
               podcastSlug={podcastSlug}
-              onMessageClick={() => setFeedbackOpen(true)}
+              onMessageClick={canShowMessage ? () => setFeedbackOpen(true) : undefined}
               shareUrl={
                 podcast?.canonicalFeedUrl ??
                 (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined)

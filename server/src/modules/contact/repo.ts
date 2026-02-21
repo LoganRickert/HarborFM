@@ -7,16 +7,27 @@ import {
   users,
 } from "../../db/schema.js";
 
-/** Get podcast id and title by slug for contact context. */
+/** Get podcast id, title, and subscriberOnlyMessages by slug for contact context. */
 export function getPodcastIdAndTitleBySlug(
   slug: string,
-): { id: string; title: string } | undefined {
-  return drizzleDb
-    .select({ id: podcasts.id, title: podcasts.title })
+): { id: string; title: string; subscriberOnlyMessages: number } | undefined {
+  const row = drizzleDb
+    .select({
+      id: podcasts.id,
+      title: podcasts.title,
+      subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`,
+    })
     .from(podcasts)
     .where(eq(podcasts.slug, slug))
     .limit(1)
     .get();
+  return row
+    ? {
+        id: row.id,
+        title: row.title,
+        subscriberOnlyMessages: row.subscriberOnlyMessages,
+      }
+    : undefined;
 }
 
 /** Get episode id and title by podcastId and episode slug. */

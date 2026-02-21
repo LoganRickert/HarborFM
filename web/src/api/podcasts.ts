@@ -75,6 +75,8 @@ export interface Podcast {
   allowUnapprovedReviews?: number | boolean;
   /** Only subscribers can leave reviews (requires subscriberOnlyFeedEnabled). */
   subscriberOnlyReviews?: number | boolean;
+  /** Only subscribers can see/use Message button and submit contact (requires subscriberOnlyFeedEnabled). */
+  subscriberOnlyMessages?: number | boolean;
   /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
   ownerCanTranscribe?: number;
   /** DNS: link domain (hostname). */

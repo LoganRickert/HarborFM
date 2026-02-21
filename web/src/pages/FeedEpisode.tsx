@@ -134,6 +134,7 @@ export function FeedEpisode({
   }
 
   const canWriteReview = !podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug);
+  const canShowMessage = !podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const shareUrl = `${origin}${isCustomFeed ? `/${episodeSlug}` : `/feed/${podcastSlug}/${episodeSlug}`}`;
@@ -162,7 +163,7 @@ export function FeedEpisode({
             <FeedEpisodeHeader
               episode={episode}
               podcast={podcast}
-              onMessageClick={() => setFeedbackOpen(true)}
+              onMessageClick={canShowMessage ? () => setFeedbackOpen(true) : undefined}
               onLockClick={() => setShowLockInfo(true)}
               shareUrl={shareUrl}
               shareTitle={shareTitle}

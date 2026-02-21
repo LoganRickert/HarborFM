@@ -64,6 +64,7 @@ export interface PodcastListRow {
   publicFeedDisabled: number;
   allowUnapprovedReviews: number;
   subscriberOnlyReviews: number;
+  subscriberOnlyMessages: number;
   maxEpisodes: number | null;
   episodeCount: number;
 }
@@ -141,6 +142,7 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
     ),
     allowUnapprovedReviews: sql<number>`COALESCE(${podcasts.allowUnapprovedReviews}, 1)`.as("allowUnapprovedReviews"),
     subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
+    subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
     maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as(
       "maxEpisodes",
     ),
@@ -282,6 +284,7 @@ export function getByIdWithFilenameForCreate(
       publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as("publicFeedDisabled"),
       allowUnapprovedReviews: sql<number>`COALESCE(${podcasts.allowUnapprovedReviews}, 1)`.as("allowUnapprovedReviews"),
       subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
+      subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
       maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as("maxEpisodes"),
       episodeCount: sql<number>`0`.as("episodeCount"),
       cloudflareApiKeyEnc: podcasts.cloudflareApiKeyEnc,
