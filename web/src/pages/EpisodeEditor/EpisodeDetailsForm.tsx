@@ -127,7 +127,7 @@ export function EpisodeDetailsForm({
               value={form.slug}
               onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value.replace(/[^a-zA-Z0-9-]/g, '') }))}
               className={styles.input}
-              placeholder="e.g. episode-1-Getting-started"
+              placeholder="e.g. episode-1-getting-started"
               pattern="[a-z0-9\-]+"
               required
               disabled={slugDisabled}
