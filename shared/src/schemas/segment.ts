@@ -94,6 +94,7 @@ export const segmentUpdateBodySchema = z.object({
   trimRanges: trimRangesSchema.optional().nullable(),
   markers: markersSchema.optional().nullable(),
   audioEq: audioEqSchema,
+  disabled: z.boolean().optional(),
 });
 
 /** Body for POST /episodes/:episodeId/segments/:segmentId/trim. */
@@ -164,6 +165,8 @@ export const segmentResponseSchema = z.object({
   markers: markersSchema.optional().nullable(),
   /** Optional 3-band EQ (low/mids/high) in dB; applied at render. */
   audioEq: audioEqSchema,
+  /** When true, segment is excluded from the final generated episode. */
+  disabled: z.boolean().optional(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */

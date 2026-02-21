@@ -266,6 +266,7 @@ export const episodeSegments = sqliteTable(
     trimRanges: text("trim_ranges"),
     markers: text("markers"),
     audioEq: text("audio_eq"),
+    disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
   },
   (table) => [index("idx_episode_segments_episode").on(table.episodeId)],
 );

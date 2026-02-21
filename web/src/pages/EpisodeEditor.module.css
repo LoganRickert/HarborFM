@@ -362,6 +362,16 @@
   border-color: #333;
 }
 
+.segmentBlockDisabled {
+  background: #000;
+  border-color: #222;
+}
+
+.segmentBlockDisabled .segmentIcon {
+  background: #111;
+  border-color: #333;
+}
+
 .segmentProcessingSpinner {
   color: var(--accent);
   animation: segmentProcessingSpin 1s linear infinite;

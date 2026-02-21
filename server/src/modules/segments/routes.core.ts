@@ -408,9 +408,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.name !== undefined ||
         body.trimRanges !== undefined ||
         body.markers !== undefined ||
-        body.audioEq !== undefined;
+        body.audioEq !== undefined ||
+        body.disabled !== undefined;
       if (!hasUpdates) {
-        return reply.status(400).send({ error: "At least one of name, trimRanges, markers, or audioEq must be provided" });
+        return reply.status(400).send({ error: "At least one of name, trimRanges, markers, audioEq, or disabled must be provided" });
       }
       const row = repo.getSegmentDuration(segmentId, episodeId);
       if (!row) return reply.status(404).send({ error: "Segment not found" });
@@ -477,6 +478,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
       if (body.audioEq !== undefined) {
         repo.updateSegmentAudioEq(segmentId, episodeId, audioEqJson);
+      }
+      if (body.disabled !== undefined) {
+        repo.updateSegmentDisabled(segmentId, episodeId, body.disabled);
       }
 
       broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });

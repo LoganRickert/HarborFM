@@ -27,6 +27,7 @@ export function redactSegmentForClient(
     audioEq: segment.audioEq,
     assetName: segment.assetName,
     waveformExists: segment.waveformExists,
+    disabled: segment.disabled,
   };
   const path = segment.audioPath;
   if (path != null && typeof path === "string" && path.length > 0) {

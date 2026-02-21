@@ -105,7 +105,7 @@ export function useSegmentEdit(
     };
     setAppliedAudioEq(eq);
     if (!audioEditActive) setDraftAudioEq(eq);
-  }, [segment.id, segment.audioEq]);
+  }, [segment.id, segment.audioEq, audioEditActive]);
 
   useEffect(() => {
     if (segmentWaveformData) {

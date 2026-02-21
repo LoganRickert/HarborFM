@@ -32,6 +32,7 @@ export interface EpisodeSectionsPanelProps {
   onSegmentPlayRequest: (segmentId: string) => void;
   onSegmentMoreInfo?: (segmentId: string) => void;
   onSegmentEdit?: (segmentId: string) => void;
+  onSegmentToggleDisabled?: (segmentId: string) => void;
   registerSegmentPause: (id: string, pause: () => void) => void;
   unregisterSegmentPause: (id: string) => void;
 }
@@ -58,6 +59,7 @@ export function EpisodeSectionsPanel({
   onSegmentPlayRequest,
   onSegmentMoreInfo,
   onSegmentEdit,
+  onSegmentToggleDisabled,
   registerSegmentPause,
   unregisterSegmentPause,
 }: EpisodeSectionsPanelProps) {
@@ -134,6 +136,7 @@ export function EpisodeSectionsPanel({
               onPlayRequest={onSegmentPlayRequest}
               onMoreInfo={onSegmentMoreInfo ? () => onSegmentMoreInfo(seg.id) : undefined}
               onEdit={onSegmentEdit ? () => onSegmentEdit(seg.id) : undefined}
+              onToggleDisabled={onSegmentToggleDisabled ? () => onSegmentToggleDisabled(seg.id) : undefined}
               registerPause={registerSegmentPause}
               unregisterPause={unregisterSegmentPause}
               readOnly={readOnly}

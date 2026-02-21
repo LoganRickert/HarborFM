@@ -95,7 +95,7 @@ export function SegmentEditorModal({
     };
     setAppliedAudioEq(eq);
     if (!audioEditActive) setDraftAudioEq(eq);
-  }, [segment.id, segment.audioEq]);
+  }, [segment.id, segment.audioEq, audioEditActive]);
 
   useEffect(() => {
     if (waveformDataProp) {

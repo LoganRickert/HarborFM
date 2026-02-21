@@ -37,6 +37,7 @@ export type SegmentListRow = {
   markers: string | null;
   audioEq: string | null;
   assetName: string | null;
+  disabled: boolean;
 };
 
 /** List segments for episode with leftJoin reusableAssets for assetName. */
@@ -58,6 +59,7 @@ export function listSegmentsForEpisode(episodeId: string): SegmentListRow[] {
       markers: episodeSegments.markers,
       audioEq: episodeSegments.audioEq,
       assetName: reusableAssets.name,
+      disabled: episodeSegments.disabled,
     })
     .from(episodeSegments)
     .leftJoin(
@@ -336,6 +338,18 @@ export function updateSegmentAudioEq(
   drizzleDb
     .update(episodeSegments)
     .set({ audioEq })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentDisabled(
+  segmentId: string,
+  episodeId: string,
+  disabled: boolean,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ disabled })
     .where(updateWhere(segmentId, episodeId))
     .run();
 }

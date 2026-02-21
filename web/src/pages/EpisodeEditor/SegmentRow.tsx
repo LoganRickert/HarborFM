@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Play, Pause, Mic, Library, Info, Trash2, Loader2, Scissors } from 'lucide-react';
+import { Play, Pause, Mic, Library, Info, Trash2, Loader2, Scissors, Eye, EyeOff } from 'lucide-react';
 import { segmentStreamUrl } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { formatDuration } from './utils';
@@ -22,6 +22,7 @@ export interface SegmentRowProps {
   onPlayRequest: (segmentId: string) => void;
   onMoreInfo?: () => void;
   onEdit?: () => void;
+  onToggleDisabled?: () => void;
   registerPause: (id: string, pause: () => void) => void;
   unregisterPause: (id: string) => void;
   readOnly?: boolean;
@@ -46,6 +47,7 @@ export function SegmentRow({
   onPlayRequest,
   onMoreInfo,
   onEdit,
+  onToggleDisabled,
   registerPause,
   unregisterPause,
   readOnly = false,
@@ -242,8 +244,10 @@ export function SegmentRow({
     );
   }
 
+  const isDisabled = !!(segment as EpisodeSegment & { disabled?: boolean }).disabled;
+
   return (
-    <li className={styles.segmentBlock}>
+    <li className={`${styles.segmentBlock} ${isDisabled ? styles.segmentBlockDisabled : ''}`.trim()}>
       <div className={styles.segmentBlockTop}>
         <span className={styles.segmentIcon} title={isRecorded ? 'Recorded' : 'From library'}>
           {isRecorded ? <Mic size={18} strokeWidth={2} aria-hidden /> : <Library size={18} strokeWidth={2} aria-hidden />}
@@ -289,6 +293,17 @@ export function SegmentRow({
           {onEdit && (
             <button type="button" className={styles.segmentBtn} onClick={onEdit} title="Edit timeline" aria-label="Edit segment timeline">
               <Scissors size={18} aria-hidden />
+            </button>
+          )}
+          {onToggleDisabled && (
+            <button
+              type="button"
+              className={styles.segmentBtn}
+              onClick={onToggleDisabled}
+              title={isDisabled ? 'Include in final episode' : 'Exclude from final episode'}
+              aria-label={isDisabled ? 'Include in final episode' : 'Exclude from final episode'}
+            >
+              {isDisabled ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
             </button>
           )}
           {onMoreInfo && (

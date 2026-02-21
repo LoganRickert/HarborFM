@@ -156,15 +156,18 @@ export async function registerRenderRoutes(app: FastifyInstance) {
 
       const { podcastId } = access;
       const segments = repo.listSegmentsForRender(episodeId);
-      if (segments.length === 0) {
+      const enabledCount = segments.filter(
+        (s) => !(s.disabled || s.inProgress || s.recordFailed),
+      ).length;
+      if (enabledCount === 0) {
         return reply
           .status(400)
-          .send({ error: "Add at least one section before rendering." });
+          .send({ error: "Add or enable at least one section before rendering." });
       }
       const DATA_DIR = getDataDir();
       const copyrightLines: string[] = [];
       for (const s of segments) {
-        if (s.inProgress || s.recordFailed) continue;
+        if (s.disabled || s.inProgress || s.recordFailed) continue;
         if (s.type === "reusable" && s.reusableAssetId) {
           const asset = repo.getReusableAssetNameAndCopyright(s.reusableAssetId as string);
           if (asset) {
@@ -228,7 +231,7 @@ export async function registerRenderRoutes(app: FastifyInstance) {
             const finalMarkers: Array<{ time: number; title?: string; color?: string }> = [];
             let offsetSec = 0;
             for (const s of segments) {
-              if (s.inProgress || s.recordFailed) continue;
+              if (s.disabled || s.inProgress || s.recordFailed) continue;
               let sourcePath: string | null = null;
               let baseDir: string = uploadsDir(podcastId, episodeId);
               if (s.type === "recorded" && s.audioPath) {

@@ -349,6 +349,12 @@ export function EpisodeEditorContent({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['segments', id] }),
   });
 
+  const toggleSegmentDisabledMutation = useMutation({
+    mutationFn: ({ segmentId, disabled }: { segmentId: string; disabled: boolean }) =>
+      updateSegment(id, segmentId, { disabled }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['segments', id] }),
+  });
+
   const addReusableMutation = useMutation({
     mutationFn: (assetId: string) => addReusableSegment(id, assetId),
     onSuccess: () => {
@@ -563,6 +569,14 @@ export function EpisodeEditorContent({
                 setSegmentModalInitialTab('edit');
                 setSegmentIdForInfo(segmentId);
               }}
+              onSegmentToggleDisabled={
+                segmentReadOnly
+                  ? undefined
+                  : (segmentId) => {
+                      const seg = segments.find((s) => s.id === segmentId);
+                      if (seg) toggleSegmentDisabledMutation.mutate({ segmentId, disabled: !seg.disabled });
+                    }
+              }
           registerSegmentPause={registerSegmentPause}
           unregisterSegmentPause={unregisterSegmentPause}
         />
@@ -570,7 +584,7 @@ export function EpisodeEditorContent({
 
       <GenerateFinalBar
         episodeId={id}
-        segmentCount={segments.length}
+        segmentCount={segments.filter((s) => !s.disabled).length}
         onBuild={() => renderMutation.mutate()}
         isBuilding={renderMutation.isPending || renderStatus?.status === 'building'}
         buildMessage={buildAlreadyInProgressMessage}
