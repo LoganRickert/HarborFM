@@ -3493,6 +3493,41 @@
   background: #dc2626;
   border-color: #dc2626;
 }
+.audioEqRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem 1.5rem;
+  align-items: stretch;
+  width: 100%;
+}
+.audioEqLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.audioEqLabel span:first-child {
+  flex: 0 0 3rem;
+}
+.audioEqLabel input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 4rem;
+}
+.audioEqValue {
+  flex: 0 0 3.5rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.audioEqActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.75rem;
+}
 .segmentEditorSaveBtn {
   display: inline-flex;
   align-items: center;

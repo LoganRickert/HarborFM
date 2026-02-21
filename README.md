@@ -16,6 +16,8 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 
 **Swagger API Docs:** [https://harborfm.com/server/](https://harborfm.com/server/)
 
+**Overview on Noted.lol** [https://noted.lol/harborfm/](https://noted.lol/harborfm/)
+
 ## Table of contents
 
 - [Overview](#overview)

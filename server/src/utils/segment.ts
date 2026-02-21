@@ -24,6 +24,7 @@ export function redactSegmentForClient(
     recordFailed: segment.recordFailed,
     trimRanges: segment.trimRanges,
     markers: segment.markers,
+    audioEq: segment.audioEq,
     assetName: segment.assetName,
     waveformExists: segment.waveformExists,
   };
@@ -45,6 +46,14 @@ export function redactSegmentForClient(
       out.markers = JSON.parse(markersRaw);
     } catch {
       out.markers = null;
+    }
+  }
+  const audioEqRaw = segment.audioEq;
+  if (typeof audioEqRaw === "string" && audioEqRaw) {
+    try {
+      out.audioEq = JSON.parse(audioEqRaw);
+    } catch {
+      out.audioEq = null;
     }
   }
   return out;

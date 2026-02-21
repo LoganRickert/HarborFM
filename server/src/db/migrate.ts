@@ -56,6 +56,7 @@ import * as m054 from "./migrations/054_reviews.js";
 import * as m055 from "./migrations/055_podcast_review_fields.js";
 import * as m056 from "./migrations/056_reviews_user_id.js";
 import * as m057 from "./migrations/057_reviews_delete_token.js";
+import * as m058 from "./migrations/058_segment_audio_eq.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -115,6 +116,7 @@ const migrations = [
   { name: "055_podcast_review_fields", ...m055 },
   { name: "056_reviews_user_id", ...m056 },
   { name: "057_reviews_delete_token", ...m057 },
+  { name: "058_segment_audio_eq", ...m058 },
 ];
 
 const MIGRATIONS_TABLE = `

@@ -304,6 +304,7 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               }
               offsetSec += effectiveDuration;
 
+              let segmentPath: string;
               if (ranges.length > 0) {
                 const tempPath = join(tmpdir(), `render_trim_${nanoid()}.wav`);
                 tempPathsToClean.push(tempPath);
@@ -313,9 +314,37 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                   ranges,
                   tempPath,
                 );
-                paths.push(tempPath);
+                segmentPath = tempPath;
               } else {
-                paths.push(sourcePath);
+                segmentPath = sourcePath;
+              }
+
+              const audioEqRaw = s.audioEq;
+              let audioEq: { lowDb?: number; midDb?: number; highDb?: number } | null = null;
+              if (typeof audioEqRaw === "string" && audioEqRaw) {
+                try {
+                  const parsed = JSON.parse(audioEqRaw) as unknown;
+                  if (typeof parsed === "object" && parsed != null) {
+                    const o = parsed as Record<string, unknown>;
+                    const low = typeof o.lowDb === "number" ? o.lowDb : 0;
+                    const mid = typeof o.midDb === "number" ? o.midDb : 0;
+                    const high = typeof o.highDb === "number" ? o.highDb : 0;
+                    if (low !== 0 || mid !== 0 || high !== 0) {
+                      audioEq = { lowDb: low, midDb: mid, highDb: high };
+                    }
+                  }
+                } catch {
+                  /* ignore invalid JSON */
+                }
+              }
+              if (audioEq) {
+                const eqPath = join(tmpdir(), `render_eq_${nanoid()}.wav`);
+                tempPathsToClean.push(eqPath);
+                const segmentBaseDir = segmentPath.startsWith(tmpdir()) ? tmpdir() : baseDir;
+                await audioService.applyEqToWav(segmentPath, eqPath, segmentBaseDir, audioEq);
+                paths.push(eqPath);
+              } else {
+                paths.push(segmentPath);
               }
             }
             if (paths.length === 0) {

@@ -693,6 +693,55 @@ export async function removeRangesAndExportToWav(
   return outputPath;
 }
 
+export interface ApplyEqOptions {
+  lowDb?: number;
+  midDb?: number;
+  highDb?: number;
+}
+
+/**
+ * Apply 3-band EQ (low/mids/high) to a WAV file and write to output.
+ * Only includes bands that are defined and non-zero. Uses ffmpeg bass, equalizer, treble filters (gain in dB).
+ * @param inputPath - Full path to source audio (must be under allowedBaseDir)
+ * @param outputPath - Full path for output WAV (must be under allowedBaseDir or tmpdir)
+ * @param allowedBaseDir - Base directory for input; output may be in tmpdir
+ * @param options - lowDb, midDb, highDb in dB (-20..+20). Omit or 0 = no change for that band.
+ */
+export async function applyEqToWav(
+  inputPath: string,
+  outputPath: string,
+  allowedBaseDir: string,
+  options: ApplyEqOptions,
+): Promise<string> {
+  const safeSource = assertPathUnder(inputPath, allowedBaseDir);
+  prepareOutputPath(outputPath, allowedBaseDir);
+
+  const low = options.lowDb ?? 0;
+  const mid = options.midDb ?? 0;
+  const high = options.highDb ?? 0;
+  const parts: string[] = [];
+  if (low !== 0) parts.push(`bass=g=${low}`);
+  if (mid !== 0) parts.push("equalizer=f=1000:t=q:w=1:g=" + mid);
+  if (high !== 0) parts.push(`treble=g=${high}`);
+
+  if (parts.length === 0) {
+    await exec(
+      FFMPEG_PATH,
+      ["-i", safeSource, "-acodec", "pcm_s16le", "-ar", "44100", "-y", outputPath],
+      { maxBuffer: 1024 * 1024 },
+    );
+    return outputPath;
+  }
+
+  const af = parts.join(",");
+  await exec(
+    FFMPEG_PATH,
+    ["-i", safeSource, "-af", af, "-acodec", "pcm_s16le", "-ar", "44100", "-y", outputPath],
+    { maxBuffer: 1024 * 1024 },
+  );
+  return outputPath;
+}
+
 /**
  * Trim audio file - extract from startSec to endSec and export to WAV.
  * @param sourcePath - Full path to source audio (must be under allowedBaseDir)

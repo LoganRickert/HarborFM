@@ -87,9 +87,16 @@ export function SegmentModal({
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (edit.hasEditUnsavedChanges) {
+        const audioEqPayload =
+          edit.appliedAudioEq.lowDb === 0 &&
+          edit.appliedAudioEq.midDb === 0 &&
+          edit.appliedAudioEq.highDb === 0
+            ? null
+            : edit.appliedAudioEq;
         await updateSegment(episodeId, segmentId, {
           trimRanges: mergeTrimRanges(edit.trimRanges),
           markers: edit.markers,
+          audioEq: audioEqPayload,
         });
       }
     },
@@ -233,6 +240,19 @@ export function SegmentModal({
         onBackToStart={edit.handleBackToStart}
         onFastForwardToggle={edit.handleFastForwardToggle}
         isFastForward={edit.playbackRate === 2}
+        audioEditActive={edit.audioEditActive}
+        draftAudioEq={edit.draftAudioEq}
+        appliedAudioEq={edit.appliedAudioEq}
+        onDraftAudioEqChange={edit.setDraftAudioEq}
+        onAudioEditActiveChange={edit.setAudioEditActive}
+        onApplyAudioEq={() => {
+          edit.setAppliedAudioEq(edit.draftAudioEq);
+          edit.setAudioEditActive(false);
+        }}
+        onCancelAudioEq={() => {
+          edit.setDraftAudioEq(edit.appliedAudioEq);
+          edit.setAudioEditActive(false);
+        }}
       />
     </div>
   );

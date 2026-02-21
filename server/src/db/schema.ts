@@ -265,6 +265,7 @@ export const episodeSegments = sqliteTable(
     recordFailed: integer("record_failed", { mode: "boolean" }).notNull().default(false),
     trimRanges: text("trim_ranges"),
     markers: text("markers"),
+    audioEq: text("audio_eq"),
   },
   (table) => [index("idx_episode_segments_episode").on(table.episodeId)],
 );

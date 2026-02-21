@@ -35,6 +35,7 @@ export type SegmentListRow = {
   recordFailed: boolean;
   trimRanges: string | null;
   markers: string | null;
+  audioEq: string | null;
   assetName: string | null;
 };
 
@@ -55,6 +56,7 @@ export function listSegmentsForEpisode(episodeId: string): SegmentListRow[] {
       recordFailed: episodeSegments.recordFailed,
       trimRanges: episodeSegments.trimRanges,
       markers: episodeSegments.markers,
+      audioEq: episodeSegments.audioEq,
       assetName: reusableAssets.name,
     })
     .from(episodeSegments)
@@ -322,6 +324,18 @@ export function updateSegmentMarkers(
   drizzleDb
     .update(episodeSegments)
     .set({ markers })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentAudioEq(
+  segmentId: string,
+  episodeId: string,
+  audioEq: string | null,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ audioEq })
     .where(updateWhere(segmentId, episodeId))
     .run();
 }
