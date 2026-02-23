@@ -153,11 +153,12 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   }, [refreshDevices]);
 
   useEffect(() => {
-    if (!deviceId || typeof window === 'undefined') return;
-    localStorage.setItem(DEVICE_ID_KEY, deviceId);
-    const agcStored = localStorage.getItem(getAgcKey(deviceId));
+    if (typeof window === 'undefined') return;
+    const id = deviceId || 'default';
+    if (deviceId) localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    const agcStored = localStorage.getItem(getAgcKey(id));
     setAutoGainControl(agcStored === 'false' ? false : true);
-    const volStored = localStorage.getItem(getMicVolumeKey(deviceId));
+    const volStored = localStorage.getItem(getMicVolumeKey(id));
     const v = parseFloat(volStored ?? '1');
     setMicVolume(Number.isFinite(v) ? Math.max(0, Math.min(8, v)) : 1);
   }, [deviceId]);
@@ -530,9 +531,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   };
 
   const handleAutoGainControlChange = (enabled: boolean) => {
+    const key = getAgcKey(deviceId || 'default');
     setAutoGainControl(enabled);
-    if (typeof window !== 'undefined' && deviceId) {
-      localStorage.setItem(getAgcKey(deviceId), String(enabled));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, String(enabled));
     }
   };
 

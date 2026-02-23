@@ -45,7 +45,10 @@ export function useMediasoupRoom(
   autoGainControlRef.current = autoGainControl;
   micVolumeRef.current = micVolume;
   const setListenToSelfStateRef = useRef<(v: boolean) => void>(() => {});
+  const listenToSelfRef = useRef(false);
+  const listenToSelfRestoreRef = useRef(false);
   const [listenToSelf, setListenToSelfState] = useState(false);
+  listenToSelfRef.current = listenToSelf;
   setListenToSelfStateRef.current = setListenToSelfState;
   const [soundboardVolumeFromRoom, setSoundboardVolumeFromRoom] = useState<number>(1);
   const mediaStreamsRef = useRef<{ micStream: MediaStream | null; localStream: MediaStream | null }>({ micStream: null, localStream: null });
@@ -182,14 +185,17 @@ export function useMediasoupRoom(
         await device.load({ routerRtpCapabilities: capsMsg.rtpCapabilities });
         if (closed) return;
 
+        // Read refs immediately before getUserMedia so we use current AGC/volume after any re-renders during async setup.
+        const agc = autoGainControlRef.current;
+        const micVol = micVolumeRef.current;
         const audioConstraints: MediaTrackConstraints = {
           ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
           sampleRate: { ideal: 48000 },
-          autoGainControl: autoGainControlRef.current,
+          autoGainControl: agc,
           noiseSuppression: false,
           // When AGC off, also disable echo cancellation to reduce pumping/volume swings.
           // Use headphones to avoid feedback when echo cancellation is off.
-          ...(!autoGainControlRef.current ? { echoCancellation: false } : {}),
+          ...(!agc ? { echoCancellation: false } : {}),
         };
         micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
         const micTrack = micStream.getAudioTracks()[0];
@@ -205,9 +211,6 @@ export function useMediasoupRoom(
         const analyser = ctx.createAnalyser();
         const silentGain = ctx.createGain();
         silentGain.gain.value = 0;
-        micSource.connect(analyser);
-        analyser.connect(silentGain);
-        silentGain.connect(ctx.destination);
 
         const selfListenGain = ctx.createGain();
         selfListenGain.gain.value = 0;
@@ -215,10 +218,14 @@ export function useMediasoupRoom(
         selfListenGainRef.current = selfListenGain;
 
         const micVolumeGain = ctx.createGain();
-        micVolumeGain.gain.value = autoGainControlRef.current ? 1 : Math.max(0, Math.min(8, micVolumeRef.current));
+        micVolumeGain.gain.value = agc ? 1 : Math.max(0, Math.min(8, micVol));
         micSource.connect(micVolumeGain);
         micVolumeGainRef.current = micVolumeGain;
         micVolumeGain.connect(selfListenGain);
+        // Meter after gain so the level bar reflects what we send (AGC on = normalized; AGC off = scaled by manual volume).
+        micVolumeGain.connect(analyser);
+        analyser.connect(silentGain);
+        silentGain.connect(ctx.destination);
 
         const sendDest = ctx.createMediaStreamDestination();
         micVolumeGain.connect(sendDest);
@@ -316,6 +323,17 @@ export function useMediasoupRoom(
         if (closed) return;
         producerRef.current = producer;
         setReady(true);
+        if (listenToSelfRestoreRef.current) {
+          listenToSelfRestoreRef.current = false;
+          ctx.resume().then(() => {
+            if (closed) return;
+            const gain = selfListenGainRef.current;
+            if (gain) {
+              gain.gain.value = 1;
+              setListenToSelfStateRef.current(true);
+            }
+          }).catch(() => {});
+        }
         const myProducerId = producer.id;
 
         // Soundboard producer is created when panel opens (setSoundboardPanelOpen(true)),
@@ -441,6 +459,7 @@ export function useMediasoupRoom(
       stopMediaTracks();
       webrtcWsRef.current = null;
       setRemoteMicLevels(new Map());
+      listenToSelfRestoreRef.current = listenToSelfRef.current;
       selfListenGainRef.current = null;
       micVolumeGainRef.current = null;
       micTrackRef.current = null;
@@ -453,7 +472,7 @@ export function useMediasoupRoom(
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken]);
+  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken, autoGainControl]);
 
   useEffect(() => {
     const gain = micVolumeGainRef.current;

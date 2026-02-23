@@ -390,9 +390,16 @@ MOUNT_SVC
     MEDIASOUP_ANNOUNCED_IP="$(curl -s --connect-timeout 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)"  # AWS
     [ -z "$MEDIASOUP_ANNOUNCED_IP" ] && MEDIASOUP_ANNOUNCED_IP="$(curl -s --connect-timeout 2 ifconfig.me 2>/dev/null)"
   fi
+  # Image tag: main (or empty) -> latest; other branches -> sanitized branch name for Docker tag
+  if [ -z "${HARBORFM_BRANCH:-}" ] || [ "$HARBORFM_BRANCH" = "main" ]; then
+    HARBORFM_IMAGE_TAG="latest"
+  else
+    HARBORFM_IMAGE_TAG="$(echo "$HARBORFM_BRANCH" | tr '/' '-')"
+  fi
   # .env
   {
     echo "INSTALL_DIR=$INSTALL_DIR"
+    echo "HARBORFM_IMAGE_TAG=$HARBORFM_IMAGE_TAG"
     echo "DOMAIN=$DOMAIN"
     echo "REVERSE_PROXY=$REVERSE_PROXY"
     echo "CERTBOT_EMAIL=$CERTBOT_EMAIL"
