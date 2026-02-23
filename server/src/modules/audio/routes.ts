@@ -51,6 +51,7 @@ import { readSettings } from "../settings/index.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { getSingleRangeRequestedLength } from "../../utils/parseRange.js";
 import { isHumanUserAgent } from "../../utils/isBot.js";
+import { podcastSourceFromUserAgent } from "../../utils/podcastSourceFromUserAgent.js";
 
 export async function audioRoutes(app: FastifyInstance) {
   app.post(
@@ -506,10 +507,11 @@ export async function audioRoutes(app: FastifyInstance) {
         const ip = getClientIp(request);
         const ua = getUserAgent(request);
         const isBot = !isHumanUserAgent(ua);
+        const source = podcastSourceFromUserAgent(ua);
         const location = isBot
           ? null
           : ((await getLocationForIp(ip).catch(() => null)) ?? "(unknown)");
-        recordEpisodeRequest(episodeId.trim(), isBot, location);
+        recordEpisodeRequest(episodeId.trim(), isBot, location, source);
 
         const fileSize = statSync(safePath).size;
         const r = request.headers["range"];
@@ -522,7 +524,13 @@ export async function audioRoutes(app: FastifyInstance) {
         const acceptLanguage =
           (request.headers["accept-language"] as string) ?? "";
         const ck = clientKey(ip, ua, acceptLanguage);
-        recordEpisodeListenIfNew(episodeId.trim(), isBot, ck, requestedLength);
+        recordEpisodeListenIfNew(
+          episodeId.trim(),
+          isBot,
+          ck,
+          requestedLength,
+          source,
+        );
       }
 
       const result = await send(request.raw, basename(safePath), {

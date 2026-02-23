@@ -36,26 +36,29 @@ const episodeCounters = new Map<Key, { bot: number; human: number }>();
 const episodeLocationCounters = new Map<Key, { bot: number; human: number }>();
 const listenCounters = new Map<Key, { bot: number; human: number }>();
 
-function rssKey(podcastId: string, date: string): Key {
-  return `rss:${podcastId}:${date}`;
+const KEY_SEP = "|";
+
+function rssKey(podcastId: string, date: string, source: string): Key {
+  return `rss:${podcastId}:${date}${KEY_SEP}${source}`;
 }
-function episodeKey(episodeId: string, date: string): Key {
-  return `ep:${episodeId}:${date}`;
+function episodeKey(episodeId: string, date: string, source: string): Key {
+  return `ep:${episodeId}:${date}${KEY_SEP}${source}`;
 }
 function episodeLocationKey(
   episodeId: string,
   date: string,
   location: string,
+  source: string,
 ): Key {
-  return `eploc:${episodeId}:${date}:${location}`;
+  return `eploc:${episodeId}:${date}:${location}${KEY_SEP}${source}`;
 }
-function listenKey(episodeId: string, date: string): Key {
-  return `listen:${episodeId}:${date}`;
+function listenKey(episodeId: string, date: string, source: string): Key {
+  return `listen:${episodeId}:${date}${KEY_SEP}${source}`;
 }
 
-function incRss(podcastId: string, isBot: boolean): void {
+function incRss(podcastId: string, isBot: boolean, source: string): void {
   const date = statDate();
-  const key = rssKey(podcastId, date);
+  const key = rssKey(podcastId, date, source);
   const cur = rssCounters.get(key) ?? { bot: 0, human: 0 };
   if (isBot) cur.bot += 1;
   else cur.human += 1;
@@ -66,16 +69,17 @@ function incEpisode(
   episodeId: string,
   isBot: boolean,
   location: string | null,
+  source: string,
 ): void {
   const date = statDate();
-  const ek = episodeKey(episodeId, date);
+  const ek = episodeKey(episodeId, date, source);
   const cur = episodeCounters.get(ek) ?? { bot: 0, human: 0 };
   if (isBot) cur.bot += 1;
   else cur.human += 1;
   episodeCounters.set(ek, cur);
 
   if (location != null && location !== "") {
-    const lk = episodeLocationKey(episodeId, date, location);
+    const lk = episodeLocationKey(episodeId, date, location, source);
     const locCur = episodeLocationCounters.get(lk) ?? { bot: 0, human: 0 };
     if (isBot) locCur.bot += 1;
     else locCur.human += 1;
@@ -106,25 +110,30 @@ function tryRecordListenDedup(
   return (result as { changes: number }).changes === 1;
 }
 
-function incListen(episodeId: string, isBot: boolean): void {
+function incListen(episodeId: string, isBot: boolean, source: string): void {
   const date = statDate();
-  const key = listenKey(episodeId, date);
+  const key = listenKey(episodeId, date, source);
   const cur = listenCounters.get(key) ?? { bot: 0, human: 0 };
   if (isBot) cur.bot += 1;
   else cur.human += 1;
   listenCounters.set(key, cur);
 }
 
-export function recordRssRequest(podcastId: string, isBot: boolean): void {
-  incRss(podcastId, isBot);
+export function recordRssRequest(
+  podcastId: string,
+  isBot: boolean,
+  source: string,
+): void {
+  incRss(podcastId, isBot, source);
 }
 
 export function recordEpisodeRequest(
   episodeId: string,
   isBot: boolean,
   location: string | null,
+  source: string,
 ): void {
-  incEpisode(episodeId, isBot, location);
+  incEpisode(episodeId, isBot, location, source);
 }
 
 /**
@@ -136,28 +145,35 @@ export function recordEpisodeListenIfNew(
   isBot: boolean,
   clientKeyVal: string,
   requestedLength: number | null,
+  source: string,
 ): void {
   if (requestedLength === null || requestedLength < LISTEN_THRESHOLD_BYTES)
     return;
   const date = statDate();
   if (!tryRecordListenDedup(episodeId, date, clientKeyVal)) return;
-  incListen(episodeId, isBot);
+  incListen(episodeId, isBot, source);
 }
 
 function flushRss(): void {
   for (const [key, counts] of rssCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const [, podcastId, date] = key.split(":");
+    const [prefix, source] = key.split(KEY_SEP);
+    const [, podcastId, date] = prefix.split(":");
     drizzleDb
       .insert(podcastStatsRssDaily)
       .values({
         podcastId,
         statDate: date,
+        source,
         botCount: counts.bot,
         humanCount: counts.human,
       })
       .onConflictDoUpdate({
-        target: [podcastStatsRssDaily.podcastId, podcastStatsRssDaily.statDate],
+        target: [
+          podcastStatsRssDaily.podcastId,
+          podcastStatsRssDaily.statDate,
+          podcastStatsRssDaily.source,
+        ],
         set: {
           botCount: sql`${podcastStatsRssDaily.botCount} + ${counts.bot}`,
           humanCount: sql`${podcastStatsRssDaily.humanCount} + ${counts.human}`,
@@ -171,12 +187,14 @@ function flushRss(): void {
 function flushEpisode(): void {
   for (const [key, counts] of episodeCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const [, episodeId, date] = key.split(":");
+    const [prefix, source] = key.split(KEY_SEP);
+    const [, episodeId, date] = prefix.split(":");
     drizzleDb
       .insert(podcastStatsEpisodeDaily)
       .values({
         episodeId,
         statDate: date,
+        source,
         botCount: counts.bot,
         humanCount: counts.human,
       })
@@ -184,6 +202,7 @@ function flushEpisode(): void {
         target: [
           podcastStatsEpisodeDaily.episodeId,
           podcastStatsEpisodeDaily.statDate,
+          podcastStatsEpisodeDaily.source,
         ],
         set: {
           botCount: sql`${podcastStatsEpisodeDaily.botCount} + ${counts.bot}`,
@@ -198,7 +217,10 @@ function flushEpisode(): void {
 function flushEpisodeLocation(): void {
   for (const [key, counts] of episodeLocationCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const parts = key.split(":");
+    const sepIdx = key.indexOf(KEY_SEP);
+    const source = key.slice(sepIdx + KEY_SEP.length);
+    const prefix = key.slice(0, sepIdx);
+    const parts = prefix.split(":");
     const episodeId = parts[1];
     const date = parts[2];
     const location = parts.slice(3).join(":");
@@ -208,6 +230,7 @@ function flushEpisodeLocation(): void {
         episodeId,
         statDate: date,
         location,
+        source,
         botCount: counts.bot,
         humanCount: counts.human,
       })
@@ -216,6 +239,7 @@ function flushEpisodeLocation(): void {
           podcastStatsEpisodeLocationDaily.episodeId,
           podcastStatsEpisodeLocationDaily.statDate,
           podcastStatsEpisodeLocationDaily.location,
+          podcastStatsEpisodeLocationDaily.source,
         ],
         set: {
           botCount:
@@ -232,12 +256,14 @@ function flushEpisodeLocation(): void {
 function flushListens(): void {
   for (const [key, counts] of listenCounters) {
     if (counts.bot === 0 && counts.human === 0) continue;
-    const [, episodeId, date] = key.split(":");
+    const [prefix, source] = key.split(KEY_SEP);
+    const [, episodeId, date] = prefix.split(":");
     drizzleDb
       .insert(podcastStatsEpisodeListensDaily)
       .values({
         episodeId,
         statDate: date,
+        source,
         botCount: counts.bot,
         humanCount: counts.human,
       })
@@ -245,6 +271,7 @@ function flushListens(): void {
         target: [
           podcastStatsEpisodeListensDaily.episodeId,
           podcastStatsEpisodeListensDaily.statDate,
+          podcastStatsEpisodeListensDaily.source,
         ],
         set: {
           botCount:

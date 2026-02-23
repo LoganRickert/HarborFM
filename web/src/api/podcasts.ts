@@ -146,11 +146,12 @@ export function getPodcast(id: string) {
 
 /** Analytics response (camelCase). Server may send snake_case; we map in getPodcastAnalytics. */
 export interface PodcastAnalytics {
-  rssDaily: Array<{ statDate: string; botCount: number; humanCount: number }>;
+  rssDaily: Array<{ statDate: string; source: string; botCount: number; humanCount: number }>;
   episodes: Array<{ id: string; title: string; slug: string | null }>;
   episodeDaily: Array<{
     episodeId: string;
     statDate: string;
+    source: string;
     botCount: number;
     humanCount: number;
   }>;
@@ -158,27 +159,30 @@ export interface PodcastAnalytics {
     episodeId: string;
     statDate: string;
     location: string;
+    source: string;
     botCount: number;
     humanCount: number;
   }>;
   episodeListensDaily: Array<{
     episodeId: string;
     statDate: string;
+    source: string;
     botCount: number;
     humanCount: number;
   }>;
 }
 
 function mapAnalyticsFromServer(raw: {
-  rss_daily?: Array<{ stat_date?: string; bot_count?: number; human_count?: number }>;
+  rss_daily?: Array<{ stat_date?: string; source?: string; bot_count?: number; human_count?: number }>;
   episodes?: Array<{ id: string; title: string; slug: string | null }>;
-  episode_daily?: Array<{ episode_id?: string; stat_date?: string; bot_count?: number; human_count?: number }>;
-  episode_location_daily?: Array<{ episode_id?: string; stat_date?: string; location?: string; bot_count?: number; human_count?: number }>;
-  episode_listens_daily?: Array<{ episode_id?: string; stat_date?: string; bot_count?: number; human_count?: number }>;
+  episode_daily?: Array<{ episode_id?: string; stat_date?: string; source?: string; bot_count?: number; human_count?: number }>;
+  episode_location_daily?: Array<{ episode_id?: string; stat_date?: string; location?: string; source?: string; bot_count?: number; human_count?: number }>;
+  episode_listens_daily?: Array<{ episode_id?: string; stat_date?: string; source?: string; bot_count?: number; human_count?: number }>;
 }): PodcastAnalytics {
   return {
     rssDaily: (raw.rss_daily ?? []).map((r) => ({
       statDate: r.stat_date ?? '',
+      source: r.source ?? 'Other',
       botCount: r.bot_count ?? 0,
       humanCount: r.human_count ?? 0,
     })),
@@ -186,6 +190,7 @@ function mapAnalyticsFromServer(raw: {
     episodeDaily: (raw.episode_daily ?? []).map((r) => ({
       episodeId: r.episode_id ?? '',
       statDate: r.stat_date ?? '',
+      source: r.source ?? 'Other',
       botCount: r.bot_count ?? 0,
       humanCount: r.human_count ?? 0,
     })),
@@ -193,12 +198,14 @@ function mapAnalyticsFromServer(raw: {
       episodeId: r.episode_id ?? '',
       statDate: r.stat_date ?? '',
       location: r.location ?? '',
+      source: r.source ?? 'Other',
       botCount: r.bot_count ?? 0,
       humanCount: r.human_count ?? 0,
     })),
     episodeListensDaily: (raw.episode_listens_daily ?? []).map((r) => ({
       episodeId: r.episode_id ?? '',
       statDate: r.stat_date ?? '',
+      source: r.source ?? 'Other',
       botCount: r.bot_count ?? 0,
       humanCount: r.human_count ?? 0,
     })),

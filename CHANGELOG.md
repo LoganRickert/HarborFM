@@ -2,6 +2,7 @@
 
 ## v1.5.1 - 2026-02-22
 
+- **Podcast analytics breakdown:** Stats (RSS, episode requests, episode listens, location) now include a **source** dimension (Apple Podcasts, Spotify, Google Podcasts, Pocket Casts, Overcast, or Other) derived from User-Agent; analytics API and UI show counts per source so you can see which apps drive traffic.
 - **Docker Compose:** Staging environment now uses the main Docker image in docker-compose (fixed staging config).
 - **Group calls:** Fixed auto gain control (AGC) resetting incorrectly when refreshing the page.
 - **Reviews Missing:** Fixed reviews not showing up even when enabled.
