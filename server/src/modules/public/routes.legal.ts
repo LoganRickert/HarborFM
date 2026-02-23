@@ -69,6 +69,11 @@ export async function registerLegalRoutes(app: FastifyInstance) {
                 description:
                   "When true, WebRTC group calls are configured ( Join Call on Dashboard).",
               },
+              reviewsEnabled: {
+                type: "boolean",
+                description:
+                  "When true, public feed pages show a Reviews card and accept new reviews (subject to podcast-level settings).",
+              },
             },
             required: ["publicFeedsEnabled"],
           },

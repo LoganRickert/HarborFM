@@ -4,6 +4,7 @@
 
 - **Docker Compose:** Staging environment now uses the main Docker image in docker-compose (fixed staging config).
 - **Group calls:** Fixed auto gain control (AGC) resetting incorrectly when refreshing the page.
+- **Reviews Missing:** Fixed reviews not showing up even when enabled.
 
 ## v1.5 - 2026-02-20
 
