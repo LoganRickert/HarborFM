@@ -31,8 +31,20 @@ export function CallJoin() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [micLevel, setMicLevel] = useState(0);
   const [showMicSettings, setShowMicSettings] = useState(false);
-  const [autoGainControl, setAutoGainControl] = useState(true);
-  const [micVolume, setMicVolume] = useState(1);
+  const [autoGainControl, setAutoGainControl] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = localStorage.getItem(getAgcKey('default'));
+    if (stored === 'false') return false;
+    if (stored === 'true') return true;
+    return true;
+  });
+  const [micVolume, setMicVolume] = useState(() => {
+    if (typeof window === 'undefined') return 1;
+    const stored = localStorage.getItem(getMicVolumeKey('default'));
+    if (stored == null) return 1;
+    const v = parseFloat(stored);
+    return Number.isFinite(v) ? Math.max(0, Math.min(8, v)) : 1;
+  });
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [listeningToSelf, setListeningToSelf] = useState(false);
@@ -791,8 +803,8 @@ export function CallJoin() {
                     checked={autoGainControl}
                     onChange={(e) => {
                       const enabled = e.target.checked;
-                      setAutoGainControl(enabled);
                       const id = deviceId || 'default';
+                      setAutoGainControl(enabled);
                       localStorage.setItem(getAgcKey(id), String(enabled));
                     }}
                     aria-label="Auto Gain Control"
