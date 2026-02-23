@@ -9,7 +9,7 @@
 
 services:
   harborfm:
-    image: ghcr.io/loganrickert/harborfm:latest
+    image: ghcr.io/loganrickert/harborfm:${HARBORFM_IMAGE_TAG:-latest}
     container_name: harborfm
     restart: unless-stopped
     environment:
@@ -155,7 +155,7 @@ services:
 
   webrtc:
     profiles: ["webrtc"]
-    image: ghcr.io/loganrickert/harborfm-webrtc:latest
+    image: ghcr.io/loganrickert/harborfm-webrtc:${HARBORFM_IMAGE_TAG:-latest}
     container_name: harborfm-webrtc
     restart: unless-stopped
     environment:
