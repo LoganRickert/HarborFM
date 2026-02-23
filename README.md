@@ -18,6 +18,8 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 
 **Overview on Noted.lol** [https://noted.lol/harborfm/](https://noted.lol/harborfm/)
 
+**Discord** [https://discord.gg/hSmstBzAJV](https://discord.gg/hSmstBzAJV)
+
 ## Table of contents
 
 - [Overview](#overview)
