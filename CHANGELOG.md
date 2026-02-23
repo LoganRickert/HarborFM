@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.5.1 - 2026-02-22
+
+- **Docker Compose:** Staging environment now uses the main Docker image in docker-compose (fixed staging config).
+- **Group calls:** Fixed auto gain control (AGC) resetting incorrectly when refreshing the page.
+
 ## v1.5 - 2026-02-20
 
 - **Reviews:** Podcast and episode reviews with public submit (name, email, rating, body); optional CAPTCHA and subscriber-only per podcast; verification email with verify and delete links; public list with verified/approved filtering and delete-own or admin delete; admin list, approve, and hide (manager/owner); optional LLM spam check;
