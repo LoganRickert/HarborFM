@@ -60,6 +60,7 @@ import * as m058 from "./migrations/058_segment_audio_eq.js";
 import * as m059 from "./migrations/059_segment_disabled.js";
 import * as m060 from "./migrations/060_podcast_subscriber_only_messages.js";
 import * as m061 from "./migrations/061_podcast_show_scheduled_episodes.js";
+import * as m062 from "./migrations/062_podcast_stats_source.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -123,6 +124,7 @@ const migrations = [
   { name: "059_segment_disabled", ...m059 },
   { name: "060_podcast_subscriber_only_messages", ...m060 },
   { name: "061_podcast_show_scheduled_episodes", ...m061 },
+  { name: "062_podcast_stats_source", ...m062 },
 ];
 
 const MIGRATIONS_TABLE = `

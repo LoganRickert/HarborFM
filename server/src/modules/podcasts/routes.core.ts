@@ -527,6 +527,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       let rssQuery = drizzleDb
         .select({
           stat_date: podcastStatsRssDaily.statDate,
+          source: podcastStatsRssDaily.source,
           bot_count: podcastStatsRssDaily.botCount,
           human_count: podcastStatsRssDaily.humanCount,
         })
@@ -565,6 +566,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       const episode_daily: Array<{
         episode_id: string;
         stat_date: string;
+        source: string;
         bot_count: number;
         human_count: number;
       }> = [];
@@ -572,12 +574,14 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episode_id: string;
         stat_date: string;
         location: string;
+        source: string;
         bot_count: number;
         human_count: number;
       }> = [];
       const episode_listens_daily: Array<{
         episode_id: string;
         stat_date: string;
+        source: string;
         bot_count: number;
         human_count: number;
       }> = [];
@@ -588,6 +592,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           .select({
             episode_id: podcastStatsEpisodeDaily.episodeId,
             stat_date: podcastStatsEpisodeDaily.statDate,
+            source: podcastStatsEpisodeDaily.source,
             bot_count: podcastStatsEpisodeDaily.botCount,
             human_count: podcastStatsEpisodeDaily.humanCount,
           })
@@ -613,6 +618,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             episode_id: podcastStatsEpisodeLocationDaily.episodeId,
             stat_date: podcastStatsEpisodeLocationDaily.statDate,
             location: podcastStatsEpisodeLocationDaily.location,
+            source: podcastStatsEpisodeLocationDaily.source,
             bot_count: podcastStatsEpisodeLocationDaily.botCount,
             human_count: podcastStatsEpisodeLocationDaily.humanCount,
           })
@@ -641,6 +647,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           .select({
             episode_id: podcastStatsEpisodeListensDaily.episodeId,
             stat_date: podcastStatsEpisodeListensDaily.statDate,
+            source: podcastStatsEpisodeListensDaily.source,
             bot_count: podcastStatsEpisodeListensDaily.botCount,
             human_count: podcastStatsEpisodeListensDaily.humanCount,
           })
@@ -649,6 +656,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           .orderBy(
             desc(podcastStatsEpisodeListensDaily.statDate),
             podcastStatsEpisodeListensDaily.episodeId,
+            podcastStatsEpisodeListensDaily.source,
           );
         if (limit !== undefined) {
           listensQuery = listensQuery.limit(limit).offset(offset) as typeof listensQuery;

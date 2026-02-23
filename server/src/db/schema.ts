@@ -334,10 +334,13 @@ export const podcastStatsRssDaily = sqliteTable(
       .notNull()
       .references(() => podcasts.id, { onDelete: "cascade" }),
     statDate: text("stat_date").notNull(),
+    source: text("source").notNull().default("Other"),
     botCount: integer("bot_count").notNull().default(0),
     humanCount: integer("human_count").notNull().default(0),
   },
-  (table) => [primaryKey({ columns: [table.podcastId, table.statDate] })],
+  (table) => [
+    primaryKey({ columns: [table.podcastId, table.statDate, table.source] }),
+  ],
 );
 
 export const podcastStatsEpisodeDaily = sqliteTable(
@@ -347,10 +350,13 @@ export const podcastStatsEpisodeDaily = sqliteTable(
       .notNull()
       .references(() => episodes.id, { onDelete: "cascade" }),
     statDate: text("stat_date").notNull(),
+    source: text("source").notNull().default("Other"),
     botCount: integer("bot_count").notNull().default(0),
     humanCount: integer("human_count").notNull().default(0),
   },
-  (table) => [primaryKey({ columns: [table.episodeId, table.statDate] })],
+  (table) => [
+    primaryKey({ columns: [table.episodeId, table.statDate, table.source] }),
+  ],
 );
 
 export const podcastStatsEpisodeLocationDaily = sqliteTable(
@@ -361,10 +367,20 @@ export const podcastStatsEpisodeLocationDaily = sqliteTable(
       .references(() => episodes.id, { onDelete: "cascade" }),
     statDate: text("stat_date").notNull(),
     location: text("location").notNull(),
+    source: text("source").notNull().default("Other"),
     botCount: integer("bot_count").notNull().default(0),
     humanCount: integer("human_count").notNull().default(0),
   },
-  (table) => [primaryKey({ columns: [table.episodeId, table.statDate, table.location] })],
+  (table) => [
+    primaryKey({
+      columns: [
+        table.episodeId,
+        table.statDate,
+        table.location,
+        table.source,
+      ],
+    }),
+  ],
 );
 
 export const podcastStatsEpisodeListensDaily = sqliteTable(
@@ -374,10 +390,13 @@ export const podcastStatsEpisodeListensDaily = sqliteTable(
       .notNull()
       .references(() => episodes.id, { onDelete: "cascade" }),
     statDate: text("stat_date").notNull(),
+    source: text("source").notNull().default("Other"),
     botCount: integer("bot_count").notNull().default(0),
     humanCount: integer("human_count").notNull().default(0),
   },
-  (table) => [primaryKey({ columns: [table.episodeId, table.statDate] })],
+  (table) => [
+    primaryKey({ columns: [table.episodeId, table.statDate, table.source] }),
+  ],
 );
 
 export const podcastStatsListenDedup = sqliteTable(

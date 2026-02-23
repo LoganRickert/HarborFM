@@ -11,6 +11,9 @@ const LOCATIONS = [
   "Unknown",
 ];
 
+/** Source labels matching podcastSourceFromUserAgent (podcast app / UA-derived). */
+const SOURCES = ["Other", "Apple Podcasts", "Spotify", "Google Podcasts", "Pocket Casts", "Overcast"];
+
 function dateString(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -69,20 +72,20 @@ function main() {
   }
 
   const insertRss = db.prepare(`
-    INSERT INTO podcast_stats_rss_daily (podcast_id, stat_date, bot_count, human_count)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO podcast_stats_rss_daily (podcast_id, stat_date, source, bot_count, human_count)
+    VALUES (?, ?, ?, ?, ?)
   `);
   const insertEpisodeDaily = db.prepare(`
-    INSERT INTO podcast_stats_episode_daily (episode_id, stat_date, bot_count, human_count)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO podcast_stats_episode_daily (episode_id, stat_date, source, bot_count, human_count)
+    VALUES (?, ?, ?, ?, ?)
   `);
   const insertListens = db.prepare(`
-    INSERT INTO podcast_stats_episode_listens_daily (episode_id, stat_date, bot_count, human_count)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO podcast_stats_episode_listens_daily (episode_id, stat_date, source, bot_count, human_count)
+    VALUES (?, ?, ?, ?, ?)
   `);
   const insertLocation = db.prepare(`
-    INSERT INTO podcast_stats_episode_location_daily (episode_id, stat_date, location, bot_count, human_count)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO podcast_stats_episode_location_daily (episode_id, stat_date, location, source, bot_count, human_count)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   const getEpisodes = db.prepare(
@@ -113,29 +116,34 @@ function main() {
     }
 
     const runInTransaction = db.transaction(() => {
-      for (const statDate of dates) {
-        insertRss.run(pid, statDate, randomInt(50, 400), randomInt(20, 200));
+      for (let di = 0; di < dates.length; di++) {
+        const statDate = dates[di];
+        const source = SOURCES[di % SOURCES.length];
+        insertRss.run(pid, statDate, source, randomInt(50, 400), randomInt(20, 200));
       }
 
       const numEpisodes = episodeIds.length;
       for (let ei = 0; ei < numEpisodes; ei++) {
         const episodeId = episodeIds[ei];
         const dayScale = 1 - (ei / Math.max(numEpisodes, 1)) * 0.6;
-        for (const statDate of dates) {
+        for (let di = 0; di < dates.length; di++) {
+          const statDate = dates[di];
+          const source = SOURCES[(ei + di) % SOURCES.length];
           const reqHuman = Math.max(0, Math.floor(randomInt(0, 80) * dayScale));
           const reqBot = Math.max(0, Math.floor(randomInt(0, 30) * dayScale));
-          insertEpisodeDaily.run(episodeId, statDate, reqBot, reqHuman);
+          insertEpisodeDaily.run(episodeId, statDate, source, reqBot, reqHuman);
           const listenHuman = Math.min(reqHuman, randomInt(0, 50));
           const listenBot = Math.min(reqBot, randomInt(0, 20));
-          insertListens.run(episodeId, statDate, listenBot, listenHuman);
+          insertListens.run(episodeId, statDate, source, listenBot, listenHuman);
 
           const numLocs = randomInt(1, 4);
           const shuffled = [...LOCATIONS].sort(() => Math.random() - 0.5);
           for (let li = 0; li < numLocs; li++) {
             const loc = shuffled[li];
+            const locSource = SOURCES[(ei + di + li) % SOURCES.length];
             const locHuman = randomInt(1, 40);
             const locBot = randomInt(0, 10);
-            insertLocation.run(episodeId, statDate, loc, locBot, locHuman);
+            insertLocation.run(episodeId, statDate, loc, locSource, locBot, locHuman);
           }
         }
       }

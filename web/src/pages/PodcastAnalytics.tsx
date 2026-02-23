@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Rss, LayoutGrid, ListMusic, Ear, MapPinned } from 'lucide-react';
+import { BarChart3, Rss, LayoutGrid, ListMusic, Ear, MapPinned, Smartphone } from 'lucide-react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -92,6 +92,19 @@ function locationTotals(analytics: PodcastAnalytics) {
     .sort((a, b) => b.total - a.total);
 }
 
+function sourceTotals(analytics: PodcastAnalytics) {
+  const bySource: Record<string, { bot: number; human: number }> = {};
+  for (const row of analytics.episodeListensDaily) {
+    const cur = bySource[row.source] ?? { bot: 0, human: 0 };
+    cur.bot += row.botCount;
+    cur.human += row.humanCount;
+    bySource[row.source] = cur;
+  }
+  return Object.entries(bySource)
+    .map(([source, counts]) => ({ source, ...counts, total: counts.bot + counts.human }))
+    .sort((a, b) => b.total - a.total);
+}
+
 function formatShortDate(iso: string) {
   const d = new Date(iso + 'T00:00:00Z');
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -104,6 +117,7 @@ function tooltipLabelFormatter(label: unknown): string {
 
 type TimeViewType = 'line' | 'area' | 'bar' | 'table';
 type LocationsViewType = 'pie' | 'bar' | 'table';
+type SourceViewType = 'pie' | 'table';
 type EpisodesViewType = 'bar' | 'table';
 
 const axisProps = {
@@ -149,6 +163,7 @@ export function PodcastAnalytics() {
   const [episodesView, setEpisodesView] = useState<EpisodesViewType>('bar');
   const [listensView, setListensView] = useState<EpisodesViewType>('bar');
   const [locationsView, setLocationsView] = useState<LocationsViewType>('pie');
+  const [sourceView, setSourceView] = useState<SourceViewType>('pie');
   const [narrow, setNarrow] = useState(false);
 
   useEffect(() => {
@@ -183,33 +198,48 @@ export function PodcastAnalytics() {
     () => (analytics ? locationTotals(analytics) : []),
     [analytics]
   );
+  const sourceTotalsList = useMemo(
+    () => (analytics ? sourceTotals(analytics) : []),
+    [analytics]
+  );
 
   const overviewData = useMemo(() => {
     if (!analytics) return [];
     const byDate: Record<string, { statDate: string; feed: number; requests: number; listens: number }> = {};
     for (const row of analytics.rssDaily) {
-      byDate[row.statDate] = { statDate: row.statDate, feed: row.humanCount + row.botCount, requests: 0, listens: 0 };
+      const d = row.statDate;
+      if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
+      byDate[d].feed += row.humanCount + row.botCount;
     }
     for (const row of analytics.episodeDaily) {
-      if (!byDate[row.statDate]) byDate[row.statDate] = { statDate: row.statDate, feed: 0, requests: 0, listens: 0 };
-      byDate[row.statDate].requests += row.humanCount + row.botCount;
+      const d = row.statDate;
+      if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
+      byDate[d].requests += row.humanCount + row.botCount;
     }
     for (const row of analytics.episodeListensDaily) {
-      if (!byDate[row.statDate]) byDate[row.statDate] = { statDate: row.statDate, feed: 0, requests: 0, listens: 0 };
-      byDate[row.statDate].listens += row.humanCount + row.botCount;
+      const d = row.statDate;
+      if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
+      byDate[d].listens += row.humanCount + row.botCount;
     }
     return Object.values(byDate).sort((a, b) => a.statDate.localeCompare(b.statDate));
   }, [analytics]);
 
   const feedData = useMemo(() => {
     if (!analytics) return [];
-    return [...analytics.rssDaily]
-      .sort((a, b) => a.statDate.localeCompare(b.statDate))
-      .map((row) => ({
-        statDate: row.statDate,
-        People: row.humanCount,
-        Apps: row.botCount,
-        total: row.humanCount + row.botCount,
+    const byDate: Record<string, { human: number; bot: number }> = {};
+    for (const row of analytics.rssDaily) {
+      const d = row.statDate;
+      if (!byDate[d]) byDate[d] = { human: 0, bot: 0 };
+      byDate[d].human += row.humanCount;
+      byDate[d].bot += row.botCount;
+    }
+    return Object.entries(byDate)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([statDate, { human, bot }]) => ({
+        statDate,
+        People: human,
+        Apps: bot,
+        total: human + bot,
       }));
   }, [analytics]);
 
@@ -251,12 +281,17 @@ export function PodcastAnalytics() {
     return locationTotalsList.map((row) => ({ name: row.location, value: row.total }));
   }, [locationTotalsList]);
 
+  const sourcePieData = useMemo(() => {
+    return sourceTotalsList.map((row) => ({ name: row.source, value: row.total }));
+  }, [sourceTotalsList]);
+
   const hasAnyData =
     overviewData.length > 0 ||
     feedData.length > 0 ||
     episodeBarData.some((d) => d.requests > 0) ||
     listensBarData.some((d) => d.listens > 0) ||
-    locationPieData.length > 0;
+    locationPieData.length > 0 ||
+    sourcePieData.length > 0;
 
   if (!id) return null;
   if (podcastLoading || !podcast) return <FullPageLoading />;
@@ -680,6 +715,72 @@ export function PodcastAnalytics() {
                       <Tooltip contentStyle={tooltipContentStyle} />
                       <Bar dataKey="total" name="Requests" fill={COLORS.requests} radius={[0, 4, 4, 0]} />
                     </BarChart>
+                  )}
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          {/* By source (app) card */}
+          <div className={styles.card}>
+            <h2 className={styles.sectionTitle}>
+              <Smartphone size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+              Listens by Source
+            </h2>
+            <p className={styles.sectionSub}>
+              Where listens came from (e.g. Apple Podcasts, Spotify, other apps). Based on app User-Agent.
+            </p>
+            <CardTabs
+              options={['pie', 'table'] as const}
+              value={sourceView}
+              onChange={setSourceView}
+              labels={{ pie: 'Pie', table: 'Table' }}
+            />
+            {sourceView === 'table' ? (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Source</th>
+                      <th className={styles.num}>People</th>
+                      <th className={styles.num}>Apps</th>
+                      <th className={styles.num}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sourceTotalsList.map((row) => (
+                      <tr key={row.source}>
+                        <td>{row.source}</td>
+                        <td className={styles.num}>{row.human}</td>
+                        <td className={styles.num}>{row.bot}</td>
+                        <td className={styles.num}>{row.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className={styles.chartContainer}>
+                <ResponsiveContainer width="100%" height={300}>
+                  {sourcePieData.length === 0 ? (
+                    <p className={styles.empty}>No source data in the last 2 weeks.</p>
+                  ) : (
+                    <PieChart>
+                      <Pie
+                        data={sourcePieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                      >
+                        {sourcePieData.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipContentStyle} formatter={(value: number | undefined) => [value ?? 0, 'Listens']} />
+                    </PieChart>
                   )}
                 </ResponsiveContainer>
               </div>
