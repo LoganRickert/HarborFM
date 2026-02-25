@@ -5,6 +5,7 @@ packages:
   - docs
   - webrtc-service
   - e2e
+  - infrastructure/instance-manager
 
 ignoredBuiltDependencies:
   - argon2

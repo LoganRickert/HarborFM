@@ -7,6 +7,7 @@
  *   - ADMIN_PASSWORD (plaintext; local/dev only), or
  *   - neither: create admin with a random password; user must use password-reset to set one.
  * Also: ADMIN_REGISTRATION_ENABLED, ADMIN_PUBLIC_FEEDS_ENABLED, ADMIN_HOSTNAME, DOMAIN.
+ * Optional: INITIAL_ADMIN_API_TOKEN — when set (e.g. from FlareVault), creates an API key for the admin user at seed time.
  */
 import "dotenv/config";
 import argon2 from "argon2";
@@ -26,9 +27,12 @@ import {
   EMAIL_WEBHOOK_FIELD_KEY,
   EMAIL_WEBHOOK_URL,
   getAdminHostnameFromEnv,
+  INITIAL_ADMIN_API_TOKEN,
+  API_KEY_PREFIX,
 } from "../config.js";
 import { db } from "../db/index.js";
 import { getDataDir } from "../services/paths.js";
+import { sha256Hex } from "../utils/hash.js";
 import { normalizeHostname } from "../utils/url.js";
 
 function decodeHashB64(b64: string): string | null {
@@ -184,6 +188,26 @@ async function main(): Promise<void> {
       unlinkSync(setupTokenPath);
     } catch {
       /* ignore */
+    }
+  }
+
+  if (INITIAL_ADMIN_API_TOKEN && INITIAL_ADMIN_API_TOKEN.trim()) {
+    const rawKey = INITIAL_ADMIN_API_TOKEN.startsWith(API_KEY_PREFIX)
+      ? INITIAL_ADMIN_API_TOKEN
+      : API_KEY_PREFIX + INITIAL_ADMIN_API_TOKEN;
+    const keyHash = sha256Hex(rawKey);
+    try {
+      db.prepare(
+        "INSERT INTO api_keys (id, user_id, key_hash) VALUES (?, ?, ?)",
+      ).run(nanoid(), id, keyHash);
+      console.info(
+        "[seed-setup] Created initial admin API key (from INITIAL_ADMIN_API_TOKEN).",
+      );
+    } catch (err) {
+      console.warn(
+        "[seed-setup] Failed to create initial API key (duplicate or limit):",
+        (err as Error)?.message ?? err,
+      );
     }
   }
 

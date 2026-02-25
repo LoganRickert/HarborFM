@@ -85,12 +85,14 @@ module "userdata" {
   email_webhook_field_key   = var.email_webhook_field_key
   mediasoup_announced_ip    = var.mediasoup_announced_ip
   data_volume_device        = var.data_volume_size > 0 ? "vdb" : ""
+  flarevault_url            = var.flarevault_url
+  flarevault_redeem_token   = var.flarevault_redeem_token
   # When set: fetch script at boot. Empty = use GitHub raw URL from harborfm_repo/branch (inline if URL fails).
   script_url = var.script_url != "" ? var.script_url : "https://raw.githubusercontent.com/${var.harborfm_repo}/${var.harborfm_branch}/infrastructure/user-data/harborfm-user-data.sh"
 }
 
 resource "vultr_firewall_group" "harborfm" {
-  description = "Harbor FM instance firewall"
+  description = "HarborFM instance firewall"
 }
 
 # Workaround for firewall group teardown: Vultr's API can fail to delete a firewall group if the
@@ -160,17 +162,47 @@ resource "vultr_instance" "harborfm" {
 }
 
 # Persistent data block storage: survives destroy so a new instance can reattach (lifecycle prevent_destroy).
-# Same region as instance; attached at boot; user-data mounts at /mnt/harborfm-data.
-# To destroy it too, remove the lifecycle block and run destroy.
+# Attachment is managed by null_resource.block_attach via Vultr API so the volume never references the
+# instance in config → it won't be pulled into a targeted instance destroy (avoids prevent_destroy errors).
+# Same region as instance; user-data mounts at /mnt/harborfm-data.
 resource "vultr_block_storage" "data" {
-  count                  = var.data_volume_size > 0 ? 1 : 0
-  region                 = var.region
-  size_gb                = var.data_volume_size
-  label                  = local.label
-  attached_to_instance   = var.attach_data_volume ? vultr_instance.harborfm.id : null
+  count     = var.data_volume_size > 0 ? 1 : 0
+  region    = var.region
+  size_gb   = var.data_volume_size
+  label     = local.label
 
   lifecycle {
     prevent_destroy = true
+  }
+}
+
+# Attach/detach block storage via Vultr API so vultr_block_storage.data has no reference to the instance.
+# Destroy provisioner runs when instance (or this resource) is destroyed, detaching the volume first.
+resource "null_resource" "block_attach" {
+  count = var.data_volume_size > 0 && var.attach_data_volume ? 1 : 0
+
+  triggers = {
+    block_id    = vultr_block_storage.data[0].id
+    instance_id = vultr_instance.harborfm.id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      curl -sf -X POST "https://api.vultr.com/v2/blocks/${self.triggers.block_id}/attach" \
+        -H "Authorization: Bearer $VULTR_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{\"instance_id\":\"${self.triggers.instance_id}\",\"live\":true}"
+    EOT
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      curl -sf -X POST "https://api.vultr.com/v2/blocks/${self.triggers.block_id}/detach" \
+        -H "Authorization: Bearer $VULTR_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{"live":true}'
+    EOT
   }
 }
 

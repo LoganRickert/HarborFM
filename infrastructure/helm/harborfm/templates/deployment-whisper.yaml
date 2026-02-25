@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "harborfm.fullname" . }}-whisper
+  labels:
+    {{- include "harborfm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: whisper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "harborfm.selectorLabels" (merge (dict "component" "whisper") .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "harborfm.selectorLabels" (merge (dict "component" "whisper") .) | nindent 8 }}
+    spec:
+      containers:
+        - name: whisper
+          image: "{{ .Values.whisper.image.repository }}:{{ .Values.whisper.image.tag }}"
+          imagePullPolicy: {{ .Values.whisper.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: ASR_MODEL
+              value: {{ .Values.whisper.asrModel | quote }}
+            - name: ASR_ENGINE
+              value: {{ .Values.whisper.asrEngine | quote }}
+          volumeMounts:
+            - name: cache
+              mountPath: /root/.cache
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: {{ include "harborfm.fullname" . }}-whisper-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.whisper.serviceName | default "whisper" }}
+  labels:
+    {{- include "harborfm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: whisper
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "harborfm.selectorLabels" (merge (dict "component" "whisper") .) | nindent 4 }}

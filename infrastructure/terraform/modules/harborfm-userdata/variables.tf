@@ -124,3 +124,16 @@ variable "data_volume_device" {
   type        = string
   default     = ""
 }
+
+variable "flarevault_url" {
+  description = "FlareVault base URL including route prefix. When set with flarevault_redeem_token, script redeems at boot instead of using inline admin creds."
+  type        = string
+  default     = ""
+}
+
+variable "flarevault_redeem_token" {
+  description = "FlareVault redeem token. When set with flarevault_url, script redeems at boot to get admin creds."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo "=== Harbor FM Docker setup ==="
+echo "=== HarborFM Docker setup ==="
 echo ""
 
 # Check for docker and compose

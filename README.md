@@ -66,7 +66,7 @@ If you are using `http`, you need to set `COOKIE_SECURE=false` as an environment
 
 ### Deploy with Terraform
 
-Use Terraform to provision a VM (AWS EC2 or Vultr) that runs Harbor FM via user-data (PM2 + nginx, with optional WebRTC and Let's Encrypt).
+Use Terraform to provision a VM (AWS EC2 or Vultr) that runs HarborFM via user-data (PM2 + nginx, with optional WebRTC and Let's Encrypt).
 
 #### AWS (EC2)
 
@@ -167,7 +167,7 @@ If you use the `install.sh` script, an `update.sh` script will also be added to 
 
 #### Adding additional domains (nginx)
 
-If you use nginx and want to serve the same Harbor FM app on extra domains or subdomains (e.g. `demo.harborfm.com`, `podcast.example.com`), use the included script from your **install directory**:
+If you use nginx and want to serve the same HarborFM app on extra domains or subdomains (e.g. `demo.harborfm.com`, `podcast.example.com`), use the included script from your **install directory**:
 
 ```bash
 ./nginx-add-domain.sh <domain>

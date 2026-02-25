@@ -1,0 +1,42 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "harborfm.fullname" . }}
+  labels:
+    {{- include "harborfm.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.existingSecret | default (printf "%s-tls" (include "harborfm.fullname" .)) }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "harborfm.fullname" . }}
+                port:
+                  number: 3001
+          {{- if .Values.webrtc.enabled }}
+          - path: /webrtc-ws
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "harborfm.fullname" . }}-webrtc
+                port:
+                  number: 3002
+          {{- end }}
+{{- end }}

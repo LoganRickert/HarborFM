@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Harbor FM - add an additional nginx site and obtain Let's Encrypt cert (nginx only)
+# HarborFM - add an additional nginx site and obtain Let's Encrypt cert (nginx only)
 # Usage: ./nginx-add-domain.sh <domain> [install-dir]
 # Run from install directory or pass install-dir (where docker-compose.yml and .env live).
 # Requires REVERSE_PROXY=nginx and CERTBOT_EMAIL in .env. DNS for the domain must already point to this host.

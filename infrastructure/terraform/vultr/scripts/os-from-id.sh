@@ -1,17 +1,27 @@
 #!/usr/bin/env bash
-# Derive Harbor FM os identifier (debian-12, ubuntu-22, ubuntu-25, centos-9, etc.) from Vultr os_id.
+# Derive HarborFM os identifier (debian-12, ubuntu-22, ubuntu-25, centos-9, etc.) from Vultr os_id.
 # Reads os_id from stdin (JSON query from Terraform external data).
 # Outputs JSON: {"os": "debian-12"} or {"os": "", "error": "..."}
 # Requires: curl, jq, VULTR_API_KEY in environment
 set -e
 
+err() { echo "$*" >&2; }
+
 API_KEY="${VULTR_API_KEY:-}"
-[ -z "$API_KEY" ] && echo "{\"os\":\"\",\"error\":\"VULTR_API_KEY not set\"}" && exit 1
+if [ -z "$API_KEY" ]; then
+  echo "{\"os\":\"\",\"error\":\"VULTR_API_KEY not set\"}"
+  err "os-from-id.sh: VULTR_API_KEY not set. Set it in vultr/.env or export VULTR_API_KEY."
+  exit 1
+fi
 
 # Terraform external passes query as JSON on stdin
 query="$(cat)"
 os_id="$(echo "$query" | jq -r '.os_id // empty')"
-[ -z "$os_id" ] && echo "{\"os\":\"\",\"error\":\"os_id required\"}" && exit 1
+if [ -z "$os_id" ]; then
+  echo "{\"os\":\"\",\"error\":\"os_id required\"}"
+  err "os-from-id.sh: os_id required in query."
+  exit 1
+fi
 
 # Fetch OS list from Vultr API (paginate to find os_id)
 name=""
@@ -33,9 +43,13 @@ while true; do
   cursor="$(echo "$next" | sed -n 's/.*cursor=\([^&"]*\).*/\1/p')"
   [ -z "$cursor" ] && break
 done
-[ -z "$name" ] && echo "{\"os\":\"\",\"error\":\"os_id $os_id not found in Vultr API\"}" && exit 1
+if [ -z "$name" ]; then
+  echo "{\"os\":\"\",\"error\":\"os_id $os_id not found in Vultr API\"}"
+  err "os-from-id.sh: os_id '$os_id' not found in Vultr API (check https://api.vultr.com/v2/os or your API key)."
+  exit 1
+fi
 
-# Map Vultr name to Harbor FM os format (debian-11, debian-12, ubuntu-22, ubuntu-24, centos-9)
+# Map Vultr name to HarborFM os format (debian-11, debian-12, ubuntu-22, ubuntu-24, centos-9)
 case "$name" in
   Debian\ 11*)     os="debian-11" ;;
   Debian\ 12*)     os="debian-12" ;;
@@ -59,7 +73,9 @@ case "$name" in
     elif echo "$lower" | grep -q 'centos 9\|centos stream 9\|rocky 9\|almalinux 9'; then os="centos-9"
     elif echo "$lower" | grep -q 'centos 10'; then os="centos-10"
     else
-      echo "{\"os\":\"\",\"error\":\"Unknown OS: $name\"}" && exit 1
+      echo "{\"os\":\"\",\"error\":\"Unknown OS: $name\"}"
+      err "os-from-id.sh: Unknown OS name from Vultr: '$name' (add mapping in scripts/os-from-id.sh)."
+      exit 1
     fi
     ;;
 esac

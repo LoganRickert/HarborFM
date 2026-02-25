@@ -1,0 +1,111 @@
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg);
+  background-image: url('/radio-bg.svg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.header {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.headerContainer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1.5rem 0.75rem;
+  max-width: var(--max-content);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.subtitle {
+  margin: 0.5rem 0 0;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 1.5rem;
+}
+
+.navBtn {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.navBtn:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.navBtnActive {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  border: none;
+  background: rgba(0, 212, 170, 0.08);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.navBtnActive:hover {
+  color: var(--accent);
+}
+
+.main {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: var(--max-content);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .main {
+    padding: 1.25rem 1rem;
+  }
+
+  .card {
+    padding: 1.25rem;
+  }
+}

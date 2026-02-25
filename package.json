@@ -5,6 +5,7 @@
   "description": "Open source podcast creator.",
   "scripts": {
     "dev": "pnpm run dev:server & pnpm run dev:web",
+    "dev:manager": "pnpm --filter instance-manager run dev",
     "dev:server": "pnpm --filter server run dev",
     "dev:web": "pnpm --filter web run dev",
     "db:migrate": "pnpm --filter server run db:migrate",

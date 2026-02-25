@@ -1,4 +1,4 @@
-# Harbor FM reverse proxy. Accept any hostname (on-demand TLS).
+# HarborFM reverse proxy. Accept any hostname (on-demand TLS).
 # WebRTC enabled: proxies /webrtc-ws/ to webrtc service.
 # Use this when docker compose --profile webrtc is used.
 

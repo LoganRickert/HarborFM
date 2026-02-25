@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Harbor FM - bare-metal host setup (no Docker). Prepares tools and deps for running the app with pm2/node on port 3001.
+# HarborFM - bare-metal host setup (no Docker). Prepares tools and deps for running the app with pm2/node on port 3001.
 # Run from the repo root or after cloning. Loads .env from current directory (pwd) if present; installs nginx/Caddy if missing.
 set -e
 
@@ -19,7 +19,7 @@ elif [ -f "$PWD/.env" ]; then
   set +a
 fi
 
-echo "=== Harbor FM bare-metal setup ==="
+echo "=== HarborFM bare-metal setup ==="
 echo ""
 
 # Hostname: prefer DOMAIN from .env, then prompt

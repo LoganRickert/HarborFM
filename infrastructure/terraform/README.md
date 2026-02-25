@@ -1,6 +1,6 @@
-# Harbor FM Terraform
+# HarborFM Terraform
 
-Deploy Harbor FM by creating a VM with user-data (AWS or Vultr).
+Deploy HarborFM by creating a VM with user-data (AWS or Vultr).
 
 **First time?** See [QUICKSTART.md](QUICKSTART.md) for a step-by-step walkthrough.
 
@@ -19,6 +19,55 @@ Notes: I am not a terraform expert so just be glad if any of this even kind of w
   - `harborfm-outputs` – shared output formatting (url, setup_url)
 
 User-data scripts live in **`../user-data/`** (see [user-data README](../user-data/README.md)).
+
+---
+
+## FlareVault (optional)
+
+When you use **FlareVault** for secret delivery, admin credentials are not put in user-data. Instead, the deployer creates a short-lived package before apply, passes a redeem token into Terraform, and the instance redeems at boot to get the admin email, password hash, and optional initial API key. After apply, the package is restricted to the instance’s public IP.
+
+**In `aws/.env` or `vultr/.env` (for `run.sh`):**
+
+| Variable | Description |
+|----------|-------------|
+| `FLAREVAULT_URL` | FlareVault base URL including route prefix (e.g. `https://flarevault.xxx.workers.dev/my-prefix`). |
+| `FLAREVAULT_ADMIN_TOKEN` | Bearer token for FlareVault admin API (create package, PATCH allowedCidr). |
+
+When both are set and you provide admin email and password (e.g. `TF_VAR_admin_email`, `TF_VAR_admin_password`, or `admin_email` / `admin_password` in `.env`), `run.sh` will:
+
+1. Hash the password and create a FlareVault package (30 min TTL, no CIDR).
+2. Pass `flarevault_url` and `flarevault_redeem_token` into Terraform (admin creds are not sent in user-data).
+3. Run `terraform apply`.
+4. After success, PATCH the package with `allowedCidr = <public_ip>/32` so only the new instance can redeem.
+
+### Flow
+
+1. **Create package before apply**  
+   With admin email and password available, the deployer (instance-manager or `run.sh`) creates a FlareVault package: `POST /v1/packages` with `instanceId`, `payload` = `{ admin_email, admin_password_hash [, initial_admin_api_token ] }`, `expiresInSeconds`: 1800. **No** `allowedCidr` is set so the redeem token can be embedded in user-data and the instance can redeem from any IP at boot.
+
+2. **Pass token in user-data**  
+   The returned `redeemToken` and `FLAREVAULT_URL` are passed into Terraform as `flarevault_redeem_token` and `flarevault_url`, and are included in the instance user-data. Admin email and password are **not** sent in user-data.
+
+3. **PATCH after apply**  
+   After Terraform apply completes, the deployer gets the instance `public_ip` from Terraform output and calls **PATCH** `/v1/packages` with `{ redeemToken, allowedCidr: "<public_ip>/32" }`. FlareVault allows this one-time update when the package’s current CIDR is null or 0.0.0.0, so redemption is then restricted to the server IP.
+
+4. **Redeem at boot**  
+   User-data sets `FLAREVAULT_URL` and `FLAREVAULT_REDEEM_TOKEN`. After cloning the repo, it runs the FlareVault redeem helper from the server tree (`server/scripts/flarevault-redeem.mjs`), which POSTs to `/v1/redeem`, decrypts the sealed response (ECDH + HKDF + AES-GCM), and outputs the payload. The script sets `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH_B64` from the payload and continues with migrations and `db:seedSetup` as usual.
+
+### Env and scripts
+
+- **Instance-manager**  
+  In `.env`: `FLAREVAULT_URL` (base URL including route prefix), `FLAREVAULT_ADMIN_TOKEN`. When both are set and the deploy form includes admin email and password, the manager creates the package, runs Terraform with `flarevault_url` and `flarevault_redeem_token`, then PATCHes the package with the new instance’s `/32` CIDR.
+
+- **run.sh (Vultr)**  
+  In the Terraform directory `.env` (e.g. `aws/.env` or `vultr/.env`): `FLAREVAULT_URL`, `FLAREVAULT_ADMIN_TOKEN`. When set and `TF_VAR_admin_email` / `TF_VAR_admin_password` are provided, `run.sh` creates the package before `terraform apply`, passes the redeem token into Terraform, runs apply, then PATCHes the package with `public_ip/32`.
+
+- **Redeem helper**  
+  **Redeem helper:** `server/scripts/flarevault-redeem.mjs`. Run from the repo root (e.g. after clone) with env `FLAREVAULT_URL` and `FLAREVAULT_REDEEM_TOKEN`; outputs the decrypted JSON payload to stdout.
+
+### Optional: initial admin API token
+
+The package payload can include `initial_admin_api_token`. When the deployer includes it, user-data passes it to the server as `INITIAL_ADMIN_API_TOKEN` and `db:seedSetup` creates an API key for the admin user at seed time. The instance-manager stores the token in deploy meta for that instance so you can copy it from the UI. Use it as `Authorization: Bearer <key>`; if the deployer sent a key without the `hfm_` prefix, the server adds the prefix at seed time—use `Bearer hfm_<token>` when calling the API.
 
 ---
 
@@ -50,7 +99,7 @@ Creates an EC2 instance and security group. The instance runs the chosen user-da
 | `vpc_id` | no | default VPC | VPC ID. |
 | `subnet_id` | no | first subnet | Subnet ID. |
 | `install_dir` | no | `""` | Install directory on the instance (passed to user-data). |
-| `harborfm_repo` | no | `loganrickert/harborfm` | GitHub repo for Harbor FM. |
+| `harborfm_repo` | no | `loganrickert/harborfm` | GitHub repo for HarborFM. |
 | `harborfm_branch` | no | `main` | Branch to use for clone. |
 | `tags` | no | `{}` | Tags to apply to the instance and security group. |
 | `environment` | no | `""` | Label (e.g. `dev`, `prod`) for the instance/sg Name tag when running multiple environments. |

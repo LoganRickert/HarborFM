@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Harbor FM - update configs from main and refresh containers
+# HarborFM - update configs from main and refresh containers
 # Run from the install directory (where docker-compose.yml lives), or pass path as first argument.
 # Usage: ./update.sh [install-dir]
 #    or: ./update.sh --no-interaction [install-dir]
@@ -30,7 +30,7 @@ HARBORFM_REPO="${HARBORFM_REPO:-loganrickert/harborfm}"
 HARBORFM_BRANCH="${HARBORFM_BRANCH:-main}"
 BASE_URL="https://raw.githubusercontent.com/${HARBORFM_REPO}/${HARBORFM_BRANCH}"
 
-echo "=== Harbor FM update ==="
+echo "=== HarborFM update ==="
 echo "Install directory: $INSTALL_DIR"
 echo ""
 
