@@ -1105,7 +1105,7 @@ fi
 # FlareVault: redeem token to get admin creds (after clone so we run server/scripts/flarevault-redeem.mjs)
 if [ -n "${FLAREVAULT_URL:-}" ] && [ -n "${FLAREVAULT_REDEEM_TOKEN:-}" ] && [ -f "$INSTALL_DIR/server/scripts/flarevault-redeem.mjs" ]; then
   echo "[harborfm-userdata] FlareVault URL and redeem token set; redeeming for admin credentials..."
-  PAYLOAD=$(cd "$INSTALL_DIR" && FLAREVAULT_URL="$FLAREVAULT_URL" FLAREVAULT_REDEEM_TOKEN="$FLAREVAULT_REDEEM_TOKEN" node server/scripts/flarevault-redeem.mjs 2>/dev/null) || true
+  PAYLOAD=$(cd "$INSTALL_DIR" && node server/scripts/flarevault-redeem.mjs "$FLAREVAULT_URL" "$FLAREVAULT_REDEEM_TOKEN" 2>/dev/null) || true
   if [ -n "$PAYLOAD" ]; then
     ADMIN_EMAIL=$(echo "$PAYLOAD" | jq -r '.admin_email // empty')
     _hash=$(echo "$PAYLOAD" | jq -r '.admin_password_hash // empty')

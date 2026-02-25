@@ -63,7 +63,7 @@ When both are set and you provide admin email and password (e.g. `TF_VAR_admin_e
   In the Terraform directory `.env` (e.g. `aws/.env` or `vultr/.env`): `FLAREVAULT_URL`, `FLAREVAULT_ADMIN_TOKEN`. When set and `TF_VAR_admin_email` / `TF_VAR_admin_password` are provided, `run.sh` creates the package before `terraform apply`, passes the redeem token into Terraform, runs apply, then PATCHes the package with `public_ip/32`.
 
 - **Redeem helper**  
-  **Redeem helper:** `server/scripts/flarevault-redeem.mjs`. Run from the repo root (e.g. after clone) with env `FLAREVAULT_URL` and `FLAREVAULT_REDEEM_TOKEN`; outputs the decrypted JSON payload to stdout.
+  **Redeem helper:** `server/scripts/flarevault-redeem.mjs`. Run from the repo root: `node server/scripts/flarevault-redeem.mjs <url> <redeem_token>`; outputs the decrypted JSON payload to stdout.
 
 ### Optional: initial admin API token
 

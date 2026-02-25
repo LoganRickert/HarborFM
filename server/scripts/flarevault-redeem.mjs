@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * FlareVault redeem helper: POST redeemToken + instancePublicKey, decrypt sealed response, output payload JSON to stdout.
- * Env: FLAREVAULT_URL, FLAREVAULT_REDEEM_TOKEN.
+ * Usage: node flarevault-redeem.mjs <url> <redeem_token>
  * Exit 0 on success; non-zero on HTTP error or decrypt failure.
  */
 import { createECDH, createDecipheriv, hkdfSync } from "crypto";
 
-const FLAREVAULT_URL = process.env.FLAREVAULT_URL?.replace(/\/+$/, "") || "";
-const REDEEM_TOKEN = process.env.FLAREVAULT_REDEEM_TOKEN || "";
+const FLAREVAULT_URL = (process.argv[2] || "").replace(/\/+$/, "");
+const REDEEM_TOKEN = process.argv[3] || "";
 
 function base64urlEncode(buf) {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -22,7 +22,7 @@ function base64urlDecode(str) {
 
 async function main() {
   if (!FLAREVAULT_URL || !REDEEM_TOKEN) {
-    console.error("flarevault-redeem: FLAREVAULT_URL and FLAREVAULT_REDEEM_TOKEN must be set");
+    console.error("flarevault-redeem: usage: node flarevault-redeem.mjs <url> <redeem_token>");
     process.exit(1);
   }
 
