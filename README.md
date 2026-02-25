@@ -1013,6 +1013,14 @@ Open HarborFM's login page. You should see an option to sign in with your SAML p
 
 **If it doesn't work:** Double-check that **Client ID** in Keycloak is exactly your HarborFM base URL + `/api/auth/sso/saml` (e.g. `https://app.harborfm.com/api/auth/sso/saml`), and that the callback URL in both places is exactly the same.
 
+## Instance manager (beta)
+
+The **instance manager** is a small web app that provides a quick interface for [Terraform](infrastructure/terraform/README.md) to **monitor and manage** HarborFM instances. Use it to deploy new instances (AWS or Vultr), view status and outputs, run Terraform apply/destroy, and optionally deliver admin credentials via [FlareVault](infrastructure/instance-manager/FlareVault.md) instead of inline user-data. It is **beta** and intended for operators who already use the Terraform configs and want a single UI instead of running `run.sh` and `terraform` from the CLI. See [infrastructure/instance-manager/README.md](infrastructure/instance-manager/README.md) for setup and usage.
+
+### FlareVault
+
+[FlareVault](https://github.com/LoganRickert/FlareVault) is a separate project: single-use secret delivery on Cloudflare Workers (Durable Objects + sealed ECDH delivery). HarborFM’s Terraform and instance manager can use it to send admin credentials to new instances at boot instead of putting them in user-data. Deploy your own worker, then set `FLAREVAULT_URL` and `FLAREVAULT_ADMIN_TOKEN` in your Terraform or instance-manager `.env`. See [infrastructure/instance-manager/FlareVault.md](infrastructure/instance-manager/FlareVault.md) for HarborFM-specific setup and the [FlareVault repo](https://github.com/LoganRickert/FlareVault) for the API and deployment.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
