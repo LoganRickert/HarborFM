@@ -58,13 +58,32 @@ maybe_patch_flarevault_cidr() {
 # FlareVault: before apply, create package and pass redeem token into Terraform
 maybe_create_flarevault_package "$1" || true
 
+# When instance-manager runs apply, hide tfvars so only -var values from the server are used.
+hide_tfvars_for_instance_manager() {
+  [ -z "${INSTANCE_MANAGER:-}" ] || [ "$1" != "apply" ] && return 0
+  for f in terraform.tfvars terraform.tfvars.json *.auto.tfvars *.auto.tfvars.json; do
+    [ -f "$f" ] || continue
+    mv "$f" "$f.bak" && echo "[run.sh] Hid $f (INSTANCE_MANAGER=1: use server values only)."
+  done
+}
+restore_tfvars_for_instance_manager() {
+  for f in terraform.tfvars.bak terraform.tfvars.json.bak *.auto.tfvars.bak *.auto.tfvars.json.bak; do
+    [ -f "$f" ] || continue
+    mv "$f" "${f%.bak}" && echo "[run.sh] Restored ${f%.bak}."
+  done
+}
+
 if [ "$1" = "apply" ]; then
+  hide_tfvars_for_instance_manager "$1" || true
+  trap restore_tfvars_for_instance_manager EXIT
   terraform "$@"
   APPLY_EXIT=$?
+  restore_tfvars_for_instance_manager
+  trap - EXIT
   if [ $APPLY_EXIT -eq 0 ] && [ -n "$REDEEM_TOKEN_SAVED" ]; then
     maybe_patch_flarevault_cidr || true
   fi
   exit $APPLY_EXIT
 fi
 
-exec terraform "$@"
+echo exec terraform "$@"

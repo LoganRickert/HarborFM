@@ -48,6 +48,19 @@
   font-size: 0.875rem;
 }
 
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
 .input,
 .textarea {
   padding: 8px 12px;

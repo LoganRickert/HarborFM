@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { ToggleGroup } from "./ToggleGroup";
 import { VULTR_OS_OPTIONS, AWS_OS_OPTIONS, VULTR_REGIONS } from "./constants";
+import type { ConfigState } from "@shared/types";
 import styles from "./Settings.module.css";
 
-type ConfigState = Record<string, string | number>;
-
 export function Settings() {
-  const [config, setConfig] = useState<ConfigState>({});
+  const [config, setConfig] = useState<Partial<ConfigState>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -14,12 +13,17 @@ export function Settings() {
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
-      .then((c: ConfigState) => setConfig(c))
+      .then((c: ConfigState) => {
+        setConfig({
+          ...c,
+          generate_admin_api_key_by_default: c.generate_admin_api_key_by_default ?? true,
+        });
+      })
       .catch(() => setMessage({ type: "error", text: "Failed to load config" }))
       .finally(() => setLoading(false));
   }, []);
 
-  const update = (key: string, value: string | number) => {
+  const update = (key: keyof ConfigState, value: ConfigState[keyof ConfigState]) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -181,15 +185,23 @@ export function Settings() {
           <h3 className={styles.sectionTitle}>Instance manager</h3>
           <div className={styles.sectionFields}>
             <label className={styles.label}>
-              <span className={styles.labelText}>Default admin API key</span>
+              <span className={styles.labelText}>Admin email (optional)</span>
               <input
-                type="password"
+                type="email"
                 className={styles.input}
-                value={String(config.default_admin_api_key ?? "")}
-                onChange={(e) => update("default_admin_api_key", e.target.value)}
-                placeholder="Used when fetching system info for instances without a per-instance key"
-                autoComplete="off"
+                value={String(config.default_admin_email ?? "")}
+                onChange={(e) => update("default_admin_email", e.target.value)}
+                placeholder="Default for Deploy form"
               />
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                className={styles.checkbox}
+                checked={config.generate_admin_api_key_by_default ?? true}
+                onChange={(e) => update("generate_admin_api_key_by_default", e.target.checked)}
+              />
+              <span className={styles.labelText}>Generate admin API key when deploying (saved per instance)</span>
             </label>
           </div>
         </div>
@@ -247,12 +259,12 @@ export function Settings() {
             </label>
             <ToggleGroup
               label="Cookie secure"
-              value={String(config.cookie_secure ?? "false")}
+              value={config.cookie_secure ? "true" : "false"}
               options={[
                 { value: "false", label: "false" },
                 { value: "true", label: "true" },
               ]}
-              onChange={(v) => update("cookie_secure", v)}
+              onChange={(v) => update("cookie_secure", v === "true")}
             />
           </div>
         </div>

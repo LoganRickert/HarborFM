@@ -5,6 +5,11 @@ import { resolve } from "path";
 export default defineConfig({
   root: "frontend",
   plugins: [react()],
+  resolve: {
+    alias: {
+      "@shared/types": resolve(__dirname, "src/types.ts"),
+    },
+  },
   server: {
     port: 3998,
     proxy: {

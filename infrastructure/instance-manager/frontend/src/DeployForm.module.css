@@ -70,6 +70,19 @@
   gap: 0.75rem;
 }
 
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
 .submitBtn {
   padding: 10px 20px;
   background: var(--accent);

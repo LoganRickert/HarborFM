@@ -6,6 +6,7 @@ import {
   VULTR_REGIONS,
   AWS_REGIONS,
 } from "./constants";
+import type { ConfigState } from "@shared/types";
 import styles from "./DeployForm.module.css";
 
 /** Saved deploy inputs from GET /api/instances/:id/deploy-inputs (no secrets). */
@@ -31,7 +32,7 @@ export interface TerraformDeployInputsPrefill {
   harborfm_repo?: string;
   harborfm_branch?: string;
   setup_id?: string;
-  cookie_secure?: string;
+  cookie_secure?: boolean;
   script_url?: string;
 }
 
@@ -65,10 +66,11 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
   const [harborfmRepo, setHarborfmRepo] = useState("loganrickert/harborfm");
   const [harborfmBranch, setHarborfmBranch] = useState("main");
   const [setupId, setSetupId] = useState("");
-  const [cookieSecure, setCookieSecure] = useState<"true" | "false">("false");
+  const [cookieSecure, setCookieSecure] = useState(false);
   const [scriptUrl, setScriptUrl] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [generateAdminApiKey, setGenerateAdminApiKey] = useState(true);
   const [kubeconfig, setKubeconfig] = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -77,13 +79,16 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
-      .then((c: Record<string, string | number>) => {
+      .then((c: ConfigState) => {
         if (c.plan != null) setPlan(String(c.plan));
         if (c.os_id != null) setOsId(String(c.os_id));
         if (c.os != null) setOs(String(c.os));
         if (c.region != null) setRegion(String(c.region));
         if (c.deploy_type != null) setDeployType(String(c.deploy_type) as "pm2" | "nginx" | "caddy");
         if (c.cloudflare_zone_name != null) setCloudflareZoneName(String(c.cloudflare_zone_name));
+        if (c.cloudflare_zone_name != null && String(c.cloudflare_zone_name).trim() !== "") {
+          setDomain(`.${String(c.cloudflare_zone_name).trim()}`);
+        }
         if (c.certbot_email != null) setCertbotEmail(String(c.certbot_email));
         if (c.ssh_allowed_cidr != null) setSshAllowedCidr(String(c.ssh_allowed_cidr));
         if (c.ssh_public_key != null) setSshPublicKey(String(c.ssh_public_key));
@@ -91,10 +96,12 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
         if (c.harborfm_repo != null) setHarborfmRepo(String(c.harborfm_repo));
         if (c.harborfm_branch != null) setHarborfmBranch(String(c.harborfm_branch));
         if (c.setup_id != null) setSetupId(String(c.setup_id));
-        if (c.cookie_secure != null) setCookieSecure(String(c.cookie_secure) === "true" ? "true" : "false");
+        if (c.cookie_secure != null) setCookieSecure(c.cookie_secure);
         if (c.script_url != null) setScriptUrl(String(c.script_url));
         if (c.instance_type != null) setInstanceType(String(c.instance_type));
         if (c.data_volume_size != null) setDataVolumeSize(String(c.data_volume_size));
+        if (c.generate_admin_api_key_by_default != null) setGenerateAdminApiKey(Boolean(c.generate_admin_api_key_by_default));
+        if (c.default_admin_email != null) setAdminEmail(String(c.default_admin_email));
         setConfigLoaded(true);
       })
       .catch(() => setConfigLoaded(true));
@@ -137,7 +144,7 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
     setHarborfmRepo(prefill.harborfm_repo ?? "loganrickert/harborfm");
     setHarborfmBranch(prefill.harborfm_branch ?? "main");
     setSetupId(prefill.setup_id ?? "");
-    setCookieSecure((prefill.cookie_secure as "true" | "false") ?? "false");
+    setCookieSecure(prefill.cookie_secure ?? false);
     setScriptUrl(prefill.script_url ?? "");
     setAdminEmail(prefill.admin_email ?? "");
     setAdminPassword("");
@@ -152,7 +159,7 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
     setLoading(true);
     setOutput("");
     try {
-      const body: Record<string, string | number> = {
+      const body: Record<string, string | number | boolean> = {
         orchestrator,
         name: name.trim(),
         domain: domain || "localhost",
@@ -169,6 +176,7 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
         setup_id: setupId,
         cookie_secure: cookieSecure,
         script_url: scriptUrl.trim(),
+        generate_admin_api_key: generateAdminApiKey,
       };
       if (orchestrator === "terraform") {
         body.provider = provider;
@@ -361,7 +369,7 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
                 placeholder="None (use repo/branch)"
               />
             </label>
-            <ToggleGroup label="Cookie secure" value={cookieSecure} options={[{ value: "false", label: "false (HTTP ok)" }, { value: "true", label: "true (HTTPS only)" }]} onChange={(v) => setCookieSecure(v)} />
+            <ToggleGroup label="Cookie secure" value={cookieSecure ? "true" : "false"} options={[{ value: "false", label: "false (HTTP ok)" }, { value: "true", label: "true (HTTPS only)" }]} onChange={(v) => setCookieSecure(v === "true")} />
             {orchestrator === "kubernetes" && (
               <label className={styles.label}>
                 <span className={styles.labelText}>Kubeconfig path (optional, saved per release)</span>
@@ -373,15 +381,28 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
 
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>Admin</h3>
-          <div className={styles.fieldRow}>
-            <label className={styles.label}>
-              <span className={styles.labelText}>Admin email (optional)</span>
-              <input type="email" className={styles.input} value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
-            </label>
-            <label className={styles.label}>
-              <span className={styles.labelText}>Admin password (optional)</span>
-              <input type="password" className={styles.input} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
-            </label>
+          <div className={styles.sectionFields}>
+            <div className={styles.fieldRow}>
+              <label className={styles.label}>
+                <span className={styles.labelText}>Admin email (optional)</span>
+                <input type="email" className={styles.input} value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} />
+              </label>
+              <label className={styles.label}>
+                <span className={styles.labelText}>Admin password (optional)</span>
+                <input type="password" className={styles.input} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
+              </label>
+            </div>
+            {orchestrator === "terraform" && (
+              <label className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  className={styles.checkbox}
+                  checked={generateAdminApiKey}
+                  onChange={(e) => setGenerateAdminApiKey(e.target.checked)}
+                />
+                <span className={styles.labelText}>Generate admin API key and save in instance manager</span>
+              </label>
+            )}
           </div>
         </div>
 

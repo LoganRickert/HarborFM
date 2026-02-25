@@ -578,10 +578,10 @@ export async function registerInstancesRoutes(app: FastifyInstance): Promise<voi
     if (!item.url) {
       return reply.status(400).send({ error: "Instance has no URL configured" });
     }
-    const apiKey = adminApiKey || (loadConfig().default_admin_api_key as string | undefined) || "";
-    if (!apiKey.trim()) {
+    const apiKey = adminApiKey?.trim() ?? "";
+    if (!apiKey) {
       return reply.status(400).send({
-        error: "Admin API key required. Add a default key in Settings or set one when adding the tracked instance.",
+        error: "Admin API key required. Set one when adding the instance, or use a deploy that generated and saved a key.",
       });
     }
     const result = await fetchSystemInfo(item.url, apiKey.trim());
@@ -599,10 +599,10 @@ export async function registerInstancesRoutes(app: FastifyInstance): Promise<voi
     if (!item.url) {
       return reply.status(400).send({ error: "Instance has no URL configured" });
     }
-    const apiKey = adminApiKey || (loadConfig().default_admin_api_key as string | undefined) || "";
-    if (!apiKey.trim()) {
+    const apiKey = adminApiKey?.trim() ?? "";
+    if (!apiKey) {
       return reply.status(400).send({
-        error: "Admin API key required.",
+        error: "Admin API key required. Set one when adding the instance, or use a deploy that generated and saved a key.",
       });
     }
     const result = await fetchSetupStatus(item.url, apiKey.trim());
@@ -683,9 +683,9 @@ export async function registerInstancesRoutes(app: FastifyInstance): Promise<voi
       harborfm_branch: inputs.harborfm_branch || "main",
       cloudflare_zone_name: inputs.cloudflare_zone_name ?? "",
       ssh_allowed_cidr: inputs.ssh_allowed_cidr ?? "192.168.1.1/32",
-      ssh_public_key: (cfg.ssh_public_key as string) ?? "",
+      ssh_public_key: cfg.ssh_public_key ?? "",
       setup_id: inputs.setup_id ?? "",
-      cookie_secure: inputs.cookie_secure ?? "",
+      cookie_secure: inputs.cookie_secure === true ? "true" : "false",
       script_url: inputs.script_url ?? "",
     };
     if (provider === "vultr") {

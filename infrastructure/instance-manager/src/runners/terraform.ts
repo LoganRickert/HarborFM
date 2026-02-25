@@ -157,7 +157,7 @@ export async function applyTerraform(
   const env = loadEnv(provider);
   const varArgs: string[] = [];
   for (const [k, v] of Object.entries(vars)) {
-    if (v === undefined || v === "") continue;
+    if (v === undefined) continue;
     if (Array.isArray(v)) {
       varArgs.push(`-var`, `${k}=${JSON.stringify(v)}`);
     } else {
@@ -169,10 +169,11 @@ export async function applyTerraform(
   } catch {
     await execa("terraform", ["workspace", "new", workspace, "-no-color"], { cwd, env, timeout: 10000 });
   }
+  const applyEnv = { ...env, INSTANCE_MANAGER: "1" };
   try {
     const run = await execa("bash", ["./run.sh", "apply", "-auto-approve", ...varArgs], {
       cwd,
-      env,
+      env: applyEnv,
       timeout: 600000,
       all: true,
     });

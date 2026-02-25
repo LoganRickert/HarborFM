@@ -1,7 +1,10 @@
 import "dotenv/config";
+import dotenv from "dotenv";
 import { resolve } from "path";
 
 const repoRoot = process.env.INFRASTRUCTURE_ROOT || resolve(process.cwd(), "../..");
+// Load git root .env so FLAREVAULT_* etc. are available when running via pnpm run dev:manager (cwd may be instance-manager).
+dotenv.config({ path: resolve(repoRoot, ".env") });
 
 export const config = {
   port: Number(process.env.PORT) || 3999,

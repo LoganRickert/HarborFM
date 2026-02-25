@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "crypto";
 import { applyTerraform, getOutputs, type TerraformProvider } from "../runners/terraform.js";
+
+/** Default prefix for generated admin API keys (HarborFM server default). User can change the key in the UI if their instance uses a different prefix. */
+const DEFAULT_API_KEY_PREFIX = "hfm_";
 import { helmUpgradeInstall } from "../runners/helm.js";
 import { loadData, saveData, type TerraformDeployInputs } from "./config.js";
 import {
@@ -34,9 +37,10 @@ export interface DeployBody {
   harborfm_repo?: string;
   harborfm_branch?: string;
   setup_id?: string;
-  cookie_secure?: string;
+  cookie_secure?: boolean;
   script_url?: string;
   kubeconfig?: string;
+  generate_admin_api_key?: boolean;
   [key: string]: string | number | boolean | string[] | undefined;
 }
 
@@ -60,6 +64,8 @@ export async function registerDeployRoutes(app: FastifyInstance): Promise<void> 
         !!body.admin_password;
 
       let redeemTokenForPatch: string | null = null;
+      /** When using FlareVault we generate a token; keep it to save in meta when generate_admin_api_key is true. */
+      let generatedAdminApiKey: string | null = null;
 
       const vars: Record<string, string | number | boolean | string[]> = {
         deploy_type: body.deploy_type || "pm2",
@@ -75,7 +81,7 @@ export async function registerDeployRoutes(app: FastifyInstance): Promise<void> 
         ssh_allowed_cidr: body.ssh_allowed_cidr ?? "192.168.1.1/32",
         ssh_public_key: body.ssh_public_key ?? "",
         setup_id: body.setup_id ?? "",
-        cookie_secure: body.cookie_secure ?? "",
+        cookie_secure: body.cookie_secure === true ? "true" : "false",
         script_url: body.script_url ?? "",
       };
 
@@ -83,12 +89,13 @@ export async function registerDeployRoutes(app: FastifyInstance): Promise<void> 
         const hash = await hashAdminPassword(body.admin_password!);
         if (hash) {
           const instanceId = `${provider}:${workspace}`;
-          const initialToken = randomBytes(24).toString("hex");
+          const initialToken = DEFAULT_API_KEY_PREFIX + randomBytes(32).toString("hex");
           const payload: { admin_email: string; admin_password_hash: string; initial_admin_api_token?: string } = {
             admin_email: body.admin_email!.trim(),
             admin_password_hash: hash,
           };
           if (initialToken) payload.initial_admin_api_token = initialToken;
+          generatedAdminApiKey = initialToken;
           const created = await createFlareVaultPackage(flarevaultUrl, adminBearerToken, instanceId, payload);
           if (created) {
             vars.flarevault_url = flarevaultUrl;
@@ -142,7 +149,7 @@ export async function registerDeployRoutes(app: FastifyInstance): Promise<void> 
           harborfm_repo: body.harborfm_repo || "loganrickert/harborfm",
           harborfm_branch: body.harborfm_branch || "main",
           setup_id: body.setup_id ?? "",
-          cookie_secure: body.cookie_secure ?? "",
+          cookie_secure: body.cookie_secure ?? false,
           script_url: body.script_url ?? "",
         };
         if (provider === "vultr") {
@@ -157,12 +164,22 @@ export async function registerDeployRoutes(app: FastifyInstance): Promise<void> 
           if (body.ami_id) inputs.ami_id = body.ami_id;
           if (body.key_name) inputs.key_name = body.key_name;
         }
-        data.terraform_deploy_meta[instanceId] = {
+        const meta: {
+          harborfm_repo: string;
+          harborfm_branch: string;
+          script_url: string;
+          inputs: TerraformDeployInputs;
+          admin_api_key?: string;
+        } = {
           harborfm_repo: vars.harborfm_repo as string,
           harborfm_branch: vars.harborfm_branch as string,
           script_url: (vars.script_url as string) ?? "",
           inputs,
         };
+        if (body.generate_admin_api_key !== false) {
+          meta.admin_api_key = generatedAdminApiKey ?? DEFAULT_API_KEY_PREFIX + randomBytes(32).toString("hex");
+        }
+        data.terraform_deploy_meta[instanceId] = meta;
         saveData(data);
       }
       return reply.send(result);
