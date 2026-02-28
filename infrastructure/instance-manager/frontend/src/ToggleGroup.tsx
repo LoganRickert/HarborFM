@@ -3,6 +3,7 @@ import styles from "./ToggleGroup.module.css";
 interface Option<T extends string> {
   value: T;
   label: string;
+  disabled?: boolean;
 }
 
 interface ToggleGroupProps<T extends string> {
@@ -24,7 +25,8 @@ export function ToggleGroup<T extends string>({ label, value, options, onChange 
           <button
             key={opt.value}
             type="button"
-            onClick={() => onChange(opt.value)}
+            disabled={opt.disabled}
+            onClick={() => !opt.disabled && onChange(opt.value)}
             className={value === opt.value ? styles.btnActive : styles.btn}
           >
             {opt.label}

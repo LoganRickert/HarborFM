@@ -34,6 +34,11 @@
   border-color: var(--text-muted);
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btnActive {
   flex: 1 1 0;
   min-width: 4.5rem;

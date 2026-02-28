@@ -265,7 +265,7 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
               value={orchestrator}
               options={[
                 { value: "terraform", label: "Terraform" },
-                { value: "kubernetes", label: "Kubernetes" },
+                { value: "kubernetes", label: "Kubernetes", disabled: true },
               ]}
               onChange={(v) => setOrchestrator(v)}
             />
