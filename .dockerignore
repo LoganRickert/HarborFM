@@ -28,3 +28,11 @@ Dockerfile
 
 # Local data (never bake in)
 data
+
+# Instance-manager Dockerfile: Terraform state and secrets (do not bake in)
+infrastructure/terraform/**/.terraform
+infrastructure/terraform/**/.terraform/
+infrastructure/terraform/**/*.tfstate
+infrastructure/terraform/**/*.tfstate.*
+infrastructure/terraform/**/.env
+infrastructure/terraform/**/terraform.tfvars

@@ -13,7 +13,11 @@ const providerDirs: Record<TerraformProvider, string> = {
 function loadEnv(provider: TerraformProvider): NodeJS.ProcessEnv {
   const envPath = resolve(providerDirs[provider], ".env");
   const env: NodeJS.ProcessEnv = { ...process.env };
-  if (!existsSync(envPath)) return env;
+  if (!existsSync(envPath)) {
+    env.TF_CLI_ARGS = "-no-color";
+    env.TERM = "dumb";
+    return env;
+  }
   const content = readFileSync(envPath, "utf-8");
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
@@ -26,7 +30,25 @@ function loadEnv(provider: TerraformProvider): NodeJS.ProcessEnv {
   }
   if (env.CLOUDFLARE_API_TOKEN) env.TF_VAR_cloudflare_api_token = env.CLOUDFLARE_API_TOKEN;
   env.TF_CLI_ARGS = "-no-color";
+  env.TERM = "dumb";
   return env;
+}
+
+const REQUIRED_ENV_PER_PROVIDER: Record<TerraformProvider, string[]> = {
+  vultr: ["VULTR_API_KEY"],
+  aws: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+};
+
+function validateProviderCredentials(provider: TerraformProvider, env: NodeJS.ProcessEnv): void {
+  const required = REQUIRED_ENV_PER_PROVIDER[provider];
+  const missing = required.filter((key) => !env[key]?.trim());
+  if (missing.length > 0) {
+    const hint =
+      provider === "vultr"
+        ? "Set VULTR_API_KEY in infrastructure/terraform/vultr/.env or in the instance-manager .env (e.g. when using run-docker.sh)."
+        : "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in infrastructure/terraform/aws/.env or in the instance-manager .env.";
+    throw new Error(`Missing required credentials for ${provider}: ${missing.join(", ")}. ${hint}`);
+  }
 }
 
 export async function listWorkspaces(provider: TerraformProvider): Promise<string[]> {
@@ -171,6 +193,7 @@ export async function applyTerraform(
   } catch {
     await execa("terraform", ["workspace", "new", workspace, "-no-color"], { cwd, env, timeout: 10000 });
   }
+  validateProviderCredentials(provider, env);
   const applyEnv = { ...env, INSTANCE_MANAGER: "1" };
   try {
     const run = await execa("bash", ["./run.sh", "apply", "-auto-approve", ...varArgs], {
@@ -178,6 +201,7 @@ export async function applyTerraform(
       env: applyEnv,
       timeout: 600000,
       all: true,
+      stdin: "pipe",
     });
     const outStr = Array.isArray(run.all) ? run.all.join("\n") : typeof run.all === "string" ? run.all : run.stdout + "\n" + run.stderr;
     return { success: true, output: outStr };
@@ -185,6 +209,54 @@ export async function applyTerraform(
     const errObj = err as { all?: string[] | string };
     const out = Array.isArray(errObj.all) ? errObj.all.join("\n") : typeof errObj.all === "string" ? errObj.all : err instanceof Error ? err.message : String(err);
     return { success: false, output: out };
+  }
+}
+
+/** Like applyTerraform but streams stdout/stderr to onChunk and returns { success, output } when done. */
+export async function applyTerraformStreaming(
+  provider: TerraformProvider,
+  workspace: string,
+  vars: Record<string, string | number | boolean | string[]>,
+  onChunk: (text: string) => void
+): Promise<{ success: boolean; output: string }> {
+  const cwd = providerDirs[provider];
+  const env = loadEnv(provider);
+  const varArgs: string[] = [];
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined) continue;
+    if (Array.isArray(v)) {
+      varArgs.push(`-var`, `${k}=${JSON.stringify(v)}`);
+    } else {
+      varArgs.push("-var", `${k}=${String(v)}`);
+    }
+  }
+  try {
+    await execa("terraform", ["workspace", "select", workspace, "-no-color"], { cwd, env, timeout: 10000 });
+  } catch {
+    await execa("terraform", ["workspace", "new", workspace, "-no-color"], { cwd, env, timeout: 10000 });
+  }
+  validateProviderCredentials(provider, env);
+  const applyEnv = { ...env, INSTANCE_MANAGER: "1" };
+  const chunks: string[] = [];
+  const push = (text: string) => {
+    chunks.push(text);
+    onChunk(text);
+  };
+  const subprocess = execa("bash", ["./run.sh", "apply", "-auto-approve", ...varArgs], {
+    cwd,
+    env: applyEnv,
+    timeout: 600000,
+    stdin: "pipe",
+  });
+  subprocess.stdout?.on("data", (c: Buffer | string) => push(typeof c === "string" ? c : c.toString()));
+  subprocess.stderr?.on("data", (c: Buffer | string) => push(typeof c === "string" ? c : c.toString()));
+  try {
+    await subprocess;
+    return { success: true, output: chunks.join("") };
+  } catch (err: unknown) {
+    const errObj = err as { all?: string[] | string; message?: string };
+    const extra = Array.isArray(errObj.all) ? errObj.all.join("\n") : typeof errObj.all === "string" ? errObj.all : err instanceof Error ? err.message : String(err);
+    return { success: false, output: chunks.join("") + (chunks.length ? "\n" : "") + extra };
   }
 }
 
@@ -200,6 +272,11 @@ export async function destroyTerraformVultr(
   const cwd = providerDirs.vultr;
   const env = { ...loadEnv("vultr"), ...(options?.destroyStorage ? { DESTROY_STORAGE: "1" } : {}) };
   try {
+    validateProviderCredentials("vultr", env);
+  } catch (err) {
+    return { success: false, output: err instanceof Error ? err.message : String(err) };
+  }
+  try {
     await execa("terraform", ["workspace", "select", workspace, "-no-color"], { cwd, env, timeout: 10000 });
   } catch {
     return { success: false, output: `Workspace '${workspace}' does not exist.` };
@@ -210,6 +287,7 @@ export async function destroyTerraformVultr(
       env,
       timeout: 300000,
       all: true,
+      stdin: "pipe",
     });
     const outStr = Array.isArray(run.all) ? run.all.join("\n") : typeof run.all === "string" ? run.all : run.stdout + "\n" + run.stderr;
     if (options?.destroyStorage) {

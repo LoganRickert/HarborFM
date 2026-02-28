@@ -5,7 +5,8 @@ import { config } from "./config.js";
 import { registerInstancesRoutes } from "./routes/instances.js";
 import { registerDeployRoutes } from "./routes/deploy.js";
 import { registerConfigRoutes } from "./routes/config.js";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 
 async function main() {
   const app = Fastify({ logger: true });
@@ -17,12 +18,13 @@ async function main() {
   registerConfigRoutes(app);
 
   if (!config.isDev && existsSync(config.paths.frontendDist)) {
-    await app.register(fastifyStatic, {
-      root: config.paths.frontendDist,
-      prefix: "/",
-    });
+    const assetsDir = join(config.paths.frontendDist, "assets");
+    if (existsSync(assetsDir)) {
+      await app.register(fastifyStatic, { root: assetsDir, prefix: "/assets/" });
+    }
+    const indexPath = join(config.paths.frontendDist, "index.html");
     app.get("*", (_request, reply) => {
-      return reply.sendFile("index.html");
+      return reply.type("text/html").send(readFileSync(indexPath, "utf-8"));
     });
   }
 

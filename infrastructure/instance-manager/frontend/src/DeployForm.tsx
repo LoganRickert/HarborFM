@@ -75,6 +75,7 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const outputPreRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     fetch("/api/config")
@@ -197,9 +198,48 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
       if (orchestrator === "kubernetes" && kubeconfig.trim()) body.kubeconfig = kubeconfig.trim();
       const res = await fetch("/api/deploy", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify(body),
       });
+      const contentType = res.headers.get("content-type") ?? "";
+      const isStream = res.ok && contentType.includes("text/plain");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setOutput(data.error ?? data.message ?? `Request failed: ${res.status}`);
+        return;
+      }
+      if (isStream && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            setOutput(buffer);
+            if (outputPreRef.current) outputPreRef.current.scrollTop = outputPreRef.current.scrollHeight;
+            const lines = buffer.split("\n");
+            const last = lines[lines.length - 1];
+            if (last.trimStart().startsWith('{"done":true')) {
+              try {
+                const result = JSON.parse(last.trim()) as { done: boolean; success: boolean; message?: string };
+                if (result.done) {
+                  const logOnly = lines.slice(0, -1).join("\n");
+                  setOutput(logOnly + (result.success ? "" : "\n" + (result.message ?? "")));
+                  if (result.success) onDeployed();
+                  break;
+                }
+              } catch {
+                // not the final line yet, keep reading
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        return;
+      }
       const data = await res.json();
       setOutput(data.output ?? data.error ?? JSON.stringify(data));
       if (data.success) onDeployed();
@@ -411,7 +451,7 @@ export function DeployForm({ onDeployed, prefill, onClearPrefill }: DeployFormPr
         </button>
       </form>
 
-      {output && <pre className={styles.outputPre}>{output}</pre>}
+      {output !== "" && <pre ref={outputPreRef} className={styles.outputPre}>{output}</pre>}
     </section>
   );
 }

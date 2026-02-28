@@ -81,7 +81,7 @@ async function main(): Promise<void> {
       let newHash: string | null = null;
       if (hashB64) {
         const decoded = decodeHashB64(hashB64);
-        if (decoded) newHash = decoded;
+        if (decoded) newHash = decoded.trim();
       } else if (password) {
         newHash = await argon2.hash(password);
       }
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
       console.warn("[seed-setup] ADMIN_PASSWORD_HASH_B64 invalid (expected base64 of argon2 hash). Skipping.");
       process.exit(0);
     }
-    passwordHash = decoded;
+    passwordHash = decoded.trim();
   } else if (password) {
     passwordHash = await argon2.hash(password);
   } else {
