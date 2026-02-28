@@ -45,11 +45,34 @@ Open http://localhost:3999 (or your PORT).
 
 ## Docker
 
-The image includes the instance-manager app and Terraform (AWS + Vultr). Use the helper scripts from the instance-manager directory.
+The image includes the instance-manager app and Terraform (AWS + Vultr).
+
+### Running using GitHub Container Registry
+
+Images are built on push to `main` (tag `latest`) and `staging` (tag `staging`).
+
+```bash
+# Create .env from .env.example and set VULTR_API_KEY (and/or AWS creds), etc.
+docker run --rm -it --init \
+  --env-file .env \
+  -p 3997:3999 \
+  -v "$(pwd)/tfstate:/data" \
+  -v "$(pwd)/config.json:/app/manager/config.json" \
+  -v "$(pwd)/data.json:/app/manager/data.json" \
+  ghcr.io/loganrickert/harborfm-instance-manager:latest
+```
+
+Open http://localhost:3997.
+
+### Build and run locally
 
 **Build** (from repo root):
 
-From the repo root: `docker build -f infrastructure/instance-manager/Dockerfile -t instance-manager .`
+```bash
+./infrastructure/instance-manager/build-docker.sh
+```
+
+Or: `docker build -f infrastructure/instance-manager/Dockerfile -t instance-manager .`
 
 **Run** (from `infrastructure/instance-manager`):
 

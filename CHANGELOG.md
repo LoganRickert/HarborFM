@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.6 - 2026-02-28
+
+- **Instance manager:** Web UI to list and deploy HarborFM instances via Terraform (AWS or Vultr).
+
 ## v1.5.1 - 2026-02-22
 
 - **Podcast analytics breakdown:** Stats (RSS, episode requests, episode listens, location) now include a **source** dimension (Apple Podcasts, Spotify, Google Podcasts, Pocket Casts, Overcast, or Other) derived from User-Agent; analytics API and UI show counts per source so you can see which apps drive traffic.

@@ -1015,7 +1015,47 @@ Open HarborFM's login page. You should see an option to sign in with your SAML p
 
 ## Instance manager (beta)
 
-The **instance manager** is a small web app that provides a quick interface for [Terraform](infrastructure/terraform/README.md) to **monitor and manage** HarborFM instances. Use it to deploy new instances (AWS or Vultr), view status and outputs, run Terraform apply/destroy, and optionally deliver admin credentials via [FlareVault](infrastructure/instance-manager/FlareVault.md) instead of inline user-data. It is **beta** and intended for operators who already use the Terraform configs and want a single UI instead of running `run.sh` and `terraform` from the CLI. See [infrastructure/instance-manager/README.md](infrastructure/instance-manager/README.md) for setup and usage.
+The **instance manager** is a web UI to list and deploy HarborFM instances using [Terraform](infrastructure/terraform/README.md) (AWS or Vultr). Deploys stream live `terraform` output. Kubernetes/Helm support is in progress.
+
+**Run with Docker (recommended)**
+
+**Example `.env`**
+
+```env
+# Required for Vultr deploys
+VULTR_API_KEY=your-vultr-api-key
+
+# Required for AWS deploys: set both below, or mount your AWS config in docker run with -v ~/.aws:/home/node/.aws:ro instead
+# AWS_ACCESS_KEY_ID=your-access-key
+# AWS_SECRET_ACCESS_KEY=your-secret-key
+
+## Encrypts the config and data json.
+# MANAGER_SECRET=$(openssl rand -base64 32)
+
+# Optional: port (default 3999), FlareVault (sends encrypted username/password to instance)
+# PORT=3999
+# FLAREVAULT_URL=https://...
+# FLAREVAULT_ADMIN_TOKEN=...
+```
+
+```bash
+cd infrastructure/instance-manager
+# Ensure config.json and data.json exist: echo '{}' > config.json && echo '{}' > data.json
+# For AWS deploys you can use -v ~/.aws:/home/node/.aws:ro instead of AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY in .env
+docker run -d \
+  --env-file .env \
+  -p 3997:3999 \
+  -v "$(pwd)/tfstate:/data" \
+  -v "$(pwd)/config.json:/app/manager/config.json" \
+  -v "$(pwd)/data.json:/app/manager/data.json" \
+  ghcr.io/loganrickert/harborfm-instance-manager:latest
+```
+
+Open http://localhost:3997. Config, instance data, and Terraform state persist in the current directory via the bind mounts.
+
+**Run locally (dev)** — From the repo root: `pnpm run dev:manager`, then open http://localhost:3998. Terraform still needs credentials in `infrastructure/terraform/vultr/.env` or `infrastructure/terraform/aws/.env` (or in the manager `.env`).
+
+Full setup, all env options, and building the image yourself: [infrastructure/instance-manager/README.md](infrastructure/instance-manager/README.md).
 
 ### FlareVault
 
