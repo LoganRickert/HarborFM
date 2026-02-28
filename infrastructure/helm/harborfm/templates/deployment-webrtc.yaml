@@ -1,0 +1,76 @@
+{{- if .Values.webrtc.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "harborfm.fullname" . }}-webrtc
+  labels:
+    {{- include "harborfm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webrtc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "harborfm.selectorLabels" (merge (dict "component" "webrtc") .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "harborfm.selectorLabels" (merge (dict "component" "webrtc") .) | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: webrtc
+          image: "{{ .Values.webrtc.image.repository }}:{{ .Values.webrtc.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.webrtc.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+            - name: rtp
+              containerPort: 41000
+              protocol: UDP
+          env:
+            - name: PORT
+              value: "3002"
+            - name: RTC_MIN_PORT
+              value: "41000"
+            - name: RTC_MAX_PORT
+              value: "41100"
+            - name: MEDIASOUP_ANNOUNCED_IP
+              value: {{ .Values.webrtc.mediasoupAnnouncedIp | quote }}
+            - name: MAIN_APP_URL
+              value: {{ printf "http://%s:3001" (include "harborfm.fullname" .) | quote }}
+            - name: RECORDING_DATA_DIR
+              value: "/webrtc"
+          envFrom:
+            - secretRef:
+                name: {{ include "harborfm.fullname" . }}-app
+          volumeMounts:
+            - name: webrtc-recordings
+              mountPath: /webrtc
+      volumes:
+        - name: webrtc-recordings
+          persistentVolumeClaim:
+            claimName: {{ include "harborfm.fullname" . }}-webrtc-recordings
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "harborfm.fullname" . }}-webrtc
+  labels:
+    {{- include "harborfm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webrtc
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3002
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 41000
+      targetPort: 41000
+      protocol: UDP
+      name: rtp-min
+  selector:
+    {{- include "harborfm.selectorLabels" (merge (dict "component" "webrtc") .) | nindent 4 }}
+{{- end }}

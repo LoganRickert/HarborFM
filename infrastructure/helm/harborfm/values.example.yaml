@@ -1,0 +1,61 @@
+# Copy to values.yaml or use: helm install -f values.example.yaml ...
+# Terraform-style options (aligned with terraform.tfvars.example)
+
+# --- Images (repo/branch in Terraform = repository + tag here) ---
+# image:
+#   repository: ghcr.io/loganrickert/harborfm
+#   tag: main
+# webrtc:
+#   enabled: true
+#   image:
+#     repository: ghcr.io/loganrickert/harborfm-webrtc
+#     tag: main
+
+# --- Admin bootstrap ---
+# admin:
+#   email: "admin@example.com"
+#   existingPasswordSecret:
+#     name: my-admin-secret
+#     key: admin-password-hash
+#   registrationEnabled: "1"
+#   publicFeedsEnabled: "1"
+#   hostname: "https://podcasts.example.com"
+
+# --- Setup token for /setup?id=... ---
+# setupId: "my-secret-setup-token-32chars"
+
+# --- Domain and ingress ---
+# domain: "podcasts.example.com"
+# ingress:
+#   enabled: true
+#   host: "podcasts.example.com"
+#   className: "nginx"
+#   annotations:
+#     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+#   tls:
+#     enabled: true
+#     certManager:
+#       issuer: letsencrypt-prod
+
+# cookieSecure: "true"
+
+# --- WebRTC (group calls) ---
+# webrtc:
+#   enabled: true
+#   mediasoupAnnouncedIp: "1.2.3.4"
+#   serviceSecret: "..."
+#   recordingCallbackSecret: "..."
+#   publicWsUrl: "wss://podcasts.example.com/webrtc-ws"
+# recordingCallbackSecret: "..."
+
+# --- Persistence (set storageClass per cluster: empty = default, or vultr-block, ebs, etc.) ---
+# persistence:
+#   storageClass: ""
+#   data:
+#     size: 20Gi
+#   secrets:
+#     size: 1Gi
+#   webrtc:
+#     size: 10Gi
+#   whisperCache:
+#     size: 10Gi

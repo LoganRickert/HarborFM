@@ -460,6 +460,10 @@ export const ADMIN_PASSWORD_HASH_B64 =
 /** Plaintext admin password (dev/seed only). Env: ADMIN_PASSWORD. */
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim() || null;
 
+/** Initial admin API key (seed only, e.g. from FlareVault). When set, seed-setup creates this key for the admin user. Env: INITIAL_ADMIN_API_TOKEN. */
+export const INITIAL_ADMIN_API_TOKEN =
+  process.env.INITIAL_ADMIN_API_TOKEN?.trim() || null;
+
 /** Bootstrap admin hostname. When unset, falls back to https://DOMAIN when DOMAIN is valid. Env: ADMIN_HOSTNAME. */
 export const ADMIN_HOSTNAME = process.env.ADMIN_HOSTNAME?.trim() || null;
 

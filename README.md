@@ -66,7 +66,7 @@ If you are using `http`, you need to set `COOKIE_SECURE=false` as an environment
 
 ### Deploy with Terraform
 
-Use Terraform to provision a VM (AWS EC2 or Vultr) that runs Harbor FM via user-data (PM2 + nginx, with optional WebRTC and Let's Encrypt).
+Use Terraform to provision a VM (AWS EC2 or Vultr) that runs HarborFM via user-data (PM2 + nginx, with optional WebRTC and Let's Encrypt).
 
 #### AWS (EC2)
 
@@ -167,7 +167,7 @@ If you use the `install.sh` script, an `update.sh` script will also be added to 
 
 #### Adding additional domains (nginx)
 
-If you use nginx and want to serve the same Harbor FM app on extra domains or subdomains (e.g. `demo.harborfm.com`, `podcast.example.com`), use the included script from your **install directory**:
+If you use nginx and want to serve the same HarborFM app on extra domains or subdomains (e.g. `demo.harborfm.com`, `podcast.example.com`), use the included script from your **install directory**:
 
 ```bash
 ./nginx-add-domain.sh <domain>
@@ -1012,6 +1012,54 @@ HarborFM needs Keycloak's public certificate to verify SAML responses, and the U
 Open HarborFM's login page. You should see an option to sign in with your SAML provider (e.g. "Keycloak"). Click it; you should be sent to Keycloak to log in and then back to HarborFM, logged in.
 
 **If it doesn't work:** Double-check that **Client ID** in Keycloak is exactly your HarborFM base URL + `/api/auth/sso/saml` (e.g. `https://app.harborfm.com/api/auth/sso/saml`), and that the callback URL in both places is exactly the same.
+
+## Instance manager (beta)
+
+The **instance manager** is a web UI to list and deploy HarborFM instances using [Terraform](infrastructure/terraform/README.md) (AWS or Vultr). Deploys stream live `terraform` output. Kubernetes/Helm support is in progress.
+
+**Run with Docker (recommended)**
+
+**Example `.env`**
+
+```env
+# Required for Vultr deploys
+VULTR_API_KEY=your-vultr-api-key
+
+# Required for AWS deploys: set both below, or mount your AWS config in docker run with -v ~/.aws:/home/node/.aws:ro instead
+# AWS_ACCESS_KEY_ID=your-access-key
+# AWS_SECRET_ACCESS_KEY=your-secret-key
+
+## Encrypts the config and data json.
+# MANAGER_SECRET=$(openssl rand -base64 32)
+
+# Optional: port (default 3999), FlareVault (sends encrypted username/password to instance)
+# PORT=3999
+# FLAREVAULT_URL=https://...
+# FLAREVAULT_ADMIN_TOKEN=...
+```
+
+```bash
+cd infrastructure/instance-manager
+# Ensure config.json and data.json exist: echo '{}' > config.json && echo '{}' > data.json
+# For AWS deploys you can use -v ~/.aws:/home/node/.aws:ro instead of AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY in .env
+docker run -d \
+  --env-file .env \
+  -p 3997:3999 \
+  -v "$(pwd)/tfstate:/data" \
+  -v "$(pwd)/config.json:/app/manager/config.json" \
+  -v "$(pwd)/data.json:/app/manager/data.json" \
+  ghcr.io/loganrickert/harborfm-instance-manager:latest
+```
+
+Open http://localhost:3997. Config, instance data, and Terraform state persist in the current directory via the bind mounts.
+
+**Run locally (dev)** — From the repo root: `pnpm run dev:manager`, then open http://localhost:3998. Terraform still needs credentials in `infrastructure/terraform/vultr/.env` or `infrastructure/terraform/aws/.env` (or in the manager `.env`).
+
+Full setup, all env options, and building the image yourself: [infrastructure/instance-manager/README.md](infrastructure/instance-manager/README.md).
+
+### FlareVault
+
+[FlareVault](https://github.com/LoganRickert/FlareVault) is a separate project: single-use secret delivery on Cloudflare Workers (Durable Objects + sealed ECDH delivery). HarborFM’s Terraform and instance manager can use it to send admin credentials to new instances at boot instead of putting them in user-data. Deploy your own worker, then set `FLAREVAULT_URL` and `FLAREVAULT_ADMIN_TOKEN` in your Terraform or instance-manager `.env`. See [infrastructure/instance-manager/FlareVault.md](infrastructure/instance-manager/FlareVault.md) for HarborFM-specific setup and the [FlareVault repo](https://github.com/LoganRickert/FlareVault) for the API and deployment.
 
 ## License
 

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { db, closeDb } from "./index.js";
 import argon2 from "argon2";
 import * as readline from "readline";

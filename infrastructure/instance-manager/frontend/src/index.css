@@ -1,0 +1,61 @@
+/* HarborFM Instance Manager – match main HarborFM site (dark, neon accent) */
+:root {
+  --bg: #0c0e12;
+  --bg-elevated: #14171e;
+  --bg-muted: #1a1e28;
+  --text: #e8eaef;
+  --text-muted: #8b92a3;
+  --accent: #00d4aa;
+  --accent-dim: #00a884;
+  --accent-glow: rgba(0, 212, 170, 0.25);
+  --border: #2a2f3d;
+  --error: #ff6b6b;
+  --success: #00d4aa;
+  --radius: 8px;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --max-content: 1200px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+a:hover {
+  opacity: 0.9;
+}
+
+input,
+select,
+button,
+textarea {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+button {
+  cursor: pointer;
+}

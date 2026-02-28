@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "harborfm.fullname" . }}
+  labels:
+    {{- include "harborfm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "harborfm.selectorLabels" (merge (dict "component" "app") .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "harborfm.selectorLabels" (merge (dict "component" "app") .) | nindent 8 }}
+    spec:
+      # Image runs as UID 10001 (appuser); fsGroup makes PVC mounts writable by that user
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: harborfm
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "harborfm.fullname" . }}-env
+            - secretRef:
+                name: {{ include "harborfm.fullname" . }}-app
+          {{- if and .Values.admin.existingPasswordSecret .Values.admin.existingPasswordSecret.name .Values.admin.existingPasswordSecret.key }}
+          env:
+            - name: ADMIN_PASSWORD_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.admin.existingPasswordSecret.name }}
+                  key: {{ .Values.admin.existingPasswordSecret.key }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: secrets
+              mountPath: /secrets
+            - name: webrtc-recordings
+              mountPath: /webrtc
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "harborfm.fullname" . }}-data
+        - name: secrets
+          persistentVolumeClaim:
+            claimName: {{ include "harborfm.fullname" . }}-secrets
+        - name: webrtc-recordings
+          persistentVolumeClaim:
+            claimName: {{ include "harborfm.fullname" . }}-webrtc-recordings

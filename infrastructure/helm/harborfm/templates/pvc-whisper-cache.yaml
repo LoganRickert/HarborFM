@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "harborfm.fullname" . }}-whisper-cache
+  labels:
+    {{- include "harborfm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: whisper
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.whisperCache.size }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}

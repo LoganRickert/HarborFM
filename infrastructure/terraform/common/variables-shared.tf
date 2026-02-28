@@ -62,7 +62,7 @@ variable "install_dir" {
 }
 
 variable "harborfm_repo" {
-  description = "GitHub repo for Harbor FM (owner/name)"
+  description = "GitHub repo for HarborFM (owner/name)"
   type        = string
   default     = "loganrickert/harborfm"
 }
@@ -182,4 +182,17 @@ variable "data_volume_size" {
   description = "Size in GB of the persistent data volume (data, secrets, webrtc). When > 0, a volume is attached and user-data mounts it; survives destroy so a new instance can reattach. Set to 0 to use root disk only."
   type        = number
   default     = 20
+}
+
+variable "flarevault_url" {
+  description = "FlareVault base URL including route prefix (e.g. https://flarevault.xxx.workers.dev/my-prefix). When set with flarevault_redeem_token, admin creds are delivered via FlareVault redeem instead of inline user-data."
+  type        = string
+  default     = ""
+}
+
+variable "flarevault_redeem_token" {
+  description = "FlareVault redeem token for the package. Set with flarevault_url when using FlareVault for admin credentials. Populated before apply (e.g. by run.sh or instance-manager) after creating the package."
+  type        = string
+  default     = ""
+  sensitive   = true
 }

@@ -1,0 +1,23 @@
+HarborFM has been deployed.
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+  {{- $host := .Values.ingress.host }}
+  {{- if .Values.ingress.tls.enabled }}
+  https://{{ $host }}
+  {{- else }}
+  http://{{ $host }}
+  {{- end }}
+{{- else }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "harborfm.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- end }}
+
+2. Open the URL in your browser. On first run you will see a one-time setup link in the app (or in the harborfm pod logs). Use it to create the admin account and configure registration.
+
+3. Secrets: Ensure JWT_SECRET and HARBORFM_SECRETS_KEY are set. Either create a Secret and set existingSecret in values, or pass them via env. Example to create a secret:
+   kubectl create secret generic harborfm-secrets --from-literal=JWT_SECRET=$(openssl rand -base64 32) --from-literal=HARBORFM_SECRETS_KEY=$(openssl rand -base64 32) -n {{ .Release.Namespace }}
+   Then set existingSecret: harborfm-secrets and upgrade the release.
+
+4. Fail2Ban is not included in this chart; use cluster or node-level measures if needed.

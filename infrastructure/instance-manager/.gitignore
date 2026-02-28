@@ -1,0 +1,11 @@
+node_modules
+dist
+tmp
+.env
+.env.local
+*.log
+
+# Optional: uncomment if config/data are machine-specific
+config.json
+data.json
+tfstate/

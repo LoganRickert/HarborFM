@@ -1,4 +1,4 @@
-# Harbor FM stack: app, reverse proxy (nginx or Caddy), Whisper ASR, Fail2Ban
+# HarborFM stack: app, reverse proxy (nginx or Caddy), Whisper ASR, Fail2Ban
 #
 # Set REVERSE_PROXY=nginx or REVERSE_PROXY=caddy in .env. Then start with:
 #   docker compose --profile $REVERSE_PROXY up -d

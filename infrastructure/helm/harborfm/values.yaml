@@ -1,0 +1,84 @@
+# HarborFM Helm chart - Terraform-aligned defaults.
+# Override with -f myvalues.yaml or --set key=value.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Main app image (repo/branch in Terraform -> repository + tag here)
+image:
+  repository: ghcr.io/loganrickert/harborfm
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# Admin bootstrap: email + password hash from existing Secret, or set values (hash created externally)
+admin:
+  email: ""
+  # Precomputed bcrypt hash in a Secret: { name: "my-secret", key: "admin-password-hash" }
+  existingPasswordSecret: {}
+  registrationEnabled: "0"
+  publicFeedsEnabled: "1"
+  hostname: ""
+
+# Pre-set setup token for /setup?id=... (or existingSecret: { name, key })
+setupId: "12345"
+# setupIdExistingSecret: { name: "my-secret", key: "setup-id" }
+
+# Domain passed to app and used for Ingress host
+domain: "tfdev10.harborfm.com"
+
+cookieSecure: "false"
+allowVideoGeneration: "1"
+caddyTlsCheckSecret: ""
+
+# WebRTC: enable to deploy webrtc Deployment and wire Ingress /webrtc-ws/
+webrtc:
+  enabled: false
+  image:
+    repository: ghcr.io/loganrickert/harborfm-webrtc
+    tag: latest
+    pullPolicy: IfNotPresent
+  mediasoupAnnouncedIp: ""
+  serviceSecret: ""
+  recordingCallbackSecret: ""
+  publicWsUrl: ""
+
+# Shared secret for recording callbacks (main app + webrtc)
+recordingCallbackSecret: ""
+
+# Ingress: single host; TLS via cert-manager or existing secret
+ingress:
+  enabled: true
+  host: "tfdev10.harborfm.com"
+  # Required for NGINX Ingress Controller to adopt this Ingress; use "" if you use a different controller
+  className: "nginx"
+  annotations: {}
+  # TLS: set either certManager issuer or existing secret name
+  tls:
+    enabled: false
+    existingSecret: ""
+    # certManager:
+    #   issuer: letsencrypt-prod
+
+# Persistence: PVCs; leave storageClass empty for cluster default (works on local, EKS, Vultr VKE)
+persistence:
+  storageClass: ""
+  data:
+    size: 10Gi
+  secrets:
+    size: 1Gi
+  webrtc:
+    size: 5Gi
+  whisperCache:
+    size: 5Gi
+
+# Whisper ASR image (fixed upstream). Service name "whisper" so app default http://whisper:9000 resolves.
+whisper:
+  serviceName: "whisper"
+  image:
+    repository: onerahmet/openai-whisper-asr-webservice
+    tag: latest
+    pullPolicy: IfNotPresent
+  asrModel: base
+  asrEngine: openai_whisper

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Harbor FM - one-line install (no clone required)
+# HarborFM - one-line install (no clone required)
 # Usage: curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/install.sh | bash
 #    or: curl -fsSL ... | bash -s -- /path/to/install-dir
 #    or: curl -fsSL ... | bash -s -- --no-interaction /path/to/install-dir
@@ -31,7 +31,7 @@ done
 INSTALL_DIR="${INSTALL_DIR:-./harborfm-docker}"
 INSTALL_DIR="$(cd -P "$(dirname "$INSTALL_DIR")" && pwd)/$(basename "$INSTALL_DIR")"
 
-echo "=== Harbor FM Docker install ==="
+echo "=== HarborFM Docker install ==="
 echo "Install directory: $INSTALL_DIR"
 echo ""
 

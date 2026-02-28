@@ -1,6 +1,6 @@
 # Terraform Quick Start
 
-Get Harbor FM running on a VM (Vultr or AWS) in a few steps.
+Get HarborFM running on a VM (Vultr or AWS) in a few steps.
 
 ## 1. Install Terraform
 
@@ -79,4 +79,4 @@ terraform output url
 terraform output -raw setup_url
 ```
 
-Open the URL in your browser. First boot may take a few minutes while the instance installs Harbor FM.
+Open the URL in your browser. First boot may take a few minutes while the instance installs HarborFM.

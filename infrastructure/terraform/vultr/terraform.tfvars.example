@@ -6,7 +6,7 @@ deploy_type = "pm2"  # nginx | caddy | pm2
 
 # Required: Vultr region and plan
 region = "ewr"       # ewr, lax, sfo, ord, etc.
-plan   = "vc2-1c-1gb"
+plan   = "vhf-2c-2gb"
 
 # Required: Vultr OS image ID. os (debian-12, ubuntu-22, etc.) is derived automatically via Vultr API.
 # See: curl -s -H "Authorization: Bearer $VULTR_API_KEY" https://api.vultr.com/v2/os | jq '.os[] | {id, name}'
@@ -17,7 +17,7 @@ os_id  = "2136"     # Debian 12 x64 (bookworm)
 # Debian 12 2136 -> debian-12
 # Debian 13 2625 -> debian-13
 # Ubuntu 22 1743 -> ubuntu-22
-# Ubuntu 24 2285 -> ubuntu-24
+# Ubuntu 24 2284 -> ubuntu-24
 # Ubuntu 25 2657 -> ubuntu-25
 # CentOS 9  542  -> centos-9
 # CentOS 10 2467 -> centos-10

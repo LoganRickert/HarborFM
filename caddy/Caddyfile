@@ -1,4 +1,4 @@
-# Harbor FM reverse proxy. Accept any hostname (on-demand TLS).
+# HarborFM reverse proxy. Accept any hostname (on-demand TLS).
 # Caddy obtains and renews TLS automatically per hostname; no certbot needed.
 # WebRTC disabled: /webrtc-ws returns 503. Use Caddyfile.webrtc when --profile webrtc.
 

@@ -1,4 +1,4 @@
-# Harbor FM - production Caddyfile for bare-metal (pm2/node on port 3001)
+# HarborFM - production Caddyfile for bare-metal (pm2/node on port 3001)
 # Copy to /etc/caddy/Caddyfile. Accepts any hostname (on-demand TLS).
 # Caddy will obtain and renew TLS automatically per hostname.
 
