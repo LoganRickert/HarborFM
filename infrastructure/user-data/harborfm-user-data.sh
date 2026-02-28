@@ -1103,15 +1103,15 @@ else
 fi
 
 # FlareVault: redeem token to get admin creds (after clone so we run server/scripts/flarevault-redeem.mjs)
+# Use a temp file so the payload (argon2 hash contains $v, $m, $p) is never in a shell variable that gets expanded.
 if [ -n "${FLAREVAULT_URL:-}" ] && [ -n "${FLAREVAULT_REDEEM_TOKEN:-}" ] && [ -f "$INSTALL_DIR/server/scripts/flarevault-redeem.mjs" ]; then
   echo "[harborfm-userdata] FlareVault URL and redeem token set; redeeming for admin credentials..."
-  PAYLOAD=$(cd "$INSTALL_DIR" && node server/scripts/flarevault-redeem.mjs "$FLAREVAULT_URL" "$FLAREVAULT_REDEEM_TOKEN" 2>/dev/null) || true
-  if [ -n "$PAYLOAD" ]; then
-    ADMIN_EMAIL=$(echo "$PAYLOAD" | jq -r '.admin_email // empty')
-    _hash=$(echo "$PAYLOAD" | jq -r '.admin_password_hash // empty')
-    ADMIN_PASSWORD_HASH_B64=$(echo "$_hash" | base64 -w 0 2>/dev/null || echo "$_hash" | base64 2>/dev/null | tr -d '\n')
-    [ -z "$ADMIN_PASSWORD_HASH_B64" ] && ADMIN_PASSWORD_HASH_B64="$_hash"
-    INITIAL_ADMIN_API_TOKEN=$(echo "$PAYLOAD" | jq -r '.initial_admin_api_token // empty')
+  PAYLOAD_FILE=$(mktemp)
+  (cd "$INSTALL_DIR" && node server/scripts/flarevault-redeem.mjs "$FLAREVAULT_URL" "$FLAREVAULT_REDEEM_TOKEN" 2>/dev/null) > "$PAYLOAD_FILE" || true
+  if [ -s "$PAYLOAD_FILE" ]; then
+    ADMIN_EMAIL=$(jq -r '.admin_email // empty' < "$PAYLOAD_FILE")
+    ADMIN_PASSWORD_HASH_B64=$(jq -r '.admin_password_hash // empty' < "$PAYLOAD_FILE" | base64 -w 0 2>/dev/null || jq -r '.admin_password_hash // empty' < "$PAYLOAD_FILE" | base64 2>/dev/null | tr -d '\n')
+    INITIAL_ADMIN_API_TOKEN=$(jq -r '.initial_admin_api_token // empty' < "$PAYLOAD_FILE")
     export ADMIN_EMAIL ADMIN_PASSWORD_HASH_B64
     [ -n "$INITIAL_ADMIN_API_TOKEN" ] && export INITIAL_ADMIN_API_TOKEN
     echo "[harborfm-userdata] FlareVault redeem succeeded; ADMIN_EMAIL and ADMIN_PASSWORD_HASH_B64 set for seed."
@@ -1119,6 +1119,7 @@ if [ -n "${FLAREVAULT_URL:-}" ] && [ -n "${FLAREVAULT_REDEEM_TOKEN:-}" ] && [ -f
   else
     echo "[harborfm-userdata] FlareVault redeem failed or returned empty; continuing without admin seed." >&2
   fi
+  rm -f "$PAYLOAD_FILE"
 fi
 
 if [ "$WEBRTC_ENABLED" = "1" ]; then

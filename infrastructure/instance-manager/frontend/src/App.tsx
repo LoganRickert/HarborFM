@@ -32,16 +32,17 @@ export default function App() {
   const [filter, setFilter] = useState<{ orchestrator?: string; provider?: string }>({});
   const [deployPrefill, setDeployPrefill] = useState<TerraformDeployInputsPrefill | null>(null);
 
-  const fetchInstances = async () => {
+  const fetchInstances = async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filter.orchestrator) params.set("orchestrator", filter.orchestrator);
       if (filter.provider) params.set("provider", filter.provider);
-      const res = await fetch(`/api/instances?${params}`);
+      const res = await fetch(`/api/instances?${params}`, { signal: signal ?? undefined });
       const data = await res.json();
       setInstances(data.instances ?? []);
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
       console.error(e);
       setInstances([]);
     } finally {
@@ -50,7 +51,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchInstances();
+    const ac = new AbortController();
+    fetchInstances(ac.signal);
+    return () => ac.abort();
   }, [filter.orchestrator, filter.provider]);
 
   return (

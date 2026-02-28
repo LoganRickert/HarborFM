@@ -25,6 +25,7 @@ function loadEnv(provider: TerraformProvider): NodeJS.ProcessEnv {
     if (key && process.env[key] === undefined) env[key] = value;
   }
   if (env.CLOUDFLARE_API_TOKEN) env.TF_VAR_cloudflare_api_token = env.CLOUDFLARE_API_TOKEN;
+  env.TF_CLI_ARGS = "-no-color";
   return env;
 }
 
@@ -115,8 +116,10 @@ export async function listTerraformInstances(provider: TerraformProvider): Promi
   const workspaces = await listWorkspaces(provider);
   const instances: TerraformInstance[] = [];
   const name = (w: string) => (w === "default" ? provider : w);
+  const prefix = INSTANCE_RESOURCE[provider];
   for (const workspace of workspaces) {
-    const hasInstance = await workspaceHasInstanceInState(provider, workspace);
+    const stateList = await getStateList(provider, workspace);
+    const hasInstance = stateList.some((addr) => addr === prefix || addr.startsWith(prefix + "["));
     if (hasInstance) {
       const outputs = await getOutputs(provider, workspace);
       if (!outputs?.instance_id?.value && !outputs?.public_ip?.value) continue;
@@ -133,7 +136,6 @@ export async function listTerraformInstances(provider: TerraformProvider): Promi
       });
       continue;
     }
-    const stateList = await getStateList(provider, workspace);
     if (stateList.length > 0) {
       instances.push({
         id: `${provider}:${workspace}`,
@@ -211,7 +213,10 @@ export async function destroyTerraformVultr(
     });
     const outStr = Array.isArray(run.all) ? run.all.join("\n") : typeof run.all === "string" ? run.all : run.stdout + "\n" + run.stderr;
     if (options?.destroyStorage) {
-      await deleteTerraformWorkspace("vultr", workspace);
+      const deleteResult = await deleteTerraformWorkspace("vultr", workspace);
+      if (!deleteResult.success) {
+        return { success: false, output: outStr + "\n\nFailed to remove workspace from list: " + deleteResult.output };
+      }
     }
     return { success: true, output: outStr };
   } catch (err: unknown) {
@@ -237,7 +242,7 @@ export async function deleteTerraformWorkspace(
     return { success: false, output: "Could not select default workspace." };
   }
   try {
-    await execa("terraform", ["workspace", "delete", workspace, "-force", "-no-color"], { cwd, env, timeout: 10000 });
+    await execa("terraform", ["workspace", "delete", "-force", "-no-color", workspace], { cwd, env, timeout: 10000 });
     return { success: true, output: "" };
   } catch (err: unknown) {
     const e = err as { stderr?: string };

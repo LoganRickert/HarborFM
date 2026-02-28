@@ -338,72 +338,63 @@ export async function registerInstancesRoutes(app: FastifyInstance): Promise<voi
   }>("/api/instances", async (request, reply) => {
     const { provider, orchestrator } = request.query;
     const data = loadData();
-    const items: InstanceItem[] = [];
     const deployMeta = data.terraform_deploy_meta || {};
+    const needTerraformAws = (!orchestrator || orchestrator === "terraform") && (!provider || provider === "aws");
+    const needTerraformVultr = (!orchestrator || orchestrator === "terraform") && (!provider || provider === "vultr");
+    const needK8s = !orchestrator || orchestrator === "kubernetes";
 
-    if (!orchestrator || orchestrator === "terraform") {
-      if (!provider || provider === "aws") {
-        try {
-          const list = await listTerraformInstances("aws");
-          for (const i of list) {
-            const item: InstanceItem = { ...i, setupUrl: i.setupUrl ?? undefined };
-            const meta = deployMeta[i.id];
-            if (meta) {
-              item.harborfm_repo = meta.harborfm_repo;
-              item.harborfm_branch = meta.harborfm_branch;
-              item.script_url = meta.script_url;
+    const [terraformAwsList, terraformVultrList, k8sList] = await Promise.all([
+      needTerraformAws
+        ? listTerraformInstances("aws").catch((err) => {
+            request.log.warn({ err }, "Failed to list Terraform AWS instances");
+            return [];
+          })
+        : Promise.resolve([]),
+      needTerraformVultr
+        ? listTerraformInstances("vultr").catch((err) => {
+            request.log.warn({ err }, "Failed to list Terraform Vultr instances");
+            return [];
+          })
+        : Promise.resolve([]),
+      needK8s
+        ? (() => {
+            const kubeconfigPaths: string[] = [];
+            if (config.kubeconfig) kubeconfigPaths.push(config.kubeconfig);
+            for (const r of Object.values(data.k8s || {})) {
+              if (r?.kubeconfig) kubeconfigPaths.push(r.kubeconfig);
             }
-            items.push(item);
-          }
-        } catch (err) {
-          request.log.warn({ err }, "Failed to list Terraform AWS instances");
-        }
-      }
-      if (!provider || provider === "vultr") {
-        try {
-          const list = await listTerraformInstances("vultr");
-          for (const i of list) {
-            const item: InstanceItem = { ...i, setupUrl: i.setupUrl ?? undefined };
-            const meta = deployMeta[i.id];
-            if (meta) {
-              item.harborfm_repo = meta.harborfm_repo;
-              item.harborfm_branch = meta.harborfm_branch;
-              item.script_url = meta.script_url;
-            }
-            items.push(item);
-          }
-        } catch (err) {
-          request.log.warn({ err }, "Failed to list Terraform Vultr instances");
-        }
-      }
-    }
+            return listHelmReleases(kubeconfigPaths.length > 0 ? kubeconfigPaths : undefined).catch((err) => {
+              request.log.warn({ err }, "Failed to list Helm releases");
+              return [];
+            });
+          })()
+        : Promise.resolve([]),
+    ]);
 
-    if (!orchestrator || orchestrator === "kubernetes") {
-      try {
-        const kubeconfigPaths: string[] = [];
-        if (config.kubeconfig) kubeconfigPaths.push(config.kubeconfig);
-        for (const r of Object.values(data.k8s || {})) {
-          if (r?.kubeconfig) kubeconfigPaths.push(r.kubeconfig);
-        }
-        const list = await listHelmReleases(kubeconfigPaths.length > 0 ? kubeconfigPaths : undefined);
-        for (const r of list) {
-          const k8sEntry = data.k8s?.[r.name];
-          items.push({
-            id: r.id,
-            name: r.name,
-            orchestrator: "kubernetes",
-            namespace: r.namespace,
-            status: r.status,
-            harborfm_repo: k8sEntry?.harborfm_repo,
-            harborfm_branch: k8sEntry?.harborfm_branch,
-            script_url: k8sEntry?.script_url,
-          });
-        }
-      } catch (err) {
-        request.log.warn({ err }, "Failed to list Helm releases");
+    const items: InstanceItem[] = [];
+    for (const i of [...terraformAwsList, ...terraformVultrList]) {
+      const item: InstanceItem = { ...i, setupUrl: i.setupUrl ?? undefined };
+      const meta = deployMeta[i.id];
+      if (meta) {
+        item.harborfm_repo = meta.harborfm_repo;
+        item.harborfm_branch = meta.harborfm_branch;
+        item.script_url = meta.script_url;
       }
+      items.push(item);
     }
-
+    for (const r of k8sList) {
+      const k8sEntry = data.k8s?.[r.name];
+      items.push({
+        id: r.id,
+        name: r.name,
+        orchestrator: "kubernetes",
+        namespace: r.namespace,
+        status: r.status,
+        harborfm_repo: k8sEntry?.harborfm_repo,
+        harborfm_branch: k8sEntry?.harborfm_branch,
+        script_url: k8sEntry?.script_url,
+      });
+    }
     if (!orchestrator || orchestrator === "manual") {
       for (const t of data.tracked || []) {
         items.push({
