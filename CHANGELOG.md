@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.6.1 - 2026-03-14
+
+- **Episode editor:** Adjusted details summary layout (flex row, gap) and badge styling (removed margin).
+- **Record modal:** Fixed React Hook useEffect dependency warnings (exhaustive-deps).
+- **Microphone:** Fixed bug where browser did not prompt for microphone permissions on record modal open.
+- **EQ:** Fixed EQ not being saved correctly.
+
 ## v1.6 - 2026-02-28
 
 - **Instance manager:** Web UI to list and deploy HarborFM instances via Terraform (AWS or Vultr).

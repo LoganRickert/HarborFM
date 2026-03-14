@@ -104,6 +104,29 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       .catch(() => {});
   }, []);
 
+  const stopLevelMeter = useCallback(() => {
+    if (levelAnimationRef.current != null) {
+      cancelAnimationFrame(levelAnimationRef.current);
+      levelAnimationRef.current = null;
+    }
+    if (audioContextRef.current?.state !== 'closed') {
+      audioContextRef.current?.close();
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevel(0);
+    hasSeenAudioRef.current = false;
+    setHasSeenAudio(false);
+  }, []);
+
+  const releasePreRecordMic = useCallback(() => {
+    stopLevelMeter();
+    if (preRecordStreamRef.current) {
+      preRecordStreamRef.current.getTracks().forEach((t) => t.stop());
+      preRecordStreamRef.current = null;
+    }
+  }, [stopLevelMeter]);
+
   useEffect(() => {
     if (!deviceId || typeof window === 'undefined') return;
     localStorage.setItem(DEVICE_ID_KEY, deviceId);
@@ -139,7 +162,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       if (settingsStreamRef.current) settingsStreamRef.current.getTracks().forEach((t) => t.stop());
       releaseWakeLock();
     };
-  }, []);
+  }, [stopLevelMeter]);
 
   // Request microphone on mount so the browser prompts when the modal opens and mic is ready for Start
   useEffect(() => {
@@ -174,7 +197,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
         preRecordStreamRef.current = null;
       }
     };
-  }, []);
+  }, [autoGainControl, deviceId, refreshDevices, stopLevelMeter]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -229,7 +252,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [recording, hasPreview, onClose]);
+  }, [recording, hasPreview, onClose, releasePreRecordMic]);
 
   useEffect(() => {
     if (blob) {
@@ -318,21 +341,6 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     }
 
     levelAnimationRef.current = requestAnimationFrame(tick);
-  }
-
-  function stopLevelMeter() {
-    if (levelAnimationRef.current != null) {
-      cancelAnimationFrame(levelAnimationRef.current);
-      levelAnimationRef.current = null;
-    }
-    if (audioContextRef.current?.state !== 'closed') {
-      audioContextRef.current?.close();
-      audioContextRef.current = null;
-    }
-    analyserRef.current = null;
-    setAudioLevel(0);
-    hasSeenAudioRef.current = false;
-    setHasSeenAudio(false);
   }
 
   function stopSettingsPreview() {
@@ -637,14 +645,6 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   }
 
   const recordProgress = playbackDuration > 0 ? Math.min(1, playbackCurrentTime / playbackDuration) : 0;
-
-  function releasePreRecordMic() {
-    stopLevelMeter();
-    if (preRecordStreamRef.current) {
-      preRecordStreamRef.current.getTracks().forEach((t) => t.stop());
-      preRecordStreamRef.current = null;
-    }
-  }
 
   function requestClose() {
     if (!recording && !hasPreview) {
