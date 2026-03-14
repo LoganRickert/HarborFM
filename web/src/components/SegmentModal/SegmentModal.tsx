@@ -85,14 +85,14 @@ export function SegmentModal({
   });
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (edit.hasEditUnsavedChanges) {
-        const audioEqPayload =
-          edit.appliedAudioEq.lowDb === 0 &&
-          edit.appliedAudioEq.midDb === 0 &&
-          edit.appliedAudioEq.highDb === 0
-            ? null
-            : edit.appliedAudioEq;
+    mutationFn: async (overrides?: { audioEq?: { lowDb: number; midDb: number; highDb: number } }) => {
+      const audioEqToSave = overrides?.audioEq ?? edit.appliedAudioEq;
+      const audioEqPayload =
+        audioEqToSave.lowDb === 0 && audioEqToSave.midDb === 0 && audioEqToSave.highDb === 0
+          ? null
+          : audioEqToSave;
+      const shouldSave = overrides?.audioEq !== undefined || edit.hasEditUnsavedChanges;
+      if (shouldSave) {
         await updateSegment(episodeId, segmentId, {
           trimRanges: mergeTrimRanges(edit.trimRanges),
           markers: edit.markers,
@@ -248,6 +248,7 @@ export function SegmentModal({
         onApplyAudioEq={() => {
           edit.setAppliedAudioEq(edit.draftAudioEq);
           edit.setAudioEditActive(false);
+          saveMutation.mutate({ audioEq: edit.draftAudioEq });
         }}
         onCancelAudioEq={() => {
           edit.setDraftAudioEq(edit.appliedAudioEq);
@@ -408,7 +409,7 @@ export function SegmentModal({
                 <button
                   type="button"
                   className={sharedStyles.dialogConfirm}
-                  onClick={() => saveMutation.mutate()}
+                  onClick={() => saveMutation.mutate(undefined)}
                   disabled={saveMutation.isPending}
                   aria-label="Save edits"
                 >

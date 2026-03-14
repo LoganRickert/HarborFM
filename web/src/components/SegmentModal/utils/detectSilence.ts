@@ -3,8 +3,10 @@ import type { WaveformData } from '../../../pages/EpisodeEditor/WaveformCanvas';
 /** Amplitude threshold for "silence" - values within ±threshold are considered silent. 8-bit scale is -128..127. */
 const SILENCE_THRESHOLD = 12;
 
-/** Buffer (seconds) - trim starts this much later and ends this much earlier, preserving audio at the edges. */
-const SILENCE_BUFFER_SEC = 0.25;
+/** Buffer (seconds) - trim starts this much later, preserving audio before speech ends. */
+const SILENCE_START_BUFFER_SEC = 0.35;
+/** Buffer (seconds) - trim ends this much earlier, preserving audio before speech resumes. */
+const SILENCE_END_BUFFER_SEC = 0.25;
 
 /**
  * Detect silence periods in waveform data. Returns trim ranges [startSec, endSec] for each
@@ -45,8 +47,8 @@ export function detectSilencePeriods(
         if (runLength >= minSilencePixels) {
           const rawStart = (runStart / pairsPerChannel) * durationSec;
           const rawEnd = (i / pairsPerChannel) * durationSec;
-          const startSec = rawStart + SILENCE_BUFFER_SEC;
-          const endSec = Math.max(startSec, rawEnd - SILENCE_BUFFER_SEC);
+          const startSec = rawStart + SILENCE_START_BUFFER_SEC;
+          const endSec = Math.max(startSec, rawEnd - SILENCE_END_BUFFER_SEC);
           ranges.push([startSec, endSec]);
         }
         runStart = null;
@@ -58,7 +60,7 @@ export function detectSilencePeriods(
     const runLength = pairsPerChannel - runStart;
     if (runLength >= minSilencePixels) {
       const rawStart = (runStart / pairsPerChannel) * durationSec;
-      const startSec = rawStart + SILENCE_BUFFER_SEC;
+      const startSec = rawStart + SILENCE_START_BUFFER_SEC;
       const endSec = durationSec;
       ranges.push([startSec, endSec]);
     }

@@ -419,6 +419,7 @@ export async function registerImportRoutes(app: FastifyInstance) {
                 format: settings.final_format,
                 bitrateKbps: settings.final_bitrate_kbps,
                 channels: settings.final_channels,
+                loudnessTargetLufs: settings.loudness_target_lufs,
               });
               const meta = await audioService.getAudioMetaAfterProcess(
                 podcastId,

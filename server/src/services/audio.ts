@@ -20,6 +20,7 @@ import {
   FFMPEG_PATH,
   AUDIOWAVEFORM_PATH,
   WAVEFORM_EXTENSION,
+  DEFAULT_LOUDNESS_TARGET_LUFS,
 } from "../config.js";
 
 /** Allow output to allowedBaseDir or to os.tmpdir(); ensures output dir is under one of them. */
@@ -42,9 +43,6 @@ function prepareOutputPath(outputPath: string, allowedBaseDir: string): void {
 }
 
 const exec = promisify(execFile);
-
-/** Loudness target for final episode (LUFS). -16 is slightly gentler than -14. Will be configurable per-user later. */
-const DEFAULT_LOUDNESS_TARGET_LUFS = -16;
 
 export interface ProbeResult {
   durationSec: number;
@@ -291,6 +289,7 @@ export async function transcodeToFinal(
     format: FinalAudioFormat;
     bitrateKbps: number;
     channels: FinalAudioChannels;
+    loudnessTargetLufs?: number | null;
   },
 ): Promise<string> {
   const uploadBase = uploadsDir(podcastId, episodeId);
@@ -298,15 +297,15 @@ export async function transcodeToFinal(
   const outPath = getFinalOutputPath(podcastId, episodeId, opts.format);
   const channels = opts.channels === "stereo" ? 2 : 1;
   const bitrate = `${Math.max(16, opts.bitrateKbps)}k`;
-  const loudnormFilter = `loudnorm=I=${DEFAULT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=14`;
-  const args = [
-    "-i",
-    safeSource,
-    "-af",
-    loudnormFilter,
-    "-ac",
-    String(channels),
-  ];
+  const effectiveLufs =
+    opts.loudnessTargetLufs !== undefined && opts.loudnessTargetLufs !== null
+      ? opts.loudnessTargetLufs
+      : DEFAULT_LOUDNESS_TARGET_LUFS;
+  const args = ["-i", safeSource];
+  if (effectiveLufs !== 0) {
+    args.push("-af", `loudnorm=I=${effectiveLufs}:TP=-1:LRA=14`);
+  }
+  args.push("-ac", String(channels));
   if (opts.format === "m4a") {
     args.push("-c:a", "aac", "-b:a", bitrate, "-movflags", "+faststart");
   } else {
@@ -383,6 +382,7 @@ export async function concatToFinal(
     format: FinalAudioFormat;
     bitrateKbps: number;
     channels: FinalAudioChannels;
+    loudnessTargetLufs?: number | null;
   },
 ): Promise<string> {
   if (segmentPaths.length === 0)
@@ -404,10 +404,15 @@ export async function concatToFinal(
     }
   }
   const n = segmentPaths.length;
-  const loudnormFilter = `loudnorm=I=${DEFAULT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=14`;
+  const effectiveLufs =
+    opts.loudnessTargetLufs !== undefined && opts.loudnessTargetLufs !== null
+      ? opts.loudnessTargetLufs
+      : DEFAULT_LOUDNESS_TARGET_LUFS;
+  const concatPart = segmentPaths.map((_, i) => `[${i}:a]`).join("") + `concat=n=${n}:v=0:a=1`;
   const filter =
-    segmentPaths.map((_, i) => `[${i}:a]`).join("") +
-    `concat=n=${n}:v=0:a=1[concat];[concat]${loudnormFilter}[out]`;
+    effectiveLufs === 0
+      ? concatPart + "[out]"
+      : concatPart + `[concat];[concat]loudnorm=I=${effectiveLufs}:TP=-1:LRA=14[out]`;
   const channels = opts.channels === "stereo" ? 2 : 1;
   const bitrate = `${Math.max(16, opts.bitrateKbps)}k`;
   const args = segmentPaths

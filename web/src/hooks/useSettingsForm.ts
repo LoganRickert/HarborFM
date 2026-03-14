@@ -24,6 +24,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   finalBitrateKbps: 128,
   finalChannels: 'mono',
   finalFormat: 'mp3',
+  loudnessTargetLufs: null,
   maxmindAccountId: '',
   maxmindLicenseKey: '',
   defaultMaxPodcasts: null,

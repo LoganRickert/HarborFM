@@ -41,6 +41,8 @@ export interface AppSettings {
   final_bitrate_kbps: number;
   final_channels: "mono" | "stereo";
   final_format: "mp3" | "m4a";
+  /** Loudness target for final episode (LUFS). null/undefined = use env. 0 = disable. */
+  loudness_target_lufs?: number | null;
   maxmind_account_id: string;
   maxmind_license_key: string;
   /** Default max podcasts for new users. null/empty = no limit. */
@@ -302,7 +304,13 @@ export function buildAppSettingsFromRows(
       settings.final_channels = row.value as AppSettings["final_channels"];
     else if (row.key === "final_format")
       settings.final_format = row.value as AppSettings["final_format"];
-    else if (row.key === "maxmind_account_id")
+    else if (row.key === "loudness_target_lufs") {
+      const v = row.value.trim();
+      if (v !== "") {
+        const n = Number(row.value);
+        if (Number.isFinite(n)) settings.loudness_target_lufs = n;
+      }
+    } else if (row.key === "maxmind_account_id")
       settings.maxmind_account_id = row.value;
     else if (row.key === "maxmind_license_key")
       settings.maxmind_license_key = row.value;
@@ -635,6 +643,7 @@ export function settingsToApiResponse(
     finalBitrateKbps: settings.final_bitrate_kbps,
     finalChannels: settings.final_channels,
     finalFormat: settings.final_format,
+    loudnessTargetLufs: settings.loudness_target_lufs ?? null,
     maxmindAccountId: settings.maxmind_account_id,
     maxmindLicenseKey: settings.maxmind_license_key ? "(set)" : "",
     defaultMaxPodcasts: settings.default_max_podcasts,

@@ -301,6 +301,15 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           : body.finalFormat === "mp3"
             ? "mp3"
             : current.final_format;
+      const parseLoudnessTarget = (v: unknown): number | null => {
+        if (v === "" || v == null) return null;
+        const n = Number(v);
+        return Number.isFinite(n) && n >= -24 && n <= 0 ? n : null;
+      };
+      const loudness_target_lufs =
+        body.loudnessTargetLufs !== undefined
+          ? parseLoudnessTarget(body.loudnessTargetLufs)
+          : current.loudness_target_lufs;
       const maxmind_account_id =
         body.maxmindAccountId !== undefined
           ? String(body.maxmindAccountId).trim()
@@ -590,6 +599,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         final_bitrate_kbps,
         final_channels,
         final_format,
+        loudness_target_lufs,
         maxmind_account_id,
         maxmind_license_key,
         default_max_podcasts,
