@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { RotateCcw, PlusCircle, Play, Pause, X, Upload, Settings, Mic, Volume2 } from 'lucide-react';
+import { RotateCcw, PlusCircle, Play, Pause, X, Upload, Settings, Mic, Volume2, MapPin, Check } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { formatDuration } from './utils';
 import { formatDurationHMS } from '../../utils/format';
@@ -9,7 +9,7 @@ import styles from '../EpisodeEditor.module.css';
 
 export interface RecordModalProps {
   onClose: () => void;
-  onAdd: (file: File, name?: string | null) => void;
+  onAdd: (file: File, name?: string | null, markers?: Array<{ time: number }>) => void;
   isAdding: boolean;
   error?: string;
 }
@@ -53,6 +53,9 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [listenToSelf, setListenToSelf] = useState(false);
+  const [markerTimestamps, setMarkerTimestamps] = useState<number[]>([]);
+  const [showMarkerCheck, setShowMarkerCheck] = useState(false);
+  const markerCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const settingsStreamRef = useRef<MediaStream | null>(null);
   const settingsAudioContextRef = useRef<AudioContext | null>(null);
@@ -121,6 +124,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
 
   useEffect(() => {
     return () => {
+      if (markerCheckTimeoutRef.current) clearTimeout(markerCheckTimeoutRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
       if (levelAnimationRef.current != null) cancelAnimationFrame(levelAnimationRef.current);
       if (settingsLevelAnimationRef.current != null) cancelAnimationFrame(settingsLevelAnimationRef.current);
@@ -541,6 +545,8 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       setSeconds(0);
       setBlob(null);
       setUploadedFile(null);
+      setMarkerTimestamps([]);
+      setShowMarkerCheck(false);
       hasSeenAudioRef.current = false;
       setHasSeenAudio(false);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -580,7 +586,23 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     if (!blob) return;
     const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('ogg') ? 'ogg' : 'webm';
     const file = new File([blob], `recording.${ext}`, { type: blob.type });
-    onAdd(file, sectionName.trim() || null);
+    const markers =
+      markerTimestamps.length > 0
+        ? markerTimestamps
+            .map((t) => ({ time: t }))
+            .sort((a, b) => a.time - b.time)
+        : undefined;
+    onAdd(file, sectionName.trim() || null, markers);
+  }
+
+  function handlePlaceMarker() {
+    setMarkerTimestamps((prev) => [...prev, seconds]);
+    if (markerCheckTimeoutRef.current) clearTimeout(markerCheckTimeoutRef.current);
+    setShowMarkerCheck(true);
+    markerCheckTimeoutRef.current = setTimeout(() => {
+      setShowMarkerCheck(false);
+      markerCheckTimeoutRef.current = null;
+    }, 1000);
   }
 
   function handleUploadFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -708,9 +730,20 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
         {recording && (
           <>
             <div className={styles.recordRow}>
-              <button ref={stopButtonRef} type="button" className={`${styles.recordBtn} ${styles.stop}`} onClick={stopRecording} aria-label="Stop recording">
-                ■
-              </button>
+              <div className={styles.recordControlsRow}>
+                <button ref={stopButtonRef} type="button" className={`${styles.recordBtn} ${styles.stop}`} onClick={stopRecording} aria-label="Stop recording">
+                  ■
+                </button>
+                <button
+                  type="button"
+                  className={styles.recordMarkerBtn}
+                  onClick={handlePlaceMarker}
+                  aria-label="Place marker"
+                  title="Place marker at current time"
+                >
+                  {showMarkerCheck ? <Check size={24} strokeWidth={2} aria-hidden /> : <MapPin size={24} strokeWidth={2} aria-hidden />}
+                </button>
+              </div>
               <span className={styles.recordDurationBadge} aria-live="polite">
                 {formatDurationHMS(seconds)}
               </span>
