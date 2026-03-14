@@ -74,6 +74,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const levelAnimationRef = useRef<number | null>(null);
+  const preRecordStreamRef = useRef<MediaStream | null>(null);
 
   const hasPreview = !!(blob || uploadedFile);
 
@@ -123,11 +124,51 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       if (timerRef.current) clearInterval(timerRef.current);
       if (levelAnimationRef.current != null) cancelAnimationFrame(levelAnimationRef.current);
       if (settingsLevelAnimationRef.current != null) cancelAnimationFrame(settingsLevelAnimationRef.current);
+      stopLevelMeter();
+      if (preRecordStreamRef.current) {
+        preRecordStreamRef.current.getTracks().forEach((t) => t.stop());
+        preRecordStreamRef.current = null;
+      }
       if (audioContextRef.current?.state !== 'closed') audioContextRef.current?.close();
       if (settingsAudioContextRef.current?.state !== 'closed') settingsAudioContextRef.current?.close();
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
       if (settingsStreamRef.current) settingsStreamRef.current.getTracks().forEach((t) => t.stop());
       releaseWakeLock();
+    };
+  }, []);
+
+  // Request microphone on mount so the browser prompts when the modal opens and mic is ready for Start
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    let cancelled = false;
+    const audioConstraints: MediaTrackConstraints = {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      sampleRate: { ideal: 48000 },
+      autoGainControl,
+      noiseSuppression: false,
+      ...(!autoGainControl ? { echoCancellation: false } : {}),
+    };
+    navigator.mediaDevices
+      .getUserMedia({ audio: audioConstraints, video: false })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        preRecordStreamRef.current = stream;
+        refreshDevices();
+        startLevelMeter(stream);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      stopLevelMeter();
+      const stream = preRecordStreamRef.current;
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        preRecordStreamRef.current = null;
+      }
     };
   }, []);
 
@@ -148,8 +189,10 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       if (!c) return;
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (!recording && !hasPreview) onClose();
-        else {
+        if (!recording && !hasPreview) {
+          releasePreRecordMic();
+          onClose();
+        } else {
           setPendingConfirm('close');
           setShowCloseConfirm(true);
         }
@@ -428,14 +471,23 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   async function startRecording() {
     try {
       stopSettingsPreview();
-      const audioConstraints: MediaTrackConstraints = {
-        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        sampleRate: { ideal: 48000 },
-        autoGainControl,
-        noiseSuppression: false,
-        ...(!autoGainControl ? { echoCancellation: false } : {}),
-      };
-      const rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      let rawStream: MediaStream;
+      const preRecord = preRecordStreamRef.current;
+      const hasLivePreRecord = preRecord?.getTracks().some((t) => t.readyState === 'live');
+      if (hasLivePreRecord && preRecord) {
+        stopLevelMeter();
+        rawStream = preRecord;
+        preRecordStreamRef.current = null;
+      } else {
+        const audioConstraints: MediaTrackConstraints = {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          sampleRate: { ideal: 48000 },
+          autoGainControl,
+          noiseSuppression: false,
+          ...(!autoGainControl ? { echoCancellation: false } : {}),
+        };
+        rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      }
       streamRef.current = rawStream;
       chunksRef.current = [];
       let streamForRecorder: MediaStream;
@@ -564,8 +616,17 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
 
   const recordProgress = playbackDuration > 0 ? Math.min(1, playbackCurrentTime / playbackDuration) : 0;
 
+  function releasePreRecordMic() {
+    stopLevelMeter();
+    if (preRecordStreamRef.current) {
+      preRecordStreamRef.current.getTracks().forEach((t) => t.stop());
+      preRecordStreamRef.current = null;
+    }
+  }
+
   function requestClose() {
     if (!recording && !hasPreview) {
+      releasePreRecordMic();
       onClose();
     } else {
       setPendingConfirm('close');
@@ -582,6 +643,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
     if (pendingConfirm === 'close') {
       setShowCloseConfirm(false);
       setPendingConfirm(null);
+      releasePreRecordMic();
       onClose();
     } else if (pendingConfirm === 'discard_preview') {
       setShowCloseConfirm(false);
