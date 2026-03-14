@@ -130,6 +130,10 @@ export function writeSettings(settings: AppSettings): void {
   upsert("final_bitrate_kbps", String(settings.final_bitrate_kbps));
   upsert("final_channels", settings.final_channels);
   upsert("final_format", settings.final_format);
+  upsert(
+    "loudness_target_lufs",
+    settings.loudness_target_lufs != null ? String(settings.loudness_target_lufs) : "",
+  );
   upsert("maxmind_account_id", settings.maxmind_account_id);
   upsert("maxmind_license_key", settings.maxmind_license_key);
   upsert(

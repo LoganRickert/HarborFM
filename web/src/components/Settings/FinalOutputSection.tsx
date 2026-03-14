@@ -9,6 +9,28 @@ export function FinalOutputSection({ form, onFormChange }: SettingsFormProps) {
       subtitle="Choose the format and quality for the final audio file."
     >
       <label className={styles.label}>
+        Loudness target (LUFS)
+        <input
+          type="number"
+          min={-24}
+          max={0}
+          step={1}
+          className={styles.input}
+          value={form.loudnessTargetLufs ?? ''}
+          placeholder="Use env default (-16)"
+          onChange={(e) => {
+            const v = e.target.value;
+            onFormChange({
+              loudnessTargetLufs: v === '' ? null : Number(e.target.value),
+            });
+          }}
+        />
+        <span className={styles.inputHelp}>
+          Target loudness for final episode. 0 = disable normalization. Empty = use env default.
+        </span>
+      </label>
+
+      <label className={styles.label}>
         Bitrate (kbps)
         <input
           type="number"

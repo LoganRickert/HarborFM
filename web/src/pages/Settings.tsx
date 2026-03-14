@@ -154,6 +154,7 @@ export function Settings() {
         finalBitrateKbps: form.finalBitrateKbps,
         finalChannels: form.finalChannels,
         finalFormat: form.finalFormat,
+        loudnessTargetLufs: form.loudnessTargetLufs,
         maxmindAccountId: form.maxmindAccountId.trim(),
         maxmindLicenseKey: form.maxmindLicenseKey === '(set)' ? undefined : form.maxmindLicenseKey,
         defaultMaxPodcasts: form.defaultMaxPodcasts,

@@ -335,7 +335,21 @@ export function EpisodeEditorContent({
   }, [detailsDialogOpen, episodeForm, episode.artworkFilename, episodeForm.artworkUrl]);
 
   const addRecordedMutation = useMutation({
-    mutationFn: ({ file, name }: { file: File; name?: string | null }) => addRecordedSegment(id, file, name),
+    mutationFn: async ({
+      file,
+      name,
+      markers,
+    }: {
+      file: File;
+      name?: string | null;
+      markers?: Array<{ time: number }>;
+    }) => {
+      const segment = await addRecordedSegment(id, file, name);
+      if (markers && markers.length > 0) {
+        await updateSegment(id, segment.id, { markers });
+      }
+      return segment;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['segments', id] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
@@ -838,7 +852,7 @@ export function EpisodeEditorContent({
       {showRecord && (
         <RecordModal
           onClose={() => setShowRecord(false)}
-          onAdd={(file, name) => addRecordedMutation.mutate({ file, name })}
+          onAdd={(file, name, markers) => addRecordedMutation.mutate({ file, name, markers })}
           isAdding={addRecordedMutation.isPending}
           error={
             addRecordedMutation.isError

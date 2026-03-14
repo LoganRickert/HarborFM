@@ -1629,6 +1629,31 @@
   flex-shrink: 0;
 }
 
+.recordControlsRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.recordMarkerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--text, #e5e5e5);
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.recordMarkerBtn:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
 .recordDurationBadge {
   flex-shrink: 0;
   display: inline-flex;
@@ -3111,6 +3136,10 @@
 }
 
 .detailsSummaryMain {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
   min-width: 0;
   flex: 1;
 }
@@ -3135,7 +3164,7 @@
 }
 
 .detailsSummaryMeta {
-  margin: 0.35rem 0 0;
+  margin: 0;
   font-size: 0.85rem;
   color: var(--text-muted);
   display: flex;
@@ -3146,6 +3175,7 @@
 
 .detailsSummaryStatusBadge {
   display: inline-block;
+  margin: 0;
   padding: 0.2rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;

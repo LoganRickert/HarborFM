@@ -102,6 +102,12 @@ export const FFPROBE_PATH = process.env.FFPROBE_PATH ?? "ffprobe";
 export const AUDIOWAVEFORM_PATH =
   process.env.AUDIOWAVEFORM_PATH ?? "audiowaveform";
 
+/** Loudness target for final episode (LUFS). -16 typical. 0 = disable. Env: DEFAULT_LOUDNESS_TARGET_LUFS. Default -16. */
+export const DEFAULT_LOUDNESS_TARGET_LUFS =
+  process.env.DEFAULT_LOUDNESS_TARGET_LUFS !== undefined
+    ? Number(process.env.DEFAULT_LOUDNESS_TARGET_LUFS)
+    : -16;
+
 /** When true, episode video generation (node-canvas + ffmpeg) is enabled. Requires canvas native deps. Env: ALLOW_VIDEO_GENERATION. Default false. */
 export const ALLOW_VIDEO_GENERATION =
   process.env.ALLOW_VIDEO_GENERATION?.trim() === "1" ||
