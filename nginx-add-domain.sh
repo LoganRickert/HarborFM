@@ -59,7 +59,13 @@ if [ -n "${DOMAIN:-}" ] && [ "$ADD_DOMAIN" = "$DOMAIN" ]; then
   exit 1
 fi
 
+# Default compose mounts sites under harborfm-data/proxy/; docker-compose.override.yml may use legacy harborfm-docker-data/ paths.
 SITES_ENABLED="$INSTALL_DIR/harborfm-data/proxy/nginx/sites-enabled"
+if [ -f "$INSTALL_DIR/docker-compose.override.yml" ] &&
+  grep -Fq 'harborfm-docker-data/nginx/sites-enabled' "$INSTALL_DIR/docker-compose.override.yml"; then
+  SITES_ENABLED="$INSTALL_DIR/harborfm-docker-data/nginx/sites-enabled"
+fi
+
 mkdir -p "$SITES_ENABLED"
 
 echo "Using sites-enabled: $SITES_ENABLED"

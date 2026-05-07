@@ -33,6 +33,14 @@ const COLORS = {
 };
 const PIE_COLORS = ['#0dcaf0', '#0d6efd', '#198754', '#e6a030', '#6f42c1', '#fd7e14', '#6c757d'];
 
+/** Bar charts only: avoids cramped Y-axis labels when a show has many episodes. */
+const EPISODE_BAR_CHART_MAX = 8;
+
+function truncateEpisodeAxisTitle(title: string, maxLen: number): string {
+  if (title.length <= maxLen) return title;
+  return title.slice(0, Math.max(0, maxLen - 1)) + '…';
+}
+
 function last14Days(): { startDate: string; endDate: string } {
   const end = new Date();
   end.setUTCDate(end.getUTCDate() - 1);
@@ -250,7 +258,7 @@ export function PodcastAnalytics() {
         const tot = episodeTotalsMap[ep.id] ?? { requestsHuman: 0, requestsBot: 0, listensHuman: 0, listensBot: 0 };
         return {
           id: ep.id,
-          name: ep.title.length > 30 ? ep.title.slice(0, 27) + '...' : ep.title,
+          name: truncateEpisodeAxisTitle(ep.title, narrow ? 28 : 36),
           fullName: ep.title,
           requests: tot.requestsHuman + tot.requestsBot,
           People: tot.requestsHuman,
@@ -258,7 +266,7 @@ export function PodcastAnalytics() {
         };
       })
       .sort((a, b) => b.requests - a.requests);
-  }, [analytics, episodeTotalsMap]);
+  }, [analytics, episodeTotalsMap, narrow]);
 
   const listensBarData = useMemo(() => {
     if (!analytics) return [];
@@ -267,7 +275,7 @@ export function PodcastAnalytics() {
         const tot = episodeTotalsMap[ep.id] ?? { requestsHuman: 0, requestsBot: 0, listensHuman: 0, listensBot: 0 };
         return {
           id: ep.id,
-          name: ep.title.length > 30 ? ep.title.slice(0, 27) + '...' : ep.title,
+          name: truncateEpisodeAxisTitle(ep.title, narrow ? 28 : 36),
           fullName: ep.title,
           listens: tot.listensHuman + tot.listensBot,
           People: tot.listensHuman,
@@ -275,7 +283,32 @@ export function PodcastAnalytics() {
         };
       })
       .sort((a, b) => b.listens - a.listens);
-  }, [analytics, episodeTotalsMap]);
+  }, [analytics, episodeTotalsMap, narrow]);
+
+  const newestEpisodeIdSet = useMemo(() => {
+    if (!analytics) return new Set<string>();
+    return new Set(analytics.episodes.slice(0, EPISODE_BAR_CHART_MAX).map((e) => e.id));
+  }, [analytics]);
+
+  const episodeBarChartData = useMemo(
+    () => episodeBarData.filter((row) => newestEpisodeIdSet.has(row.id)).sort((a, b) => b.requests - a.requests),
+    [episodeBarData, newestEpisodeIdSet]
+  );
+
+  const listensBarChartData = useMemo(
+    () => listensBarData.filter((row) => newestEpisodeIdSet.has(row.id)).sort((a, b) => b.listens - a.listens),
+    [listensBarData, newestEpisodeIdSet]
+  );
+
+  const episodeChartMargin = useMemo(
+    () =>
+      narrow
+        ? { top: 8, right: 8, left: 4, bottom: 8 }
+        : { top: 8, right: 12, left: 16, bottom: 8 },
+    [narrow]
+  );
+
+  const episodeYAxisWidth = narrow ? 108 : 172;
 
   const locationPieData = useMemo(() => {
     return locationTotalsList.map((row) => ({ name: row.location, value: row.total }));
@@ -564,14 +597,17 @@ export function PodcastAnalytics() {
               </div>
             ) : (
               <div className={styles.chartContainer}>
-                <ResponsiveContainer width="100%" height={300}>
-                  {episodeBarData.length === 0 ? (
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.min(420, Math.max(260, 52 + episodeBarChartData.length * 44))}
+                >
+                  {episodeBarChartData.length === 0 ? (
                     <p className={styles.empty}>No episode data in the last 2 weeks.</p>
                   ) : (
-                    <BarChart data={episodeBarData} layout="vertical" margin={chartMargin} barCategoryGap="8%">
+                    <BarChart data={episodeBarChartData} layout="vertical" margin={episodeChartMargin} barCategoryGap="12%">
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                       <XAxis type="number" {...axisProps} />
-                      <YAxis type="category" dataKey="name" width={verticalYAxisWidth} {...axisProps} tickLine={false} />
+                      <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
                       <Tooltip
                         contentStyle={tooltipContentStyle}
                         formatter={(value: number | undefined) => [value ?? 0, '']}
@@ -586,6 +622,9 @@ export function PodcastAnalytics() {
                   )}
                 </ResponsiveContainer>
               </div>
+            )}
+            {episodesView === 'bar' && episodeBarData.length > EPISODE_BAR_CHART_MAX && (
+              <p className={styles.cardFooter}>Bar chart shows your {EPISODE_BAR_CHART_MAX} most recent episodes (see the table for all).</p>
             )}
           </div>
 
@@ -625,14 +664,17 @@ export function PodcastAnalytics() {
               </div>
             ) : (
               <div className={styles.chartContainer}>
-                <ResponsiveContainer width="100%" height={300}>
-                  {listensBarData.length === 0 ? (
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.min(420, Math.max(260, 52 + listensBarChartData.length * 44))}
+                >
+                  {listensBarChartData.length === 0 ? (
                     <p className={styles.empty}>No listen data in the last 2 weeks.</p>
                   ) : (
-                    <BarChart data={listensBarData} layout="vertical" margin={chartMargin} barCategoryGap="8%">
+                    <BarChart data={listensBarChartData} layout="vertical" margin={episodeChartMargin} barCategoryGap="12%">
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                       <XAxis type="number" {...axisProps} />
-                      <YAxis type="category" dataKey="name" width={verticalYAxisWidth} {...axisProps} tickLine={false} />
+                      <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
                       <Tooltip
                         contentStyle={tooltipContentStyle}
                         formatter={(value: number | undefined) => [value ?? 0, '']}
@@ -647,6 +689,9 @@ export function PodcastAnalytics() {
                   )}
                 </ResponsiveContainer>
               </div>
+            )}
+            {listensView === 'bar' && listensBarData.length > EPISODE_BAR_CHART_MAX && (
+              <p className={styles.cardFooter}>Bar chart shows your {EPISODE_BAR_CHART_MAX} most recent episodes (see the table for all).</p>
             )}
           </div>
 

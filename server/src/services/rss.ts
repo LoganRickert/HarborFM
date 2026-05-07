@@ -21,6 +21,8 @@ import {
 } from "./paths.js";
 import { EXT_DOT_TO_EXT } from "../utils/artwork.js";
 import { API_PREFIX, APP_NAME, RSS_FEED_FILENAME } from "../config.js";
+import { getCanonicalFeedUrl } from "./dns/custom-domain-resolver.js";
+import { readSettings } from "../modules/settings/index.js";
 
 /** Placeholder in token feed template XML; replaced with token id when serving. */
 export const SUBSCRIBER_TOKEN_ID_PLACEHOLDER = "{{SUBSCRIBER_TOKEN_ID}}";
@@ -100,6 +102,44 @@ function getSetting(key: string): string | null {
     .limit(1)
     .get();
   return row?.value ?? null;
+}
+
+/**
+ * Atom rel="self" href: same path as rssFeedUrl but HTTPS root from linked/managed DNS
+ * when enabled, otherwise the primary rssFeedUrl (app host or export).
+ */
+function atomLinkSelfHref(params: {
+  rssFeedUrl: string;
+  exportPrefix: string | null;
+  podcast: {
+    linkDomain?: string | null;
+    managedDomain?: string | null;
+    managedSubDomain?: string | null;
+  };
+  slugEnc: string;
+  slugRaw: string;
+  tokenIdPlaceholder?: string;
+}): string {
+  const {
+    rssFeedUrl,
+    exportPrefix,
+    podcast,
+    slugEnc,
+    slugRaw,
+    tokenIdPlaceholder,
+  } = params;
+  if (!rssFeedUrl || exportPrefix != null) return rssFeedUrl;
+
+  const canonicalRoot = getCanonicalFeedUrl(podcast, readSettings());
+  if (!canonicalRoot) return rssFeedUrl;
+  const canonicalNoSlash =
+    sanitizeHttpUrl(canonicalRoot.replace(/\/$/, ""))?.replace(/\/+$/, "") ??
+    "";
+  if (!canonicalNoSlash || !slugRaw) return rssFeedUrl;
+  if (tokenIdPlaceholder) {
+    return `${canonicalNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/rss`;
+  }
+  return `${canonicalNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/rss`;
 }
 
 export function generateRss(
@@ -215,7 +255,7 @@ export function generateRss(
   const categorySecondaryThree = podcast.categorySecondaryThree
     ? escapeXml(String(podcast.categorySecondaryThree))
     : "";
-  const explicit = podcast.explicit ? "true" : "false";
+  const explicit = podcast.explicit ? "yes" : "no";
   const siteUrl = sanitizeHttpUrl(podcast.siteUrl);
   const slugRaw = stripControlChars(String(podcast.slug ?? "")).trim();
   const copyright = podcast.copyright
@@ -282,6 +322,15 @@ export function generateRss(
     }
   }
 
+  const atomSelfHref = atomLinkSelfHref({
+    rssFeedUrl,
+    exportPrefix,
+    podcast,
+    slugEnc,
+    slugRaw,
+    tokenIdPlaceholder,
+  });
+
   const nowRfc2822 = new Date().toUTCString();
   const lastBuildDate =
     episodesList.length > 0
@@ -297,12 +346,9 @@ export function generateRss(
       : "";
   const channelLink = siteUrl || fallbackSiteUrl;
 
-  const stylesheetHref =
-    exportPrefix == null && publicBaseNoSlash
-      ? `${publicBaseNoSlash}/style.xsl`
-      : exportPrefix == null
-        ? "/style.xsl"
-        : "";
+  // Root-relative URL: resolved against the RSS document origin so custom domains /
+  // host aliases load /style.xsl from the same site (avoid cross-origin blocking).
+  const stylesheetHref = exportPrefix == null ? "/style.xsl" : "";
   // Omit xml-stylesheet when feed is for S3 deploy (style.xsl is not uploaded there)
   const stylesheetPi = stylesheetHref
     ? `<?xml-stylesheet type="text/xsl" href="${escapeXml(stylesheetHref)}"?>\n`
@@ -314,8 +360,8 @@ ${stylesheetPi}<rss xmlns:podcast="https://podcastindex.org/namespace/1.0" xmlns
     <title><![CDATA[${title}]]></title>
 `;
   if (channelLink) out += `    <link>${escapeXml(channelLink)}</link>\n`;
-  if (rssFeedUrl) {
-    out += `    <atom:link href="${escapeXml(rssFeedUrl)}" rel="self" type="application/rss+xml"/>\n`;
+  if (atomSelfHref) {
+    out += `    <atom:link href="${escapeXml(atomSelfHref)}" rel="self" type="application/rss+xml"/>\n`;
   }
   if (websubHubUrl) {
     out += `    <atom:link rel="hub" href="${escapeXml(websubHubUrl)}"/>\n`;
@@ -459,10 +505,10 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       : new Date(String(ep.updatedAt)).toUTCString();
     const epExplicit =
       ep.explicit === true
-        ? "true"
+        ? "yes"
         : podcast.explicit
-          ? "true"
-          : "false";
+          ? "yes"
+          : "no";
     const duration =
       ep.audioDurationSec != null ? Number(ep.audioDurationSec) : 0;
     const season = ep.seasonNumber != null ? Number(ep.seasonNumber) : null;
@@ -634,7 +680,12 @@ export function getPublicFeedSelfUrl(
   publicBaseUrl?: string | null,
 ): string | null {
   const podcast = drizzleDb
-    .select({ slug: podcasts.slug })
+    .select({
+      slug: podcasts.slug,
+      linkDomain: podcasts.linkDomain,
+      managedDomain: podcasts.managedDomain,
+      managedSubDomain: podcasts.managedSubDomain,
+    })
     .from(podcasts)
     .where(eq(podcasts.id, podcastId))
     .limit(1)
@@ -678,9 +729,16 @@ export function getPublicFeedSelfUrl(
       ? `${publicBaseNoSlash}/${exportPrefix}/${RSS_FEED_FILENAME}`
       : `${publicBaseNoSlash}/${RSS_FEED_FILENAME}`;
   }
-  if (slugRaw)
-    return `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${encodeURIComponent(slugRaw)}/rss`;
-  return null;
+  if (!slugRaw) return null;
+  const slugEnc = encodeURIComponent(slugRaw);
+  const rssFeedUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/rss`;
+  return atomLinkSelfHref({
+    rssFeedUrl,
+    exportPrefix,
+    podcast,
+    slugEnc,
+    slugRaw,
+  });
 }
 
 export function writeRssFile(
