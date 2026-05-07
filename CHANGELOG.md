@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.6.2 - 2026-05-07
+
+- **Podcast analytics:** Episode Requests and Listens **bar** charts now include at most the **8 most recent episodes** (same order as elsewhere: newest publish/update first), with taller charts and a wider Y-axis so episode titles stay readable. The **table** view still lists every episode with full titles; when a show has more than eight episodes, a short note under the bar chart explains the limit.
+- Fixed 2 minor bugs
+
 ## v1.6.1 - 2026-03-14
 
 - **Episode editor:** Adjusted details summary layout (flex row, gap) and badge styling (removed margin).
