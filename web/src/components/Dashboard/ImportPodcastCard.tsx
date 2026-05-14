@@ -2,7 +2,12 @@ import { Download } from 'lucide-react';
 import { ImportPodcastCardProps } from '../../types/dashboard';
 import styles from './ImportPodcastCard.module.css';
 
-export function ImportPodcastCard({ onImportClick }: ImportPodcastCardProps) {
+export function ImportPodcastCard({
+  onImportClick,
+  disabled = false,
+  disabledReason,
+}: ImportPodcastCardProps) {
+  const busyHint = disabled && disabledReason ? ` (${disabledReason})` : '';
   return (
     <section className={styles.importCard} aria-label="Import podcast">
       <div className={styles.importCardRow}>
@@ -16,7 +21,8 @@ export function ImportPodcastCard({ onImportClick }: ImportPodcastCardProps) {
           type="button"
           className={styles.importCardBtn}
           onClick={onImportClick}
-          aria-label="Open import podcast dialog"
+          disabled={disabled}
+          aria-label={`Open import podcast dialog${busyHint}`}
         >
           <Download size={20} strokeWidth={2} aria-hidden />
           Import

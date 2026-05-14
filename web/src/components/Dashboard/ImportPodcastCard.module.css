@@ -67,10 +67,16 @@
   flex-shrink: 0;
 }
 
-.importCardBtn:hover {
+.importCardBtn:hover:not(:disabled) {
   border-color: rgba(0, 212, 170, 0.45);
   background: rgba(0, 212, 170, 0.08);
   color: var(--accent);
+}
+
+.importCardBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--text-muted);
 }
 
 @media (max-width: 640px) {

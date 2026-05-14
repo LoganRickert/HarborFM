@@ -2,6 +2,7 @@
 
 ## v1.6.2 - 2026-05-07
 
+- **Dashboard:** RSS podcast import shows a **dismissible progress panel** (bottom corner on desktop, along the bottom on small screens) with a **progress bar** and status text instead of a blocking full-screen modal while importing. The feed URL dialog closes after the import starts; you can hide progress until you refresh the page. The Import action stays disabled while an import is in progress.
 - **Podcast analytics:** Episode Requests and Listens **bar** charts now include at most the **8 most recent episodes** (same order as elsewhere: newest publish/update first), with taller charts and a wider Y-axis so episode titles stay readable. The **table** view still lists every episode with full titles; when a show has more than eight episodes, a short note under the bar chart explains the limit.
 - Fixed 2 minor bugs
 

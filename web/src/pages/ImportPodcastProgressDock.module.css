@@ -1,0 +1,136 @@
+/* Fixed import progress panel — bottom-right on wide screens, full-width strip on small */
+
+.dock {
+  position: fixed;
+  z-index: 1090;
+  bottom: 1rem;
+  right: 1rem;
+  left: auto;
+  width: min(380px, calc(100vw - 2rem));
+  max-width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  padding: 1rem 1.125rem;
+  animation: dockIn 0.2s ease;
+}
+
+@keyframes dockIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dismiss {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dismiss:hover {
+  background: rgba(0, 212, 170, 0.12);
+  border-color: rgba(0, 212, 170, 0.45);
+  color: var(--text);
+}
+
+.status {
+  margin: 0 0 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.status[aria-live] {
+  min-height: 1.2em;
+}
+
+.backgroundHint {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  opacity: 0.92;
+}
+
+.track {
+  height: 6px;
+  background: var(--bg-muted);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.35s ease;
+}
+
+.fillIndeterminate {
+  width: 35%;
+  animation: dockIndeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes dockIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.errorCard {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius);
+}
+
+.errorText {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--error);
+}
+
+@media (max-width: 640px) {
+  .dock {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+    border-radius: 12px 12px 0 0;
+  }
+}

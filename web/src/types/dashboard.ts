@@ -42,6 +42,10 @@ export interface DashboardPaginationProps {
 
 export interface ImportPodcastCardProps {
   onImportClick: () => void;
+  /** When true, Import is not available (e.g. another import is running). */
+  disabled?: boolean;
+  /** Shown in aria-label when disabled. */
+  disabledReason?: string;
 }
 
 export interface DashboardEmptyStateProps {

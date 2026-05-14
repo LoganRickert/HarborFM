@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { isReadOnly } from '../api/auth';
 import { useAuthStore } from '../store/auth';
 import { EditShowDetailsDialog } from './EditShowDetailsDialog';
 import { ImportPodcastDialog } from './ImportPodcastDialog';
+import { ImportPodcastProgressDock } from './ImportPodcastProgressDock';
 import { useSearchAndSort } from '../hooks/useSearchAndSort';
 import { useDashboardQueries, PODCASTS_PAGE_SIZE } from '../hooks/useDashboardQueries';
 import {
@@ -20,15 +22,15 @@ import styles from './Dashboard.module.css';
 
 export function Dashboard() {
   const { userId } = useParams<{ userId?: string }>();
+  const queryClient = useQueryClient();
   const [editingPodcastId, setEditingPodcastId] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [joinCallDialogOpen, setJoinCallDialogOpen] = useState(false);
   const [activeImportPodcastId, setActiveImportPodcastId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const userClosedImportDialogRef = useRef(false);
+  const userClosedImportDockRef = useRef(false);
   const isAdminView = Boolean(userId);
 
-  // Use custom hooks
   const { searchQuery, searchDebounced, setSearchQuery, sortNewestFirst, setSortNewestFirst } =
     useSearchAndSort();
 
@@ -50,21 +52,37 @@ export function Dashboard() {
     sortNewestFirst,
   });
 
-  // Handle active import dialog
+  const handleImportDockDismiss = useCallback(() => {
+    userClosedImportDockRef.current = true;
+    setActiveImportPodcastId(null);
+  }, []);
+
+  const handleImportStarted = useCallback(
+    (podcastId: string) => {
+      userClosedImportDockRef.current = false;
+      setActiveImportPodcastId(podcastId);
+      setImportDialogOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ['activeImport'] });
+    },
+    [queryClient],
+  );
+
+  const handleImportDialogClose = useCallback(() => {
+    setImportDialogOpen(false);
+  }, []);
+
   useEffect(() => {
     if (isAdminView) return;
+    if (userClosedImportDockRef.current) return;
     const status = activeImport?.status;
     if (
       (status === 'pending' || status === 'importing') &&
-      activeImport?.podcastId &&
-      !userClosedImportDialogRef.current
+      activeImport?.podcastId
     ) {
-      setImportDialogOpen(true);
       setActiveImportPodcastId(activeImport.podcastId);
     }
   }, [isAdminView, activeImport?.status, activeImport?.podcastId]);
 
-  // Computed values
   const publicFeedsEnabled = publicConfig?.publicFeedsEnabled !== false;
   const maxPodcasts = meData?.user?.maxPodcasts ?? null;
   const podcastCount = meData?.podcastCount ?? 0;
@@ -73,23 +91,25 @@ export function Dashboard() {
   const user = useAuthStore((s) => s.user);
   const readOnly = !isAdminView && isReadOnly(meData?.user ?? user);
 
+  const importInProgress =
+    activeImport?.status === 'pending' ||
+    activeImport?.status === 'importing' ||
+    activeImportPodcastId != null;
+
   const totalPages = Math.max(1, Math.ceil(total / PODCASTS_PAGE_SIZE));
   const pageClamped = Math.max(1, Math.min(page, totalPages));
   const rangeStart = total === 0 ? 0 : (pageClamped - 1) * PODCASTS_PAGE_SIZE + 1;
   const rangeEnd = (pageClamped - 1) * PODCASTS_PAGE_SIZE + podcasts.length;
   const showImportCard = !isAdminView && !readOnly && !atPodcastLimit;
 
-  // Scroll to top on page change
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [page]);
 
-  // Reset search when query changes
   useEffect(() => {
     setPage(1);
   }, [searchDebounced]);
 
-  // Clamp page when data changes
   useEffect(() => {
     if (podcastsData != null && total > 0) {
       setPage((p) => (p > totalPages ? Math.max(1, totalPages) : p));
@@ -176,7 +196,13 @@ export function Dashboard() {
             totalPages={totalPages}
             onPageChange={setPage}
           />
-          {showImportCard && <ImportPodcastCard onImportClick={() => setImportDialogOpen(true)} />}
+          {showImportCard && (
+            <ImportPodcastCard
+              onImportClick={() => setImportDialogOpen(true)}
+              disabled={importInProgress}
+              disabledReason="Import already in progress"
+            />
+          )}
         </>
       )}
 
@@ -190,13 +216,16 @@ export function Dashboard() {
 
       <ImportPodcastDialog
         open={importDialogOpen}
-        initialPodcastId={activeImportPodcastId}
-        onClose={() => {
-          setImportDialogOpen(false);
-          setActiveImportPodcastId(null);
-          userClosedImportDialogRef.current = true;
-        }}
+        onClose={handleImportDialogClose}
+        onImportStarted={handleImportStarted}
       />
+
+      {activeImportPodcastId && (
+        <ImportPodcastProgressDock
+          podcastId={activeImportPodcastId}
+          onDismiss={handleImportDockDismiss}
+        />
+      )}
 
       <JoinCallDialog
         open={joinCallDialogOpen}

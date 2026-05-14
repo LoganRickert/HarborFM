@@ -49,6 +49,7 @@ import {
 } from "./utils.js";
 import * as repo from "./repo.js";
 import * as episodesRepo from "../episodes/repo.js";
+import { sendNewShowCongratulationsEmail } from "../podcasts/service.js";
 
 export async function registerImportRoutes(app: FastifyInstance) {
   app.post(
@@ -242,6 +243,12 @@ export async function registerImportRoutes(app: FastifyInstance) {
                 } catch (_) {
                   /* ignore */
                 }
+                sendNewShowCongratulationsEmail(
+                  podcastId,
+                  { title: channel.title, slug },
+                  ownerId,
+                  log,
+                );
                 return;
               }
             }
@@ -272,6 +279,12 @@ export async function registerImportRoutes(app: FastifyInstance) {
                 } catch (_) {
                   /* ignore */
                 }
+                sendNewShowCongratulationsEmail(
+                  podcastId,
+                  { title: channel.title, slug },
+                  ownerId,
+                  log,
+                );
                 return;
               }
 
@@ -377,6 +390,12 @@ export async function registerImportRoutes(app: FastifyInstance) {
                 } catch (_) {
                   /* ignore */
                 }
+                sendNewShowCongratulationsEmail(
+                  podcastId,
+                  { title: channel.title, slug },
+                  ownerId,
+                  log,
+                );
                 return;
               }
 
@@ -522,6 +541,12 @@ export async function registerImportRoutes(app: FastifyInstance) {
           } catch (_) {
             /* ignore */
           }
+          sendNewShowCongratulationsEmail(
+            podcastId,
+            { title: channel.title, slug },
+            ownerId,
+            log,
+          );
         })();
       });
 
