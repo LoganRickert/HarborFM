@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.6.3 - 2026-07-06
+
+- **Public feed player:** Playback controls below the waveform on the podcast feed and episode pages: current time / duration, speed (1x, 1.5x, 2x, 2.5x), and volume, matching the embed player. On the feed list, controls appear only while an episode is playing and animate in/out with a fade slide; on the episode page they are always visible when audio is available.
+- **RSS feed preview on custom domains:** RSS `xml-stylesheet` now uses a root-relative `/style.xsl` URL so browser feed previews work on linked/managed domains (fixes cross-origin blocking when the feed was served from a custom domain but pointed at the app host). Cached feeds with an absolute stylesheet URL are regenerated on the next request.
+
 ## v1.6.2 - 2026-05-07
 
 - **Dashboard:** RSS podcast import shows a **dismissible progress panel** (bottom corner on desktop, along the bottom on small screens) with a **progress bar** and status text instead of a blocking full-screen modal while importing. The feed URL dialog closes after the import starts; you can hide progress until you refresh the page. The Import action stays disabled while an import is in progress.
