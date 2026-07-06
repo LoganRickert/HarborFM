@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
-import { Play, Pause, Share2, Download, Rss, FileText, Volume2 } from 'lucide-react';
+import { Play, Pause, Share2, Download, Rss, FileText } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getPublicConfig,
@@ -14,9 +14,10 @@ import { FullPageLoading } from '../components/Loading';
 import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedSubscriberOnlyMessage } from '../components/Feed';
+import { FeedPlaybackControls } from '../components/Feed/FeedPlaybackControls';
 import { useFeedAudioPlayer } from '../hooks/useFeedAudioPlayer';
 import { WaveformCanvas } from './EpisodeEditor/WaveformCanvas';
-import { formatDurationEmbed, formatSeasonEpisode, formatSeasonEpisodeLong } from '../utils/format';
+import { formatSeasonEpisode, formatSeasonEpisodeLong } from '../utils/format';
 import styles from './EmbedEpisode.module.css';
 
 const EMBED_HEIGHT_MESSAGE_TYPE = 'harborfm-embed-height';
@@ -28,8 +29,6 @@ export function EmbedEpisode() {
   const episodeSlug = params.episodeSlug ?? '';
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [volume, setVolume] = useState(1);
   const [audioLoadFailed, setAudioLoadFailed] = useState(false);
 
   const host = typeof window !== 'undefined' ? window.location.host : '';
@@ -74,6 +73,10 @@ export function EmbedEpisode() {
     hasWaveform,
     togglePlay,
     seek,
+    volume,
+    setVolume,
+    playbackRate,
+    cyclePlaybackRate,
   } = useFeedAudioPlayer({
     audioUrl,
     podcastSlug: effectivePodcastSlug,
@@ -82,22 +85,6 @@ export function EmbedEpisode() {
     waveformUrlFn: publicEpisodeWaveformUrl,
     privateWaveformUrl: episode?.privateWaveformUrl,
   });
-
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    el.playbackRate = playbackRate;
-  }, [audioRef, playbackRate]);
-
-  useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    el.volume = volume;
-  }, [audioRef, volume]);
-
-  const cyclePlaybackRate = useCallback(() => {
-    setPlaybackRate((r) => (r === 1 ? 1.5 : r === 1.5 ? 2 : r === 2 ? 2.5 : 1));
-  }, []);
 
   const handleWrapperKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -313,28 +300,14 @@ export function EmbedEpisode() {
                 )}
               </div>
 
-              <div className={styles.controlsRow}>
-                <span className={styles.time}>
-                  {formatDurationEmbed(Math.ceil(currentTime))} / {formatDurationEmbed(Math.ceil(durationSec))}
-                </span>
-                <button type="button" className={styles.speedBtn} onClick={cyclePlaybackRate} aria-label="Playback speed">
-                  {playbackRate}x
-                </button>
-                <div className={styles.volumeWrap}>
-                  <Volume2 size={18} className={styles.volumeIcon} aria-hidden />
-                  <input
-                    id="embed-volume"
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className={styles.volumeSlider}
-                    aria-label="Volume"
-                  />
-                </div>
-              </div>
+              <FeedPlaybackControls
+                currentTime={currentTime}
+                durationSec={durationSec}
+                volume={volume}
+                setVolume={setVolume}
+                playbackRate={playbackRate}
+                cyclePlaybackRate={cyclePlaybackRate}
+              />
             </>
           ) : (
             <p className={styles.noAudioText}>Audio not available.</p>

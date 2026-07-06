@@ -3,6 +3,8 @@ import { Play, Pause } from 'lucide-react';
 import { useFeedAudioPlayer } from '../../hooks/useFeedAudioPlayer';
 import { publicEpisodeWaveformUrl, PublicEpisodeWithAuth } from '../../api/public';
 import { WaveformCanvas } from '../../pages/EpisodeEditor/WaveformCanvas';
+import { FeedPlaybackControls } from './FeedPlaybackControls';
+import { FadeSlide } from './FadeSlide';
 import { FeedEpisodePlayerProps } from '../../types/feed';
 import styles from './FeedEpisodePlayer.module.css';
 
@@ -28,6 +30,10 @@ export function FeedEpisodePlayer({
     hasWaveform,
     togglePlay,
     seek,
+    volume,
+    setVolume,
+    playbackRate,
+    cyclePlaybackRate,
   } = useFeedAudioPlayer({
     audioUrl,
     podcastSlug,
@@ -71,6 +77,18 @@ export function FeedEpisodePlayer({
             className={styles.waveform}
           />
         </div>
+      ) : null}
+      {hasWaveform ? (
+        <FadeSlide show={isPlaying}>
+          <FeedPlaybackControls
+            currentTime={currentTime}
+            durationSec={durationSec}
+            volume={volume}
+            setVolume={setVolume}
+            playbackRate={playbackRate}
+            cyclePlaybackRate={cyclePlaybackRate}
+          />
+        </FadeSlide>
       ) : null}
       {hasWaveform ? (
         <audio

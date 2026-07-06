@@ -22,6 +22,7 @@ import {
   FeedBreadcrumbs,
   FeedEpisodeHeader,
   FeedSubscriberOnlyMessage,
+  FeedPlaybackControls,
   SubscriptionInfoDialog,
   PodcastLinksCard,
   hasPodcastLinks,
@@ -93,6 +94,10 @@ export function FeedEpisode({
     hasWaveform,
     togglePlay,
     seek,
+    volume,
+    setVolume,
+    playbackRate,
+    cyclePlaybackRate,
   } = useFeedAudioPlayer({
     audioUrl,
     podcastSlug,
@@ -216,6 +221,16 @@ export function FeedEpisode({
                     />
                   </div>
                 )}
+                {hasWaveform ? (
+                  <FeedPlaybackControls
+                    currentTime={currentTime}
+                    durationSec={durationSec}
+                    volume={volume}
+                    setVolume={setVolume}
+                    playbackRate={playbackRate}
+                    cyclePlaybackRate={cyclePlaybackRate}
+                  />
+                ) : null}
                 {hasWaveform ? (
                   <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} onError={() => setAudioLoadFailed(true)}>
                     <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />

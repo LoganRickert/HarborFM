@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { WaveformData } from '../pages/EpisodeEditor/WaveformCanvas';
+import { useGlobalPlaybackSettings } from './useGlobalPlaybackSettings';
 
 interface UseFeedAudioPlayerParams {
   audioUrl: string | null;
@@ -26,6 +27,8 @@ export function useFeedAudioPlayer({
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const { volume, setVolume, playbackRate, setPlaybackRate, cyclePlaybackRate } =
+    useGlobalPlaybackSettings();
 
   const hasWaveform = Boolean(waveformData && durationSec > 0);
 
@@ -100,6 +103,18 @@ export function useFeedAudioPlayer({
     };
   }, [audioUrl, onPlay, onPause]);
 
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.volume = volume;
+  }, [volume, audioUrl]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    el.playbackRate = playbackRate;
+  }, [playbackRate, audioUrl]);
+
   const togglePlay = useCallback(() => {
     const el = audioRef.current;
     if (!el || !audioUrl) return;
@@ -139,5 +154,10 @@ export function useFeedAudioPlayer({
     seek,
     setIsPlaying,
     setCurrentTime,
+    volume,
+    setVolume,
+    playbackRate,
+    setPlaybackRate,
+    cyclePlaybackRate,
   };
 }

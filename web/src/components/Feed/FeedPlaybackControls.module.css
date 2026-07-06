@@ -1,0 +1,63 @@
+.controlsRow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.time {
+  font-size: 0.8125rem;
+  font-family: var(--font-mono), monospace;
+  color: var(--text-muted);
+  justify-self: start;
+}
+
+.speedBtn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+  min-height: 32px;
+  justify-self: center;
+}
+
+.speedBtn:hover {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
+.volumeWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  justify-self: end;
+  max-width: 240px;
+}
+
+.volumeIcon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.volumeSlider {
+  flex: 1;
+  min-width: 120px;
+  height: 24px;
+  accent-color: var(--accent);
+}
+
+@media (max-width: 650px) {
+  .volumeWrap {
+    max-width: 120px;
+  }
+
+  .volumeSlider {
+    min-width: 60px;
+  }
+}

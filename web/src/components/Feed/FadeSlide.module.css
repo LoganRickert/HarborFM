@@ -1,0 +1,31 @@
+.fadeSlide {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-8px);
+  overflow: hidden;
+  pointer-events: none;
+  transition:
+    grid-template-rows 0.24s ease,
+    opacity 0.24s ease,
+    transform 0.24s ease;
+}
+
+.fadeSlideVisible {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fadeSlide {
+    transition: none;
+    transform: none;
+  }
+}
