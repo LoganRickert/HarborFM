@@ -758,6 +758,11 @@ export function writeRssToFile(podcastId: string, xml: string): void {
   writeFileSync(path, xml, "utf8");
 }
 
+/** Absolute xml-stylesheet hrefs break browser preview on custom domains. */
+function hasCrossOriginStylesheet(xml: string): boolean {
+  return /<\?xml-stylesheet[^>]+href="https?:\/\//.test(xml);
+}
+
 /**
  * Return cached RSS XML if the feed file exists and is newer than maxAgeMs.
  * Otherwise return null (caller should generate and save).
@@ -775,7 +780,9 @@ export function getCachedRssIfFresh(
     const stat = statSync(safePath);
     const age = Date.now() - stat.mtimeMs;
     if (age >= maxAgeMs) return null;
-    return readFileSync(safePath, "utf8");
+    const xml = readFileSync(safePath, "utf8");
+    if (hasCrossOriginStylesheet(xml)) return null;
+    return xml;
   } catch {
     return null;
   }
