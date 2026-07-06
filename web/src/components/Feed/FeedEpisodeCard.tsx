@@ -65,7 +65,7 @@ export function FeedEpisodeCard({
           podcastSlug={podcastSlug}
           isPlaying={isPlaying}
           onPlay={() => onPlay(episode.id)}
-          onPause={onPause}
+          onPause={() => onPause(episode.id)}
         />
       ) : scheduledNotReleased && !hasAudio ? (
         <div className={styles.lockedCard} aria-label="Scheduled for future release">

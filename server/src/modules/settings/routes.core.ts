@@ -468,6 +468,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.welcomeBanner !== undefined
           ? String(body.welcomeBanner)
           : current.welcome_banner;
+      const white_label =
+        body.whiteLabel !== undefined
+          ? String(body.whiteLabel).trim()
+          : (current as { white_label?: string }).white_label ?? "";
       const custom_terms =
         body.customTerms !== undefined
           ? String(body.customTerms)
@@ -633,6 +637,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         reviews_publish_non_verified,
         reviews_llm_spam_check,
         welcome_banner,
+        white_label,
         custom_terms,
         custom_privacy,
         dns_provider,

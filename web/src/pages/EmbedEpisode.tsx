@@ -18,6 +18,7 @@ import { FeedPlaybackControls } from '../components/Feed/FeedPlaybackControls';
 import { useFeedAudioPlayer } from '../hooks/useFeedAudioPlayer';
 import { WaveformCanvas } from './EpisodeEditor/WaveformCanvas';
 import { formatSeasonEpisode, formatSeasonEpisodeLong } from '../utils/format';
+import { getSiteDisplayName } from '../utils/siteBranding';
 import styles from './EmbedEpisode.module.css';
 
 const EMBED_HEIGHT_MESSAGE_TYPE = 'harborfm-embed-height';
@@ -38,7 +39,6 @@ export function EmbedEpisode() {
     retry: false,
     staleTime: 0,
     refetchOnMount: 'always',
-    enabled: !podcastSlugParam,
   });
 
   const effectivePodcastSlug = podcastSlugParam ?? config?.customFeedSlug ?? '';
@@ -59,6 +59,12 @@ export function EmbedEpisode() {
     queryClient.cancelQueries({ queryKey: ['activeImport'] });
     queryClient.removeQueries({ queryKey: ['activeImport'] });
   }, [queryClient]);
+
+  useEffect(() => {
+    if (window.self === window.top) return;
+    document.documentElement.classList.add('embed-iframe');
+    return () => document.documentElement.classList.remove('embed-iframe');
+  }, []);
 
   const audioUrl = episode?.privateAudioUrl || episode?.audioUrl || null;
   const durationSec = episode?.audioDurationSec ?? 0;
@@ -169,6 +175,7 @@ export function EmbedEpisode() {
 
   const seasonEpisodeLong = formatSeasonEpisodeLong(episode.seasonNumber, episode.episodeNumber);
   const seasonEpisodeShort = formatSeasonEpisode(episode.seasonNumber, episode.episodeNumber);
+  const siteName = getSiteDisplayName(config?.whiteLabel);
 
   const scheduledNotReleased = Boolean(episode.scheduledNotReleased);
   const isSubscriberOnly = !audioUrl && !audioLoadFailed && Boolean(episode.subscriberOnly) && !scheduledNotReleased;
@@ -211,7 +218,7 @@ export function EmbedEpisode() {
                 {seasonEpisodeLong && <span className={styles.seasonEpisode}>{seasonEpisodeLong}</span>}
                 <a href={origin + (isCustomDomain ? '/' : '/feed')} target="_blank" rel="noopener noreferrer" className={styles.brand}>
                   <img src="/favicon.png" alt="" className={styles.favicon} onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.svg'; }} />
-                  HarborFM
+                  {siteName}
                 </a>
               </div>
             </div>
@@ -221,7 +228,7 @@ export function EmbedEpisode() {
             {seasonEpisodeShort && <span className={styles.seasonEpisodeShort}>{seasonEpisodeShort}</span>}
             <a href={origin + (isCustomDomain ? '/' : '/feed')} target="_blank" rel="noopener noreferrer" className={styles.brandMobile}>
               <img src="/favicon.png" alt="" className={styles.favicon} onError={(e) => { (e.target as HTMLImageElement).src = '/favicon.svg'; }} />
-              HarborFM
+              {siteName}
             </a>
           </div>
 

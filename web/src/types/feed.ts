@@ -28,7 +28,7 @@ export interface FeedEpisodeCardProps {
   showPlayer?: boolean;
   playingEpisodeId: string | null;
   onPlay: (episodeId: string) => void;
-  onPause: () => void;
+  onPause: (episodeId: string) => void;
   /** When true (e.g. custom domain), link to /{episode.slug} instead of /feed/{podcastSlug}/{episode.slug} */
   useShortEpisodeUrls?: boolean;
 }
@@ -66,7 +66,7 @@ export interface FeedEpisodesListProps {
   podcastSlug: string;
   playingEpisodeId: string | null;
   onPlay: (episodeId: string) => void;
-  onPause: () => void;
+  onPause: (episodeId: string) => void;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;

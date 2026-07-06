@@ -102,6 +102,8 @@ export const publicConfigSchema = z.object({
   webrtcEnabled: z.boolean().optional(),
   /** When true, public feed pages show reviews and accept submissions (subject to podcast settings). */
   reviewsEnabled: z.boolean().optional(),
+  /** When set, replaces HarborFM on public feed headers and embeds. */
+  whiteLabel: z.string().optional(),
 });
 
 export type PublicPodcast = z.infer<typeof publicPodcastSchema>;

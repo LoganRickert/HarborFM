@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HarborFM iframe size test</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2e3344;
+      --text: #e8eaef;
+      --muted: #9aa3b5;
+      --accent: #3b82f6;
+      --label-bg: #252936;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 1rem 1.25rem;
+      background: rgba(15, 17, 23, 0.92);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+    }
+
+    h1 {
+      margin: 0 0 1rem;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .url-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .url-row input {
+      flex: 1;
+      min-width: 16rem;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.875rem;
+    }
+
+    .url-row input:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .url-row button {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .url-row button:hover { filter: brightness(1.08); }
+
+    .url-row button.secondary {
+      background: var(--label-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .url-row button.secondary:hover { filter: brightness(1.12); }
+
+    .url-row button.secondary.active {
+      background: #2a3348;
+      border-color: var(--accent);
+    }
+
+    .notes-panel {
+      display: none;
+      margin-top: 0.75rem;
+    }
+
+    .notes-panel.open { display: block; }
+
+    .notes-panel textarea {
+      width: 100%;
+      min-height: 12rem;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: ui-monospace, "Cascadia Code", "SF Mono", monospace;
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      resize: vertical;
+    }
+
+    .notes-panel textarea:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .notes-panel .clear-notes-btn {
+      margin-top: 0.5rem;
+      padding: 0.45rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--label-bg);
+      color: var(--text);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .notes-panel .clear-notes-btn:hover {
+      filter: brightness(1.12);
+    }
+
+    main {
+      padding: 1.25rem;
+      max-width: 1200px;
+    }
+
+    section {
+      margin-bottom: 2.5rem;
+    }
+
+    section h2 {
+      margin: 0 0 0.25rem;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    section .section-desc {
+      margin: 0 0 1rem;
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--label-bg);
+      border-bottom: 1px solid var(--border);
+      font-family: ui-monospace, "Cascadia Code", "SF Mono", monospace;
+      font-size: 0.8125rem;
+    }
+
+    .card-header .dims {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-header-left {
+      min-width: 0;
+    }
+
+    .card-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .add-note-btn {
+      padding: 0.25rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .add-note-btn:hover { filter: brightness(1.1); }
+
+    .add-note-btn.has-note {
+      border-color: #86efac;
+      color: #86efac;
+    }
+
+    .frame-wrap {
+      overflow: hidden;
+      background: #fff;
+      resize: both;
+    }
+
+    .frame-wrap iframe {
+      display: block;
+      width: 100%;
+      border: 0;
+      background: #fff;
+    }
+
+    .empty-state {
+      padding: 3rem 1rem;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(0, 0, 0, 0.55);
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: min(32rem, 100%);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 0.9375rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      padding: 0.2rem 0.45rem;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .modal-close:hover { color: var(--text); }
+
+    .modal-body {
+      padding: 1rem;
+    }
+
+    .modal-body textarea {
+      width: 100%;
+      min-height: 8rem;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      resize: vertical;
+    }
+
+    .modal-body textarea:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .modal-footer button {
+      padding: 0.45rem 0.85rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .modal-footer .cancel-btn {
+      background: var(--label-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .modal-footer .save-btn {
+      background: var(--accent);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>iframe size test</h1>
+    <form class="url-row" id="url-form">
+      <input
+        type="url"
+        id="url-input"
+        placeholder="http://localhost:5173/embed/underground-ego-3/dawn-of-a-new-era"
+        spellcheck="false"
+        required
+      />
+      <button type="submit">Apply</button>
+      <button type="button" class="secondary" id="notes-toggle">Notes</button>
+    </form>
+    <div class="notes-panel" id="notes-panel">
+      <textarea id="notes-output" readonly spellcheck="false" placeholder="No notes yet. Use Add Note on a container to record feedback."></textarea>
+      <button type="button" class="clear-notes-btn" id="clear-notes-btn">Clear All Notes</button>
+    </div>
+  </header>
+
+  <div class="modal-backdrop" id="note-modal-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
+      <div class="modal-header">
+        <h2 id="note-modal-title">Add note</h2>
+        <button type="button" class="modal-close" id="note-modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="note-modal-input" placeholder="Describe layout issues, overlaps, clipping, etc."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="cancel-btn" id="note-modal-cancel">Cancel</button>
+        <button type="button" class="save-btn" id="note-modal-save">Save note</button>
+      </div>
+    </div>
+  </div>
+
+  <main id="main">
+    <p class="empty-state">Enter a URL above and click Apply.</p>
+  </main>
+
+  <script>
+    const STORAGE_KEY = 'harborfm_iframe_test_url';
+
+    let loadGeneration = 0;
+    let viewportObserver = null;
+    const pendingIframeLoads = new WeakMap();
+    let activeNoteKey = null;
+    const notes = {};
+
+    function containerKey(width, height) {
+      return width + 'x' + height;
+    }
+
+    function containerLabel(width, height) {
+      return 'Container ' + width + ' × ' + height + ' px';
+    }
+
+    function formatAllNotes() {
+      const keys = Object.keys(notes).filter((key) => notes[key]?.trim());
+      if (!keys.length) return '';
+
+      keys.sort((a, b) => {
+        const [aw, ah] = a.split('x').map(Number);
+        const [bw, bh] = b.split('x').map(Number);
+        if (aw !== bw) return aw - bw;
+        return ah - bh;
+      });
+
+      return keys
+        .map((key) => {
+          const [width, height] = key.split('x').map(Number);
+          return containerLabel(width, height) + '\n\n' + notes[key].trim();
+        })
+        .join('\n\n');
+    }
+
+    function refreshNotesOutput() {
+      notesOutput.value = formatAllNotes();
+    }
+
+    function refreshCardNoteButtons() {
+      for (const btn of document.querySelectorAll('.add-note-btn')) {
+        const key = btn.dataset.noteKey;
+        btn.classList.toggle('has-note', Boolean(notes[key]?.trim()));
+      }
+    }
+
+    function clearAllNotes() {
+      for (const key of Object.keys(notes)) delete notes[key];
+      refreshNotesOutput();
+      refreshCardNoteButtons();
+    }
+
+    function openNoteModal(width, height) {
+      activeNoteKey = containerKey(width, height);
+      noteModalTitle.textContent = 'Note for ' + containerLabel(width, height);
+      noteModalInput.value = notes[activeNoteKey] || '';
+      noteModalBackdrop.classList.add('open');
+      noteModalBackdrop.setAttribute('aria-hidden', 'false');
+      noteModalInput.focus();
+    }
+
+    function closeNoteModal() {
+      activeNoteKey = null;
+      noteModalBackdrop.classList.remove('open');
+      noteModalBackdrop.setAttribute('aria-hidden', 'true');
+      noteModalInput.value = '';
+    }
+
+    function saveActiveNote() {
+      if (!activeNoteKey) return;
+      const text = noteModalInput.value.trim();
+      if (text) notes[activeNoteKey] = text;
+      else delete notes[activeNoteKey];
+      refreshNotesOutput();
+      refreshCardNoteButtons();
+      closeNoteModal();
+    }
+
+    function sizeSteps(min, max, step) {
+      const out = [];
+      for (let n = min; n <= max; n += step) out.push(n);
+      return out;
+    }
+
+    const SIZES = sizeSteps(100, 500, 50);
+
+    const SECTIONS = [
+      {
+        title: 'Width sweep',
+        description: 'Height fixed at 200px; width increases 100 to 500.',
+        pairs: () => SIZES.map((w) => [w, 200]),
+      },
+      {
+        title: 'Height sweep',
+        description: 'Width fixed at 200px; height increases 100 to 500.',
+        pairs: () => SIZES.map((h) => [200, h]),
+      },
+      {
+        title: 'Square sweep',
+        description: 'Equal width and height from 100 × 100 through 500 × 500.',
+        pairs: () => SIZES.map((s) => [s, s]),
+      },
+    ];
+
+    const urlInput = document.getElementById('url-input');
+    const main = document.getElementById('main');
+    const form = document.getElementById('url-form');
+    const notesToggle = document.getElementById('notes-toggle');
+    const notesPanel = document.getElementById('notes-panel');
+    const notesOutput = document.getElementById('notes-output');
+    const clearNotesBtn = document.getElementById('clear-notes-btn');
+    const noteModalBackdrop = document.getElementById('note-modal-backdrop');
+    const noteModalTitle = document.getElementById('note-modal-title');
+    const noteModalInput = document.getElementById('note-modal-input');
+    const noteModalClose = document.getElementById('note-modal-close');
+    const noteModalCancel = document.getElementById('note-modal-cancel');
+    const noteModalSave = document.getElementById('note-modal-save');
+
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) urlInput.value = saved;
+    refreshNotesOutput();
+
+    notesToggle.addEventListener('click', () => {
+      const open = notesPanel.classList.toggle('open');
+      notesToggle.classList.toggle('active', open);
+      if (open) refreshNotesOutput();
+    });
+
+    clearNotesBtn.addEventListener('click', clearAllNotes);
+
+    noteModalClose.addEventListener('click', closeNoteModal);
+    noteModalCancel.addEventListener('click', closeNoteModal);
+    noteModalSave.addEventListener('click', saveActiveNote);
+    noteModalBackdrop.addEventListener('click', (e) => {
+      if (e.target === noteModalBackdrop) closeNoteModal();
+    });
+    noteModalInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeNoteModal();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && noteModalBackdrop.classList.contains('open')) closeNoteModal();
+    });
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+      if (!url) return;
+      localStorage.setItem(STORAGE_KEY, url);
+      render(url);
+    });
+
+    if (saved) render(saved);
+
+    function render(url) {
+      loadGeneration += 1;
+      const gen = loadGeneration;
+      if (viewportObserver) {
+        viewportObserver.disconnect();
+        viewportObserver = null;
+      }
+      main.innerHTML = '';
+      const loadQueue = [];
+
+      for (const section of SECTIONS) {
+        const sec = document.createElement('section');
+        sec.innerHTML =
+          '<h2>' + section.title + '</h2>' +
+          '<p class="section-desc">' + section.description + '</p>';
+        const cards = document.createElement('div');
+        cards.className = 'cards';
+
+        for (const [w, h] of section.pairs()) {
+          const { card, iframe } = createCard(url, w, h);
+          cards.appendChild(card);
+          loadQueue.push({ iframe, url });
+        }
+
+        sec.appendChild(cards);
+        main.appendChild(sec);
+      }
+
+      observeIframeLoads(loadQueue, gen);
+      refreshCardNoteButtons();
+    }
+
+    function observeIframeLoads(queue, gen) {
+      viewportObserver = new IntersectionObserver(
+        (entries) => {
+          if (gen !== loadGeneration) return;
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const iframe = entry.target;
+            const item = pendingIframeLoads.get(iframe);
+            if (!item || iframe.src) continue;
+
+            viewportObserver.unobserve(iframe);
+            pendingIframeLoads.delete(iframe);
+            iframe.src = item.url;
+          }
+        },
+        { threshold: 0 }
+      );
+
+      for (const item of queue) {
+        pendingIframeLoads.set(item.iframe, item);
+        viewportObserver.observe(item.iframe);
+      }
+    }
+
+    function createCard(url, width, height) {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const iframeHeight = height;
+
+      const header = document.createElement('div');
+      header.className = 'card-header';
+
+      const headerLeft = document.createElement('div');
+      headerLeft.className = 'card-header-left';
+      headerLeft.innerHTML = '<span class="dims">' + containerLabel(width, height) + '</span>';
+
+      const headerActions = document.createElement('div');
+      headerActions.className = 'card-header-actions';
+
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.className = 'add-note-btn';
+      resetBtn.textContent = 'Reset';
+      resetBtn.addEventListener('click', () => {
+        wrap.style.width = width + 'px';
+        wrap.style.height = height + 'px';
+      });
+
+      const addNoteBtn = document.createElement('button');
+      addNoteBtn.type = 'button';
+      addNoteBtn.className = 'add-note-btn';
+      addNoteBtn.textContent = 'Add Note';
+      addNoteBtn.dataset.noteKey = containerKey(width, height);
+      addNoteBtn.addEventListener('click', () => openNoteModal(width, height));
+
+      headerActions.appendChild(resetBtn);
+      headerActions.appendChild(addNoteBtn);
+      header.appendChild(headerLeft);
+      header.appendChild(headerActions);
+
+      const wrap = document.createElement('div');
+      wrap.className = 'frame-wrap';
+      wrap.style.width = width + 'px';
+      wrap.style.height = height + 'px';
+      wrap.style.maxWidth = '100%';
+
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('width', '100%');
+      iframe.setAttribute('height', String(iframeHeight));
+      iframe.setAttribute('frameborder', '0');
+      iframe.setAttribute('allowfullscreen', '');
+      iframe.title = width + ' by ' + height + ' embed preview';
+      wrap.appendChild(iframe);
+
+      card.appendChild(header);
+      card.appendChild(wrap);
+
+      return { card, iframe };
+    }
+  </script>
+</body>
+</html>

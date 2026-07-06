@@ -13,12 +13,29 @@
   justify-content: center;
 }
 
+:global(html.embed-iframe) .wrapper {
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  justify-content: center;
+}
+
 .layout {
   display: flex;
   flex-direction: row;
   gap: 1rem;
   align-items: center;
   max-width: 100%;
+  min-width: 0;
+}
+
+:global(html.embed-iframe) .layout {
+  flex: 0 1 auto;
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  align-items: center;
 }
 
 .artworkWrap {
@@ -52,6 +69,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+:global(html.embed-iframe) .content {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  align-self: center;
 }
 
 .scheduledPlaceholder {
@@ -106,6 +131,14 @@
 
 .metaRowMobile {
   display: none;
+}
+
+@media (max-width: 150px) {
+  .metaRowMobile {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
 }
 
 .seasonEpisodeShort {
@@ -217,6 +250,16 @@
   border-radius: var(--radius);
   overflow: hidden;
   cursor: pointer;
+}
+
+@media (max-width: 150px) {
+  .playbackRow {
+    justify-content: center;
+  }
+
+  .waveform {
+    display: none;
+  }
 }
 
 .audioNative {

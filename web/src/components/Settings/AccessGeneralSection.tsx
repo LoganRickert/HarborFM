@@ -66,6 +66,20 @@ export function AccessGeneralSection({
         </p>
       </label>
 
+      <label className={styles.label} data-settings-label="White Label">
+        White Label
+        <input
+          type="text"
+          className={styles.input}
+          placeholder="HarborFM"
+          value={form.whiteLabel}
+          onChange={(e) => onFormChange({ whiteLabel: e.target.value })}
+        />
+        <p className={styles.inputHelp}>
+          When set, replaces &quot;HarborFM&quot; on public feed headers, episode pages, and embeds. Leave empty to use the default name.
+        </p>
+      </label>
+
       <label className="toggle" data-settings-label="Enable WebSub Discovery">
         <input
           type="checkbox"

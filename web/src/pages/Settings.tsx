@@ -189,6 +189,7 @@ export function Settings() {
         reviewsPublishNonVerified: form.reviewsPublishNonVerified,
         reviewsLlmSpamCheck: form.reviewsLlmSpamCheck,
         welcomeBanner: form.welcomeBanner,
+        whiteLabel: form.whiteLabel.trim(),
         customTerms: form.customTerms,
         customPrivacy: form.customPrivacy,
         dnsProvider: form.dnsProvider,

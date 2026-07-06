@@ -58,6 +58,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   reviewsPublishNonVerified: false,
   reviewsLlmSpamCheck: false,
   welcomeBanner: '',
+  whiteLabel: '',
   customTerms: '',
   customPrivacy: '',
   dnsProvider: 'none',

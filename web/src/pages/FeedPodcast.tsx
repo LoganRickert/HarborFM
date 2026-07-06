@@ -88,18 +88,15 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   const handlePlay = useCallback((episodeId: string) => {
     setPlayingEpisodeId((prev) => {
       if (prev && prev !== episodeId) {
-        const audio = document.getElementById(`audio-${prev}`) as HTMLAudioElement;
-        if (audio) {
-          audio.pause();
-          audio.currentTime = 0;
-        }
+        const audio = document.getElementById(`audio-${prev}`) as HTMLAudioElement | null;
+        audio?.pause();
       }
       return episodeId;
     });
   }, []);
 
-  const handlePause = useCallback(() => {
-    setPlayingEpisodeId(null);
+  const handlePause = useCallback((episodeId: string) => {
+    setPlayingEpisodeId((current) => (current === episodeId ? null : current));
   }, []);
 
   // Episodes from server are already filtered (by search) and sorted

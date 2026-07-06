@@ -43,6 +43,8 @@ export function FeedEpisodePlayer({
     privateWaveformUrl: episodeWithAuth.privateWaveformUrl,
     onPlay,
     onPause,
+    persistPlaybackPosition: true,
+    isActive: isPlaying,
   });
 
   if (!audioUrl) return null;

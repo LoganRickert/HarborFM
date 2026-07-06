@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.6.5 - 2026-07-06
+
+- **White Label:** New setting in Access & General replaces "HarborFM" on public feed headers, episode pages, and embed players when configured.
+- **Embed player layout:** Responsive controls for narrow and short iframes: hide total duration below 250px width; compact volume slide-over below 200px; hide waveform, time, and speed below 150px width (play button centered); hide all playback controls below 150px height; stack season/episode above the brand link at 150px width. Fixed overflow scrollbars in small embeds and vertically centered content.
+- **Dev:** Local `dev/iframe-test.html` tool to preview embed URLs at sizes from 100px to 500px (width, height, and square sweeps), with per-size notes, reset, and viewport-based iframe loading.
+
+## v1.6.4 - 2026-07-06
+
+- **Global playback settings:** Volume and playback speed (1x, 1.5x, 2x, 2.5x) persist in `localStorage` and apply across feed, episode, and embed players.
+- **Listen position:** Feed and episode pages remember where you left off per episode. Position is shared between the feed list and the episode page.
+- **Feed player fixes:** Playback speed from `localStorage` is applied correctly after refresh when the waveform player mounts. Starting a different episode on the feed list now stops the previous episode's audio instead of leaving it playing in the background.
+- **CI:** GitHub Actions workflows updated to Node 24-compatible action versions (Docker and Pages jobs).
+
 ## v1.6.3 - 2026-07-06
 
 - **Public feed player:** Playback controls below the waveform on the podcast feed and episode pages: current time / duration, speed (1x, 1.5x, 2x, 2.5x), and volume, matching the embed player. On the feed list, controls appear only while an episode is playing and animate in/out with a fade slide; on the episode page they are always visible when audio is available.

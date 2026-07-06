@@ -110,6 +110,7 @@ export const settingsPatchBodySchema = z.object({
   reviewsPublishNonVerified: z.boolean().optional(),
   reviewsLlmSpamCheck: z.boolean().optional(),
   welcomeBanner: z.string().optional(),
+  whiteLabel: z.string().optional(),
   customTerms: z.string().optional(),
   customPrivacy: z.string().optional(),
   // DNS configuration
@@ -197,6 +198,7 @@ export const settingsResponseSchema = z.object({
   reviewsPublishNonVerified: z.boolean(),
   reviewsLlmSpamCheck: z.boolean(),
   welcomeBanner: z.string(),
+  whiteLabel: z.string(),
   customTerms: z.string(),
   customPrivacy: z.string(),
   dnsProvider: z.enum(['none', 'cloudflare']),

@@ -213,6 +213,7 @@ export function writeSettings(settings: AppSettings): void {
   );
   upsert("reviews_llm_spam_check", String(settings.reviews_llm_spam_check));
   upsert("welcome_banner", settings.welcome_banner);
+  upsert("white_label", settings.white_label);
   upsert("custom_terms", settings.custom_terms);
   upsert("custom_privacy", settings.custom_privacy);
   upsert("dns_provider", settings.dns_provider);

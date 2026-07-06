@@ -50,6 +50,7 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
       'Hostname',
       'WebSub',
       'Welcome Banner',
+      'White Label',
     ],
   },
   {

@@ -99,6 +99,8 @@ export interface AppSettings {
   email_enable_contact: boolean;
   /** Optional message shown above the sign-in form. Newlines are preserved. */
   welcome_banner: string;
+  /** When set, replaces HarborFM on public feed headers and embeds. */
+  white_label: string;
   /** Custom Terms of Service (Markdown). When set, /terms shows this instead of default. */
   custom_terms: string;
   /** Custom Privacy Policy (Markdown). When set, /privacy shows this instead of default. */
@@ -204,6 +206,7 @@ export const DEFAULTS: AppSettings = {
   email_enable_invite: true,
   email_enable_contact: true,
   welcome_banner: "",
+  white_label: "",
   custom_terms: "",
   custom_privacy: "",
   dns_provider: "none",
@@ -381,6 +384,7 @@ export function buildAppSettingsFromRows(
     else if (row.key === "email_enable_contact")
       settings.email_enable_contact = row.value === "true";
     else if (row.key === "welcome_banner") settings.welcome_banner = row.value;
+    else if (row.key === "white_label") settings.white_label = row.value;
     else if (row.key === "custom_terms") settings.custom_terms = row.value;
     else if (row.key === "custom_privacy") settings.custom_privacy = row.value;
     else if (row.key === "dns_provider") {
@@ -527,6 +531,7 @@ export function buildAppSettingsFromRows(
     email_enable_contact:
       settings.email_enable_contact ?? DEFAULTS.email_enable_contact,
     welcome_banner: settings.welcome_banner ?? DEFAULTS.welcome_banner,
+    white_label: settings.white_label ?? DEFAULTS.white_label,
     custom_terms: settings.custom_terms ?? DEFAULTS.custom_terms,
     custom_privacy: settings.custom_privacy ?? DEFAULTS.custom_privacy,
     dns_provider: settings.dns_provider ?? DEFAULTS.dns_provider,
@@ -677,6 +682,7 @@ export function settingsToApiResponse(
     reviewsPublishNonVerified: settings.reviews_publish_non_verified,
     reviewsLlmSpamCheck: settings.reviews_llm_spam_check,
     welcomeBanner: settings.welcome_banner,
+    whiteLabel: settings.white_label ?? "",
     customTerms: settings.custom_terms ?? "",
     customPrivacy: settings.custom_privacy ?? "",
     dnsProvider: settings.dns_provider,

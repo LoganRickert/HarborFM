@@ -105,6 +105,7 @@ export function FeedEpisode({
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
     privateWaveformUrl: episode?.privateWaveformUrl,
+    persistPlaybackPosition: true,
   });
 
   useMeta({
