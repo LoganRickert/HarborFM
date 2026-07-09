@@ -61,6 +61,7 @@ import * as m059 from "./migrations/059_segment_disabled.js";
 import * as m060 from "./migrations/060_podcast_subscriber_only_messages.js";
 import * as m061 from "./migrations/061_podcast_show_scheduled_episodes.js";
 import * as m062 from "./migrations/062_podcast_stats_source.js";
+import * as m063 from "./migrations/063_podcast_discord_url.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -125,6 +126,7 @@ const migrations = [
   { name: "060_podcast_subscriber_only_messages", ...m060 },
   { name: "061_podcast_show_scheduled_episodes", ...m061 },
   { name: "062_podcast_stats_source", ...m062 },
+  { name: "063_podcast_discord_url", ...m063 },
 ];
 
 const MIGRATIONS_TABLE = `

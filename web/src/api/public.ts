@@ -41,6 +41,7 @@ export interface PublicPodcast {
   instagramUrl?: string | null;
   tiktokUrl?: string | null;
   youtubeUrl?: string | null;
+  discordUrl?: string | null;
 }
 
 /** camelCase shape for public episode (transformed from server snake_case). */
@@ -108,6 +109,7 @@ function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
     instagramUrl: r.instagram_url != null ? String(r.instagram_url) : null,
     tiktokUrl: r.tiktok_url != null ? String(r.tiktok_url) : null,
     youtubeUrl: r.youtube_url != null ? String(r.youtube_url) : null,
+    discordUrl: r.discord_url != null ? String(r.discord_url) : null,
   };
 }
 

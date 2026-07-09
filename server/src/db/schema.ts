@@ -118,6 +118,7 @@ export const podcasts = sqliteTable(
     instagramUrl: text("instagram_url"),
     tiktokUrl: text("tiktok_url"),
     youtubeUrl: text("youtube_url"),
+    discordUrl: text("discord_url"),
     allowUnapprovedReviews: integer("allow_unapproved_reviews", { mode: "boolean" }).default(true),
     subscriberOnlyReviews: integer("subscriber_only_reviews", { mode: "boolean" }).default(false),
     subscriberOnlyMessages: integer("subscriber_only_messages", { mode: "boolean" }).default(false),

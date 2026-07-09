@@ -10,6 +10,7 @@ import {
   SiInstagram,
   SiTiktok,
   SiYoutube,
+  SiDiscord,
 } from 'react-icons/si';
 import type { PublicPodcast } from '../../api/public';
 import styles from './FeedPodcast/PodcastLinks.module.css';
@@ -29,6 +30,7 @@ const LINK_KEYS = [
   'instagramUrl',
   'tiktokUrl',
   'youtubeUrl',
+  'discordUrl',
 ] as const;
 
 const PODCAST_PLATFORMS: Array<{
@@ -54,6 +56,7 @@ const SOCIAL_PLATFORMS: Array<{
   { key: 'instagramUrl', label: 'Instagram', Icon: SiInstagram },
   { key: 'tiktokUrl', label: 'TikTok', Icon: SiTiktok },
   { key: 'youtubeUrl', label: 'YouTube', Icon: SiYoutube },
+  { key: 'discordUrl', label: 'Discord', Icon: SiDiscord },
 ];
 
 function LinkGroup({

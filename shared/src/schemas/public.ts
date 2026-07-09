@@ -32,6 +32,7 @@ export const publicPodcastSchema = z.object({
   instagramUrl: z.string().nullable().optional(),
   tiktokUrl: z.string().nullable().optional(),
   youtubeUrl: z.string().nullable().optional(),
+  discordUrl: z.string().nullable().optional(),
 });
 
 /** Querystring for GET /public/podcasts (paginated list). */

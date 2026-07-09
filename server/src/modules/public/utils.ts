@@ -41,6 +41,7 @@ export function publicPodcastDto(
     instagramUrl?: string | null;
     tiktokUrl?: string | null;
     youtubeUrl?: string | null;
+    discordUrl?: string | null;
   },
 ) {
   const path = row.artworkPath as string | null | undefined;
@@ -72,6 +73,7 @@ export function publicPodcastDto(
     instagram_url: row.instagramUrl ?? null,
     tiktok_url: row.tiktokUrl ?? null,
     youtube_url: row.youtubeUrl ?? null,
+    discord_url: row.discordUrl ?? null,
   };
 }
 

@@ -564,9 +564,9 @@ export function InstanceList({
                   </p>
                   {(inst.harborfm_repo != null || inst.harborfm_branch != null || inst.script_url != null) && (
                     <p className={styles.deployInfo}>
-                      Repo: {inst.harborfm_repo || "—"}
+                      Repo: {inst.harborfm_repo || "-"}
                       {" · "}
-                      Branch: {inst.harborfm_branch || "—"}
+                      Branch: {inst.harborfm_branch || "-"}
                       {" · "}
                       Script: {inst.script_url ? (inst.script_url.length > 40 ? inst.script_url.slice(0, 37) + "…" : inst.script_url) : "(none)"}
                     </p>

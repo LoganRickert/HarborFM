@@ -43,7 +43,7 @@ function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {
     // Defer until after React has committed and the browser has painted the new route.
-    // Fixes mobile (e.g. iOS Safari) where scrolling in the same tick often has no effect.
+    // Fixes mobile Safari where scrolling in the same tick often has no effect.
     const id = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.scrollTo(0, 0);

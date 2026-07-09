@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getPodcast, updatePodcast, type Podcast } from '../api/podcasts';
+import type { PodcastUpdate } from '@harborfm/shared';
 import styles from '../components/PodcastDetail/shared.module.css';
 
 export interface EditSocialLinksDialogProps {
@@ -12,17 +13,18 @@ export interface EditSocialLinksDialogProps {
 }
 
 const LINK_FIELDS = [
-  { key: 'applePodcastsUrl' as const, apiKey: 'apple_podcasts_url' as const, label: 'Apple Podcasts' },
-  { key: 'spotifyUrl' as const, apiKey: 'spotify_url' as const, label: 'Spotify' },
-  { key: 'amazonMusicUrl' as const, apiKey: 'amazon_music_url' as const, label: 'Amazon Music' },
-  { key: 'podcastIndexUrl' as const, apiKey: 'podcast_index_url' as const, label: 'Podcast Index' },
-  { key: 'listenNotesUrl' as const, apiKey: 'listen_notes_url' as const, label: 'Listen Notes' },
-  { key: 'castboxUrl' as const, apiKey: 'castbox_url' as const, label: 'Castbox' },
-  { key: 'xUrl' as const, apiKey: 'x_url' as const, label: 'X' },
-  { key: 'facebookUrl' as const, apiKey: 'facebook_url' as const, label: 'Facebook' },
-  { key: 'instagramUrl' as const, apiKey: 'instagram_url' as const, label: 'Instagram' },
-  { key: 'tiktokUrl' as const, apiKey: 'tiktok_url' as const, label: 'TikTok' },
-  { key: 'youtubeUrl' as const, apiKey: 'youtube_url' as const, label: 'YouTube' },
+  { key: 'applePodcastsUrl' as const, label: 'Apple Podcasts' },
+  { key: 'spotifyUrl' as const, label: 'Spotify' },
+  { key: 'amazonMusicUrl' as const, label: 'Amazon Music' },
+  { key: 'podcastIndexUrl' as const, label: 'Podcast Index' },
+  { key: 'listenNotesUrl' as const, label: 'Listen Notes' },
+  { key: 'castboxUrl' as const, label: 'Castbox' },
+  { key: 'xUrl' as const, label: 'X' },
+  { key: 'facebookUrl' as const, label: 'Facebook' },
+  { key: 'instagramUrl' as const, label: 'Instagram' },
+  { key: 'tiktokUrl' as const, label: 'TikTok' },
+  { key: 'youtubeUrl' as const, label: 'YouTube' },
+  { key: 'discordUrl' as const, label: 'Discord' },
 ] as const;
 
 export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLinksDialogProps) {
@@ -58,10 +60,10 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const payload: Record<string, string | null> = {};
-    for (const { key, apiKey } of LINK_FIELDS) {
+    const payload: PodcastUpdate = {};
+    for (const { key } of LINK_FIELDS) {
       const val = form[key];
-      payload[apiKey] = (val?.trim() || null) ?? null;
+      payload[key] = val?.trim() || null;
     }
     mutation.mutate(payload);
   }
@@ -74,7 +76,7 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}>
           <div className={styles.dialogHeaderRow}>
-            <Dialog.Title className={styles.dialogTitle}>Edit Links</Dialog.Title>
+            <Dialog.Title className={styles.dialogTitle}>Platform &amp; Social Links</Dialog.Title>
             <Dialog.Close asChild>
               <button
                 type="button"
@@ -126,7 +128,7 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
             )}
           </div>
           {podcast && (
-            <div className={styles.dialogFooter}>
+            <div className={`${styles.dialogFooter} ${styles.dialogFooterCancelLeft}`}>
               <button type="button" className={styles.cancel} onClick={onClose} disabled={mutation.isPending} aria-label="Cancel">
                 Cancel
               </button>

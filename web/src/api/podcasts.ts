@@ -104,6 +104,7 @@ export interface Podcast {
   instagramUrl?: string | null;
   tiktokUrl?: string | null;
   youtubeUrl?: string | null;
+  discordUrl?: string | null;
   /** DNS config from server settings (allow toggles and default domain list for edit UI). */
   dnsConfig?: {
     allowLinkingDomain: boolean;

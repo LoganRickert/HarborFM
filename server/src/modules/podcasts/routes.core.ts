@@ -873,6 +873,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.instagramUrl !== undefined) set.instagramUrl = data.instagramUrl;
       if (data.tiktokUrl !== undefined) set.tiktokUrl = data.tiktokUrl;
       if (data.youtubeUrl !== undefined) set.youtubeUrl = data.youtubeUrl;
+      if (data.discordUrl !== undefined) set.discordUrl = data.discordUrl;
       if (data.categoryPrimaryTwo !== undefined) set.categoryPrimaryTwo = data.categoryPrimaryTwo;
       if (data.categorySecondaryTwo !== undefined) {
         const primaryTwo =

@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { Image } from 'lucide-react';
 import { slugify, type EpisodeForm } from './utils';
+import { EpisodePublishControls } from './EpisodePublishControls';
 import localStyles from '../EpisodeEditor.module.css';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 
@@ -287,32 +288,16 @@ export function EpisodeDetailsForm({
         className={`${styles.editDetailsTabPanel} ${activeTab === 'publish' ? styles.editDetailsTabPanelActive : ''}`}
       >
         <div className={styles.tabPanelFields}>
-          <label className={styles.label}>
-            Status
-            <div className={styles.statusToggle} role="group" aria-label="Episode status">
-              {(['draft', 'scheduled', 'published'] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={form.status === s ? styles.statusToggleActive : styles.statusToggleBtn}
-                  onClick={() => setForm((prev) => ({ ...prev, status: s }))}
-                  aria-pressed={form.status === s}
-                  aria-label={`Status: ${s.charAt(0).toUpperCase() + s.slice(1)}`}
-                >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </button>
-              ))}
-            </div>
-          </label>
-          <label className={styles.label}>
-            Publish at (optional)
-            <input
-              type="datetime-local"
-              value={form.publishAt}
-              onChange={(e) => setForm((prev) => ({ ...prev, publishAt: e.target.value }))}
-              className={styles.input}
-            />
-          </label>
+          <EpisodePublishControls
+            values={{
+              status: form.status,
+              seasonNumber: form.seasonNumber,
+              episodeNumber: form.episodeNumber,
+              publishAt: form.publishAt,
+            }}
+            onChange={(fields) => setForm((prev) => ({ ...prev, ...fields }))}
+            variant="form"
+          />
           <label className="toggle">
             <input
               type="checkbox"
@@ -334,30 +319,6 @@ export function EpisodeDetailsForm({
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
             Subscriber-only episodes are omitted from the public RSS and episode list; they appear only in tokenized subscriber feeds.
           </p>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <label className={styles.label} style={{ flex: '1 1 80px' }}>
-              Season
-              <input
-                type="number"
-                min={0}
-                value={form.seasonNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, seasonNumber: e.target.value }))}
-                className={styles.input}
-                placeholder="e.g. 1"
-              />
-            </label>
-            <label className={styles.label} style={{ flex: '1 1 80px' }}>
-              Episode
-              <input
-                type="number"
-                min={0}
-                value={form.episodeNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, episodeNumber: e.target.value }))}
-                className={styles.input}
-                placeholder="e.g. 1"
-              />
-            </label>
-          </div>
           <label className={styles.label}>
             Episode type
             <select

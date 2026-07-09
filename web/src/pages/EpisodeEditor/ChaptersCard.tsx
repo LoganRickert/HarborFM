@@ -22,6 +22,12 @@ export interface ChaptersCardProps {
   hasFinalAudio: boolean;
   /** Duration of final audio in seconds. Used to validate chapter times. */
   finalDurationSec: number;
+  /** Controlled expanded state (optional). */
+  expanded?: boolean;
+  /** Called when expanded state changes. */
+  onExpandedChange?: (expanded: boolean) => void;
+  /** Hide the built-in toggle header (parent controls expansion). */
+  hideHeader?: boolean;
 }
 
 /** Parse "m:ss" or "mm:ss" or plain seconds number. Returns seconds or NaN. */
@@ -228,8 +234,13 @@ export function ChaptersCard({
   canEdit,
   hasFinalAudio,
   finalDurationSec,
+  expanded: expandedProp,
+  onExpandedChange,
+  hideHeader = false,
 }: ChaptersCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded = expandedProp ?? internalExpanded;
+  const setExpanded = onExpandedChange ?? setInternalExpanded;
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
@@ -260,28 +271,30 @@ export function ChaptersCard({
   };
 
   return (
-    <div className={styles.chaptersCard}>
-      <button
-        type="button"
-        className={styles.chaptersCardHeader}
-        onClick={() => setExpanded((e) => !e)}
-        aria-expanded={expanded}
-        aria-controls="chapters-card-content"
-        id="chapters-card-toggle"
-      >
-        <span className={styles.chaptersCardHeaderText}>View Chapters</span>
-        <span className={styles.chaptersCardHeaderIcon} aria-hidden>
-          {expanded ? (
-            <ChevronUp size={18} strokeWidth={2} />
-          ) : (
-            <ChevronDown size={18} strokeWidth={2} />
-          )}
-        </span>
-      </button>
+    <div className={`${styles.chaptersCard} ${hideHeader ? styles.chaptersCardEmbedded : ''}`}>
+      {!hideHeader && (
+        <button
+          type="button"
+          className={styles.chaptersCardHeader}
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          aria-controls="chapters-card-content"
+          id="chapters-card-toggle"
+        >
+          <span className={styles.chaptersCardHeaderText}>View Chapters</span>
+          <span className={styles.chaptersCardHeaderIcon} aria-hidden>
+            {expanded ? (
+              <ChevronUp size={18} strokeWidth={2} />
+            ) : (
+              <ChevronDown size={18} strokeWidth={2} />
+            )}
+          </span>
+        </button>
+      )}
       <div
         id="chapters-card-content"
         role="region"
-        aria-labelledby="chapters-card-toggle"
+        aria-labelledby={hideHeader ? undefined : 'chapters-card-toggle'}
         className={styles.chaptersCardBody}
         style={{ display: expanded ? 'block' : 'none' }}
       >

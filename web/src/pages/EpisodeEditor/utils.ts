@@ -44,6 +44,18 @@ export function episodeToForm(episode: Episode): EpisodeForm {
   };
 }
 
+export type PublishFormFields = Pick<EpisodeForm, 'status' | 'seasonNumber' | 'episodeNumber' | 'publishAt'>;
+
+/** Build API update payload for publish fields only. */
+export function publishFieldsToApiPayload(fields: PublishFormFields) {
+  return {
+    status: fields.status as 'draft' | 'scheduled' | 'published',
+    seasonNumber: fields.seasonNumber === '' ? null : parseInt(fields.seasonNumber, 10),
+    episodeNumber: fields.episodeNumber === '' ? null : parseInt(fields.episodeNumber, 10),
+    publishAt: fields.publishAt ? new Date(fields.publishAt).toISOString() : null,
+  };
+}
+
 /** Build API update payload from form. */
 export function formToApiPayload(form: EpisodeForm) {
   return {

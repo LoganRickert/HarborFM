@@ -7,7 +7,7 @@
  *   - ADMIN_PASSWORD (plaintext; local/dev only), or
  *   - neither: create admin with a random password; user must use password-reset to set one.
  * Also: ADMIN_REGISTRATION_ENABLED, ADMIN_PUBLIC_FEEDS_ENABLED, ADMIN_HOSTNAME, DOMAIN.
- * Optional: INITIAL_ADMIN_API_TOKEN — when set (e.g. from FlareVault), creates an API key for the admin user at seed time.
+ * Optional: INITIAL_ADMIN_API_TOKEN - when set (e.g. from FlareVault), creates an API key for the admin user at seed time.
  */
 import "dotenv/config";
 import argon2 from "argon2";

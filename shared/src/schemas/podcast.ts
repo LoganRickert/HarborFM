@@ -52,6 +52,7 @@ export const podcastCreateSchema = z.object({
   instagramUrl: nullableOptionalUrl,
   tiktokUrl: nullableOptionalUrl,
   youtubeUrl: nullableOptionalUrl,
+  discordUrl: nullableOptionalUrl,
 });
 
 /** Partial of create schema plus optional per-podcast limits and flags. */

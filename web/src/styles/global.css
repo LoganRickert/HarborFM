@@ -72,7 +72,7 @@ input, textarea, select {
   font-size: 1rem;
 }
 
-/* Prevent iOS zoom on input focus (zoom persists when modal/popup closes) */
+/* Prevent mobile zoom on input focus (zoom persists when modal/popup closes) */
 @media (max-width: 768px) {
   input, textarea, select {
     font-size: 16px !important;

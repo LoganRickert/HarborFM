@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.6.6 - 2026-07-09
+
+- **Episode editor:** Redesigned the Final Episode box with a collapsible publishing panel, action tile grid for build/export tools, and improved mobile layout.
+- **Podcast page:** Redesigned the show header with prominent Episodes/Analytics actions, a grouped action list for public links and show settings, and a tighter responsive layout.
+- **Platform & Social Links:** Added Discord link under Follow (fixes #49).
+- **Platform & Social Links:** Fixed saved URLs not persisting after refresh.
+
+![Podcast page header](screenshots/harborfm-1.6.6-1.jpg)
+
+![Final Episode box](screenshots/harborfm-1.6.6-2.jpg)
+
 ## v1.6.5 - 2026-07-06
 
 - **White Label:** New setting in Access & General replaces "HarborFM" on public feed headers, episode pages, and embed players when configured.

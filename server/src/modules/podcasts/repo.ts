@@ -52,6 +52,7 @@ export interface PodcastListRow {
   instagramUrl: string | null;
   tiktokUrl: string | null;
   youtubeUrl: string | null;
+  discordUrl: string | null;
   linkDomain: string | null;
   managedDomain: string | null;
   managedSubDomain: string | null;
@@ -129,6 +130,7 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
     instagramUrl: podcasts.instagramUrl,
     tiktokUrl: podcasts.tiktokUrl,
     youtubeUrl: podcasts.youtubeUrl,
+    discordUrl: podcasts.discordUrl,
     linkDomain: podcasts.linkDomain,
     managedDomain: podcasts.managedDomain,
     managedSubDomain: podcasts.managedSubDomain,
@@ -276,6 +278,7 @@ export function getByIdWithFilenameForCreate(
       instagramUrl: podcasts.instagramUrl,
       tiktokUrl: podcasts.tiktokUrl,
       youtubeUrl: podcasts.youtubeUrl,
+    discordUrl: podcasts.discordUrl,
       linkDomain: podcasts.linkDomain,
       managedDomain: podcasts.managedDomain,
       managedSubDomain: podcasts.managedSubDomain,

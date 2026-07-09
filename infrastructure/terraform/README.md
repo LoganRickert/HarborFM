@@ -67,7 +67,7 @@ When both are set and you provide admin email and password (e.g. `TF_VAR_admin_e
 
 ### Optional: initial admin API token
 
-The package payload can include `initial_admin_api_token`. When the deployer includes it, user-data passes it to the server as `INITIAL_ADMIN_API_TOKEN` and `db:seedSetup` creates an API key for the admin user at seed time. The instance-manager stores the token in deploy meta for that instance so you can copy it from the UI. Use it as `Authorization: Bearer <key>`; if the deployer sent a key without the `hfm_` prefix, the server adds the prefix at seed time—use `Bearer hfm_<token>` when calling the API.
+The package payload can include `initial_admin_api_token`. When the deployer includes it, user-data passes it to the server as `INITIAL_ADMIN_API_TOKEN` and `db:seedSetup` creates an API key for the admin user at seed time. The instance-manager stores the token in deploy meta for that instance so you can copy it from the UI. Use it as `Authorization: Bearer <key>`; if the deployer sent a key without the `hfm_` prefix, the server adds the prefix at seed time. Use `Bearer hfm_<token>` when calling the API.
 
 ---
 

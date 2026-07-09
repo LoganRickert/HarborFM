@@ -20,6 +20,14 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 
 **Discord** [https://discord.gg/hSmstBzAJV](https://discord.gg/hSmstBzAJV)
 
+## YouTube Tutorials
+
+### Quick Install and First Podcast
+[![HarborFM Quick Start](https://img.youtube.com/vi/WMLN44gbbKc/hqdefault.jpg)](https://youtu.be/WMLN44gbbKc)
+
+### Recording Your First Episode
+[![HarborFM Quick Start](https://img.youtube.com/vi/Qf-U95wzTBY/hqdefault.jpg)](https://youtu.be/Qf-U95wzTBY)
+
 ## Table of contents
 
 - [Overview](#overview)
@@ -1053,7 +1061,7 @@ docker run -d \
 
 Open http://localhost:3997. Config, instance data, and Terraform state persist in the current directory via the bind mounts.
 
-**Run locally (dev)** — From the repo root: `pnpm run dev:manager`, then open http://localhost:3998. Terraform still needs credentials in `infrastructure/terraform/vultr/.env` or `infrastructure/terraform/aws/.env` (or in the manager `.env`).
+**Run locally (dev)** - From the repo root: `pnpm run dev:manager`, then open http://localhost:3998. Terraform still needs credentials in `infrastructure/terraform/vultr/.env` or `infrastructure/terraform/aws/.env` (or in the manager `.env`).
 
 Full setup, all env options, and building the image yourself: [infrastructure/instance-manager/README.md](infrastructure/instance-manager/README.md).
 

@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, FileAudio, FileText, FilePlus2, TriangleAlert, Video } from 'lucide-react';
+import {
+  Play,
+  Pause,
+  FileAudio,
+  FileText,
+  FilePlus2,
+  TriangleAlert,
+  Video,
+  Download,
+  List,
+} from 'lucide-react';
 import { downloadEpisodeUrl, finalEpisodeWaveformUrl } from '../../api/audio';
 import { FeedVideoPlayer } from '../../components/Feed/FeedVideoPlayer';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import { formatDuration } from './utils';
 import { ChaptersCard } from './ChaptersCard';
+import { CollapsiblePublishPanel } from './CollapsiblePublishPanel';
+import { ActionTile } from './ActionTile';
+import type { PublishFormFields } from './EpisodePublishControls';
 import styles from '../EpisodeEditor.module.css';
 
 export interface GenerateFinalBarProps {
@@ -12,40 +25,29 @@ export interface GenerateFinalBarProps {
   segmentCount: number;
   onBuild: () => void;
   isBuilding: boolean;
-  /** When set, show this message instead of "Building..." (e.g. "A build is already in progress."). */
   buildMessage?: string | null;
   hasFinalAudio: boolean;
   finalDurationSec: number;
-  /** When the final was last built (e.g. episode.updated_at). Used to bust cache so new build is played. */
   finalUpdatedAt?: string | null;
   readOnly?: boolean;
-  /** Called when user starts playing the final episode (e.g. to pause any playing segment). */
+  metadataReadOnly?: boolean;
+  publishValues: PublishFormFields;
+  onPublishSave: (values: PublishFormFields) => void | Promise<void>;
+  publishSaving?: boolean;
+  publishSaveError?: string | null;
   onFinalPlayStart?: () => void;
-  /** Ref to register pause+reset callback (parent calls this when a segment starts playing to reset final to 0). */
   pauseAndResetRef?: React.MutableRefObject<(() => void) | null>;
-  /** When true, show a Transcript button that opens the episode transcript popup. */
   hasTranscript?: boolean;
-  /** Called when the user clicks the Transcript button (view existing transcript). */
   onOpenTranscript?: () => void;
-  /** Called when the user clicks Generate Transcript (runs backend transcription then typically opens modal). Omit when hasTranscript. */
   onGenerateTranscript?: () => Promise<void>;
-  /** Error message to show in the card (e.g. build failed, transcript generation failed). */
   error?: string | null;
-  /** When false, the Generate Transcript button is disabled (grayed out). */
   canGenerateTranscript?: boolean;
-  /** Chapter markers for the final waveform (from episode.finalMarkers). */
   finalMarkers?: Array<{ time: number; title?: string; color?: string }>;
-  /** Called when user edits chapters (add/edit/delete). Parent should PATCH episode with finalMarkers. */
   onMarkersChange?: (markers: Array<{ time: number; title?: string; color?: string }>) => void;
-  /** When true, episode has a generated video (show Download Video link). */
   hasVideo?: boolean;
-  /** When true, video generation is in progress (disable Generate Video button). */
   isGeneratingVideo?: boolean;
-  /** Called when user clicks Generate Video (open modal). */
   onOpenGenerateVideo?: () => void;
-  /** URL for downloading the episode video (when hasVideo). */
   downloadVideoUrl?: string;
-  /** Optional poster/thumbnail URL for the video (e.g. episode artwork). */
   videoPosterUrl?: string | null;
 }
 
@@ -59,6 +61,11 @@ export function GenerateFinalBar({
   finalDurationSec,
   finalUpdatedAt,
   readOnly = false,
+  metadataReadOnly = false,
+  publishValues,
+  onPublishSave,
+  publishSaving = false,
+  publishSaveError,
   onFinalPlayStart,
   pauseAndResetRef,
   hasTranscript = false,
@@ -80,6 +87,7 @@ export function GenerateFinalBar({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isGeneratingTranscript, setIsGeneratingTranscript] = useState(false);
+  const [chaptersExpanded, setChaptersExpanded] = useState(false);
 
   const waveformCacheKey = finalUpdatedAt ?? episodeId ?? '';
   const waveformUrl =
@@ -186,48 +194,89 @@ export function GenerateFinalBar({
     }
   }
 
+  function seekAndPlay(time: number) {
+    const el = audioRef.current;
+    if (!el || !downloadUrl) return;
+    onFinalPlayStart?.();
+    const urlChanged = downloadUrl !== lastLoadedUrlRef.current;
+    const needsLoad = !el.src || el.ended || urlChanged;
+    if (needsLoad) {
+      lastLoadedUrlRef.current = downloadUrl;
+      el.src = downloadUrl;
+      el.addEventListener(
+        'canplay',
+        () => {
+          el.currentTime = time;
+          setCurrentTime(time);
+          el.play().catch(() => setIsPlaying(false));
+        },
+        { once: true }
+      );
+    } else {
+      el.currentTime = time;
+      setCurrentTime(time);
+      el.play().catch(() => setIsPlaying(false));
+    }
+  }
+
+  async function handleTranscriptClick() {
+    if (hasTranscript && onOpenTranscript) {
+      onOpenTranscript();
+      return;
+    }
+    if (onGenerateTranscript && canGenerateTranscript) {
+      setIsGeneratingTranscript(true);
+      try {
+        await onGenerateTranscript();
+      } finally {
+        setIsGeneratingTranscript(false);
+      }
+    } else if (onOpenTranscript) {
+      onOpenTranscript();
+    }
+  }
+
   const durationSec = finalDurationSec > 0 ? finalDurationSec : 0;
+  const chapterCount = finalMarkers?.length ?? 0;
+  const showTranscriptTile =
+    (hasTranscript && onOpenTranscript) ||
+    (!hasTranscript && hasFinalAudio && !isBuilding && (onGenerateTranscript || onOpenTranscript));
+  const showVideoTile = hasFinalAudio && onOpenGenerateVideo && !readOnly;
+  const showDownloadMp3 = hasFinalAudio && downloadUrl && !isBuilding;
+  const showDownloadVideo = hasVideo && downloadVideoUrl && !isGeneratingVideo;
+  const showVideoPlayer = showDownloadVideo;
 
   return (
     <div className={styles.generateBar}>
-      <div className={styles.generateBarHeader}>
-        <div>
-          <h2 className={styles.generateBarTitle}>Generate Final Episode</h2>
-          <p className={styles.generateBarSub}>
-            Build the final MP3 from your sections. When done, you can play it here or download it for your feed.
-          </p>
-        </div>
-        {(hasFinalAudio && downloadUrl && !isBuilding) || (hasVideo && downloadVideoUrl && !isGeneratingVideo) ? (
-          <div className={styles.generateBarHeaderDownloads}>
-            {hasFinalAudio && downloadUrl && !isBuilding && (
-              <a
-                href={downloadUrl}
-                download
-                className={styles.generateBarHeaderDownload}
-                title="Download Final Audio"
-                aria-label="Download Final Audio"
-              >
-                <FileAudio size={20} strokeWidth={2} aria-hidden />
-              </a>
-            )}
-            {hasVideo && downloadVideoUrl && !isGeneratingVideo && (
-              <a
-                href={downloadVideoUrl}
-                download
-                className={styles.generateBarHeaderDownload}
-                title="Download Video"
-                aria-label="Download Video"
-              >
-                <Video size={20} strokeWidth={2} aria-hidden />
-              </a>
-            )}
-          </div>
-        ) : null}
+      <div className={styles.generateBarTop}>
+        <h2 className={styles.generateBarTitle}>
+          {hasFinalAudio ? 'Final Episode' : 'Build Final Episode'}
+        </h2>
       </div>
-      {error && (
-        <p className={styles.error} style={{ marginTop: 0, marginBottom: '1.25rem' }} role="alert">{error}</p>
+
+      <CollapsiblePublishPanel
+        savedValues={publishValues}
+        readOnly={metadataReadOnly}
+        onSave={onPublishSave}
+        isSaving={publishSaving}
+        saveError={publishSaveError}
+      />
+
+      {(error || buildMessage) && (
+        <div className={styles.generateBarAlerts}>
+          {buildMessage && (
+            <div className={styles.generateBarBuildNotice} role="status">
+              <TriangleAlert size={16} strokeWidth={2} aria-hidden className={styles.generateBarBuildNoticeIcon} />
+              <span>{buildMessage}</span>
+            </div>
+          )}
+          {error && (
+            <p className={styles.error} role="alert" style={{ margin: 0 }}>{error}</p>
+          )}
+        </div>
       )}
-      {hasVideo && downloadVideoUrl && !isGeneratingVideo && (
+
+      {showVideoPlayer && (
         <div className={styles.generateBarVideoWrap}>
           <FeedVideoPlayer
             src={downloadVideoUrl}
@@ -237,6 +286,7 @@ export function GenerateFinalBar({
           />
         </div>
       )}
+
       {hasFinalAudio && durationSec > 0 && (
         <div className={styles.generateBarPlayback}>
           <div />
@@ -273,127 +323,103 @@ export function GenerateFinalBar({
         </div>
       )}
       <audio ref={audioRef} style={{ display: 'none' }} />
-      <div className={styles.generateBarInner}>
-        <div className={styles.generateBarActionsWrap}>
-          {buildMessage && (
-            <div className={styles.generateBarBuildNotice} role="status">
-              <TriangleAlert size={18} strokeWidth={2} aria-hidden className={styles.generateBarBuildNoticeIcon} />
-              <span>{buildMessage}</span>
-            </div>
-          )}
-          <div className={styles.generateBarActions}>
-          <button
-            type="button"
-            className={styles.renderBtnPrimary}
-            onClick={onBuild}
-            disabled={segmentCount === 0 || isBuilding || readOnly}
-            title={readOnly ? 'Read-only account' : undefined}
-            aria-label={readOnly ? 'MGenerate Episode Audio (read-only)' : isBuilding ? 'Building...' : 'Generate Episode Audio'}
-          >
-            <FileAudio size={20} strokeWidth={2} aria-hidden />
-            <span>{isBuilding ? 'Building...' : 'Generate Episode Audio'}</span>
-          </button>
-          {((hasTranscript && onOpenTranscript) || (!hasTranscript && (hasFinalAudio && !isBuilding) && (onGenerateTranscript || onOpenTranscript))) && (
-            <button
-              type="button"
-              className={hasTranscript ? styles.generateBarTranscriptBtn : styles.generateBarGenerateTranscriptBtn}
-              onClick={hasTranscript ? onOpenTranscript : async () => {
-                if (onGenerateTranscript && canGenerateTranscript) {
-                  setIsGeneratingTranscript(true);
-                  try {
-                    await onGenerateTranscript();
-                  } finally {
-                    setIsGeneratingTranscript(false);
-                  }
-                } else if (onOpenTranscript) {
-                  onOpenTranscript();
-                }
-              }}
-              disabled={isBuilding || (!hasTranscript && onGenerateTranscript && (isGeneratingTranscript || !canGenerateTranscript))}
-              title={
-                isBuilding
-                  ? 'Transcript available after build finishes'
-                  : hasTranscript
-                    ? 'View Episode Transcript'
-                    : isGeneratingTranscript
-                      ? 'Generating transcript…'
-                      : onGenerateTranscript
-                        ? 'Generate transcript from final audio'
-                        : 'Upload your own SRT transcript'
-              }
-              aria-label={
-                isBuilding
-                  ? 'Transcript (disabled while building)'
-                  : hasTranscript
-                    ? 'View Episode Transcript'
-                    : isGeneratingTranscript
-                      ? 'Generating transcript'
-                      : onGenerateTranscript
-                        ? 'Generate Transcript'
-                        : 'Upload Transcript'
-              }
-            >
-              {hasTranscript ? (
-                <>
-                  <FileText size={18} strokeWidth={2} aria-hidden />
-                  <span>Transcript</span>
-                </>
+
+      <div className={styles.generateBarActionGrid}>
+        <ActionTile
+          icon={<FileAudio size={22} strokeWidth={1.75} aria-hidden />}
+          label={isBuilding ? 'Building…' : hasFinalAudio ? 'Rebuild' : 'Build'}
+          color="teal"
+          onClick={onBuild}
+          disabled={segmentCount === 0 || isBuilding || readOnly}
+          infoText="Stitch all enabled sections into one MP3 for your podcast feed."
+        />
+        {showTranscriptTile && (
+          <ActionTile
+            icon={
+              hasTranscript ? (
+                <FileText size={22} strokeWidth={1.75} aria-hidden />
               ) : (
-                <>
-                  <FilePlus2 size={18} strokeWidth={2} aria-hidden />
-                  <span>
-                    {isGeneratingTranscript ? 'Generating…' : onGenerateTranscript ? 'Generate Transcript' : 'Upload Transcript'}
-                  </span>
-                </>
-              )}
-            </button>
-          )}
-          {hasFinalAudio && onOpenGenerateVideo && !readOnly && (
-            <button
-              type="button"
-              className={styles.generateBarGenerateTranscriptBtn}
-              onClick={onOpenGenerateVideo}
-              disabled={isBuilding || isGeneratingVideo}
-              title={isGeneratingVideo ? 'Video is generating…' : 'Generate a video version with spectrum overlay'}
-              aria-label={isGeneratingVideo ? 'Generating video' : 'Generate Video'}
-            >
-              <Video size={18} strokeWidth={2} aria-hidden />
-              <span>{isGeneratingVideo ? 'Generating video…' : 'Generate Video'}</span>
-            </button>
-          )}
-          </div>
-        </div>
+                <FilePlus2 size={22} strokeWidth={1.75} aria-hidden />
+              )
+            }
+            label={
+              hasTranscript
+                ? 'View Transcript'
+                : isGeneratingTranscript
+                  ? 'Generating…'
+                  : onGenerateTranscript
+                    ? 'Generate Transcript'
+                    : 'Add Transcript'
+            }
+            color="blue"
+            onClick={handleTranscriptClick}
+            disabled={
+              isBuilding ||
+              (!hasTranscript && !!onGenerateTranscript && (isGeneratingTranscript || !canGenerateTranscript))
+            }
+            infoText={
+              onGenerateTranscript
+                ? 'Generate a transcript from your final audio, or upload your own SRT file.'
+                : 'Upload an SRT transcript for your episode.'
+            }
+          />
+        )}
+        {showVideoTile && (
+          <ActionTile
+            icon={<Video size={22} strokeWidth={1.75} aria-hidden />}
+            label={isGeneratingVideo ? 'Generating…' : hasVideo ? 'Regenerate Video' : 'Generate Video'}
+            color="purple"
+            onClick={() => onOpenGenerateVideo?.()}
+            disabled={isBuilding || isGeneratingVideo}
+            infoText="Generate a shareable video with a spectrum visualizer over your episode audio."
+          />
+        )}
+        <ActionTile
+          icon={<List size={22} strokeWidth={1.75} aria-hidden />}
+          label="Chapters"
+          sublabel={
+            chapterCount > 0
+              ? `${chapterCount} chapter${chapterCount === 1 ? '' : 's'}`
+              : undefined
+          }
+          color="amber"
+          onClick={() => setChaptersExpanded((e) => !e)}
+          active={chaptersExpanded}
+          disabled={!hasFinalAudio}
+          infoText="Add chapter markers so listeners can skip to sections in podcast apps."
+        />
+        {showDownloadMp3 && (
+          <ActionTile
+            icon={<Download size={22} strokeWidth={1.75} aria-hidden />}
+            label="Download MP3"
+            color="green"
+            href={downloadUrl}
+            download
+            infoText="Download the final stitched MP3 file."
+          />
+        )}
+        {showDownloadVideo && (
+          <ActionTile
+            icon={<Download size={22} strokeWidth={1.75} aria-hidden />}
+            label="Download Video"
+            color="slate"
+            href={downloadVideoUrl}
+            download
+            infoText="Download the generated video file."
+          />
+        )}
       </div>
+
       <ChaptersCard
         markers={finalMarkers ?? []}
         onMarkersChange={(m) => onMarkersChange?.(m)}
-        onSeekTo={(time) => {
-          const el = audioRef.current;
-          if (!el || !downloadUrl) return;
-          onFinalPlayStart?.();
-          const urlChanged = downloadUrl !== lastLoadedUrlRef.current;
-          const needsLoad = !el.src || el.ended || urlChanged;
-          if (needsLoad) {
-            lastLoadedUrlRef.current = downloadUrl;
-            el.src = downloadUrl;
-            el.addEventListener(
-              'canplay',
-              () => {
-                el.currentTime = time;
-                setCurrentTime(time);
-                el.play().catch(() => setIsPlaying(false));
-              },
-              { once: true }
-            );
-          } else {
-            el.currentTime = time;
-            setCurrentTime(time);
-            el.play().catch(() => setIsPlaying(false));
-          }
-        }}
+        onSeekTo={seekAndPlay}
         canEdit={!readOnly && !!onMarkersChange}
         hasFinalAudio={hasFinalAudio}
         finalDurationSec={finalDurationSec}
+        expanded={chaptersExpanded}
+        onExpandedChange={setChaptersExpanded}
+        hideHeader
       />
     </div>
   );

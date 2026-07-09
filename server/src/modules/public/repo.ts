@@ -75,6 +75,7 @@ export function getPodcastBySlug(slug: string) {
       instagramUrl: podcasts.instagramUrl,
       tiktokUrl: podcasts.tiktokUrl,
       youtubeUrl: podcasts.youtubeUrl,
+      discordUrl: podcasts.discordUrl,
     })
     .from(podcasts)
     .where(eq(podcasts.slug, slug))
@@ -138,6 +139,7 @@ export function listPublicPodcasts(options: ListPublicPodcastsOptions) {
       instagramUrl: podcasts.instagramUrl,
       tiktokUrl: podcasts.tiktokUrl,
       youtubeUrl: podcasts.youtubeUrl,
+      discordUrl: podcasts.discordUrl,
     })
     .from(podcasts)
     .where(whereCond)

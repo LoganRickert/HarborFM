@@ -16,7 +16,7 @@ import {
   getRenderStatus,
   type EpisodeSegment,
 } from '../../api/segments';
-import { episodeToForm, formToApiPayload } from './utils';
+import { episodeToForm, formToApiPayload, publishFieldsToApiPayload } from './utils';
 import { EpisodeDetailsSummaryCard } from './EpisodeDetailsSummaryCard';
 import { EpisodeDetailsForm, type EpisodeDetailsTab } from './EpisodeDetailsForm';
 import { GenerateFinalBar } from './GenerateFinalBar';
@@ -47,6 +47,15 @@ import { CallPanel } from '../../components/GroupCall/CallPanel';
 import { useEpisodeWebSocket } from '../../hooks/useEpisodeWebSocket';
 import { useBatchedSegmentWaveforms } from '../../hooks/useBatchedSegmentWaveforms';
 import { EndCallConfirmDialog } from '../../components/GroupCall/EndCallConfirmDialog';
+import type { PublishFormFields } from './EpisodePublishControls';
+
+function isPublishOnlyUpdate(variables: Record<string, unknown> | undefined): boolean {
+  if (!variables) return false;
+  const keys = Object.keys(variables);
+  if (keys.length === 0) return false;
+  const publishKeys = new Set(['status', 'seasonNumber', 'episodeNumber', 'publishAt']);
+  return keys.every((k) => publishKeys.has(k));
+}
 
 export interface EpisodeEditorContentProps {
   episode: Episode;
@@ -129,6 +138,7 @@ export function EpisodeEditorContent({
     queryFn: () => getVideoStatus(id!),
     enabled: !!id,
     staleTime: 60_000,
+    refetchInterval: (query) => (query.state.data?.status === 'generating' ? 1500 : false),
   });
   const activeCall = activeSession
     ? {
@@ -294,13 +304,28 @@ export function EpisodeEditorContent({
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['episode', id] });
       queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
-      if (!('finalMarkers' in (variables ?? {}))) {
+      const vars = variables as Record<string, unknown> | undefined;
+      const isFinalMarkersOnly = vars && Object.keys(vars).length === 1 && 'finalMarkers' in vars;
+      if (!isFinalMarkersOnly && !isPublishOnlyUpdate(vars)) {
         setDetailsDialogOpen(false);
         setPendingArtworkFile(null);
         setCoverUploadKey((k) => k + 1);
       }
     },
   });
+
+  const publishUpdateMutation = useMutation({
+    mutationFn: (fields: PublishFormFields) => updateEpisode(id, publishFieldsToApiPayload(fields)),
+    onSuccess: (_, fields) => {
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+      queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
+      setEpisodeForm((prev) => ({ ...prev, ...fields }));
+    },
+  });
+
+  const handlePublishSave = useCallback(async (fields: PublishFormFields) => {
+    await publishUpdateMutation.mutateAsync(fields);
+  }, [publishUpdateMutation]);
 
   const deleteEpisodeMutation = useMutation({
     mutationFn: () => deleteEpisode(id),
@@ -435,6 +460,13 @@ export function EpisodeEditorContent({
       setBuildAlreadyInProgressMessage(null);
     }
   }, [renderStatus, id, queryClient]);
+
+  useEffect(() => {
+    if (!videoStatus || !id) return;
+    if (videoStatus.status === 'done') {
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+    }
+  }, [videoStatus, id, queryClient]);
 
   function handleMoveUp(index: number) {
     if (index <= 0) return;
@@ -612,6 +644,20 @@ export function EpisodeEditorContent({
             : undefined
         }
         readOnly={segmentReadOnly}
+        metadataReadOnly={metadataReadOnly}
+        publishValues={{
+          status: episodeForm.status,
+          seasonNumber: episodeForm.seasonNumber,
+          episodeNumber: episodeForm.episodeNumber,
+          publishAt: episodeForm.publishAt,
+        }}
+        onPublishSave={handlePublishSave}
+        publishSaving={publishUpdateMutation.isPending}
+        publishSaveError={
+          publishUpdateMutation.isError
+            ? (publishUpdateMutation.error as Error)?.message ?? 'Failed to save'
+            : null
+        }
         onFinalPlayStart={pauseCurrentSegment}
         pauseAndResetRef={finalPauseRef}
         hasTranscript={episode.hasTranscript === true}
@@ -622,10 +668,10 @@ export function EpisodeEditorContent({
             : undefined
         }
         canGenerateTranscript={asrAvail?.available === true && meData?.user?.canTranscribe === 1}
-        hasVideo={Boolean((episode as { videoFinalPath?: string | null }).videoFinalPath)}
+        hasVideo={Boolean(episode.videoFinalPath)}
         isGeneratingVideo={videoStatus?.status === 'generating'}
         onOpenGenerateVideo={!segmentReadOnly && meData?.user?.canGenerateVideo === 1 ? () => setShowGenerateVideoModal(true) : undefined}
-        downloadVideoUrl={(episode as { videoFinalPath?: string | null }).videoFinalPath ? downloadEpisodeVideoUrl(id, (episode as { updatedAt?: string }).updatedAt) : undefined}
+        downloadVideoUrl={episode.videoFinalPath ? downloadEpisodeVideoUrl(id, episode.updatedAt) : undefined}
         videoPosterUrl={
           episode.artworkUrl
             ? episode.artworkUrl

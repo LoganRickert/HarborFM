@@ -1,10 +1,26 @@
 import { Link } from 'react-router-dom';
-import { BarChart3, List, Link2, MessageSquare, Settings as GearIcon, Lock, Rss } from 'lucide-react';
+import {
+  BarChart3,
+  ChevronRight,
+  ExternalLink,
+  Globe,
+  List,
+  Lock,
+  MessageSquare,
+  Rss,
+  Settings,
+  Share2,
+} from 'lucide-react';
 import { getPublicRssUrl } from '../../api/rss';
+import { PodcastGroupDetailRow, PodcastGroupRow } from './PodcastGroupList';
 import localStyles from './PodcastDetail.module.css';
 import sharedStyles from './shared.module.css';
 
 const styles = { ...sharedStyles, ...localStyles };
+
+function toTitleCase(s: string): string {
+  return s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 interface PodcastHeroProps {
   podcast: {
@@ -16,116 +32,224 @@ interface PodcastHeroProps {
     artworkFilename?: string | null;
     subscriberOnlyFeedEnabled?: boolean;
     publicFeedDisabled?: boolean;
+    siteUrl?: string | null;
+    authorName?: string | null;
+    categoryPrimary?: string | null;
+    categorySecondary?: string | null;
+    categoryPrimaryTwo?: string | null;
+    categorySecondaryTwo?: string | null;
+    categoryPrimaryThree?: string | null;
+    categorySecondaryThree?: string | null;
+    language?: string | null;
+    medium?: string | null;
+    itunesType?: string;
+    ownerName?: string | null;
+    email?: string | null;
+    explicit?: number;
   };
   readOnly: boolean;
   canManageShow: boolean;
   onEditClick: () => void;
-  /** Opens the Edit Social Links dialog. */
   onLinksClick?: () => void;
-  /** When true, center the podcast title (e.g. on the podcast detail page). */
-  centerTitle?: boolean;
-  /** When set, show Public Page / Public RSS buttons at bottom left. */
   publicFeedsEnabled?: boolean;
+  detailsExpanded: boolean;
+  onDetailsToggle: () => void;
 }
 
-export function PodcastHero({ podcast, readOnly, canManageShow, onEditClick, onLinksClick, centerTitle, publicFeedsEnabled }: PodcastHeroProps) {
-  const showFeedButtons = publicFeedsEnabled !== undefined;
+export function PodcastHero({
+  podcast,
+  readOnly,
+  canManageShow,
+  onEditClick,
+  onLinksClick,
+  publicFeedsEnabled,
+  detailsExpanded,
+  onDetailsToggle,
+}: PodcastHeroProps) {
+  const showPublicRss = !(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
+  const canEdit = !readOnly && canManageShow;
+  const artworkSrc =
+    podcast.artworkUrl ??
+    (podcast.artworkFilename
+      ? `/api/podcasts/${podcast.id}/artwork/${encodeURIComponent(podcast.artworkFilename)}`
+      : null);
+
+  const categories = [
+    podcast.categoryPrimary,
+    podcast.categorySecondary,
+    podcast.categoryPrimaryTwo,
+    podcast.categorySecondaryTwo,
+    podcast.categoryPrimaryThree,
+    podcast.categorySecondaryThree,
+  ].filter(Boolean);
 
   return (
-    <div className={styles.podcastHero}>
-      <div className={styles.podcastHeroTop}>
-        {(podcast.artworkUrl || podcast.artworkFilename) && (
-          <img
-            src={podcast.artworkUrl ?? (podcast.artworkFilename ? `/api/podcasts/${podcast.id}/artwork/${encodeURIComponent(podcast.artworkFilename)}` : '')}
-            alt=""
-            className={styles.podcastHeroArtwork}
+    <div className={styles.podcastShowBody}>
+        <div className={styles.podcastIdentityBlock}>
+          <div className={styles.podcastIdentity}>
+            {artworkSrc ? (
+              <img src={artworkSrc} alt="" className={styles.podcastIdentityArtwork} />
+            ) : (
+              <div className={styles.podcastIdentityArtworkPlaceholder} aria-hidden />
+            )}
+            <div className={styles.podcastIdentityMain}>
+              <div className={styles.podcastIdentityTitleRow}>
+                {!!podcast.subscriberOnlyFeedEnabled && (
+                  <Lock
+                    size={14}
+                    strokeWidth={2.25}
+                    className={
+                      podcast.publicFeedDisabled
+                        ? `${styles.podcastIdentityLock} ${styles.podcastIdentityLockGold}`
+                        : styles.podcastIdentityLock
+                    }
+                    aria-hidden
+                  />
+                )}
+                <h1 className={styles.podcastIdentityTitle}>{podcast.title}</h1>
+              </div>
+              {podcast.description ? (
+                <p className={styles.podcastIdentityDescription}>{podcast.description}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className={styles.podcastPrimaryActions}>
+            <Link
+              to={`/podcasts/${podcast.id}/episodes`}
+              className={styles.podcastPrimaryBtn}
+            >
+              <List size={20} strokeWidth={2} aria-hidden />
+              Episodes
+            </Link>
+            <Link
+              to={`/podcasts/${podcast.id}/analytics`}
+              className={`${styles.podcastPrimaryBtn} ${styles.podcastPrimaryBtnSecondary}`}
+            >
+              <BarChart3 size={20} strokeWidth={2} aria-hidden />
+              Analytics
+            </Link>
+          </div>
+        </div>
+
+        <div className={`${styles.podcastShowList} ${detailsExpanded ? styles.podcastShowListExpanded : ''}`}>
+        {publicFeedsEnabled && (
+          <PodcastGroupRow
+            label="Public Page"
+            icon={Globe}
+            iconTone="green"
+            to={`/feed/${podcast.slug}`}
           />
         )}
-        <div className={styles.podcastHeroMain}>
-          <div className={styles.podcastHeroHeader}>
-            <div className={centerTitle ? `${styles.podcastHeroTitleRow} ${styles.podcastHeroTitleRowCentered}` : styles.podcastHeroTitleRow}>
-              {!!podcast.subscriberOnlyFeedEnabled && (
-                <Lock
-                  size={22}
-                  strokeWidth={2}
-                  className={
-                    podcast.publicFeedDisabled
-                      ? `${styles.podcastHeroTitleLock} ${styles.podcastHeroTitleLockGold}`
-                      : styles.podcastHeroTitleLock
-                  }
-                  aria-hidden
-                />
-              )}
-              <h1 className={styles.cardTitle}>{podcast.title}</h1>
-            </div>
-            <div className={styles.cardHeaderActions}>
-              <Link to={`/podcasts/${podcast.id}/analytics`} className={styles.cardHeaderSecondary}>
-                <BarChart3 size={16} strokeWidth={2} aria-hidden />
-                Analytics
-              </Link>
-              <Link to={`/podcasts/${podcast.id}/episodes`} className={styles.cardHeaderPrimary}>
-                <List size={16} strokeWidth={2} aria-hidden />
-                Episodes
-              </Link>
-              {!readOnly && canManageShow && (
-                <>
-                  <button
-                    type="button"
-                    className={styles.cardSettings}
-                    onClick={onEditClick}
-                    aria-label={`Edit details for ${podcast.title}`}
+        {showPublicRss && (
+          <PodcastGroupRow
+            label="Public RSS"
+            icon={Rss}
+            iconTone="amber"
+            href={getPublicRssUrl(podcast.slug)}
+            external
+          />
+        )}
+        {canManageShow && (
+          <PodcastGroupRow
+            label="Reviews"
+            icon={MessageSquare}
+            iconTone="slate"
+            to={`/podcasts/${podcast.id}/reviews`}
+          />
+        )}
+        {canEdit && (
+          <PodcastGroupRow
+            label="Edit Show"
+            icon={Settings}
+            iconTone="purple"
+            onClick={onEditClick}
+          />
+        )}
+        {canEdit && onLinksClick && (
+          <PodcastGroupRow
+            label="Platform & Social Links"
+            icon={Share2}
+            iconTone="blue"
+            onClick={onLinksClick}
+          />
+        )}
+
+        <button
+          type="button"
+          className={`${styles.groupListRow} ${styles.podcastShowDetailsToggle}`}
+          onClick={onDetailsToggle}
+          aria-expanded={detailsExpanded}
+          aria-controls="podcast-details-content"
+        >
+          <span className={styles.groupListRowLead}>
+            <span className={styles.groupListRowLabel}>Show Details</span>
+          </span>
+          <ChevronRight
+            size={15}
+            strokeWidth={2.25}
+            className={styles.groupListRowAccessory}
+            aria-hidden
+          />
+        </button>
+
+        <div
+          id="podcast-details-content"
+          className={`${styles.groupListExpand} ${detailsExpanded ? styles.groupListExpandOpen : ''}`}
+          aria-hidden={!detailsExpanded}
+        >
+          <div className={styles.groupListExpandInner}>
+            {podcast.authorName && (
+              <PodcastGroupDetailRow label="Author" value={podcast.authorName} />
+            )}
+            {categories.length > 0 && (
+              <PodcastGroupDetailRow label="Categories" value={categories.join(', ')} />
+            )}
+            {podcast.language && (
+              <PodcastGroupDetailRow label="Language" value={toTitleCase(podcast.language)} />
+            )}
+            {podcast.medium && (
+              <PodcastGroupDetailRow label="Medium" value={toTitleCase(podcast.medium)} />
+            )}
+            <PodcastGroupDetailRow
+              label="Type"
+              value={podcast.itunesType === 'serial' ? 'Serial' : 'Episodic'}
+            />
+            {podcast.ownerName && (
+              <PodcastGroupDetailRow label="Owner" value={podcast.ownerName} />
+            )}
+            {podcast.email && (
+              <PodcastGroupDetailRow
+                label="Email"
+                value={
+                  <a href={`mailto:${podcast.email}`} className={styles.groupListDetailLink}>
+                    {podcast.email}
+                  </a>
+                }
+              />
+            )}
+            {podcast.siteUrl && (
+              <PodcastGroupDetailRow
+                label="Website"
+                value={
+                  <a
+                    href={podcast.siteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.groupListDetailLink}
                   >
-                    <GearIcon size={18} strokeWidth={2} />
-                  </button>
-                  {onLinksClick && (
-                    <button
-                      type="button"
-                      className={styles.cardSettings}
-                      onClick={onLinksClick}
-                      aria-label={`Edit links for ${podcast.title}`}
-                      title="Edit links"
-                    >
-                      <Link2 size={18} strokeWidth={2} />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+                    <ExternalLink size={13} strokeWidth={2} aria-hidden />
+                    Visit website
+                  </a>
+                }
+              />
+            )}
+            {!!podcast.explicit && (
+              <PodcastGroupDetailRow label="Explicit" value="Yes" />
+            )}
           </div>
-          {podcast.description && (
-            <p className={styles.podcastHeroDescription}>{podcast.description}</p>
-          )}
         </div>
       </div>
-      {showFeedButtons && (
-        <div className={styles.podcastHeroFeedRow}>
-          <div className={styles.podcastDetailsActions}>
-            {publicFeedsEnabled && (
-              <Link to={`/feed/${podcast.slug}`} className={styles.podcastDetailsActionLink}>
-                <Rss size={16} strokeWidth={2} aria-hidden />
-                Public Page
-              </Link>
-            )}
-            {!(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled) && (
-              <a
-                href={getPublicRssUrl(podcast.slug)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.podcastDetailsActionLink}
-              >
-                <Rss size={16} strokeWidth={2} aria-hidden />
-                Public RSS
-              </a>
-            )}
-            {canManageShow && (
-              <Link to={`/podcasts/${podcast.id}/reviews`} className={styles.podcastDetailsActionLink}>
-                <MessageSquare size={16} strokeWidth={2} aria-hidden />
-                Reviews
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

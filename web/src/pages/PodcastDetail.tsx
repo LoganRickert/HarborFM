@@ -9,7 +9,6 @@ import { EditShowDetailsDialog } from './EditShowDetailsDialog';
 import { EditSocialLinksDialog } from './EditSocialLinksDialog';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { PodcastHero } from '../components/PodcastDetail/PodcastHero';
-import { PodcastDetailsGrid } from '../components/PodcastDetail/PodcastDetailsGrid';
 import { RssFeedCard } from '../components/PodcastDetail/RssFeedCard';
 import { ShowCastCard } from '../components/ShowCast';
 import { ExportsSection } from '../components/Exports/ExportsSection';
@@ -56,17 +55,17 @@ export function PodcastDetail() {
     <div className={styles.page}>
       <Breadcrumb items={breadcrumbItems} />
 
-      <div className={styles.card}>
+      <div className={`${styles.card} ${styles.podcastShowCard}`}>
         <PodcastHero
           podcast={podcast}
           readOnly={readOnly}
           canManageShow={canManageShow}
           onEditClick={() => setDetailsDialogOpen(true)}
           onLinksClick={() => setLinksDialogOpen(true)}
-          centerTitle
           publicFeedsEnabled={publicFeedsEnabled}
+          detailsExpanded={detailsExpanded}
+          onDetailsToggle={() => setDetailsExpanded((e) => !e)}
         />
-        <PodcastDetailsGrid podcast={podcast} detailsExpanded={detailsExpanded} onDetailsToggle={() => setDetailsExpanded((e) => !e)} />
       </div>
 
       {detailsDialogOpen && (
