@@ -46,13 +46,6 @@ export function useEpisodeWebSocket(
             recordingInProgress?: boolean;
           };
           const t = msg.type;
-          if (t === 'segmentAdded' || t === 'segmentUpdated' || t === 'segmentReordered') {
-            console.log('[useEpisodeWebSocket] received', t, {
-              segmentId: msg.segmentId,
-              pendingSegmentIds: msg.pendingSegmentIds,
-              recordingInProgress: msg.recordingInProgress,
-            });
-          }
 
           switch (t) {
             case 'callStarted':
@@ -88,7 +81,6 @@ export function useEpisodeWebSocket(
                     if (!old) return old;
                     const alreadyCleared = Array.isArray(old.pendingSegmentIds) && old.pendingSegmentIds.length === 0;
                     if (alreadyCleared && segMsg.pendingSegmentIds!.length > 0) {
-                      console.log('[useEpisodeWebSocket] segmentAdded: ignoring stale recordingInProgress=true (cache already has pendingSegmentIds=[])', segMsg.pendingSegmentIds);
                       return old;
                     }
                     return { ...old, recordingInProgress: true, pendingSegmentIds: segMsg.pendingSegmentIds };
@@ -98,28 +90,13 @@ export function useEpisodeWebSocket(
               } else if (segMsg.pendingSegmentIds !== undefined || segMsg.recordingInProgress === false) {
                 queryClient.setQueryData(
                   ['call-session', episodeId],
-                  (old: { recordingInProgress?: boolean; pendingSegmentIds?: string[] } | undefined) => {
-                    const hadOld = !!old;
-                    const next = {
-                      ...(old ?? {}),
-                      ...(segMsg.pendingSegmentIds !== undefined && { pendingSegmentIds: segMsg.pendingSegmentIds }),
-                      ...(segMsg.recordingInProgress === false && { recordingInProgress: false }),
-                    };
-                    console.log('[useEpisodeWebSocket] segmentAdded: updating call-session cache', {
-                      hadExistingCache: hadOld,
-                      pendingSegmentIds: segMsg.pendingSegmentIds,
-                      recordingInProgress: segMsg.recordingInProgress,
-                      nextPending: next.pendingSegmentIds,
-                    });
-                    return next;
-                  },
+                  (old: { recordingInProgress?: boolean; pendingSegmentIds?: string[] } | undefined) => ({
+                    ...(old ?? {}),
+                    ...(segMsg.pendingSegmentIds !== undefined && { pendingSegmentIds: segMsg.pendingSegmentIds }),
+                    ...(segMsg.recordingInProgress === false && { recordingInProgress: false }),
+                  }),
                 );
                 queryClient.invalidateQueries({ queryKey: ['call-session', episodeId] });
-              } else {
-                console.log('[useEpisodeWebSocket] segmentAdded: no call-session update (branch skip)', {
-                  recordingInProgress: segMsg.recordingInProgress,
-                  pendingSegmentIds: segMsg.pendingSegmentIds,
-                });
               }
               break;
             }

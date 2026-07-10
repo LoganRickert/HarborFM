@@ -10,7 +10,8 @@ export async function registerRoutes(
     roomId: string,
     state: import("../recording/RecordingManager.js").RecordingState,
     producerId: string,
-    reason: string
+    reason: string,
+    permanent?: boolean
   ) => void
 ): Promise<void> {
   await registerRoomRoutes(app);

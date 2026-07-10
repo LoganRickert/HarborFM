@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as mediasoupClient from 'mediasoup-client';
 import { createAudioLevelProcessor } from '../utils/audioLevel.js';
 
-export type RemoteTrackInfo = { track: MediaStreamTrack; source?: string; participantId?: string; producerId: string };
+export type RemoteTrackInfo = { track: MediaStreamTrack; source?: string; participantId?: string; participantName?: string; producerId: string };
 
 export function useMediasoupRoom(
   webrtcUrl: string | undefined,
@@ -24,11 +24,16 @@ export function useMediasoupRoom(
   const [micLevel, setMicLevel] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
   const producerRef = useRef<mediasoupClient.types.Producer | null>(null);
+  const myProducerIdRef = useRef<string | null>(null);
+  const recreateMicProducerRef = useRef<(() => Promise<void>) | null>(null);
+  const userMutedRef = useRef(false);
   const setMutedRef = useRef<(muted: boolean) => void>((muted) => {
+    userMutedRef.current = muted;
     const p = producerRef.current;
-    if (p) {
-      if (muted) p.pause();
-      else p.resume();
+    if (muted) {
+      if (p) p.pause();
+    } else {
+      void recreateMicProducerRef.current?.();
     }
   });
   const ctxRef = useRef<AudioContext | null>(null);
@@ -143,11 +148,12 @@ export function useMediasoupRoom(
             if (msg.type === 'producerParticipant' && typeof msg.producerId === 'string' && typeof msg.participantId === 'string') {
               const producerId = msg.producerId as string;
               const participantId = msg.participantId as string;
+              const participantName = typeof msg.participantName === 'string' ? msg.participantName : undefined;
               setRemoteTracks((prev) => {
                 const next = new Map(prev);
                 for (const [cid, info] of next) {
                   if (info.producerId === producerId) {
-                    next.set(cid, { ...info, participantId });
+                    next.set(cid, { ...info, participantId, ...(participantName ? { participantName } : {}) });
                     break;
                   }
                 }
@@ -322,7 +328,122 @@ export function useMediasoupRoom(
         const producer = await sendTransport.produce({ track });
         if (closed) return;
         producerRef.current = producer;
+        myProducerIdRef.current = producer.id;
         setReady(true);
+
+        async function ensureLiveSendTrack(): Promise<MediaStreamTrack | null> {
+          if (closed) return null;
+          const ctx = ctxRef.current;
+          if (ctx && ctx.state === 'suspended') {
+            await ctx.resume().catch(() => {});
+          }
+          let micTrack = micTrackRef.current;
+          if (micTrack?.readyState === 'ended') {
+            try {
+              const agcNow = autoGainControlRef.current;
+              const constraints: MediaTrackConstraints = {
+                ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+                sampleRate: { ideal: 48000 },
+                autoGainControl: agcNow,
+                noiseSuppression: false,
+                ...(!agcNow ? { echoCancellation: false } : {}),
+              };
+              const newMicStream = await navigator.mediaDevices.getUserMedia({ audio: constraints, video: false });
+              const newMicTrack = newMicStream.getAudioTracks()[0];
+              if (!newMicTrack || closed) return null;
+              mediaStreamsRef.current.micStream?.getTracks().forEach((t) => t.stop());
+              micTrackRef.current = newMicTrack;
+              mediaStreamsRef.current.micStream = newMicStream;
+              micTrack = newMicTrack;
+              if (ctx && micVolumeGainRef.current) {
+                const micSource = ctx.createMediaStreamSource(newMicStream);
+                micSource.connect(micVolumeGainRef.current);
+              }
+              const sendDest = ctx?.createMediaStreamDestination();
+              if (sendDest && micVolumeGainRef.current) {
+                micVolumeGainRef.current.connect(sendDest);
+                const newSendTrack = sendDest.stream.getAudioTracks()[0];
+                if (newSendTrack) {
+                  mediaStreamsRef.current.localStream?.getTracks().forEach((t) => t.stop());
+                  mediaStreamsRef.current.localStream = new MediaStream([newSendTrack]);
+                  return newSendTrack;
+                }
+              }
+              return null;
+            } catch {
+              return null;
+            }
+          }
+          if (micTrack && !micTrack.enabled) {
+            micTrack.enabled = true;
+          }
+          return mediaStreamsRef.current.localStream?.getAudioTracks()[0] ?? null;
+        }
+
+        /** New producer after background/unmute so recording gets a fresh segment startMs (RTP has no silence gap on resume). */
+        async function recreateMicProducer() {
+          if (closed || !sendTransport || userMutedRef.current) return;
+          const oldProducer = producerRef.current;
+          if (oldProducer) {
+            try {
+              oldProducer.close();
+            } catch {
+              /* ignore */
+            }
+            producerRef.current = null;
+            myProducerIdRef.current = null;
+          }
+          const sendTrack = await ensureLiveSendTrack();
+          if (!sendTrack || closed) return;
+          try {
+            const newProducer = await sendTransport.produce({ track: sendTrack });
+            if (closed) {
+              newProducer.close();
+              return;
+            }
+            producerRef.current = newProducer;
+            myProducerIdRef.current = newProducer.id;
+            setReady(true);
+            if (participantId && participantName) {
+              safeSend(webrtcWs, {
+                type: 'associateProducer',
+                producerId: newProducer.id,
+                participantId,
+                participantName,
+              });
+            }
+          } catch {
+            setReady(false);
+          }
+        }
+        recreateMicProducerRef.current = recreateMicProducer;
+
+        const handleVisibilityChange = () => {
+          if (document.visibilityState === 'hidden') {
+            if (!userMutedRef.current) {
+              const p = producerRef.current;
+              if (p) {
+                try {
+                  p.close();
+                } catch {
+                  /* ignore */
+                }
+                producerRef.current = null;
+                myProducerIdRef.current = null;
+                setReady(false);
+              }
+            }
+          } else {
+            void recreateMicProducer();
+          }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        const prevCleanup = cleanupRef.current;
+        cleanupRef.current = () => {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          prevCleanup?.();
+        };
+
         if (listenToSelfRestoreRef.current) {
           listenToSelfRestoreRef.current = false;
           ctx.resume().then(() => {
@@ -334,8 +455,6 @@ export function useMediasoupRoom(
             }
           }).catch(() => {});
         }
-        const myProducerId = producer.id;
-
         // Soundboard producer is created when panel opens (setSoundboardPanelOpen(true)),
         // and torn down when panel closes (setSoundboardPanelOpen(false)).
 
@@ -377,6 +496,7 @@ export function useMediasoupRoom(
             rtpParameters: mediasoupClient.types.RtpParameters;
             source?: string;
             participantId?: string;
+            participantName?: string;
           };
           const consumer = await recvTransport!.consume({
             id: consumedMsg.id,
@@ -384,7 +504,7 @@ export function useMediasoupRoom(
             kind: consumedMsg.kind as mediasoupClient.types.MediaKind,
             rtpParameters: consumedMsg.rtpParameters,
           });
-          return { consumer, source: consumedMsg.source, participantId: consumedMsg.participantId };
+          return { consumer, source: consumedMsg.source, participantId: consumedMsg.participantId, participantName: consumedMsg.participantName };
         }
 
         safeSend(webrtcWs, { type: 'getProducers' });
@@ -396,9 +516,9 @@ export function useMediasoupRoom(
         }
         const consumedProducerIds = new Set<string>();
         for (const producerId of producersMsg.producerIds || []) {
-          if (producerId === myProducerId) continue;
+          if (producerId === myProducerIdRef.current) continue;
           try {
-            const { consumer, source, participantId } = await consumeProducer(producerId);
+            const { consumer, source, participantId, participantName } = await consumeProducer(producerId);
             if (closed) return;
             consumedProducerIds.add(producerId);
             setRemoteTracks((prev) => new Map(prev).set(consumer.id, {
@@ -406,6 +526,7 @@ export function useMediasoupRoom(
               producerId,
               ...(source ? { source } : {}),
               ...(participantId ? { participantId } : {}),
+              ...(participantName ? { participantName } : {}),
             }));
           } catch {
             // skip
@@ -413,17 +534,29 @@ export function useMediasoupRoom(
         }
 
         handleNewProducer = async (producerId: string) => {
-          if (producerId === myProducerId || consumedProducerIds.has(producerId) || closed) return;
+          if (producerId === myProducerIdRef.current || consumedProducerIds.has(producerId) || closed) return;
           try {
-            const { consumer, source, participantId } = await consumeProducer(producerId);
+            const { consumer, source, participantId: remoteParticipantId, participantName } = await consumeProducer(producerId);
             if (closed) return;
             consumedProducerIds.add(producerId);
-            setRemoteTracks((prev) => new Map(prev).set(consumer.id, {
-              track: consumer.track,
-              producerId,
-              ...(source ? { source } : {}),
-              ...(participantId ? { participantId } : {}),
-            }));
+            setRemoteTracks((prev) => {
+              const next = new Map(prev);
+              if (remoteParticipantId) {
+                for (const [cid, info] of next) {
+                  if (info.participantId === remoteParticipantId && info.producerId !== producerId) {
+                    next.delete(cid);
+                  }
+                }
+              }
+              next.set(consumer.id, {
+                track: consumer.track,
+                producerId,
+                ...(source ? { source } : {}),
+                ...(remoteParticipantId ? { participantId: remoteParticipantId } : {}),
+                ...(participantName ? { participantName } : {}),
+              });
+              return next;
+            });
           } catch {
             // skip
           }
@@ -444,14 +577,21 @@ export function useMediasoupRoom(
     const handlePageUnload = () => {
       stopMediaTracks();
     };
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (!event.persisted) {
+        stopMediaTracks();
+      }
+    };
     window.addEventListener('beforeunload', handlePageUnload);
-    window.addEventListener('pagehide', handlePageUnload);
+    window.addEventListener('pagehide', handlePageHide);
 
     run(url, rid);
     return () => {
       window.removeEventListener('beforeunload', handlePageUnload);
-      window.removeEventListener('pagehide', handlePageUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       closed = true;
+      recreateMicProducerRef.current = null;
+      myProducerIdRef.current = null;
       if (heartbeatIntervalId) {
         clearInterval(heartbeatIntervalId);
         heartbeatIntervalId = undefined;

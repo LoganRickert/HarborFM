@@ -108,7 +108,7 @@ export function handleHostJoin(
       state.isHost = true;
 
       const OPEN = 1;
-      const REMOUNT_GRACE_MS = 500;
+      const REMOUNT_GRACE_MS = 2000;
       const existingSockets = sessionSockets.get(state.sessionId);
       let existingHostSocket: WebSocket | null = null;
       if (existingSockets) {
@@ -176,6 +176,14 @@ export function handleHostJoin(
         state.participantId,
         req.headers.origin as string | undefined,
         req.headers.referer as string | undefined
+      );
+      req.log.info(
+        {
+          sessionId: state.sessionId,
+          participantCount: session.participants.length,
+          participantIds: session.participants.map((p) => p.id),
+        },
+        "Call host joined",
       );
       socket.send(JSON.stringify(hostJoinedPayload));
     })
@@ -324,6 +332,7 @@ export function handleGuestJoin(
     isHost: false,
     participants: session.participants,
     recordingInProgress: session.recordingInProgress === true,
+    recordingStartedAtEpochMs: session.recordingStartedAtEpochMs,
   };
   if (session.hostDisconnectedAt != null && session.hostDisconnectGraceMs != null) {
     webrtcJoinedPayload.hostDisconnected = true;
@@ -348,10 +357,25 @@ export function handleGuestJoin(
     webrtcJoinedPayload.roomId = session.roomId;
   }
   socket.send(JSON.stringify(webrtcJoinedPayload));
+  const sessionAfterJoin = getSessionById(state.sessionId);
   broadcastToSession(state.sessionId, {
     type: "participantJoined",
     participant: p,
   });
+  if (sessionAfterJoin) {
+    broadcastToSession(state.sessionId, {
+      type: "participants",
+      participants: [...sessionAfterJoin.participants],
+    });
+    req.log.info(
+      {
+        sessionId: state.sessionId,
+        guestId: p.id,
+        participantCount: sessionAfterJoin.participants.length,
+      },
+      "Call guest joined",
+    );
+  }
   return true;
 }
 

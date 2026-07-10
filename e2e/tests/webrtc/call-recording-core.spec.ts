@@ -324,6 +324,88 @@ test.describe('Call recording core', () => {
     }
   });
 
+  test('creates multiple recording segments when guest pauses and resumes @slow', async ({ page, context }) => {
+    test.setTimeout(120000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+
+    const joinUrlRaw = await page.getByRole('textbox', { name: 'Join link' }).inputValue();
+    const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;
+
+    const browser = context.browser()!;
+    const guestContext = await browser.newContext({ baseURL, permissions: ['microphone'] });
+    const guestPage = await guestContext.newPage();
+    try {
+      await guestPage.goto(joinUrl);
+      await guestPage.getByLabel(/your name/i).fill('E2E Guest');
+      await guestPage.getByRole('button', { name: /join call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
+
+      const recordBtn = page.getByRole('button', { name: /record segment/i });
+      await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+      await recordBtn.click();
+      await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 10000 });
+
+      await page.waitForTimeout(3000);
+
+      const guestMuteBtn = guestPage.getByRole('button', { name: /^mute$/i });
+      await guestMuteBtn.click();
+      await expect(guestPage.getByRole('button', { name: /^unmute$/i })).toBeVisible({ timeout: 5000 });
+      // producerpause debounce (4s) + RTP flush (~1.2s)
+      await page.waitForTimeout(7000);
+
+      const guestUnmuteBtn = guestPage.getByRole('button', { name: /^unmute$/i });
+      await guestUnmuteBtn.click();
+      await expect(guestPage.getByRole('button', { name: /^mute$/i })).toBeVisible({ timeout: 5000 });
+      // producerCheckInterval (2.5s) + segment warmup
+      await page.waitForTimeout(8000);
+
+      await page.waitForTimeout(3000);
+
+      await page.getByRole('button', { name: /stop recording/i }).click();
+      await page
+        .getByRole('status')
+        .filter({ hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i })
+        .waitFor({ state: 'visible', timeout: 30000 });
+
+      let recorded: { id?: string; duration_sec?: number } | undefined;
+      for (let i = 0; i < 60; i++) {
+        await page.waitForTimeout(500);
+        const segmentsRes = await page.request.get(`${API_BASE}/episodes/${episodeId}/segments`);
+        expect(segmentsRes.ok()).toBeTruthy();
+        const { segments } = await segmentsRes.json();
+        recorded = segments.find((s: { duration_sec?: number }) => s.duration_sec != null);
+        if (recorded) break;
+      }
+      expect(recorded).toBeDefined();
+
+      const segId = recorded!.id;
+      expect(segId).toBeDefined();
+      const recordingsBase = join(DATA_DIR, 'uploads', podcastId, episodeId, 'recordings');
+      const mtDir = findMtDir(recordingsBase, segId!);
+      expect(mtDir).toBeTruthy();
+      const manifest = JSON.parse(readFileSync(join(mtDir!, 'tracks_manifest.json'), 'utf8'));
+      expect(Array.isArray(manifest.segments)).toBe(true);
+
+      const micSegments = (manifest.segments as Array<{ producerId?: string; source?: string; participantName?: string }>)
+        .filter((s) => s.source !== 'soundboard');
+      const guestMicSegments = micSegments.filter((s) => s.participantName === 'E2E Guest');
+      expect(
+        guestMicSegments.length,
+        `Expected 2+ guest mic segments after mute/unmute (new producer per resume); got ${JSON.stringify(guestMicSegments)}`,
+      ).toBeGreaterThanOrEqual(2);
+      expect(
+        new Set(guestMicSegments.map((s) => s.producerId)).size,
+        'Guest should use a new producer after unmute so the gap stays silent in the mix',
+      ).toBeGreaterThanOrEqual(2);
+    } finally {
+      await guestContext.close();
+    }
+  });
+
   test('recovers .part files after webrtc restart @slow', async ({ page }) => {
     test.skip(process.env.E2E_FAULT_INJECTION !== '1', 'Crash recovery requires E2E_FAULT_INJECTION=1 and restart-webrtc');
     test.setTimeout(120000);

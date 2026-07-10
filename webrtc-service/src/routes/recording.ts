@@ -98,7 +98,8 @@ export function registerRecordingRoutes(
     roomId: string,
     state: import("../recording/RecordingManager.js").RecordingState,
     producerId: string,
-    reason: string
+    reason: string,
+    permanent?: boolean
   ) => void
 ): void {
   app.post<{
@@ -326,13 +327,13 @@ export function registerRecordingRoutes(
         import("../recording/RecordingManager.js").ActiveSegment
       >();
       const finalizedSegments: import("../recording/RecordingManager.js").FinalizedSegmentInfo[] = [];
-      const finalizedProducerIds = new Set<string>();
+      const leftProducerIds = new Set<string>();
 
       const state: import("../recording/RecordingManager.js").RecordingState = {
         ...meta,
         activeSegmentsByProducerId,
         finalizedSegments,
-        finalizedProducerIds,
+        leftProducerIds,
         recordingStartedAt,
         recordingEpochMs,
         portBase,
@@ -444,7 +445,13 @@ export function registerRecordingRoutes(
                 });
               }
               finalizedThisTick.add(producerId);
-              finalizeProducerStream(roomId, rec, producerId, producerStillInRoom ? "stall" : "producer closed");
+              finalizeProducerStream(
+                roomId,
+                rec,
+                producerId,
+                producerStillInRoom ? "stall" : "producer closed",
+                !producerStillInRoom,
+              );
             }
           } catch (e) {
             request.log.warn({ err: e, producerId }, "segment watchdog getStats failed");
@@ -468,13 +475,12 @@ export function registerRecordingRoutes(
         }
         for (const producerId of toFinalize) {
           finalizedThisTick.add(producerId);
-          finalizeProducerStream(roomId, rec, producerId, "transport disconnected");
+          finalizeProducerStream(roomId, rec, producerId, "transport disconnected", false);
         }
 
         const currentIds = new Set(rec.activeSegmentsByProducerId.keys());
-        for (const fs of rec.finalizedSegments) currentIds.add(fs.producerId);
         for (const id of finalizedThisTick) currentIds.add(id);
-        for (const id of rec.finalizedProducerIds) currentIds.add(id);
+        for (const id of rec.leftProducerIds) currentIds.add(id);
 
         const allAudio = Array.from(roomState.producers.values()).filter((p) => p.kind === "audio");
         const newUnpaused = allAudio.filter((p) => !p.paused && !currentIds.has(p.id));

@@ -237,7 +237,10 @@ export const wsHandler = async (socket: any, req: any) => {
             kind: consumer.kind,
             rtpParameters: consumer.rtpParameters,
             ...(producerSource ? { source: producerSource } : {}),
-            ...(producerParticipant ? { participantId: producerParticipant.participantId } : {}),
+            ...(producerParticipant ? {
+              participantId: producerParticipant.participantId,
+              participantName: producerParticipant.participantName,
+            } : {}),
           })
         );
         return;
@@ -290,7 +293,12 @@ export const wsHandler = async (socket: any, req: any) => {
         for (const [s, r] of socketRooms.entries()) {
           if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
             (s as { send: (d: string) => void }).send(
-              JSON.stringify({ type: "producerParticipant", producerId, participantId })
+              JSON.stringify({
+                type: "producerParticipant",
+                producerId,
+                participantId,
+                participantName: safeName,
+              })
             );
           }
         }

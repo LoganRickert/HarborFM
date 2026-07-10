@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
 import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, Settings, X } from 'lucide-react';
-import { callWebSocketUrl } from '../../api/call';
+import { callWebSocketUrl, getActiveSession } from '../../api/call';
 import { DEVICE_ID_KEY, getAgcKey, getMicVolumeKey } from '../../constants/micSettings';
 import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
@@ -32,6 +32,10 @@ export interface CallPanelProps {
   roomId?: string;
   /** Host token for host-only WebRTC actions (soundboard). Only for host. */
   hostToken?: string;
+  /** Participants from GET /call/session (hydrate before WS connects). */
+  initialParticipants?: CallParticipant[];
+  /** Episode id for REST participant sync fallback. */
+  episodeId?: string;
   /** True when WebRTC is not available (service down or not configured). */
   mediaUnavailable?: boolean;
   onEnd: () => void;
@@ -52,17 +56,32 @@ export interface CallPanelProps {
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
 const SOUNDBOARD_VOLUME_KEY = 'harborfm_soundboard_volume';
-/** Pending endCall timeouts keyed by sessionId. Used to cancel cleanup on React Strict Mode remount. */
-const pendingEndCallTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+/** Socket from a Strict Mode unmount that must be closed when the effect remounts. */
+const pendingStrictModeSockets = new Map<string, WebSocket>();
+/** Incremented on each CallPanel WS effect run; stale cleanups skip endCall. */
+let callPanelConnectGeneration = 0;
+/** Per-session connect count to detect React Strict Mode remount. */
+const callPanelConnectCountBySession = new Map<string, number>();
 const END_CALL_DELAY_MS = 200;
 
-export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hostToken, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onRecordingStateChange, onEndRequest, onRegisterEndCall, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
+function defaultHostParticipant(name: string): CallParticipant {
+  return { id: '__pending_host__', name: name || 'Host', isHost: true, joinedAt: Date.now() };
+}
+
+/** Drop optimistic placeholder when the server sent a real host. */
+function normalizeParticipants(list: CallParticipant[]): CallParticipant[] {
+  const hasRealHost = list.some((p) => p.isHost && p.id !== '__pending_host__');
+  if (!hasRealHost) return list;
+  return list.filter((p) => p.id !== '__pending_host__');
+}
+
+export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hostToken, initialParticipants, episodeId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onRecordingStateChange, onEndRequest, onRegisterEndCall, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
   const [displayName, setDisplayName] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
   });
   const [editingName, setEditingName] = useState(false);
-  const [participants, setParticipants] = useState<CallParticipant[]>([]);
+  const [participants, setParticipants] = useState<CallParticipant[]>(() => initialParticipants ?? []);
   const [copied, setCopied] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingPending, setRecordingPending] = useState(false);
@@ -76,6 +95,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const [roomIdFromWs, setRoomIdFromWs] = useState<string | undefined>(undefined);
   const [hostTokenFromWs, setHostTokenFromWs] = useState<string | undefined>(undefined);
   const [alreadyInCall, setAlreadyInCall] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -219,40 +239,102 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
     return () => clearInterval(id);
   }, [recording]);
 
+  const applyParticipantList = (list: CallParticipant[]) => {
+    setParticipants(normalizeParticipants(list));
+  };
+
   useEffect(() => {
-    const existing = pendingEndCallTimeouts.get(sessionId);
-    if (existing) {
-      clearTimeout(existing);
-      pendingEndCallTimeouts.delete(sessionId);
+    if (initialParticipants && initialParticipants.length > 0) {
+      applyParticipantList(initialParticipants);
+    }
+  }, [initialParticipants, sessionId]);
+
+  // REST fallback only while call WS is not connected (WS is authoritative once open).
+  useEffect(() => {
+    if (!episodeId || wsConnected) return;
+    let cancelled = false;
+    const syncFromApi = () => {
+      getActiveSession(episodeId)
+        .then((session) => {
+          if (cancelled || !session?.participants?.length) return;
+          applyParticipantList(session.participants as CallParticipant[]);
+        })
+        .catch(() => {});
+    };
+    syncFromApi();
+    const id = setInterval(syncFromApi, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [episodeId, sessionId, wsConnected]);
+
+  useEffect(() => {
+    const connectGen = ++callPanelConnectGeneration;
+    const sessionConnectCount = (callPanelConnectCountBySession.get(sessionId) ?? 0) + 1;
+    callPanelConnectCountBySession.set(sessionId, sessionConnectCount);
+    const strictModeRemount = sessionConnectCount > 1 || pendingStrictModeSockets.has(sessionId);
+    const orphanWs = pendingStrictModeSockets.get(sessionId);
+    if (orphanWs) {
+      pendingStrictModeSockets.delete(sessionId);
+      try {
+        if (orphanWs.readyState === WebSocket.OPEN || orphanWs.readyState === WebSocket.CONNECTING) {
+          orphanWs.close();
+        }
+      } catch {
+        /* ignore */
+      }
     }
     migratedFromOtherTabRef.current = false;
     setAlreadyInCall(false);
+    setWsConnected(false);
     setWebrtcUrlFromWs(undefined);
     setRoomIdFromWs(undefined);
     setHostTokenFromWs(undefined);
+    const hostName = localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
+    const seed =
+      initialParticipants && initialParticipants.length > 0
+        ? initialParticipants
+        : [defaultHostParticipant(hostName)];
+    setParticipants(normalizeParticipants(seed));
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
       const url = callWebSocketUrl();
       const ws = new WebSocket(url);
       wsRef.current = ws;
+      const connectTimeout = setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+      }, 8000);
 
       ws.onopen = () => {
+        clearTimeout(connectTimeout);
+        setWsConnected(true);
         const name = localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
         ws.send(JSON.stringify({ type: 'host', sessionId, name: name || undefined }));
+        ws.send(JSON.stringify({ type: 'heartbeat' }));
       };
 
       ws.onmessage = (event) => {
         try {
         const msg = JSON.parse(event.data as string);
         if (msg.type === 'alreadyInCall') {
+          if (strictModeRemount && ws.readyState === WebSocket.OPEN) {
+            migratedFromOtherTabRef.current = true;
+            ws.send(JSON.stringify({ type: 'migrateHost' }));
+            return;
+          }
           migratedFromOtherTabRef.current = true;
           setAlreadyInCall(true);
-        } else if (msg.type === 'joined' && msg.participants) {
+        } else if (msg.type === 'joined') {
           const didMigrate = migratedFromOtherTabRef.current;
           migratedFromOtherTabRef.current = false;
           setAlreadyInCall(false);
-          setParticipants(msg.participants);
+          if (Array.isArray(msg.participants) && msg.participants.length > 0) {
+            applyParticipantList(msg.participants as CallParticipant[]);
+          }
           if (msg.webrtcUrl) setWebrtcUrlFromWs(msg.webrtcUrl);
           if (msg.roomId) setRoomIdFromWs(msg.roomId);
           if (msg.hostToken) setHostTokenFromWs(msg.hostToken);
@@ -276,15 +358,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           }
           onRecordingStateChange?.({ pendingSegmentIds: msg.pendingSegmentIds ?? [], recordingActive: msg.recordingInProgress === true });
         } else if (msg.type === 'participants') {
-          setParticipants(msg.participants ?? []);
+          const list = (msg.participants ?? []) as CallParticipant[];
+          if (list.length > 0) applyParticipantList(list);
         } else if (msg.type === 'participantJoined') {
-          setParticipants((prev) => {
-            const p = msg.participant;
-            if (p && !prev.some((x) => x.id === p.id)) return [...prev, p];
-            return prev;
-          });
+          // participants broadcast usually follows; ignore to avoid duplicates before full list arrives
         } else if (msg.type === 'heartbeatAck' && Array.isArray(msg.participants)) {
-          setParticipants(msg.participants);
+          const list = msg.participants as CallParticipant[];
+          if (list.length > 0) applyParticipantList(list);
         } else if (msg.type === 'callEnded') {
           onCallEnded();
         } else if (msg.type === 'error') {
@@ -298,7 +378,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           onRecordingStateChange?.({ pendingSegmentIds: msg.pendingSegmentIds ?? [], recordingActive: true });
         } else if (msg.type === 'recordingStopped') {
           const pendingSegmentIds = msg.pendingSegmentIds ?? [];
-          console.log('[CallPanel] recordingStopped', { pendingSegmentIds, hasOnRecordingStateChange: !!onRecordingStateChange });
           setRecording(false);
           setRecordingPending(false);
           setRecordingError(null);
@@ -323,11 +402,6 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           onRecordingStateChange?.({ recordingActive: false });
         } else if (msg.type === 'segmentRecorded') {
           const pendingSegmentIds = (msg as { pendingSegmentIds?: string[] }).pendingSegmentIds ?? [];
-          console.log('[CallPanel] segmentRecorded', {
-            pendingSegmentIds,
-            hasOnRecordingStateChange: !!onRecordingStateChange,
-            hasOnSegmentRecorded: !!onSegmentRecorded,
-          });
           setRecording(false);
           setRecordingPending(false);
           setRecordingError(null);
@@ -358,15 +432,20 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           }
         }
         } catch {
-          // ignore
+          // ignore malformed messages
         }
       };
 
       ws.onclose = () => {
-        if (wsRef.current === ws) onCallEnded();
+        clearTimeout(connectTimeout);
+        if (wsRef.current === ws) {
+          setWsConnected(false);
+          onCallEnded();
+        }
       };
 
       ws.onerror = () => {
+        clearTimeout(connectTimeout);
         if (wsRef.current === ws) onCallEnded();
       };
 
@@ -383,14 +462,25 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       const wsToClose = wsRef.current;
       wsRef.current = null;
-      const timeoutId = setTimeout(() => {
-        pendingEndCallTimeouts.delete(sessionId);
+      if (wsToClose) {
+        pendingStrictModeSockets.set(sessionId, wsToClose);
+        try {
+          if (wsToClose.readyState === WebSocket.OPEN || wsToClose.readyState === WebSocket.CONNECTING) {
+            wsToClose.close();
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      const cleanupGen = connectGen;
+      setTimeout(() => {
+        pendingStrictModeSockets.delete(sessionId);
+        if (callPanelConnectGeneration !== cleanupGen) return;
         if (wsToClose?.readyState === WebSocket.OPEN) {
           wsToClose.send(JSON.stringify({ type: 'endCall' }));
           wsToClose.close();
         }
       }, END_CALL_DELAY_MS);
-      pendingEndCallTimeouts.set(sessionId, timeoutId);
     };
   }, [sessionId, onCallEnded, onSegmentRecorded, onRecordingStateChange, setMuted, leaveRoom]);
 
@@ -421,6 +511,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   };
 
   const handleEndCall = useCallback(() => {
+    callPanelConnectCountBySession.delete(sessionId);
     leaveRoom();
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'endCall' }));
@@ -436,8 +527,13 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
 
   const handleStartRecording = () => {
     const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN && !recordingPending) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setRecordingError('Call connection not ready. Wait a moment and try again.');
+      return;
+    }
+    if (!recordingPending) {
       setRecordingPending(true);
+      setRecordingError(null);
       ws.send(JSON.stringify({ type: 'startRecording', clientEpochMs: Date.now() }));
     }
   };
@@ -887,8 +983,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
               type="button"
               className={styles.recordSegmentBtn}
               onClick={handleStartRecording}
-              disabled={recordDisabled}
-              title={recordDisabled ? recordDisabledMessage : undefined}
+              disabled={recordDisabled || !wsConnected}
+              title={
+                !wsConnected
+                  ? 'Connecting to call…'
+                  : recordDisabled
+                    ? recordDisabledMessage
+                    : undefined
+              }
               aria-label={
                 recordDisabled
                   ? (recordDisabledMessage ? `Record segment: ${recordDisabledMessage}` : 'Record segment from call (disabled)')

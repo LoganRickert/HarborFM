@@ -40,6 +40,7 @@ export type FinalizedSegmentInfo = {
 };
 
 const RECORDING_WARMUP_MS = Number(process.env.RECORDING_WARMUP_MS) || 500;
+const PAUSE_FINALIZE_DEBOUNCE_MS = Number(process.env.PRODUCER_PAUSE_DEBOUNCE_MS) || 4000;
 
 /** LUFS target for final mixed segment. Gentle normalization so it's not too strong. */
 const SEGMENT_LOUDNESS_TARGET_LUFS = -18;
@@ -47,8 +48,8 @@ const SEGMENT_LOUDNESS_TARGET_LUFS = -18;
 export type RecordingState = RecordingMeta & {
   activeSegmentsByProducerId: Map<string, ActiveSegment>;
   finalizedSegments: FinalizedSegmentInfo[];
-  /** Producers we've finalized (stall/closed/etc) - never re-add as late-joiner */
-  finalizedProducerIds: Set<string>;
+  /** Producers that left the call permanently - never re-add during this recording */
+  leftProducerIds: Set<string>;
   recordingStartedAt: number;
   recordingEpochMs?: number;
   portBase: number;
@@ -163,16 +164,43 @@ export class RecordingManager {
       ...(source ? { source } : {}),
     };
 
-    const finalize = (reason: string) => this.finalizeProducerStream(roomId, state, producerId, reason);
-    consumer.on("producerclose", () => finalize("left"));
-    consumer.on("producerpause", () => finalize("paused"));
-    producer.on("transportclose", () => finalize("transport closed"));
+    let pauseFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
+    const finalize = (reason: string, permanent: boolean) =>
+      this.finalizeProducerStream(roomId, state, producerId, reason, permanent);
+
+    consumer.on("producerclose", () => {
+      if (pauseFinalizeTimer) clearTimeout(pauseFinalizeTimer);
+      finalize("left", true);
+    });
+    consumer.on("producerpause", () => {
+      if (pauseFinalizeTimer) clearTimeout(pauseFinalizeTimer);
+      pauseFinalizeTimer = setTimeout(() => {
+        pauseFinalizeTimer = undefined;
+        finalize("paused", false);
+      }, PAUSE_FINALIZE_DEBOUNCE_MS);
+    });
+    consumer.on("producerresume", () => {
+      if (pauseFinalizeTimer) {
+        clearTimeout(pauseFinalizeTimer);
+        pauseFinalizeTimer = undefined;
+      }
+    });
+    producer.on("transportclose", () => {
+      if (pauseFinalizeTimer) clearTimeout(pauseFinalizeTimer);
+      finalize("transport closed", true);
+    });
 
     return activeSegment;
   }
 
-  finalizeProducerStream(roomId: string, state: RecordingState, producerId: string, _reason: string): void {
-    this.finalizeProducerStreamAsync(roomId, state, producerId).catch(() => {
+  finalizeProducerStream(
+    roomId: string,
+    state: RecordingState,
+    producerId: string,
+    _reason: string,
+    permanent = false,
+  ): void {
+    this.finalizeProducerStreamAsync(roomId, state, producerId, permanent).catch(() => {
       /* log handled inside */
     });
   }
@@ -181,6 +209,7 @@ export class RecordingManager {
     roomId: string,
     state: RecordingState,
     producerId: string,
+    permanent = false,
   ): Promise<void> {
     const rec = this.deps.recordingByRoom.get(roomId);
     if (!rec || rec !== state) return;
@@ -188,7 +217,9 @@ export class RecordingManager {
     const seg = state.activeSegmentsByProducerId.get(producerId);
     if (!seg) return;
 
-    state.finalizedProducerIds.add(producerId);
+    if (permanent) {
+      state.leftProducerIds.add(producerId);
+    }
     state.activeSegmentsByProducerId.delete(producerId);
 
     // Delay to let in-flight RTP reach FFmpeg before we close (avoids losing last ~1s).

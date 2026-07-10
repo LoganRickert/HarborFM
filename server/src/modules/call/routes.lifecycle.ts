@@ -492,6 +492,9 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       if (session.recordingInProgress === true) {
         payload.recordingInProgress = true;
       }
+      if (isHost) {
+        payload.participants = [...session.participants];
+      }
       return reply.send(payload);
     },
   );

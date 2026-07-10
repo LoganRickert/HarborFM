@@ -59,9 +59,10 @@ function finalizeProducerStream(
   roomId: string,
   state: import("./recording/RecordingManager.js").RecordingState,
   producerId: string,
-  reason: string
+  reason: string,
+  permanent?: boolean
 ): void {
-  recordingManager.finalizeProducerStream(roomId, state, producerId, reason);
+  recordingManager.finalizeProducerStream(roomId, state, producerId, reason, permanent);
 }
 
 if (!WEBRTC_SERVICE_SECRET && !WEBRTC_INSECURE_SKIP_AUTH) {

@@ -12,6 +12,7 @@ import { CallJoinHeader } from '../components/CallJoinHeader';
 import { LeaveCallConfirmDialog } from '../components/GroupCall/LeaveCallConfirmDialog';
 import type { CallJoinInfo } from '../api/call';
 import { createAudioLevelProcessor } from '../utils/audioLevel';
+import { formatDurationHMS } from '../utils/format';
 import styles from './CallJoin.module.css';
 
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
@@ -62,6 +63,8 @@ export function CallJoin() {
   const [chatUnread, setChatUnread] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [recordingInProgress, setRecordingInProgress] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingEpochRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const selfListenGainRef = useRef<GainNode | null>(null);
   const micVolumeGainRef = useRef<GainNode | null>(null);
@@ -88,6 +91,31 @@ export function CallJoin() {
   setMutedRef.current = setMuted;
 
   useWakeLock(joined);
+
+  const applyRecordingState = useCallback((inProgress: boolean, epochMs?: number) => {
+    setRecordingInProgress(inProgress);
+    if (inProgress) {
+      const epoch = typeof epochMs === 'number' ? epochMs : Date.now();
+      recordingEpochRef.current = epoch;
+      setRecordingSeconds(Math.max(0, Math.floor((Date.now() - epoch) / 1000)));
+    } else {
+      recordingEpochRef.current = null;
+      setRecordingSeconds(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!recordingInProgress || recordingEpochRef.current == null) return;
+    const tick = () => {
+      const epoch = recordingEpochRef.current;
+      if (epoch != null) {
+        setRecordingSeconds(Math.max(0, Math.floor((Date.now() - epoch) / 1000)));
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [recordingInProgress]);
 
   useEffect(() => {
     if (!hostDisconnected) {
@@ -347,7 +375,10 @@ export function CallJoin() {
           }
           setMyParticipantId(msg.participantId ?? null);
           setParticipants(msg.participants ?? []);
-          setRecordingInProgress(msg.recordingInProgress === true);
+          applyRecordingState(
+            msg.recordingInProgress === true,
+            typeof msg.recordingStartedAtEpochMs === 'number' ? msg.recordingStartedAtEpochMs : undefined,
+          );
           if (msg.hostDisconnected === true && typeof msg.gracePeriodMs === 'number' && typeof msg.endsAt === 'number') {
             setHostDisconnected({ gracePeriodMs: msg.gracePeriodMs, endsAt: msg.endsAt });
           } else {
@@ -365,9 +396,12 @@ export function CallJoin() {
             setHostDisconnected({ gracePeriodMs: msg.gracePeriodMs, endsAt: msg.endsAt });
           }
         } else if (msg.type === 'recordingStarted') {
-          setRecordingInProgress(true);
+          applyRecordingState(
+            true,
+            typeof msg.recordingEpochMs === 'number' ? msg.recordingEpochMs : undefined,
+          );
         } else if (msg.type === 'recordingStopped') {
-          setRecordingInProgress(false);
+          applyRecordingState(false);
         } else if (msg.type === 'participantJoined') {
           setParticipants((prev) => {
             const p = msg.participant;
@@ -498,6 +532,13 @@ export function CallJoin() {
             <p className={`${styles.sub} ${styles.podcastEpisode}`}>
               {joinInfo.podcast.title} - {joinInfo.episode.title}
             </p>
+          )}
+          {recordingInProgress && (
+            <div className={styles.recordingBanner} role="status" aria-live="polite">
+              <span className={styles.recordingIndicator} aria-hidden />
+              <span className={styles.recordingLabel}>Recording</span>
+              <span className={styles.recordingDuration}>{formatDurationHMS(recordingSeconds)}</span>
+            </div>
           )}
           <h1 className={styles.cardTitle}>You're In The Call</h1>
           {audioUnavailable && (

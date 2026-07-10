@@ -30,6 +30,16 @@ export interface CallSessionResponse {
   roomId?: string;
   hostToken?: string;
   webrtcUnavailable?: boolean;
+  /** Current participants (host only). */
+  participants?: Array<{
+    id: string;
+    name: string;
+    isHost: boolean;
+    joinedAt: number;
+    muted?: boolean;
+    mutedByHost?: boolean;
+    disconnected?: boolean;
+  }>;
   /** Segment IDs being processed (recording stopped, not yet added). Host only. */
   pendingSegmentIds?: string[];
   /** True when recording is actively in progress (host has started, not yet stopped). */
@@ -62,6 +72,13 @@ export function getCallByCode(code: string): Promise<CallByCodeResponse> {
 
 export function callWebSocketUrl(): string {
   if (typeof window === 'undefined') return '';
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/api/call/ws`;
+  const { hostname, port, protocol, host } = window.location;
+  // Vite dev server (5173): WS proxy is flaky; connect straight to the API port.
+  const isViteDev = import.meta.env.DEV && port === '5173';
+  if (isViteDev) {
+    const apiPort = import.meta.env.VITE_API_PORT || '3001';
+    return `ws://${hostname}:${apiPort}/api/call/ws`;
+  }
+  const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${wsProtocol}//${host}/api/call/ws`;
 }

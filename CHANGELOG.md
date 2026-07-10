@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.7.0 - 2026-07-10
+
+- **Group call recording:** When a guest backgrounds the tab or unmutes after mute, the client now creates a new WebRTC producer instead of resuming the old one so multitrack segments stay time-aligned.
+- **Group call participants:** Fixed host participant list Strict Mode remount cleanup.
+- **Group call guests:** Recording banner with elapsed time above "You're In The Call" on the guest join page.
+- **Group call:** Increased host remount grace period (500ms → 2s) so page refreshes are less likely to end the call.
+
 ## v1.6.6 - 2026-07-09
 
 - **Episode editor:** Redesigned the Final Episode box with a collapsible publishing panel, action tile grid for build/export tools, and improved mobile layout.

@@ -150,6 +150,7 @@ export function EpisodeEditorContent({
         roomId: activeSession.roomId,
         hostToken: activeSession.hostToken,
         webrtcUnavailable: activeSession.webrtcUnavailable,
+        participants: activeSession.participants,
       }
     : null;
 
@@ -194,12 +195,6 @@ export function EpisodeEditorContent({
 
   const handleRecordingStateChange = useCallback(
     (args?: { pendingSegmentIds?: string[]; recordingActive?: boolean }) => {
-      console.log('[EpisodeEditorContent] handleRecordingStateChange', {
-        pendingSegmentIds: args?.pendingSegmentIds,
-        recordingActive: args?.recordingActive,
-        willSetPending: args?.pendingSegmentIds !== undefined,
-        willSetActive: args?.recordingActive !== undefined,
-      });
       if (args?.pendingSegmentIds !== undefined) {
         setWsPendingSegmentIds(args.pendingSegmentIds);
       }
@@ -581,17 +576,6 @@ export function EpisodeEditorContent({
                     ? (sessionCleared ? [] : (wsPending ?? sessionPending ?? []))
                     : (sessionPending ?? []);
                 const filtered = raw.filter((segId) => !segments.some((s) => s.id === segId));
-                if (raw.length > 0 || filtered.length > 0) {
-                  console.log('[EpisodeEditorContent] processingSegmentIds', {
-                    callPanelOpenInThisTab,
-                    wsPendingSegmentIds: wsPending,
-                    activeSessionPending: activeSession?.pendingSegmentIds ?? null,
-                    sessionCleared,
-                    raw,
-                    segmentIds: segments.map((s) => s.id),
-                    filtered,
-                  });
-                }
                 return filtered;
               })()}
               onAddRecord={() => setShowRecord(true)}
@@ -884,6 +868,8 @@ export function EpisodeEditorContent({
           webrtcUrl={activeCall.webrtcUrl}
           roomId={activeCall.roomId}
           hostToken={activeCall.hostToken}
+          initialParticipants={activeCall.participants}
+          episodeId={id}
           mediaUnavailable={!activeCall.webrtcUrl || !activeCall.roomId || activeCall.webrtcUnavailable}
           onEnd={handleCallEnded}
           onCallEnded={handleCallEnded}
