@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.3 - 2026-07-11
+
+- **Custom domain Open Graph:** Fixed linking-domain homepages serving default HarborFM meta instead of podcast-specific tags.
+
 ## v1.7.2 - 2026-07-11
 
 - **Public feed Open Graph:** Podcast and episode feed pages now serve podcast-specific meta tags in the initial HTML (title, description, `og:url`, `og:site_name`, and cover image) so link previews and view-source work for crawlers—not just after React loads.

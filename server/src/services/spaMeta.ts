@@ -33,6 +33,18 @@ const RESERVED_SINGLE_SEGMENTS = new Set([
   "episodes",
 ]);
 
+function requestHost(request: FastifyRequest): string {
+  const forwarded = request.headers["x-forwarded-host"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim().split(":")[0];
+  }
+  const hostHeader = request.headers.host;
+  if (typeof hostHeader === "string" && hostHeader.trim()) {
+    return hostHeader.split(",")[0].trim().split(":")[0];
+  }
+  return (request.hostname ?? "").split(":")[0];
+}
+
 function getSiteName(): string {
   const settings = readSettings();
   const whiteLabel = String(
@@ -138,10 +150,7 @@ export function resolveSpaMetaForRequest(
   if (!readSettings().public_feeds_enabled) return null;
 
   const pathname = request.url.split("?")[0];
-  const host =
-    (typeof request.headers.host === "string"
-      ? request.headers.host.split(",")[0]
-      : request.hostname) ?? request.hostname;
+  const host = requestHost(request);
   const route = resolveFeedRoute(pathname, host);
   if (!route) return null;
 

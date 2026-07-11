@@ -307,6 +307,8 @@ async function main() {
     await app.register(fastifyStatic, {
       root: publicDir,
       prefix: "/",
+      // Let the SPA notFoundHandler serve index.html so we can inject OG meta.
+      index: false,
     });
 
     // SPA fallback: serve index.html for non-API routes that don't match a file (sendFile is added by @fastify/static)
