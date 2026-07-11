@@ -21,6 +21,7 @@ import {
   markSegmentRecordFailed,
 } from "../../services/segmentFromRecording.js";
 import { RECORD_MIN_FREE_BYTES } from "../../config.js";
+import { getGuestCallShowNotesPayload } from "../showNotes/broadcast.js";
 import {
   getClientIp,
   getIpBan,
@@ -333,6 +334,7 @@ export function handleGuestJoin(
     participants: session.participants,
     recordingInProgress: session.recordingInProgress === true,
     recordingStartedAtEpochMs: session.recordingStartedAtEpochMs,
+    ...getGuestCallShowNotesPayload(session.episodeId),
   };
   if (session.hostDisconnectedAt != null && session.hostDisconnectGraceMs != null) {
     webrtcJoinedPayload.hostDisconnected = true;

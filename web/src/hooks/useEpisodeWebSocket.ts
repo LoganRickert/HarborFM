@@ -59,6 +59,9 @@ export function useEpisodeWebSocket(
             case 'callSessionUpdated':
               queryClient.invalidateQueries({ queryKey: ['call-session', episodeId] });
               break;
+            case 'showNotesUpdated':
+              queryClient.invalidateQueries({ queryKey: ['show-notes', episodeId] });
+              break;
             case 'recordingStarted': {
               const rec = msg as { recordingInProgress?: boolean; pendingSegmentIds?: string[] };
               queryClient.setQueryData(

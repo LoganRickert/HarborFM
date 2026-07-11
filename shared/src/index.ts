@@ -15,3 +15,4 @@ export * from './schemas/segment.js';
 export * from './schemas/settings.js';
 export * from './schemas/setup.js';
 export * from './schemas/call.js';
+export * from './schemas/showNotes.js';

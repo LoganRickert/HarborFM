@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+import { useAutoResizeTextarea } from '../../../hooks/useAutoResizeTextarea';
 import styles from '../../../pages/EpisodeEditor.module.css';
 
 export interface SegmentAskTabProps {
@@ -19,6 +21,9 @@ export function SegmentAskTab({
   isRateLimitMessage,
   askMutationPending,
 }: SegmentAskTabProps) {
+  const responseRef = useRef<HTMLTextAreaElement>(null);
+  useAutoResizeTextarea(responseRef, askResponse ?? '', { minHeight: 80 });
+
   return (
     <div className={styles.transcriptAsk}>
       <form onSubmit={onAskSubmit} className={styles.transcriptAskForm}>
@@ -45,7 +50,16 @@ export function SegmentAskTab({
           {askError}
         </p>
       )}
-      {askResponse != null && <div className={styles.transcriptAskResponse}>{askResponse}</div>}
+      {askResponse != null && (
+        <textarea
+          ref={responseRef}
+          readOnly
+          className={styles.transcriptAskResponse}
+          value={askResponse}
+          aria-label="Answer"
+          rows={4}
+        />
+      )}
     </div>
   );
 }

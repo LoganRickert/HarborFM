@@ -169,6 +169,9 @@ export const episodes = sqliteTable(
     subscriberOnly: integer("subscriber_only", { mode: "boolean" }).default(false),
     finalMarkers: text("final_markers"),
     videoFinalPath: text("video_final_path"),
+    showNotesGuestVisible: integer("show_notes_guest_visible", { mode: "boolean" })
+      .notNull()
+      .default(false),
   },
   (table) => [
     unique("episodes_podcast_guid").on(table.podcastId, table.guid),
@@ -272,6 +275,26 @@ export const episodeSegments = sqliteTable(
     disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
   },
   (table) => [index("idx_episode_segments_episode").on(table.episodeId)],
+);
+
+// ---------------------------------------------------------------------------
+// Episode show notes (064)
+// ---------------------------------------------------------------------------
+export const episodeShowNotesItems = sqliteTable(
+  "episode_show_notes_items",
+  {
+    id: text("id").primaryKey(),
+    episodeId: text("episode_id")
+      .notNull()
+      .references(() => episodes.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    text: text("text").notNull().default(""),
+    durationMin: integer("duration_min"),
+    checked: integer("checked", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [index("idx_episode_show_notes_items_episode").on(table.episodeId)],
 );
 
 // ---------------------------------------------------------------------------

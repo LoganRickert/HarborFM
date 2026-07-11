@@ -22,6 +22,7 @@ import { EpisodeDetailsForm, type EpisodeDetailsTab } from './EpisodeDetailsForm
 import { GenerateFinalBar } from './GenerateFinalBar';
 import { EpisodeCastCard } from './EpisodeCastCard';
 import { EpisodeSectionsPanel } from './EpisodeSectionsPanel';
+import { ShowNotesPanel } from './ShowNotesPanel';
 import { RecordModal } from './RecordModal';
 import { LibraryModal } from './LibraryModal';
 import { DeleteEpisodeConfirmDialog } from './DeleteEpisodeConfirmDialog';
@@ -559,6 +560,7 @@ export function EpisodeEditorContent({
           </button>
         </div>
       )}
+      <ShowNotesPanel episodeId={id} canEdit={canEditSegments && !segmentReadOnly} />
       <div className={styles.card}>
         <EpisodeSectionsPanel
               episodeId={id}

@@ -376,8 +376,137 @@
 
 .callActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.showNotesBtn {
+  flex: 1;
+  min-width: min(100%, 8rem);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text, #e5e5e5);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius, 8px);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.showNotesBtn:hover {
+  border-color: var(--accent, #00d4aa);
+  color: var(--accent, #00d4aa);
+}
+
+.showNotesOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.showNotesPopover {
+  background: var(--bg-elevated, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius, 8px);
+  padding: 1.25rem;
+  max-width: 420px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.showNotesPopoverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.showNotesPopoverTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text, #e5e5e5);
+}
+
+.showNotesPopoverClose {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  color: var(--text-muted, #888);
+}
+
+.showNotesPopoverClose:hover {
+  background: var(--bg-muted, #252525);
+  color: var(--text, #e5e5e5);
+}
+
+.showNotesPopoverBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.showNotesEmpty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+}
+
+.showNotesGuestList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.showNotesGuestItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+
+.showNotesGuestDuration {
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent, #00d4aa);
+  padding: 0.15rem 0.4rem;
+  background: rgba(0, 212, 170, 0.12);
+  border-radius: 4px;
+}
+
+.showNotesGuestText {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--text, #e5e5e5);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .iconBtn {

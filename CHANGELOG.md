@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7.1 - 2026-07-11
+
+- **Episode editor:** Added a collapsible Show Notes panel for planning call topics: add topics with optional duration (5–30 min), mark items as discussed, drag to reorder, and choose whether guests can see notes (host only or share with guests). Collapsed by default; expand with the chevron in the header.
+- **Group call guests:** When the host enables guest visibility, participants on the call can open **See Show Notes** to view planned topics and durations in a dialog; notes update live over the call WebSocket.
+- **Section editor:** Ask tab responses now render in a read-only text field instead of plain text, so clicking in and using Ctrl+A / copy selects only the answer—not the whole page.
+
+![Show Notes panel](screenshots/harborfm-1.7.1-1.jpg)
+
 ## v1.7.0 - 2026-07-10
 
 - **Group call recording:** When a guest backgrounds the tab or unmutes after mute, the client now creates a new WebRTC producer instead of resuming the old one so multitrack segments stay time-aligned.

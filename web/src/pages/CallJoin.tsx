@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User, Settings, X } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User, Settings, X, List } from 'lucide-react';
+import type { ShowNotesItem } from '@harborfm/shared';
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
 import { getAgcKey, getMicVolumeKey } from '../constants/micSettings';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
@@ -10,6 +11,7 @@ import { AudioUnlockProvider } from '../components/GroupCall/AudioUnlockContext'
 import { CallChatPanel, type ChatMessage } from '../components/GroupCall/CallChatPanel';
 import { CallJoinHeader } from '../components/CallJoinHeader';
 import { LeaveCallConfirmDialog } from '../components/GroupCall/LeaveCallConfirmDialog';
+import { CallShowNotesDialog } from '../components/GroupCall/CallShowNotesDialog';
 import type { CallJoinInfo } from '../api/call';
 import { createAudioLevelProcessor } from '../utils/audioLevel';
 import { formatDurationHMS } from '../utils/format';
@@ -65,6 +67,9 @@ export function CallJoin() {
   const [recordingInProgress, setRecordingInProgress] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const recordingEpochRef = useRef<number | null>(null);
+  const [showNotesGuestVisible, setShowNotesGuestVisible] = useState(false);
+  const [showNotesItems, setShowNotesItems] = useState<ShowNotesItem[]>([]);
+  const [showNotesOpen, setShowNotesOpen] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
   const selfListenGainRef = useRef<GainNode | null>(null);
   const micVolumeGainRef = useRef<GainNode | null>(null);
@@ -116,6 +121,12 @@ export function CallJoin() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [recordingInProgress]);
+
+  const applyShowNotesState = useCallback((visible: boolean, items: ShowNotesItem[]) => {
+    setShowNotesGuestVisible(visible);
+    setShowNotesItems(items);
+    if (!visible || items.length === 0) setShowNotesOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!hostDisconnected) {
@@ -386,6 +397,10 @@ export function CallJoin() {
           }
           if (msg.webrtcUrl) setWebrtcUrl(msg.webrtcUrl);
           if (msg.roomId) setWebrtcRoomId(msg.roomId);
+          applyShowNotesState(
+            msg.showNotesGuestVisible === true,
+            Array.isArray(msg.showNotesItems) ? (msg.showNotesItems as ShowNotesItem[]) : [],
+          );
         } else if (msg.type === 'participants') {
           const list = msg.participants ?? [];
           setParticipants(list);
@@ -402,6 +417,11 @@ export function CallJoin() {
           );
         } else if (msg.type === 'recordingStopped') {
           applyRecordingState(false);
+        } else if (msg.type === 'showNotesUpdated') {
+          applyShowNotesState(
+            msg.guestVisible === true,
+            Array.isArray(msg.showNotesItems) ? (msg.showNotesItems as ShowNotesItem[]) : [],
+          );
         } else if (msg.type === 'participantJoined') {
           setParticipants((prev) => {
             const p = msg.participant;
@@ -557,6 +577,17 @@ export function CallJoin() {
             </p>
           )}
           <div className={styles.callActions}>
+            {showNotesGuestVisible && showNotesItems.some((i) => !i.checked) && (
+              <button
+                type="button"
+                className={styles.showNotesBtn}
+                onClick={() => setShowNotesOpen(true)}
+                aria-label="See show notes"
+              >
+                <List size={18} strokeWidth={2} aria-hidden />
+                <span className={styles.callActionLabel}>See Show Notes</span>
+              </button>
+            )}
             <button
               type="button"
               className={styles.iconBtn}
@@ -709,6 +740,11 @@ export function CallJoin() {
           open={leaveConfirmOpen}
           onOpenChange={setLeaveConfirmOpen}
           onConfirm={handleLeave}
+        />
+        <CallShowNotesDialog
+          open={showNotesOpen}
+          onClose={() => setShowNotesOpen(false)}
+          items={showNotesItems.filter((i) => !i.checked)}
         />
       </>
       </AudioUnlockProvider>
