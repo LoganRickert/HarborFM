@@ -1,5 +1,5 @@
 import "dotenv/config";
-import Fastify from "fastify";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import cookie from "@fastify/cookie";
@@ -304,21 +304,7 @@ async function main() {
   // In production, serve the web app from PUBLIC_DIR (e.g. Docker copies web dist here)
   const publicDir = resolve(CONFIG_PUBLIC_DIR);
   if (existsSync(publicDir)) {
-    await app.register(fastifyStatic, {
-      root: publicDir,
-      prefix: "/",
-      // Let the SPA notFoundHandler serve index.html so we can inject OG meta.
-      index: false,
-    });
-
-    // SPA fallback: serve index.html for non-API routes that don't match a file (sendFile is added by @fastify/static)
-    app.setNotFoundHandler((request, reply) => {
-      if (
-        request.url === `/${API_PREFIX}` ||
-        request.url.startsWith(`/${API_PREFIX}/`)
-      ) {
-        return reply.status(404).send({ error: "Not found" });
-      }
+    const sendSpaIndex = (request: FastifyRequest, reply: FastifyReply) => {
       const pathname = request.url.split("?")[0];
       if (pathname === "/login" || pathname === "/login/2fa-setup") {
         reply.header("Cache-Control", "no-store");
@@ -330,6 +316,25 @@ async function main() {
         return reply.send(injectSpaMetaHtml(html, spaMeta));
       }
       return reply.sendFile("index.html");
+    };
+
+    // Custom-domain homepages need OG meta injection; register before static so `/` is not auto-served raw index.html.
+    app.get("/", (request, reply) => sendSpaIndex(request, reply));
+
+    await app.register(fastifyStatic, {
+      root: publicDir,
+      prefix: "/",
+    });
+
+    // SPA fallback: serve index.html for non-API routes that don't match a file (sendFile is added by @fastify/static)
+    app.setNotFoundHandler((request, reply) => {
+      if (
+        request.url === `/${API_PREFIX}` ||
+        request.url.startsWith(`/${API_PREFIX}/`)
+      ) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      return sendSpaIndex(request, reply);
     });
   }
 
