@@ -2,12 +2,13 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useParams } from 'react-router-dom';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublicPodcast, getPublicEpisodes, getPublicConfig } from '../api/public';
+import { getPublicPodcast, getPublicEpisodes, getPublicConfig, getPublicPodcastArtworkUrl } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
 import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedbackModal } from '../components/FeedbackModal';
 import { useMeta } from '../hooks/useMeta';
+import { getSiteDisplayName } from '../utils/siteBranding';
 import {
   FeedSiteHeader,
   FeedPodcastHeader,
@@ -108,10 +109,22 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     });
   }, [allEpisodes, sortNewestFirst]);
 
+  const siteName = getSiteDisplayName(publicConfig?.whiteLabel);
+  const podcastArtwork = podcast ? getPublicPodcastArtworkUrl(podcast) : null;
+  const pageUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}`
+      : undefined;
+
   // Update meta tags
+  const isCustomDomain = !!publicConfig?.customFeedSlug;
   useMeta({
-    title: podcast ? `${podcast.title} - HarborFM` : undefined,
-    description: podcast?.description || (podcast ? `Listen to ${podcast.title}${podcast.authorName ? ` by ${podcast.authorName}` : ''} on HarborFM.` : undefined),
+    title: podcast ? `${podcast.title} | ${siteName}` : undefined,
+    siteName: podcast ? siteName : undefined,
+    description: podcast?.description?.trim() || undefined,
+    image: podcastArtwork ?? undefined,
+    url: podcast ? pageUrl : undefined,
+    favicon: isCustomDomain ? podcastArtwork : undefined,
   });
 
   if (!podcastSlug) return null;

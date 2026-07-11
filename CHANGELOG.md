@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.7.2 - 2026-07-11
+
+- **Public feed Open Graph:** Podcast and episode feed pages now serve podcast-specific meta tags in the initial HTML (title, description, `og:url`, `og:site_name`, and cover image) so link previews and view-source work for crawlers—not just after React loads.
+- **Custom domains:** Feed pages on a linking domain use the podcast cover as the favicon when available.
+
 ## v1.7.1 - 2026-07-11
 
 - **Episode editor:** Added a collapsible Show Notes panel for planning call topics: add topics with optional duration (5–30 min), mark items as discussed, drag to reorder, and choose whether guests can see notes (host only or share with guests). Collapsed by default; expand with the chevron in the header.

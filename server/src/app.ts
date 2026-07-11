@@ -10,6 +10,8 @@ import fastifyStatic from "@fastify/static";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import { join, resolve } from "path";
+import { injectSpaMetaHtml } from "@harborfm/shared";
+import { resolveSpaMetaForRequest } from "./services/spaMeta.js";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD_HASH,
@@ -318,6 +320,12 @@ async function main() {
       const pathname = request.url.split("?")[0];
       if (pathname === "/login" || pathname === "/login/2fa-setup") {
         reply.header("Cache-Control", "no-store");
+      }
+      const spaMeta = resolveSpaMetaForRequest(request);
+      if (spaMeta) {
+        const html = readFileSync(join(publicDir, "index.html"), "utf8");
+        reply.type("text/html");
+        return reply.send(injectSpaMetaHtml(html, spaMeta));
       }
       return reply.sendFile("index.html");
     });

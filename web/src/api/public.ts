@@ -151,6 +151,38 @@ export type { PublicConfig, PublicEpisodesResponse, PublicPodcastsListQuery, Pub
 // PublicEpisode with auth may include private URLs (same shape; server may send null when unauthenticated)
 export type PublicEpisodeWithAuth = PublicEpisode;
 
+export function getPublicPodcastArtworkUrl(podcast: {
+  artworkUrl?: string | null;
+  artworkFilename?: string | null;
+  id: string;
+}): string | null {
+  if (podcast.artworkUrl) return podcast.artworkUrl;
+  if (podcast.artworkFilename) {
+    return `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`;
+  }
+  return null;
+}
+
+export function getPublicEpisodeArtworkUrl(
+  episode: {
+    artworkUrl?: string | null;
+    artworkFilename?: string | null;
+    id: string;
+    podcastId: string;
+  },
+  podcast: {
+    artworkUrl?: string | null;
+    artworkFilename?: string | null;
+    id: string;
+  },
+): string | null {
+  if (episode.artworkUrl) return episode.artworkUrl;
+  if (episode.artworkFilename) {
+    return `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`;
+  }
+  return getPublicPodcastArtworkUrl(podcast);
+}
+
 export function getPublicConfig() {
   return apiGet<PublicConfig>(`/public/config`);
 }

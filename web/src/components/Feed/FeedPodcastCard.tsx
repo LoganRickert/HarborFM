@@ -2,16 +2,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Radio, Lock, ArrowUpRight } from 'lucide-react';
 import { FeedPodcastCardProps } from '../../types/feed';
+import { getPublicPodcastArtworkUrl } from '../../api/public';
 import { SubscriptionInfoDialog } from './SubscriptionInfoDialog';
 import styles from './FeedPodcastCard.module.css';
-
-function podcastArtworkUrl(podcast: { artworkUrl?: string | null; artworkFilename?: string | null; id: string }): string | null {
-  if (podcast.artworkUrl) return podcast.artworkUrl;
-  if (podcast.artworkFilename) {
-    return `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`;
-  }
-  return null;
-}
 
 export function FeedPodcastCard({ podcast, showLockIcon }: FeedPodcastCardProps) {
   const [showLockInfo, setShowLockInfo] = useState(false);
@@ -21,7 +14,7 @@ export function FeedPodcastCard({ podcast, showLockIcon }: FeedPodcastCardProps)
     e.stopPropagation();
     setShowLockInfo(true);
   };
-  const artwork = podcastArtworkUrl(podcast);
+  const artwork = getPublicPodcastArtworkUrl(podcast);
   const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
   const hasSubscriberFeatures = Boolean(podcast.subscriberOnlyFeedEnabled);
 

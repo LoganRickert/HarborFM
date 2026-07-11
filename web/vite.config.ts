@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { spaMetaPlugin } from './vite-spa-meta-plugin';
 
 export default defineConfig(({ mode }) => {
   const isStaging = mode === 'staging';
   return {
-    plugins: [react()],
+    plugins: [spaMetaPlugin(), react()],
     resolve: {
       alias: { '@': path.resolve(__dirname, 'src') },
     },

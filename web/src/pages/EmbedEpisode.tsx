@@ -6,6 +6,7 @@ import {
   getPublicConfig,
   getPublicPodcast,
   getPublicEpisode,
+  getPublicPodcastArtworkUrl,
   publicEpisodeWaveformUrl,
   type PublicEpisodeWithAuth,
 } from '../api/public';
@@ -16,6 +17,7 @@ import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedSubscriberOnlyMessage } from '../components/Feed';
 import { FeedPlaybackControls } from '../components/Feed/FeedPlaybackControls';
 import { useFeedAudioPlayer } from '../hooks/useFeedAudioPlayer';
+import { useMeta } from '../hooks/useMeta';
 import { WaveformCanvas } from './EpisodeEditor/WaveformCanvas';
 import { formatSeasonEpisode, formatSeasonEpisodeLong } from '../utils/format';
 import { getSiteDisplayName } from '../utils/siteBranding';
@@ -65,6 +67,10 @@ export function EmbedEpisode() {
     document.documentElement.classList.add('embed-iframe');
     return () => document.documentElement.classList.remove('embed-iframe');
   }, []);
+
+  useMeta({
+    favicon: isCustomDomain && podcast ? getPublicPodcastArtworkUrl(podcast) : undefined,
+  });
 
   const audioUrl = episode?.privateAudioUrl || episode?.audioUrl || null;
   const durationSec = episode?.audioDurationSec ?? 0;

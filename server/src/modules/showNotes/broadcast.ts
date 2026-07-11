@@ -5,7 +5,7 @@ import * as repo from "./repo.js";
 
 /** Push show notes to episode collaborators and active call guests. */
 export function broadcastShowNotesUpdate(episodeId: string): void {
-  const { guestVisible, items } = repo.getShowNotesForEpisode(episodeId);
+  const { guestVisible } = repo.getShowNotesForEpisode(episodeId);
   broadcastToEpisode(episodeId, { type: "showNotesUpdated" });
   const session = getAnyActiveSessionForEpisode(episodeId);
   if (!session) return;

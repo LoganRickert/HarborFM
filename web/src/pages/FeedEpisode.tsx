@@ -7,6 +7,8 @@ import {
   getPublicEpisode,
   getPublicEpisodeCast,
   getPublicConfig,
+  getPublicPodcastArtworkUrl,
+  getPublicEpisodeArtworkUrl,
   publicEpisodeWaveformUrl,
   type PublicEpisodeWithAuth,
 } from '../api/public';
@@ -15,6 +17,7 @@ import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedbackModal } from '../components/FeedbackModal';
 import { useMeta } from '../hooks/useMeta';
+import { getSiteDisplayName } from '../utils/siteBranding';
 import { useFeedAudioPlayer } from '../hooks/useFeedAudioPlayer';
 import { WaveformCanvas } from './EpisodeEditor/WaveformCanvas';
 import {
@@ -108,9 +111,22 @@ export function FeedEpisode({
     persistPlaybackPosition: true,
   });
 
+  const siteName = getSiteDisplayName(publicConfig?.whiteLabel);
+  const episodeArtwork =
+    episode && podcast ? getPublicEpisodeArtworkUrl(episode, podcast) : null;
+  const podcastArtwork = podcast ? getPublicPodcastArtworkUrl(podcast) : null;
+  const pageUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}`
+      : undefined;
+
   useMeta({
-    title: episode && podcast ? `${episode.title} - ${podcast.title} - HarborFM` : undefined,
-    description: episode?.description || (episode && podcast ? `Listen to ${episode.title} from ${podcast.title}${podcast.authorName ? ` by ${podcast.authorName}` : ''} on HarborFM.` : undefined),
+    title: episode && podcast ? `${episode.title} | ${podcast.title} | ${siteName}` : undefined,
+    siteName: podcast ? siteName : undefined,
+    description: episode?.description?.trim() || podcast?.description?.trim() || undefined,
+    image: episodeArtwork ?? undefined,
+    url: episode && podcast ? pageUrl : undefined,
+    favicon: publicConfig?.customFeedSlug ? podcastArtwork : undefined,
   });
 
   if (!podcastSlug || !episodeSlug) return null;

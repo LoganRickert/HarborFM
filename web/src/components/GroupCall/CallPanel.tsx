@@ -104,6 +104,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
   const [soundboardMinimized, setSoundboardMinimized] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsMinimized, setSettingsMinimized] = useState(false);
+  const initialParticipantsRef = useRef(initialParticipants);
+  useEffect(() => {
+    initialParticipantsRef.current = initialParticipants;
+  }, [initialParticipants]);
   const [deviceId, setDeviceId] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DEVICE_ID_KEY) || '';
@@ -292,9 +296,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
     setRoomIdFromWs(undefined);
     setHostTokenFromWs(undefined);
     const hostName = localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
+    const hydratedParticipants = initialParticipantsRef.current;
     const seed =
-      initialParticipants && initialParticipants.length > 0
-        ? initialParticipants
+      hydratedParticipants && hydratedParticipants.length > 0
+        ? hydratedParticipants
         : [defaultHostParticipant(hostName)];
     setParticipants(normalizeParticipants(seed));
     let cancelled = false;
@@ -518,7 +523,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       wsRef.current.close();
     }
     onEnd();
-  }, [onEnd, leaveRoom]);
+  }, [onEnd, leaveRoom, sessionId]);
 
   useEffect(() => {
     onRegisterEndCall?.(handleEndCall);

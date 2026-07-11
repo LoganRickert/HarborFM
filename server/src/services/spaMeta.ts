@@ -1,0 +1,203 @@
+import type { FastifyRequest } from "fastify";
+import {
+  DEFAULT_OG_IMAGE_PATH,
+  type SpaPageMeta,
+} from "@harborfm/shared";
+import { APP_NAME, API_PREFIX } from "../config.js";
+import { readSettings } from "../modules/settings/index.js";
+import * as repo from "../modules/public/repo.js";
+import { publicEpisodeDto, publicPodcastDto } from "../modules/public/utils.js";
+import { getPodcastByHost } from "./dns/custom-domain-resolver.js";
+
+const RESERVED_SINGLE_SEGMENTS = new Set([
+  "login",
+  "register",
+  "setup",
+  "feed",
+  "embed",
+  "api",
+  "privacy",
+  "terms",
+  "contact",
+  "verify-email",
+  "complete-account",
+  "reset-password",
+  "call",
+  "library",
+  "profile",
+  "users",
+  "messages",
+  "settings",
+  "dashboard",
+  "podcasts",
+  "episodes",
+]);
+
+function getSiteName(): string {
+  const settings = readSettings();
+  const whiteLabel = String(
+    (settings as { white_label?: string }).white_label ?? "",
+  ).trim();
+  return whiteLabel || APP_NAME;
+}
+
+function requestOrigin(request: FastifyRequest): string {
+  const protoHeader = request.headers["x-forwarded-proto"];
+  const proto =
+    (typeof protoHeader === "string"
+      ? protoHeader.split(",")[0]
+      : request.protocol) ?? "http";
+  const hostHeader =
+    request.headers["x-forwarded-host"] ??
+    request.headers.host ??
+    request.hostname;
+  const host =
+    (typeof hostHeader === "string"
+      ? hostHeader.split(",")[0]
+      : request.hostname) ?? request.hostname;
+  return `${proto}://${host}`;
+}
+
+function absoluteUrl(origin: string, pathOrUrl: string): string {
+  if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
+    return pathOrUrl;
+  }
+  return new URL(pathOrUrl, origin).href;
+}
+
+function podcastCoverUrl(
+  origin: string,
+  dto: Record<string, unknown>,
+): string | null {
+  if (dto.artwork_url) {
+    return absoluteUrl(origin, String(dto.artwork_url));
+  }
+  if (dto.artwork_filename && dto.id) {
+    return absoluteUrl(
+      origin,
+      `/${API_PREFIX}/public/artwork/${String(dto.id)}/${encodeURIComponent(String(dto.artwork_filename))}`,
+    );
+  }
+  return null;
+}
+
+function episodeCoverUrl(
+  origin: string,
+  podcastId: string,
+  dto: Record<string, unknown>,
+): string | null {
+  if (dto.artwork_url) {
+    return absoluteUrl(origin, String(dto.artwork_url));
+  }
+  if (dto.artwork_filename && dto.id) {
+    return absoluteUrl(
+      origin,
+      `/${API_PREFIX}/public/artwork/${podcastId}/episodes/${String(dto.id)}/${encodeURIComponent(String(dto.artwork_filename))}`,
+    );
+  }
+  return null;
+}
+
+function resolveFeedRoute(
+  pathname: string,
+  host: string,
+): { podcastSlug: string; episodeSlug?: string } | null {
+  const clean = pathname.split("?")[0].replace(/\/$/, "") || "/";
+
+  const feedMatch = clean.match(/^\/feed\/([^/]+)(?:\/([^/]+))?$/);
+  if (feedMatch) {
+    return {
+      podcastSlug: decodeURIComponent(feedMatch[1]),
+      episodeSlug: feedMatch[2]
+        ? decodeURIComponent(feedMatch[2])
+        : undefined,
+    };
+  }
+
+  const hostMatch = getPodcastByHost(host);
+  if (!hostMatch) return null;
+
+  if (clean === "/" || clean === "") {
+    return { podcastSlug: hostMatch.slug };
+  }
+
+  const segmentMatch = clean.match(/^\/([^/]+)$/);
+  if (!segmentMatch) return null;
+  const segment = decodeURIComponent(segmentMatch[1]).toLowerCase();
+  if (RESERVED_SINGLE_SEGMENTS.has(segment)) return null;
+
+  return {
+    podcastSlug: hostMatch.slug,
+    episodeSlug: decodeURIComponent(segmentMatch[1]),
+  };
+}
+
+export function resolveSpaMetaForRequest(
+  request: FastifyRequest,
+): SpaPageMeta | null {
+  if (!readSettings().public_feeds_enabled) return null;
+
+  const pathname = request.url.split("?")[0];
+  const host =
+    (typeof request.headers.host === "string"
+      ? request.headers.host.split(",")[0]
+      : request.hostname) ?? request.hostname;
+  const route = resolveFeedRoute(pathname, host);
+  if (!route) return null;
+
+  const origin = requestOrigin(request);
+  const siteName = getSiteName();
+  const defaultImage = absoluteUrl(origin, DEFAULT_OG_IMAGE_PATH);
+  const pageUrl = absoluteUrl(origin, pathname);
+
+  const podcastRow = repo.getPodcastBySlug(route.podcastSlug);
+  if (!podcastRow) return null;
+  if (
+    podcastRow.publicFeedDisabled === 1 &&
+    podcastRow.subscriberOnlyFeedEnabled !== 1
+  ) {
+    return null;
+  }
+
+  const podcastDto = publicPodcastDto(podcastRow) as Record<string, unknown>;
+  const podcastCover = podcastCoverUrl(origin, podcastDto) ?? defaultImage;
+
+  if (!route.episodeSlug) {
+    return {
+      title: `${String(podcastRow.title)} | ${siteName}`,
+      description: String(podcastRow.description ?? "").trim(),
+      siteName,
+      url: pageUrl,
+      image: podcastCover,
+    };
+  }
+
+  const podcastMeta = repo.getPodcastMetaForFeed(route.podcastSlug);
+  if (!podcastMeta) return null;
+
+  const episodeRow = repo.getPublicEpisodeBySlug(
+    podcastMeta.id,
+    route.episodeSlug,
+    podcastMeta.showScheduledEpisodes === 1,
+  );
+  if (!episodeRow) return null;
+
+  const episodeDto = publicEpisodeDto(podcastMeta.id, episodeRow, {
+    podcastSlug: route.podcastSlug,
+  }) as Record<string, unknown>;
+  const episodeCover =
+    episodeCoverUrl(origin, podcastMeta.id, episodeDto) ??
+    podcastCoverUrl(origin, podcastDto) ??
+    defaultImage;
+  const description =
+    String(episodeDto.description ?? "").trim() ||
+    String(podcastRow.description ?? "").trim();
+
+  return {
+    title: `${String(episodeRow.title)} | ${String(podcastRow.title)} | ${siteName}`,
+    description,
+    siteName,
+    url: pageUrl,
+    image: episodeCover,
+  };
+}
