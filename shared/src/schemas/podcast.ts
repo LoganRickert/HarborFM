@@ -55,37 +55,63 @@ export const podcastCreateSchema = z.object({
   discordUrl: nullableOptionalUrl,
 });
 
-/** Partial of create schema plus optional per-podcast limits and flags. */
-export const podcastUpdateSchema = podcastCreateSchema.partial().extend({
-  maxCollaborators: z.number().int().min(0).nullable().optional(),
-  unlisted: z.union([z.literal(0), z.literal(1)]).optional(),
-  /** Accept boolean or 0/1 (e.g. from GET response or form state). */
-  subscriberOnlyFeedEnabled: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
-  /** When true, public RSS and public episode list/page do not load (subscriber-only show). Accept boolean or 0/1. */
-  publicFeedDisabled: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
-  /** When true, show unapproved reviews on the public feed (default true). */
-  allowUnapprovedReviews: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
-  /** When true, only subscribers can leave reviews (requires subscriberOnlyFeedEnabled). Accept boolean or 0/1. */
-  subscriberOnlyReviews: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
-  /** When true, only subscribers can see/use Message button and submit contact for this show (requires subscriberOnlyFeedEnabled). Accept boolean or 0/1. */
-  subscriberOnlyMessages: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
-  /** When true, episodes scheduled for a future date appear on the public feed with a placeholder. Accept boolean or 0/1. */
-  showScheduledEpisodes: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
-  /** DNS: link domain (hostname only, no https://). */
-  linkDomain: z.string().nullable().optional(),
-  /** DNS: managed domain (hostname only, no https://). */
-  managedDomain: z.string().nullable().optional(),
-  /** DNS: managed sub-domain (reject www and @). */
-  managedSubDomain: z
-    .string()
-    .nullable()
-    .optional()
-    .refine((v) => v == null || v === '' || (v !== 'www' && v !== '@'), {
-      message: 'Reserved values www and @ are not allowed',
-    }),
-  /** DNS: Cloudflare API key (plaintext; server encrypts before storing). Send null to clear. */
-  cloudflareApiKey: z.string().nullable().optional(),
-});
+/**
+ * Partial update schema. Do not use podcastCreateSchema.partial() alone: Zod 4 still
+ * applies .default() for omitted keys, which would wipe description and other fields
+ * on narrow PATCHes (e.g. enabling subscriber tokens).
+ */
+export const podcastUpdateSchema = podcastCreateSchema
+  .omit({
+    description: true,
+    language: true,
+    authorName: true,
+    ownerName: true,
+    categoryPrimary: true,
+    explicit: true,
+    locked: true,
+    itunesType: true,
+    medium: true,
+  })
+  .partial()
+  .extend({
+    description: z.string().optional(),
+    language: z.string().length(2).optional(),
+    authorName: z.string().optional(),
+    ownerName: z.string().optional(),
+    categoryPrimary: z.string().optional(),
+    explicit: z.union([z.literal(0), z.literal(1)]).optional(),
+    locked: z.union([z.literal(0), z.literal(1)]).optional(),
+    itunesType: z.enum(['episodic', 'serial']).optional(),
+    medium: z.enum(['podcast', 'music', 'video', 'film', 'audiobook', 'newsletter', 'blog']).optional(),
+    maxCollaborators: z.number().int().min(0).nullable().optional(),
+    unlisted: z.union([z.literal(0), z.literal(1)]).optional(),
+    /** Accept boolean or 0/1 (e.g. from GET response or form state). */
+    subscriberOnlyFeedEnabled: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** When true, public RSS and public episode list/page do not load (subscriber-only show). Accept boolean or 0/1. */
+    publicFeedDisabled: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** When true, show unapproved reviews on the public feed (default true). */
+    allowUnapprovedReviews: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** When true, only subscribers can leave reviews (requires subscriberOnlyFeedEnabled). Accept boolean or 0/1. */
+    subscriberOnlyReviews: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** When true, only subscribers can see/use Message button and submit contact for this show (requires subscriberOnlyFeedEnabled). Accept boolean or 0/1. */
+    subscriberOnlyMessages: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** When true, episodes scheduled for a future date appear on the public feed with a placeholder. Accept boolean or 0/1. */
+    showScheduledEpisodes: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** DNS: link domain (hostname only, no https://). */
+    linkDomain: z.string().nullable().optional(),
+    /** DNS: managed domain (hostname only, no https://). */
+    managedDomain: z.string().nullable().optional(),
+    /** DNS: managed sub-domain (reject www and @). */
+    managedSubDomain: z
+      .string()
+      .nullable()
+      .optional()
+      .refine((v) => v == null || v === '' || (v !== 'www' && v !== '@'), {
+        message: 'Reserved values www and @ are not allowed',
+      }),
+    /** DNS: Cloudflare API key (plaintext; server encrypts before storing). Send null to clear. */
+    cloudflareApiKey: z.string().nullable().optional(),
+  });
 
 /** Body for POST /podcasts/import: feed URL (RSS or Atom). */
 export const podcastImportBodySchema = z.object({

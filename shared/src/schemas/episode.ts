@@ -38,15 +38,28 @@ const finalMarkerSchema = z.object({
   color: z.string().optional(),
 });
 
-export const episodeUpdateSchema = episodeCreateSchema.partial().extend({
-  slug: z.string().regex(/^[a-z0-9-]+$/, { error: 'Slug: lowercase letters, numbers, hyphens only' }).optional(),
-  guid: z.string().min(1, { message: 'GUID cannot be empty' }).optional(),
-  subscriberOnly: subscriberOnlySchema,
-  /** Chapter markers for the final audio. Overwrites markers from render. */
-  finalMarkers: z.array(finalMarkerSchema).optional().nullable(),
-  /** Override: no default so PATCH with only finalMarkers (e.g. editing chapters) does not reset status to draft. */
-  status: episodeStatusSchema.optional(),
-});
+/**
+ * Partial update schema. Do not use episodeCreateSchema.partial() alone: Zod 4 still
+ * applies .default() for omitted keys (e.g. description "" / status draft), which
+ * wipes fields on narrow PATCHes such as quick publish or chapter edits.
+ */
+export const episodeUpdateSchema = episodeCreateSchema
+  .omit({
+    description: true,
+    status: true,
+    guidIsPermalink: true,
+  })
+  .partial()
+  .extend({
+    description: z.string().optional(),
+    status: episodeStatusSchema.optional(),
+    guidIsPermalink: z.union([z.literal(0), z.literal(1)]).optional(),
+    slug: z.string().regex(/^[a-z0-9-]+$/, { error: 'Slug: lowercase letters, numbers, hyphens only' }).optional(),
+    guid: z.string().min(1, { message: 'GUID cannot be empty' }).optional(),
+    subscriberOnly: subscriberOnlySchema,
+    /** Chapter markers for the final audio. Overwrites markers from render. */
+    finalMarkers: z.array(finalMarkerSchema).optional().nullable(),
+  });
 
 /** Episode as returned by GET /episodes/:id and list endpoints. Includes server-computed fields. */
 export const episodeResponseSchema = z.object({

@@ -16,7 +16,16 @@ export const castCreateSchema = z.object({
   isPublic: z.union([z.literal(0), z.literal(1)]).default(1),
 });
 
-export const castUpdateSchema = castCreateSchema.partial();
+/**
+ * Partial update schema. Do not use castCreateSchema.partial() alone: Zod 4 still
+ * applies .default() for omitted keys (isPublic: 1), which can flip private cast public.
+ */
+export const castUpdateSchema = castCreateSchema
+  .omit({ isPublic: true })
+  .partial()
+  .extend({
+    isPublic: z.union([z.literal(0), z.literal(1)]).optional(),
+  });
 
 export const castResponseSchema = z.object({
   id: z.string(),
