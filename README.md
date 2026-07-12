@@ -283,7 +283,7 @@ All users can view a profile page where they can see their basic account informa
 
 ![HarborFM](screenshots/screenshota_10.jpg)
 
-Lastly, there is an analytics page that has the statistics for views/listens that take place within the application on the public feed. The determination if it's a bot or a human may not be very accurate so please take it with a grain of salt. The request vs listens may not be very accurate either. This page is more just to give you a general feel more than an specialized analytics page.
+Lastly, there is an analytics page for views and listens on the public feed. HarborFM classifies traffic as listeners vs crawlers (directory agents and bots) and skips tiny audio probes; overview charts emphasize listeners. Treat the numbers as a general feel rather than a specialized analytics product. Remote exports (S3, FTP, and so on) are not counted.
 
 ![HarborFM](screenshots/screenshota_11.jpg)
 

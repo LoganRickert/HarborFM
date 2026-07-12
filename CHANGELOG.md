@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.7.7 - 2026-07-12
+
+- **Public feed:** Podcast and episode descriptions preserve newlines (`white-space: pre-wrap`) on the feed show page and episode list cards.
+
+## v1.7.6 - 2026-07-12
+
+- **Podcast / episode / cast updates:** Fixed Zod 4 PATCH schemas applying create-time defaults for omitted fields, which could wipe podcast or episode descriptions.
+- **Show details dialog:** Clicking the backdrop no longer closes Edit Show Details or Edit Social Links.
+- **Podcast page:** Long unbroken URLs in the show description wrap inside the identity card instead of overflowing.
+
 ## v1.7.5 - 2026-07-12
 
 - **Podcast analytics:** Listener vs crawler classification for RSS and enclosure stats (known podcast apps count as listeners; directory agents like `Spotify/1.0`, Amazon Music Podcast, and feed bots count as crawlers).
