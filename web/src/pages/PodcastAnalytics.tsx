@@ -213,21 +213,22 @@ export function PodcastAnalytics() {
 
   const overviewData = useMemo(() => {
     if (!analytics) return [];
+    // Overview defaults to listener (human_count) totals so crawler RSS polls do not dominate.
     const byDate: Record<string, { statDate: string; feed: number; requests: number; listens: number }> = {};
     for (const row of analytics.rssDaily) {
       const d = row.statDate;
       if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
-      byDate[d].feed += row.humanCount + row.botCount;
+      byDate[d].feed += row.humanCount;
     }
     for (const row of analytics.episodeDaily) {
       const d = row.statDate;
       if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
-      byDate[d].requests += row.humanCount + row.botCount;
+      byDate[d].requests += row.humanCount;
     }
     for (const row of analytics.episodeListensDaily) {
       const d = row.statDate;
       if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
-      byDate[d].listens += row.humanCount + row.botCount;
+      byDate[d].listens += row.humanCount;
     }
     return Object.values(byDate).sort((a, b) => a.statDate.localeCompare(b.statDate));
   }, [analytics]);
@@ -245,8 +246,8 @@ export function PodcastAnalytics() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([statDate, { human, bot }]) => ({
         statDate,
-        People: human,
-        Apps: bot,
+        Listeners: human,
+        Crawlers: bot,
         total: human + bot,
       }));
   }, [analytics]);
@@ -261,8 +262,8 @@ export function PodcastAnalytics() {
           name: truncateEpisodeAxisTitle(ep.title, narrow ? 28 : 36),
           fullName: ep.title,
           requests: tot.requestsHuman + tot.requestsBot,
-          People: tot.requestsHuman,
-          Apps: tot.requestsBot,
+          Listeners: tot.requestsHuman,
+          Crawlers: tot.requestsBot,
         };
       })
       .sort((a, b) => b.requests - a.requests);
@@ -278,8 +279,8 @@ export function PodcastAnalytics() {
           name: truncateEpisodeAxisTitle(ep.title, narrow ? 28 : 36),
           fullName: ep.title,
           listens: tot.listensHuman + tot.listensBot,
-          People: tot.listensHuman,
-          Apps: tot.listensBot,
+          Listeners: tot.listensHuman,
+          Crawlers: tot.listensBot,
         };
       })
       .sort((a, b) => b.listens - a.listens);
@@ -405,7 +406,8 @@ export function PodcastAnalytics() {
           See how your show is doing over the last 2 weeks: feed check-ins, episode plays, and where listeners are from.
         </p>
         <p className={styles.sectionSub}>
-          Numbers include both people and automated apps (e.g. podcast players).
+          Overview charts show listeners only. Directory crawlers and bots are listed separately as Crawlers where broken out.
+          Tiny audio probes (partial ranges under 250 KB) are not counted as episode requests or listens.
         </p>
       </div>
 
@@ -495,9 +497,9 @@ export function PodcastAnalytics() {
               </div>
             )}
             <p className={styles.cardFooter}>
-              <strong>Feed Check-Ins:</strong> Times your RSS feed was requested (e.g. by podcast apps checking for new episodes).{' '}
-              <strong>Episode Requests:</strong> Times an episode audio file was requested.{' '}
-              <strong>Listens:</strong> Plays of 250 KB or more (estimated listeners).
+              <strong>Feed Check-Ins:</strong> Listener feed fetches (directory crawlers are excluded from this overview).{' '}
+              <strong>Episode Requests:</strong> Full-file or ≥250 KB audio requests from listeners (tiny metadata probes are excluded).{' '}
+              <strong>Listens:</strong> Unique listener downloads of 250 KB or more (at most one per client per episode per day).
             </p>
           </div>
 
@@ -512,10 +514,10 @@ export function PodcastAnalytics() {
                 <span className={styles.summaryCount}>{rssTotal.total}</span> <span className={styles.summaryLabel}>Total</span>
               </span>
               <span className={styles.summaryItem}>
-                <span className={styles.summaryCount}>{rssTotal.human}</span> <span className={styles.summaryLabel}>People</span>
+                <span className={styles.summaryCount}>{rssTotal.human}</span> <span className={styles.summaryLabel}>Listeners</span>
               </span>
               <span className={styles.summaryItem}>
-                <span className={styles.summaryCount}>{rssTotal.bot}</span> <span className={styles.summaryLabel}>Apps</span>
+                <span className={styles.summaryCount}>{rssTotal.bot}</span> <span className={styles.summaryLabel}>Crawlers</span>
               </span>
             </div>
             <CardTabs
@@ -530,8 +532,8 @@ export function PodcastAnalytics() {
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th className={styles.num}>People</th>
-                      <th className={styles.num}>Apps</th>
+                      <th className={styles.num}>Listeners</th>
+                      <th className={styles.num}>Crawlers</th>
                       <th className={styles.num}>Total</th>
                     </tr>
                   </thead>
@@ -539,8 +541,8 @@ export function PodcastAnalytics() {
                     {[...feedData].reverse().map((row) => (
                       <tr key={row.statDate}>
                         <td>{formatShortDate(row.statDate)}</td>
-                        <td className={styles.num}>{row.People}</td>
-                        <td className={styles.num}>{row.Apps}</td>
+                        <td className={styles.num}>{row.Listeners}</td>
+                        <td className={styles.num}>{row.Crawlers}</td>
                         <td className={styles.num}>{row.total}</td>
                       </tr>
                     ))}
@@ -550,10 +552,13 @@ export function PodcastAnalytics() {
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer width="100%" height={300}>
-                  {renderTimeChart(feedData, [{ key: 'People', name: 'People', color: COLORS.human }, { key: 'Apps', name: 'Apps', color: COLORS.bot }], feedView)}
+                  {renderTimeChart(feedData, [{ key: 'Listeners', name: 'Listeners', color: COLORS.human }, { key: 'Crawlers', name: 'Crawlers', color: COLORS.bot }], feedView)}
                 </ResponsiveContainer>
               </div>
             )}
+            <p className={styles.cardFooter}>
+              Directory polls (Spotify, Amazon Music, Podbean, etc.) appear under Crawlers. They check for new episodes and are not downloads.
+            </p>
           </div>
 
           {/* Episodes card */}
@@ -574,8 +579,8 @@ export function PodcastAnalytics() {
                   <thead>
                     <tr>
                       <th>Episode</th>
-                      <th className={styles.num}>People</th>
-                      <th className={styles.num}>Apps</th>
+                      <th className={styles.num}>Listeners</th>
+                      <th className={styles.num}>Crawlers</th>
                       <th className={styles.num}>Total</th>
                     </tr>
                   </thead>
@@ -587,8 +592,8 @@ export function PodcastAnalytics() {
                             {row.fullName}
                           </Link>
                         </td>
-                        <td className={styles.num}>{row.People}</td>
-                        <td className={styles.num}>{row.Apps}</td>
+                        <td className={styles.num}>{row.Listeners}</td>
+                        <td className={styles.num}>{row.Crawlers}</td>
                         <td className={styles.num}>{row.requests}</td>
                       </tr>
                     ))}
@@ -616,8 +621,8 @@ export function PodcastAnalytics() {
                         }
                       />
                       <Legend />
-                      <Bar dataKey="People" name="People" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
-                      <Bar dataKey="Apps" name="Apps" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
+                      <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
+                      <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
                     </BarChart>
                   )}
                 </ResponsiveContainer>
@@ -641,8 +646,8 @@ export function PodcastAnalytics() {
                   <thead>
                     <tr>
                       <th>Episode</th>
-                      <th className={styles.num}>People</th>
-                      <th className={styles.num}>Apps</th>
+                      <th className={styles.num}>Listeners</th>
+                      <th className={styles.num}>Crawlers</th>
                       <th className={styles.num}>Total</th>
                     </tr>
                   </thead>
@@ -654,8 +659,8 @@ export function PodcastAnalytics() {
                             {row.fullName}
                           </Link>
                         </td>
-                        <td className={styles.num}>{row.People}</td>
-                        <td className={styles.num}>{row.Apps}</td>
+                        <td className={styles.num}>{row.Listeners}</td>
+                        <td className={styles.num}>{row.Crawlers}</td>
                         <td className={styles.num}>{row.listens}</td>
                       </tr>
                     ))}
@@ -683,8 +688,8 @@ export function PodcastAnalytics() {
                         }
                       />
                       <Legend />
-                      <Bar dataKey="People" name="People" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
-                      <Bar dataKey="Apps" name="Apps" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
+                      <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
+                      <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
                     </BarChart>
                   )}
                 </ResponsiveContainer>
@@ -713,8 +718,8 @@ export function PodcastAnalytics() {
                   <thead>
                     <tr>
                       <th>Location</th>
-                      <th className={styles.num}>People</th>
-                      <th className={styles.num}>Apps</th>
+                      <th className={styles.num}>Listeners</th>
+                      <th className={styles.num}>Crawlers</th>
                       <th className={styles.num}>Total</th>
                     </tr>
                   </thead>
@@ -787,8 +792,8 @@ export function PodcastAnalytics() {
                   <thead>
                     <tr>
                       <th>Source</th>
-                      <th className={styles.num}>People</th>
-                      <th className={styles.num}>Apps</th>
+                      <th className={styles.num}>Listeners</th>
+                      <th className={styles.num}>Crawlers</th>
                       <th className={styles.num}>Total</th>
                     </tr>
                   </thead>

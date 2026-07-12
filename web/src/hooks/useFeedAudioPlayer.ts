@@ -85,7 +85,7 @@ export function useFeedAudioPlayer({
     restoredPositionRef.current = false;
   }, [persistPlaybackPosition, podcastSlug, episodeSlug, audioUrl, hasWaveform]);
 
-  // Pause when another feed episode becomes active (only on active → inactive transition).
+  // Pause when another feed episode becomes active (only on active to inactive transition).
   useEffect(() => {
     if (wasActiveRef.current && !isActive) {
       const el = audioRef.current;

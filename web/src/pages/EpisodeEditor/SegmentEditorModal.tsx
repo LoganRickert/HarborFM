@@ -281,7 +281,7 @@ export function SegmentEditorModal({
     !markersEqual(markers, serverMarkers) ||
     !audioEqEqual(appliedAudioEq, segment.audioEq);
 
-  /** Merge overlapping or adjacent trim ranges. E.g. [[0,5],[4,10],[15,20]] → [[0,10],[15,20]]. */
+  /** Merge overlapping or adjacent trim ranges. E.g. [[0,5],[4,10],[15,20]] to [[0,10],[15,20]]. */
   function mergeTrimRanges(ranges: Array<[number, number]>): Array<[number, number]> {
     if (ranges.length <= 1) return ranges;
     const sorted = [...ranges].sort((a, b) => a[0] - b[0]);

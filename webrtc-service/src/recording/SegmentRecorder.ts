@@ -28,7 +28,7 @@ export type SegmentRecorderOptions = {
 };
 
 /**
- * SegmentRecorder: RTP → MP3 per producer. Writes to .mp3.part, renames to .mp3 on clean stop.
+ * SegmentRecorder: RTP to MP3 per producer. Writes to .mp3.part, renames to .mp3 on clean stop.
  * Uses SDP temp file so stdin stays available for graceful shutdown ('q' command).
  */
 export class SegmentRecorder {
@@ -88,7 +88,7 @@ export class SegmentRecorder {
   }
 
   /**
-   * Stop recording: send 'q' to stdin for graceful flush, fallback to SIGINT. Rename .part → .mp3 on success.
+   * Stop recording: send 'q' to stdin for graceful flush, fallback to SIGINT. Rename .part to .mp3 on success.
    */
   stop(graceMs: number): Promise<{ success: boolean; filePath: string | null }> {
     return new Promise((resolve) => {

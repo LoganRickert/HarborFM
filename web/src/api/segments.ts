@@ -75,7 +75,7 @@ export function recoverRecordedSegment(episodeId: string, segmentId: string): Pr
   });
 }
 
-/** Include audioPath to bust cache when the segment file changes (e.g. after trim → new .wav). */
+/** Include audioPath to bust cache when the segment file changes (e.g. after trim to new .wav). */
 export function segmentStreamUrl(episodeId: string, segmentId: string, audioPath?: string | null): string {
   const url = `${BASE}/episodes/${episodeId}/segments/${segmentId}/stream`;
   if (audioPath) {

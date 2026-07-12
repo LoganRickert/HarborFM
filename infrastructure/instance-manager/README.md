@@ -82,7 +82,7 @@ cd infrastructure/instance-manager
 ```
 
 - Requires a `.env` file (copy from `.env.example`). If `MANAGER_SECRET` is not set, the script generates one and appends it to `.env`.
-- **Volumes**: `./tfstate` → `/data` (Terraform state); `./config.json` and `./data.json` → container (created as `{}` if missing). Config and instance data therefore persist in the current directory.
+- **Volumes**: `./tfstate` to `/data` (Terraform state); `./config.json` and `./data.json` to container (created as `{}` if missing). Config and instance data therefore persist in the current directory.
 - **Port**: Container 3999 is published as **3997** (so it doesn’t clash with a local manager). Open http://localhost:3997.
 - **Credentials**: Set `VULTR_API_KEY` (and for AWS: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) in `.env` so deploys work. The API errors with a clear message if they’re missing.
 - Ctrl+C stops the container (`--init` forwards signals).

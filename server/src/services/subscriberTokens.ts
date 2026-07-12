@@ -23,9 +23,9 @@ export interface ValidateSubscriberTokenResult {
 
 /**
  * Validate subscriber token with existence distinction: unknown hash vs exists but disabled/expired.
- * - tokenExists: false, row: null → hash not in DB (caller may record bad attempt and ban).
- * - tokenExists: true, row: null → hash exists but disabled/expired/invalid (reject without recording).
- * - tokenExists: true, row → valid token.
+ * - tokenExists: false, row: null to hash not in DB (caller may record bad attempt and ban).
+ * - tokenExists: true, row: null to hash exists but disabled/expired/invalid (reject without recording).
+ * - tokenExists: true, row to valid token.
  */
 export function validateSubscriberTokenByValueWithExistence(
   rawToken: string,

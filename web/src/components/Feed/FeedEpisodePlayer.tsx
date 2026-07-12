@@ -96,7 +96,7 @@ export function FeedEpisodePlayer({
         <audio
           ref={audioRef}
           id={`audio-${episode.id}`}
-          preload="metadata"
+          preload="none"
           style={{ display: 'none' }}
           onError={() => setAudioLoadFailed(true)}
         >
@@ -109,7 +109,7 @@ export function FeedEpisodePlayer({
           src={audioUrl}
           controls
           className={styles.audio}
-          preload="metadata"
+          preload="none"
           onError={() => setAudioLoadFailed(true)}
         />
       )}

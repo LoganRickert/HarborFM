@@ -190,7 +190,7 @@ async function main() {
       openapi: "3.0.0",
       info: {
         title: `${APP_NAME} API`,
-        description: `REST API for ${APP_NAME}. Authenticate with an API key from **Profile → API keys** in the app. Use the key as a Bearer token: \`Authorization: Bearer ${API_KEY_PREFIX}your_key_here\`.`,
+        description: `REST API for ${APP_NAME}. Authenticate with an API key from **Profile to API keys** in the app. Use the key as a Bearer token: \`Authorization: Bearer ${API_KEY_PREFIX}your_key_here\`.`,
         version: APP_VERSION,
       },
       servers: [{ url: apiPrefix, description: `${APP_NAME} API base` }],
@@ -200,7 +200,7 @@ async function main() {
             type: "http",
             scheme: "bearer",
             bearerFormat: "API Key",
-            description: `Your API key from Profile → API keys (prefix: ${API_KEY_PREFIX})`,
+            description: `Your API key from Profile to API keys (prefix: ${API_KEY_PREFIX})`,
           },
         },
       },

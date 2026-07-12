@@ -503,7 +503,7 @@ export async function registerSsoRoutes(app: FastifyInstance) {
 
         if (needsCompleteAccount) {
           console.log(
-            `[OIDC] userId=${userId} isNewUser=${isNewUser} → redirect /complete-account`,
+            `[OIDC] userId=${userId} isNewUser=${isNewUser} to redirect /complete-account`,
           );
           const token = app.jwt.sign(
             buildAuthJwtPayload({ id: userId, email: null, username: null }),
@@ -574,7 +574,7 @@ export async function registerSsoRoutes(app: FastifyInstance) {
           row.read_only !== 1
         ) {
           console.log(
-            `[OIDC] userId=${row.id} isNewUser=${isNewUser} userHas2FA=false → redirect /login/2fa-setup (methods=${setupMethods.join(",")})`,
+            `[OIDC] userId=${row.id} isNewUser=${isNewUser} userHas2FA=false to redirect /login/2fa-setup (methods=${setupMethods.join(",")})`,
           );
           const { challengeToken } = create2FAChallenge(
             row.id,
@@ -590,7 +590,7 @@ export async function registerSsoRoutes(app: FastifyInstance) {
 
         if (twoFactorEnabled && userHas2FA) {
           console.log(
-            `[OIDC] userId=${row.id} isNewUser=${isNewUser} userHas2FA=true method=${resolve2FAMethod(row, allowedMethods, emailProviderConfigured)} → redirect /login?method=...`,
+            `[OIDC] userId=${row.id} isNewUser=${isNewUser} userHas2FA=true method=${resolve2FAMethod(row, allowedMethods, emailProviderConfigured)} to redirect /login?method=...`,
           );
           const method = resolve2FAMethod(
             row,
@@ -606,7 +606,7 @@ export async function registerSsoRoutes(app: FastifyInstance) {
         }
 
         console.log(
-          `[OIDC] userId=${row.id} isNewUser=${isNewUser} → redirect / (no 2FA or 2FA not enforced)`,
+          `[OIDC] userId=${row.id} isNewUser=${isNewUser} to redirect / (no 2FA or 2FA not enforced)`,
         );
         const token = app.jwt.sign(
           buildAuthJwtPayload(row),
@@ -1170,7 +1170,7 @@ export async function registerSsoRoutes(app: FastifyInstance) {
         const opensslStack = err && typeof err === "object" && "opensslErrorStack" in err ? (err as { opensslErrorStack?: string[] }).opensslErrorStack : undefined;
         const hint =
           /invalid signature/i.test(errMsg)
-            ? " IdP certificate (PEM) must match the key Keycloak uses to sign the assertion. Get it from Keycloak Admin → Realm settings → Keys → click the RS256 (SIG) key → Certificate (copy PEM). In the SAML client, ensure 'Sign assertions' (or similar) is ON."
+            ? " IdP certificate (PEM) must match the key Keycloak uses to sign the assertion. Get it from Keycloak Admin to Realm settings to Keys to click the RS256 (SIG) key to Certificate (copy PEM). In the SAML client, ensure 'Sign assertions' (or similar) is ON."
             : /oaep decoding|ERR_OSSL_RSA_OAEP/i.test(errMsg)
               ? " Key encryption may use a different OAEP hash (SHA-1 vs SHA-256). Ensure the SP decryption key matches the cert uploaded to Keycloak for encryption."
               : "";

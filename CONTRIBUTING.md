@@ -114,7 +114,7 @@ When adding a new migration:
 - **server** - Fastify API, SQLite (better-sqlite3), ffmpeg-based audio processing. Serves the built web app in production.
 - **web** - React frontend (Vite, TanStack Query).
 
-Build order is shared → server → web. Root scripts run across workspaces where applicable.
+Build order is shared to server to web. Root scripts run across workspaces where applicable.
 
 ## Submitting changes
 

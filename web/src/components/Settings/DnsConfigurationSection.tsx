@@ -167,7 +167,7 @@ export function DnsConfigurationSection({ form, onFormChange }: SettingsFormProp
             <span>Allow Sub-Domain</span>
           </label>
           <p className={styles.inputHelp}>
-            When on, podcast owners can use a sub-domain of a shared base domain (e.g. &quot;myshow&quot; under example.com → myshow.example.com). You must set the base domain below.
+            When on, podcast owners can use a sub-domain of a shared base domain (e.g. &quot;myshow&quot; under example.com to myshow.example.com). You must set the base domain below.
           </p>
           {form.dnsDefaultAllowSubDomain && (
             <label className={styles.label}>

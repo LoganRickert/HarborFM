@@ -1,8 +1,8 @@
 /**
  * Parse Range request header for a single range.
- * - No Range header or invalid → full file, return fileSize.
- * - Single range (e.g. bytes=0-4999 or bytes=1000-) → return requested length.
- * - Multiple ranges (e.g. bytes=0-100,200-300) → return null (do not count as listen).
+ * - No Range header or invalid to full file, return fileSize.
+ * - Single range (e.g. bytes=0-4999 or bytes=1000-) to return requested length.
+ * - Multiple ranges (e.g. bytes=0-100,200-300) to return null (do not count as listen).
  */
 export function getSingleRangeRequestedLength(
   rangeHeader: string | undefined,
@@ -14,7 +14,7 @@ export function getSingleRangeRequestedLength(
 
   const spec = raw.slice(6).trim();
   const parts = spec.split(",");
-  if (parts.length !== 1) return null; // multiple ranges → not a listen
+  if (parts.length !== 1) return null; // multiple ranges to not a listen
 
   const part = parts[0]!.trim();
   const dash = part.indexOf("-");

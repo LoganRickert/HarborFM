@@ -217,5 +217,73 @@ export async function run({ runOne }) {
     })
   );
 
+  results.push(
+    await runOne('Tiny Range GET public episode audio does not count as request or listen', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const today = todayUTC();
+      const sumRows = (rows, eid) =>
+        (rows || [])
+          .filter((r) => r.episode_id === eid && r.stat_date === today)
+          .reduce((s, r) => s + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
+      const beforeReq = sumRows(beforeData.episode_daily, episode.id);
+      const beforeLis = sumRows(beforeData.episode_listens_daily, episode.id);
+
+      const episodeUrl = `${baseURL}/${podcast.id}/episodes/${episode.id}`;
+      await fetch(episodeUrl, {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          Range: 'bytes=0-1',
+        },
+      });
+      await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const afterReq = sumRows(data.episode_daily, episode.id);
+      const afterLis = sumRows(data.episode_listens_daily, episode.id);
+      if (afterReq !== beforeReq) {
+        throw new Error(`Expected tiny Range not to increment requests (before ${beforeReq}, after ${afterReq})`);
+      }
+      if (afterLis !== beforeLis) {
+        throw new Error(`Expected tiny Range not to increment listens (before ${beforeLis}, after ${afterLis})`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('Spotify/1.0 RSS counts as crawler (bot_count); Overcast RSS as listener', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const today = todayUTC();
+      const sumSource = (rows, source, field) =>
+        (rows || [])
+          .filter((r) => r.stat_date === today && r.source === source)
+          .reduce((s, r) => s + (r[field] ?? 0), 0);
+      const beforeSpotifyBot = sumSource(beforeData.rss_daily, 'Spotify', 'bot_count');
+      const beforeOvercastHuman = sumSource(beforeData.rss_daily, 'Overcast', 'human_count');
+
+      const rssUrl = `${baseURL}/public/podcasts/${encodeURIComponent(slug)}/rss`;
+      await fetch(rssUrl, { headers: { 'User-Agent': 'Spotify/1.0' } });
+      await fetch(rssUrl, {
+        headers: { 'User-Agent': 'Overcast/3.0 (+http://overcast.fm/; iOS podcast app)' },
+      });
+      await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const afterSpotifyBot = sumSource(data.rss_daily, 'Spotify', 'bot_count');
+      const afterOvercastHuman = sumSource(data.rss_daily, 'Overcast', 'human_count');
+      if (afterSpotifyBot < beforeSpotifyBot + 1) {
+        throw new Error(`Expected Spotify/1.0 to increment Spotify bot_count (before ${beforeSpotifyBot}, after ${afterSpotifyBot})`);
+      }
+      if (afterOvercastHuman < beforeOvercastHuman + 1) {
+        throw new Error(`Expected Overcast to increment Overcast human_count (before ${beforeOvercastHuman}, after ${afterOvercastHuman})`);
+      }
+    })
+  );
+
   return results;
 }

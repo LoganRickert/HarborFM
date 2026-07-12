@@ -1,19 +1,30 @@
 # Changelog
 
+## v1.7.5 - 2026-07-12
+
+- **Podcast analytics:** Listener vs crawler classification for RSS and enclosure stats (known podcast apps count as listeners; directory agents like `Spotify/1.0`, Amazon Music Podcast, and feed bots count as crawlers).
+- **Podcast analytics:** Tiny partial Range probes (for example feed `preload` metadata) no longer count as episode requests; full-file GETs still do. Public feed and embed players use `preload="none"`.
+- **Podcast analytics UI:** Overview charts use listener totals by default; People/Apps relabeled Listeners/Crawlers.
+- **Dev tooling:** Added `dev/logs-analytics/analyze_access_log.py` to reconcile nginx access logs with in-app analytics exports.
+
+## v1.7.4 - 2026-07-11
+
+- **Custom domain Open Graph:** Fixed index root with linking domain error
+
 ## v1.7.3 - 2026-07-11
 
 - **Custom domain Open Graph:** Fixed linking-domain homepages serving default HarborFM meta instead of podcast-specific tags.
 
 ## v1.7.2 - 2026-07-11
 
-- **Public feed Open Graph:** Podcast and episode feed pages now serve podcast-specific meta tags in the initial HTML (title, description, `og:url`, `og:site_name`, and cover image) so link previews and view-source work for crawlers—not just after React loads.
+- **Public feed Open Graph:** Podcast and episode feed pages now serve podcast-specific meta tags in the initial HTML (title, description, `og:url`, `og:site_name`, and cover image) so link previews and view-source work for crawlers, not just after React loads.
 - **Custom domains:** Feed pages on a linking domain use the podcast cover as the favicon when available.
 
 ## v1.7.1 - 2026-07-11
 
 - **Episode editor:** Added a collapsible Show Notes panel for planning call topics: add topics with optional duration (5–30 min), mark items as discussed, drag to reorder, and choose whether guests can see notes (host only or share with guests). Collapsed by default; expand with the chevron in the header.
 - **Group call guests:** When the host enables guest visibility, participants on the call can open **See Show Notes** to view planned topics and durations in a dialog; notes update live over the call WebSocket.
-- **Section editor:** Ask tab responses now render in a read-only text field instead of plain text, so clicking in and using Ctrl+A / copy selects only the answer—not the whole page.
+- **Section editor:** Ask tab responses now render in a read-only text field instead of plain text, so clicking in and using Ctrl+A / copy selects only the answer, not the whole page.
 
 ![Show Notes panel](screenshots/harborfm-1.7.1-1.jpg)
 
@@ -22,7 +33,7 @@
 - **Group call recording:** When a guest backgrounds the tab or unmutes after mute, the client now creates a new WebRTC producer instead of resuming the old one so multitrack segments stay time-aligned.
 - **Group call participants:** Fixed host participant list Strict Mode remount cleanup.
 - **Group call guests:** Recording banner with elapsed time above "You're In The Call" on the guest join page.
-- **Group call:** Increased host remount grace period (500ms → 2s) so page refreshes are less likely to end the call.
+- **Group call:** Increased host remount grace period (500ms to 2s) so page refreshes are less likely to end the call.
 
 ## v1.6.6 - 2026-07-09
 
@@ -80,7 +91,7 @@
 ## v1.5 - 2026-02-20
 
 - **Reviews:** Podcast and episode reviews with public submit (name, email, rating, body); optional CAPTCHA and subscriber-only per podcast; verification email with verify and delete links; public list with verified/approved filtering and delete-own or admin delete; admin list, approve, and hide (manager/owner); optional LLM spam check;
-- **Admin settings (tabbed):** Settings page redesigned with a tabbed layout; each section (Access & General, Default Limits, Final Output, etc.) is a tab; first tab is System (version, command status, memory/CPU/disk from new system-stats API); global search filters tabs and scrolls to matching controls (e.g. “Account Registration” → Enable Account Registration); single form and one Save across all tabs; vertical sidebar on desktop, drawer on mobile; keyboard navigation (arrows, Home/End) and Escape to close drawer;
+- **Admin settings (tabbed):** Settings page redesigned with a tabbed layout; each section (Access & General, Default Limits, Final Output, etc.) is a tab; first tab is System (version, command status, memory/CPU/disk from new system-stats API); global search filters tabs and scrolls to matching controls (e.g. “Account Registration” to Enable Account Registration); single form and one Save across all tabs; vertical sidebar on desktop, drawer on mobile; keyboard navigation (arrows, Home/End) and Escape to close drawer;
 - **Custom domain feed:** HarborFM header (name and logo) is hidden on podcast and episode feed pages when viewed on a custom domain (link/managed domain).
 - **Segment audio EQ:** Per-segment equalizer in the segment editor: Audio button (right of Zoom Out) with Low / Mids / High sliders (-20 to +20 dB); live Web Audio preview; Apply stores EQ locally until Save, Cancel reverts; same EQ applied when rendering the final episode (ffmpeg bass, equalizer, treble); segment list playback uses saved EQ when present.
 - **Segment enable/disable:** Owners, admins, and editors/managers can exclude segments from the final episode via an Eye button to the right of the segment editor (Scissors) button on the episode details page; disabled segments show a black row and EyeOff icon; toggling again re-enables; disabled segments are omitted when building the final episode; "Generate Episode Audio" is disabled when all segments are disabled.

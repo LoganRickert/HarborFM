@@ -304,7 +304,7 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
                       ←
                     </button>
                     <button type="button" className={styles.libraryPageBtn} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={pageClamped >= totalPages} aria-label="Next page">
-                      →
+                      to
                     </button>
                   </div>
                 </div>

@@ -1,0 +1,14 @@
+# Local dumps and generated reports; do not commit
+access.log
+*.log
+analytics.json
+report-*.json
+report-*.csv
+*.csv
+*.json
+!package.json
+
+# Keep the tool + docs only
+!.gitignore
+!README.md
+!analyze_access_log.py

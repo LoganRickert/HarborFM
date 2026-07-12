@@ -12,9 +12,12 @@
 const SOURCE_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: "Apple Podcasts", pattern: /^Podcasts\/|^Balados\//i },
   { label: "Spotify", pattern: /Spotify\/[\d.]+/i },
+  { label: "Amazon Music", pattern: /Amazon Music/i },
   { label: "Google Podcasts", pattern: /GooglePodcasts\/|GoogleChirp|^Podcasts$/i },
   { label: "Pocket Casts", pattern: /PocketCasts\/|Pocket%20Casts\/|^Pocket Casts\b|^Shifty Jelly Pocket Casts/i },
   { label: "Overcast", pattern: /^Overcast\/|^Overcast\s|Overcast Player\s/i },
+  { label: "iHeartRadio", pattern: /iHeartRadio/i },
+  { label: "Podbean", pattern: /Podbean\//i },
 ];
 
 export function podcastSourceFromUserAgent(userAgent: string | null | undefined): string {

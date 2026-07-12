@@ -163,7 +163,7 @@ resource "vultr_instance" "harborfm" {
 
 # Persistent data block storage: survives destroy so a new instance can reattach (lifecycle prevent_destroy).
 # Attachment is managed by null_resource.block_attach via Vultr API so the volume never references the
-# instance in config → it won't be pulled into a targeted instance destroy (avoids prevent_destroy errors).
+# instance in config to it won't be pulled into a targeted instance destroy (avoids prevent_destroy errors).
 # Same region as instance; user-data mounts at /mnt/harborfm-data.
 resource "vultr_block_storage" "data" {
   count     = var.data_volume_size > 0 ? 1 : 0

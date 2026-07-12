@@ -896,7 +896,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           if (!settings.dns_allow_linking_domain) {
             return reply.status(400).send({
               error:
-                "Linking domain is disabled in server settings. Enable it in Settings → DNS & custom domain to set a link domain.",
+                "Linking domain is disabled in server settings. Enable it in Settings to DNS & custom domain to set a link domain.",
             });
           }
         }

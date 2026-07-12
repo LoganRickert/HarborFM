@@ -280,11 +280,11 @@ export function EmbedEpisode() {
                   </div>
                 )}
                 {hasWaveform ? (
-                  <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} onError={() => setAudioLoadFailed(true)}>
+                  <audio ref={audioRef} preload="none" style={{ display: 'none' }} onError={() => setAudioLoadFailed(true)}>
                     <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                   </audio>
                 ) : (
-                  <audio ref={audioRef} controls className={styles.audioNative} preload="metadata" onError={() => setAudioLoadFailed(true)}>
+                  <audio ref={audioRef} controls className={styles.audioNative} preload="none" onError={() => setAudioLoadFailed(true)}>
                     <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                   </audio>
                 )}

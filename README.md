@@ -385,9 +385,9 @@ All environment variables supported by the server work the same in Docker. Set t
 | `WEBRTC_ENABLED` | (false) | Set to `1` or `true` to enable group calls |
 | `WEBRTC_SERVICE_URL` | (none) | Internal URL to webrtc service (e.g. `http://webrtc:3002`) |
 | `WEBRTC_PUBLIC_WS_URL` | (none) | Public WebSocket base for clients (e.g. `wss://example.com/webrtc-ws`) |
-| `WEBRTC_SERVICE_SECRET` | (none) | Optional; auth header for server → webrtc HTTP requests |
+| `WEBRTC_SERVICE_SECRET` | (none) | Optional; auth header for server to webrtc HTTP requests |
 | `WEBRTC_RECORDINGS_DIR` | `{DATA_DIR}/webrtc-recordings` | Directory for webrtc recording output; server reads from here |
-| `RECORDING_CALLBACK_SECRET` | (none) | Secret for webrtc → server recording callback auth |
+| `RECORDING_CALLBACK_SECRET` | (none) | Secret for webrtc to server recording callback auth |
 | `HOST_AWAY_GRACE_NO_GUESTS_MS` | `60000` | Host-away grace period (ms) when no guests |
 | `HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS` | `120000` | Host-away grace (ms) when recording, no guests |
 | `HOST_AWAY_GRACE_WITH_GUESTS_MS` | `300000` | Host-away grace (ms) when guests present |
@@ -489,7 +489,7 @@ From the repo root, run the deploy script. It installs dependencies (`pnpm insta
 pnpm run deploy:pm2
 ```
 
-Requires **pnpm**, **pm2**, and **Node ≥ 22**. Configure the app via `server/.env` (see [Docker environment variables](#docker-environment-variables) for the full list). PM2 5.2+ will load it from the ecosystem config. Logs go to `logs/harborfm-out.log` and `logs/harborfm-err.log`. When self-hosting, API docs (Swagger) are at `https://<your-host>/api/docs`; API keys are in **Profile → API keys**.
+Requires **pnpm**, **pm2**, and **Node ≥ 22**. Configure the app via `server/.env` (see [Docker environment variables](#docker-environment-variables) for the full list). PM2 5.2+ will load it from the ecosystem config. Logs go to `logs/harborfm-out.log` and `logs/harborfm-err.log`. When self-hosting, API docs (Swagger) are at `https://<your-host>/api/docs`; API keys are in **Profile to API keys**.
 
 ### Manual build and run
 
@@ -608,13 +608,13 @@ Each podcast has an **owner** (the user who created it) and optional **collabora
 | **manager** | Everything in editor, plus: create/update episodes and episode artwork, edit show details, configure **Podcast Delivery** (exports), manage collaborators (invite, change role, remove). |
 | **owner** | Full control. Only the owner can delete the podcast or transfer ownership. |
 
-- **Collaborators** are managed per show in **Settings → Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on Harbor yet, the UI can send them an “invite to the platform” email (rate-limited).
+- **Collaborators** are managed per show in **Settings to Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on Harbor yet, the UI can send them an “invite to the platform” email (rate-limited).
 - **Storage** for a show (recorded segments, episode source audio) counts against the **podcast owner’s** storage limit, not the collaborator’s. If the owner is at or near their limit, “Record new section” is disabled for everyone on that show.
 - **New episode** is only available to **managers** and the **owner**; view and editor roles see it disabled.
 
 ## Export
 
-Podcast delivery exports push your RSS feed and episode audio to a destination. Configure one or more exports per show in **Settings → Podcast Delivery**; credentials are stored encrypted. Deploy skips files that are unchanged (using MD5 sidecar files where the service doesn’t provide hashes).
+Podcast delivery exports push your RSS feed and episode audio to a destination. Configure one or more exports per show in **Settings to Podcast Delivery**; credentials are stored encrypted. Deploy skips files that are unchanged (using MD5 sidecar files where the service doesn’t provide hashes).
 
 Supported export types and example request bodies (for create/update):
 
@@ -762,7 +762,7 @@ docker run --rm -it -p 5000:80 -p 2525:25 -p 110:110 rnwood/smtp4dev
 - **SMTP:** `localhost:2525` (no TLS)  
 - **POP3:** `localhost:110`  
 
-Configure HarborFM Settings → Email with host `localhost`, port `2525`, and any from address. Accepts any username/password.
+Configure HarborFM Settings to Email with host `localhost`, port `2525`, and any from address. Accepts any username/password.
 
 ### Deployment targets (FTP, SFTP, WebDAV, IPFS, SMB)
 
@@ -912,7 +912,7 @@ Before upgrading, back up **DATA_DIR** (SQLite database, uploads, processed audi
 
 ## Single Sign-On (SSO)
 
-HarborFM supports Single Sign-On via **OIDC** (OpenID Connect) and **SAML**. Configured providers appear as sign-in options on the login page. Add and edit providers under **Settings → SSO (OIDC / SAML)**. Use the list to add a provider, then open it to set endpoints, client credentials, and optional attributes. Use `(set)` in password or certificate fields when editing to keep existing secrets without re-entering them.
+HarborFM supports Single Sign-On via **OIDC** (OpenID Connect) and **SAML**. Configured providers appear as sign-in options on the login page. Add and edit providers under **Settings to SSO (OIDC / SAML)**. Use the list to add a provider, then open it to set endpoints, client credentials, and optional attributes. Use `(set)` in password or certificate fields when editing to keep existing secrets without re-entering them.
 
 The examples below assume your HarborFM instance is at **https://app.harborfm.com** and you are using **Keycloak** as the identity provider.
 
@@ -920,14 +920,14 @@ The examples below assume your HarborFM instance is at **https://app.harborfm.co
 
 1. **Keycloak realm and client**
    - In Keycloak Admin: create or select a realm (e.g. `harborfm`).
-   - Create a client: **Clients → Create client**.
+   - Create a client: **Clients to Create client**.
    - Client ID: e.g. `harborfm`.
    - Client authentication: **On**.
    - Valid redirect URIs: `https://app.harborfm.com/api/auth/sso/oidc/callback/harborfm` (use your provider ID in the path).
    - Save, then open the client **Credentials** tab and copy the **Client secret**.
 
 2. **HarborFM Settings**
-   - Go to **Settings → SSO (OIDC / SAML)** and ensure **Hostname** is set to `app.harborfm.com` (or `https://app.harborfm.com`).
+   - Go to **Settings to SSO (OIDC / SAML)** and ensure **Hostname** is set to `app.harborfm.com` (or `https://app.harborfm.com`).
    - Under **OIDC providers**, click **Add Provider**.
    - **Provider ID**: `harborfm` (must match the path segment in the callback URL).
    - **Display Name**: e.g. `Keycloak` or your org name.
@@ -1009,7 +1009,7 @@ HarborFM needs Keycloak's public certificate to verify SAML responses, and the U
    - **Display Name**: e.g. `Keycloak` (shown on the login page).
    - **IdP Entry Point URL**: the Keycloak SAML URL from Step 2 (e.g. `https://keycloak.example.com/realms/harborfm/protocol/saml`).
    - **IdP certificate (PEM)**: paste the PEM from Step 2 above (the IdP’s certificate). HarborFM uses it to verify SAML responses from Keycloak.
-   - **SP certificate (PEM)** (optional): leave blank unless your IdP requires the client to sign SAML requests. In Keycloak, that’s **Clients** → your SAML client → **Settings** → **Client Signature Required** = ON. If you enable it: generate a key pair for HarborFM (the SP), paste the **SP private key** (PEM, e.g. `-----BEGIN PRIVATE KEY-----` … `-----END PRIVATE KEY-----`) into this field, and add the matching **public certificate** to Keycloak’s client **Keys** tab so Keycloak can verify the signature. Most setups leave **Client Signature Required** OFF and leave this blank.
+   - **SP certificate (PEM)** (optional): leave blank unless your IdP requires the client to sign SAML requests. In Keycloak, that’s **Clients** to your SAML client to **Settings** to **Client Signature Required** = ON. If you enable it: generate a key pair for HarborFM (the SP), paste the **SP private key** (PEM, e.g. `-----BEGIN PRIVATE KEY-----` … `-----END PRIVATE KEY-----`) into this field, and add the matching **public certificate** to Keycloak’s client **Keys** tab so Keycloak can verify the signature. Most setups leave **Client Signature Required** OFF and leave this blank.
    HarborFM derives the entity ID and callback URL from Hostname and Provider ID. Use the **Callback URL** shown in the form when configuring Keycloak; set **Client ID** in Keycloak to your base URL + `/api/auth/sso/saml` (e.g. `https://app.harborfm.com/api/auth/sso/saml`).
 3. Save the provider, then click **Save** at the bottom of the Settings page.
 

@@ -87,7 +87,7 @@ export function CallSettingsPanel({
                 />
                 <span className={styles.volumeValue}>{Math.round((micVolume ?? 1) * 100)}%</span>
               </div>
-              <p className={styles.agcHint} title="Chrome may still apply AGC. If volume still pumps, try chrome://flags → search 'WebRTC input volume' → Disabled.">
+              <p className={styles.agcHint} title="Chrome may still apply AGC. If volume still pumps, try chrome://flags to search 'WebRTC input volume' to Disabled.">
                 Use headphones to avoid feedback. If volume pumps, try disabling &quot;Allow WebRTC to adjust input volume&quot; in chrome://flags.
               </p>
             </>

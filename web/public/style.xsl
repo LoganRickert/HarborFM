@@ -428,7 +428,7 @@
                     <xsl:with-param name="content">
                       <xsl:value-of select="$cat1"/>
                       <xsl:if test="normalize-space($cat2)">
-                        <xsl:text> → </xsl:text>
+                        <xsl:text> to </xsl:text>
                         <xsl:value-of select="$cat2"/>
                       </xsl:if>
                     </xsl:with-param>

@@ -916,7 +916,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                             setForm((f) => ({ ...f, managedSubDomain: v }));
                           }}
                           className={styles.input}
-                          placeholder={`e.g. www, myshow (→ myshow.${podcast.dnsConfig.defaultDomain})`}
+                          placeholder={`e.g. www, myshow (to myshow.${podcast.dnsConfig.defaultDomain})`}
                         />
                         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
                           Sub-domain under {podcast.dnsConfig.defaultDomain}. Letters, numbers, and hyphens only.

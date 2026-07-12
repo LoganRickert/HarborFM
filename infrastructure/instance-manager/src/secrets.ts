@@ -4,7 +4,7 @@ const MANAGER_SECRET_ENV = "MANAGER_SECRET";
 let cachedKey: Buffer | null | undefined = undefined;
 
 /**
- * Returns the 32-byte key if MANAGER_SECRET is set and valid (base64 → 32 bytes), else null.
+ * Returns the 32-byte key if MANAGER_SECRET is set and valid (base64 to 32 bytes), else null.
  * No file fallback; key must be set in env when encryption is desired.
  */
 export function getManagerKey(): Buffer | null {

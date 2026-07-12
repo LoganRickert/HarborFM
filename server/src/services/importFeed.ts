@@ -1,7 +1,7 @@
 /**
  * Fetch and parse RSS/Atom feeds for podcast import.
  * Uses fast-xml-parser 5.3.5. Handles pagination via atom:link rel="next",
- * dedupes by guid → enclosure url → (title + pubDate), returns oldest-first.
+ * dedupes by guid to enclosure url to (title + pubDate), returns oldest-first.
  */
 
 import { XMLParser } from "fast-xml-parser";

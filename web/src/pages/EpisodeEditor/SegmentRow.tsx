@@ -83,7 +83,7 @@ export function SegmentRow({
     setLocalName(segment.name ?? (recordFailed ? 'Recording Failed' : ''));
   }, [segment.name, recordFailed]);
 
-  // Clear loaded segment when episode/segment or audio file path changes (e.g. after trim → new file)
+  // Clear loaded segment when episode/segment or audio file path changes (e.g. after trim to new file)
   useEffect(() => {
     loadedSegmentIdRef.current = null;
   }, [episodeId, segment.id, segment.audioPath]);

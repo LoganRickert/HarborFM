@@ -45,12 +45,13 @@ import {
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import {
   EPISODE_AUDIO_UPLOAD_MAX_BYTES,
+  LISTEN_THRESHOLD_BYTES,
   WAVEFORM_EXTENSION,
 } from "../../config.js";
 import { readSettings } from "../settings/index.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { getSingleRangeRequestedLength } from "../../utils/parseRange.js";
-import { isHumanUserAgent } from "../../utils/isBot.js";
+import { isPodcastListenerUserAgent } from "../../utils/podcastTrafficClass.js";
 import { podcastSourceFromUserAgent } from "../../utils/podcastSourceFromUserAgent.js";
 
 export async function audioRoutes(app: FastifyInstance) {
@@ -503,16 +504,14 @@ export async function audioRoutes(app: FastifyInstance) {
       const safePath = assertPathUnder(path, allowedBase);
       const mime = episode.audioMime || "audio/mpeg";
 
-      // Stats: only for GET (not HEAD). Location lookup only for human requests.
+      // Stats: only for GET (not HEAD). Location lookup only for listener requests.
+      // Tiny Range probes (e.g. preload=metadata bytes=0-1) do not count.
+      // Full-file GETs always count as requests; listens still require LISTEN_THRESHOLD_BYTES.
       if (request.method === "GET") {
         const ip = getClientIp(request);
         const ua = getUserAgent(request);
-        const isBot = !isHumanUserAgent(ua);
+        const isBot = !isPodcastListenerUserAgent(ua);
         const source = podcastSourceFromUserAgent(ua);
-        const location = isBot
-          ? null
-          : ((await getLocationForIp(ip).catch(() => null)) ?? "(unknown)");
-        recordEpisodeRequest(episodeId.trim(), isBot, location, source);
 
         const fileSize = statSync(safePath).size;
         const r = request.headers["range"];
@@ -522,16 +521,29 @@ export async function audioRoutes(app: FastifyInstance) {
           rangeHeader,
           fileSize,
         );
-        const acceptLanguage =
-          (request.headers["accept-language"] as string) ?? "";
-        const ck = clientKey(ip, ua, acceptLanguage);
-        recordEpisodeListenIfNew(
-          episodeId.trim(),
-          isBot,
-          ck,
-          requestedLength,
-          source,
-        );
+        const isFullFile =
+          requestedLength !== null && requestedLength >= fileSize;
+        const countsAsRequest =
+          requestedLength !== null &&
+          (isFullFile || requestedLength >= LISTEN_THRESHOLD_BYTES);
+
+        if (countsAsRequest) {
+          const location = isBot
+            ? null
+            : ((await getLocationForIp(ip).catch(() => null)) ?? "(unknown)");
+          recordEpisodeRequest(episodeId.trim(), isBot, location, source);
+
+          const acceptLanguage =
+            (request.headers["accept-language"] as string) ?? "";
+          const ck = clientKey(ip, ua, acceptLanguage);
+          recordEpisodeListenIfNew(
+            episodeId.trim(),
+            isBot,
+            ck,
+            requestedLength,
+            source,
+          );
+        }
       }
 
       const result = await send(request.raw, basename(safePath), {

@@ -799,7 +799,7 @@ export function Library() {
                   disabled={pageClamped >= totalPages}
                   aria-label="Next page of library"
                 >
-                  →
+                  to
                 </button>
               </div>
             </div>

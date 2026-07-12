@@ -249,11 +249,11 @@ export function FeedEpisode({
                   />
                 ) : null}
                 {hasWaveform ? (
-                  <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} onError={() => setAudioLoadFailed(true)}>
+                  <audio ref={audioRef} preload="none" style={{ display: 'none' }} onError={() => setAudioLoadFailed(true)}>
                     <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                   </audio>
                 ) : (
-                  <audio ref={audioRef} controls className={styles.audio} preload="metadata" onError={() => setAudioLoadFailed(true)}>
+                  <audio ref={audioRef} controls className={styles.audio} preload="none" onError={() => setAudioLoadFailed(true)}>
                     <source src={audioUrl} type={episode.audioMime || 'audio/mpeg'} />
                     Your browser does not support the audio element.
                   </audio>
