@@ -321,7 +321,11 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable} ${styles.dialogShowDetailsGrid}`}>
+        <Dialog.Content
+          className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable} ${styles.dialogShowDetailsGrid}`}
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>Edit Podcast Details</Dialog.Title>
             <Dialog.Close asChild>
