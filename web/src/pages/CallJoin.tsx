@@ -105,7 +105,7 @@ export function CallJoin() {
   myParticipantIdRef.current = myParticipantId;
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
-  const { remoteTracks, remoteMicLevels, soundboardVolumeFromRoom, setMuted } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, soundboardVolumeFromRoom, setMuted, micLevel: sendMicLevel } = useMediasoupRoom(
     webrtcUrl,
     webrtcRoomId,
     deviceId || undefined,
@@ -115,6 +115,8 @@ export function CallJoin() {
     autoGainControl,
     micVolume,
   );
+  // When in-call, show the mediasoup send-path level (what remotes hear), not the pre-join preview mic.
+  const displayMicLevel = joined ? sendMicLevel : micLevel;
   const setMutedRef = useRef(setMuted);
   setMutedRef.current = setMuted;
 
@@ -735,7 +737,7 @@ export function CallJoin() {
                   aria-label="Microphone level"
                   title={p.id === myParticipantId ? 'Click if the bar doesn\'t move' : undefined}
                 >
-                  <div className={styles.micLevelBar} style={{ width: `${p.muted ? 0 : (p.id === myParticipantId ? micLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
+                  <div className={styles.micLevelBar} style={{ width: `${p.muted ? 0 : (p.id === myParticipantId ? displayMicLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
                 </div>
               </li>
             ))}

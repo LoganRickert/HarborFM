@@ -57,6 +57,13 @@ export function useMediasoupRoom(
   setListenToSelfStateRef.current = setListenToSelfState;
   const [soundboardVolumeFromRoom, setSoundboardVolumeFromRoom] = useState<number>(1);
   const mediaStreamsRef = useRef<{ micStream: MediaStream | null; localStream: MediaStream | null }>({ micStream: null, localStream: null });
+  /** Bumped to tear down and re-join the mediasoup room when WS/transport died while backgrounded. */
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  const requestReconnectRef = useRef<() => void>(() => {});
+  requestReconnectRef.current = () => {
+    setError(null);
+    setReconnectNonce((n) => n + 1);
+  };
 
   useEffect(() => {
     if (!webrtcUrl || !roomId) return;
@@ -72,26 +79,56 @@ export function useMediasoupRoom(
     let recvTransport: mediasoupClient.types.Transport | null = null;
     let localStream: MediaStream | null = null;
     let micStream: MediaStream | null = null;
-    const pendingResolvers = new Map<string, Array<(value: unknown) => void>>();
+    type Pending = { resolve: (value: unknown) => void; reject: (err: Error) => void };
+    const pendingResolvers = new Map<string, Pending[]>();
 
     function waitFor(type: string): Promise<unknown> {
       return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error(`Timeout waiting for ${type}`)), 15000);
+        const timeout = setTimeout(() => {
+          const queue = pendingResolvers.get(type);
+          if (queue) {
+            const idx = queue.findIndex((p) => p.reject === entry.reject);
+            if (idx !== -1) queue.splice(idx, 1);
+          }
+          reject(new Error(`Timeout waiting for ${type}`));
+        }, 15000);
+        const entry: Pending = {
+          resolve: (value) => {
+            clearTimeout(timeout);
+            resolve(value);
+          },
+          reject: (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          },
+        };
         const queue = pendingResolvers.get(type) ?? [];
-        queue.push((value) => {
-          clearTimeout(timeout);
-          const i = queue.indexOf(queue[queue.length - 1]);
-          if (i !== -1) queue.splice(i, 1);
-          resolve(value);
-        });
+        queue.push(entry);
         pendingResolvers.set(type, queue);
       });
     }
 
-    function safeSend(ws: WebSocket | null, msg: object): void {
+    function rejectPending(type: string, err: Error): void {
+      const queue = pendingResolvers.get(type);
+      if (!queue?.length) return;
+      const entry = queue.shift();
+      entry?.reject(err);
+    }
+
+    function safeSend(ws: WebSocket | null, msg: object): boolean {
       if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(msg));
+        return true;
       }
+      return false;
+    }
+
+    function transportIsUsable(
+      transport: mediasoupClient.types.Transport | null,
+    ): boolean {
+      if (!transport || transport.closed) return false;
+      const state = transport.connectionState;
+      return state !== 'closed' && state !== 'failed';
     }
 
     async function run(wsUrl: string, roomIdParam: string) {
@@ -126,12 +163,13 @@ export function useMediasoupRoom(
             clearInterval(heartbeatIntervalId);
             heartbeatIntervalId = undefined;
           }
-          if (!closed) {
+          // While backgrounded, mobile often drops the WS; recover on foreground instead of a sticky error.
+          if (!closed && document.visibilityState === 'visible') {
             setError('Audio connection lost - WebRTC service may have stopped. Please refresh or try again.');
           }
         };
         webrtcWs.onerror = () => {
-          if (!closed) {
+          if (!closed && document.visibilityState === 'visible') {
             setError('Audio connection failed - WebRTC service may be unavailable.');
           }
         };
@@ -141,6 +179,13 @@ export function useMediasoupRoom(
         webrtcWs.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data as string) as { type: string; [k: string]: unknown };
+            if (msg.type === 'error') {
+              rejectPending(
+                'produced',
+                new Error(typeof msg.error === 'string' ? msg.error : 'WebRTC error'),
+              );
+              return;
+            }
             if (msg.type === 'newProducer' && typeof msg.producerId === 'string') {
               handleNewProducer(msg.producerId);
               return;
@@ -176,8 +221,8 @@ export function useMediasoupRoom(
             }
             const queue = pendingResolvers.get(msg.type);
             if (queue?.length) {
-              const fn = queue.shift();
-              if (fn) fn(msg);
+              const entry = queue.shift();
+              entry?.resolve(msg);
             }
           } catch {
             // ignore
@@ -309,7 +354,9 @@ export function useMediasoupRoom(
               payload.source = nextProduceSource;
               nextProduceSource = undefined;
             }
-            safeSend(webrtcWs, payload);
+            if (!safeSend(webrtcWs, payload)) {
+              throw new Error('WebSocket not open');
+            }
             const producedMsg = (await waitFor('produced')) as { id: string };
             if (closed) return;
             if (participantId && participantName) {
@@ -325,20 +372,35 @@ export function useMediasoupRoom(
             errback(e as Error);
           }
         });
-        const producer = await sendTransport.produce({ track });
+        const producer = await sendTransport.produce({ track, stopTracks: false });
         if (closed) return;
         producerRef.current = producer;
         myProducerIdRef.current = producer.id;
         setReady(true);
 
-        async function ensureLiveSendTrack(): Promise<MediaStreamTrack | null> {
+        /**
+         * Build a live track for produce().
+         * alwaysNewSend: never reuse a track that was already produced.
+         * forceRefresh: try remic after background; if getUserMedia fails, keep existing mic.
+         */
+        async function ensureLiveSendTrack(
+          forceRefresh = false,
+          alwaysNewSend = false,
+        ): Promise<MediaStreamTrack | null> {
           if (closed) return null;
           const ctx = ctxRef.current;
-          if (ctx && ctx.state === 'suspended') {
+          const micVolumeGain = micVolumeGainRef.current;
+          if (!ctx || !micVolumeGain) return null;
+          if (ctx.state === 'suspended') {
             await ctx.resume().catch(() => {});
           }
+
           let micTrack = micTrackRef.current;
-          if (micTrack?.readyState === 'ended') {
+          const existingSend = mediaStreamsRef.current.localStream?.getAudioTracks()[0] ?? null;
+          const micDead = !micTrack || micTrack.readyState === 'ended';
+          const sendDead = !existingSend || existingSend.readyState === 'ended';
+
+          if (forceRefresh || micDead) {
             try {
               const agcNow = autoGainControlRef.current;
               const constraints: MediaTrackConstraints = {
@@ -348,41 +410,73 @@ export function useMediasoupRoom(
                 noiseSuppression: false,
                 ...(!agcNow ? { echoCancellation: false } : {}),
               };
-              const newMicStream = await navigator.mediaDevices.getUserMedia({ audio: constraints, video: false });
+              const newMicStream = await navigator.mediaDevices.getUserMedia({
+                audio: constraints,
+                video: false,
+              });
               const newMicTrack = newMicStream.getAudioTracks()[0];
-              if (!newMicTrack || closed) return null;
-              mediaStreamsRef.current.micStream?.getTracks().forEach((t) => t.stop());
-              micTrackRef.current = newMicTrack;
-              mediaStreamsRef.current.micStream = newMicStream;
-              micTrack = newMicTrack;
-              if (ctx && micVolumeGainRef.current) {
+              if (!newMicTrack || closed) {
+                newMicStream.getTracks().forEach((t) => t.stop());
+                if (micDead) return null;
+              } else {
+                mediaStreamsRef.current.micStream?.getTracks().forEach((t) => t.stop());
+                micTrackRef.current = newMicTrack;
+                mediaStreamsRef.current.micStream = newMicStream;
+                micTrack = newMicTrack;
                 const micSource = ctx.createMediaStreamSource(newMicStream);
-                micSource.connect(micVolumeGainRef.current);
+                micSource.connect(micVolumeGain);
               }
-              const sendDest = ctx?.createMediaStreamDestination();
-              if (sendDest && micVolumeGainRef.current) {
-                micVolumeGainRef.current.connect(sendDest);
-                const newSendTrack = sendDest.stream.getAudioTracks()[0];
-                if (newSendTrack) {
-                  mediaStreamsRef.current.localStream?.getTracks().forEach((t) => t.stop());
-                  mediaStreamsRef.current.localStream = new MediaStream([newSendTrack]);
-                  return newSendTrack;
-                }
-              }
-              return null;
             } catch {
-              return null;
+              if (micDead) return null;
+              // Keep existing mic (common when visibilitychange is not a user gesture on iOS).
             }
           }
-          if (micTrack && !micTrack.enabled) {
-            micTrack.enabled = true;
+
+          micTrack = micTrackRef.current;
+          if (!micTrack || micTrack.readyState === 'ended') return null;
+          if (!micTrack.enabled) micTrack.enabled = true;
+
+          // Browser may mute capture while backgrounded; wait briefly for unmute.
+          if (micTrack.muted) {
+            await new Promise<void>((resolve) => {
+              const done = () => {
+                micTrack!.removeEventListener('unmute', done);
+                clearTimeout(timer);
+                resolve();
+              };
+              const timer = setTimeout(done, 2000);
+              micTrack!.addEventListener('unmute', done);
+            });
           }
-          return mediaStreamsRef.current.localStream?.getAudioTracks()[0] ?? null;
+
+          if (alwaysNewSend || forceRefresh || sendDead || micDead) {
+            const sendDest = ctx.createMediaStreamDestination();
+            micVolumeGain.connect(sendDest);
+            const newSendTrack = sendDest.stream.getAudioTracks()[0];
+            if (!newSendTrack) return null;
+            mediaStreamsRef.current.localStream?.getTracks().forEach((t) => {
+              try {
+                t.stop();
+              } catch {
+                /* ignore */
+              }
+            });
+            mediaStreamsRef.current.localStream = new MediaStream([newSendTrack]);
+            return newSendTrack;
+          }
+
+          return existingSend;
         }
 
         /** New producer after background/unmute so recording gets a fresh segment startMs (RTP has no silence gap on resume). */
-        async function recreateMicProducer() {
-          if (closed || !sendTransport || userMutedRef.current) return;
+        async function recreateMicProducer(opts?: { forceRefresh?: boolean }): Promise<boolean> {
+          if (closed || userMutedRef.current) return false;
+          if (
+            webrtcWs?.readyState !== WebSocket.OPEN ||
+            !transportIsUsable(sendTransport)
+          ) {
+            return false;
+          }
           const oldProducer = producerRef.current;
           if (oldProducer) {
             try {
@@ -393,16 +487,23 @@ export function useMediasoupRoom(
             producerRef.current = null;
             myProducerIdRef.current = null;
           }
-          const sendTrack = await ensureLiveSendTrack();
-          if (!sendTrack || closed) return;
+          // Always use a fresh send track for the new producer (never reuse a previously produced track).
+          const sendTrack = await ensureLiveSendTrack(opts?.forceRefresh === true, true);
+          if (!sendTrack || closed || sendTrack.readyState === 'ended') {
+            setReady(false);
+            return false;
+          }
           try {
-            const newProducer = await sendTransport.produce({ track: sendTrack });
+            const newProducer = await sendTransport!.produce({ track: sendTrack, stopTracks: false });
             if (closed) {
               newProducer.close();
-              return;
+              return false;
             }
             producerRef.current = newProducer;
             myProducerIdRef.current = newProducer.id;
+            if (userMutedRef.current) {
+              newProducer.pause();
+            }
             setReady(true);
             if (participantId && participantName) {
               safeSend(webrtcWs, {
@@ -412,11 +513,18 @@ export function useMediasoupRoom(
                 participantName,
               });
             }
-          } catch {
+            return true;
+          } catch (err) {
             setReady(false);
+            return false;
           }
         }
-        recreateMicProducerRef.current = recreateMicProducer;
+        recreateMicProducerRef.current = async () => {
+          const ok = await recreateMicProducer();
+          if (!ok && !closed && !userMutedRef.current) {
+            requestReconnectRef.current();
+          }
+        };
 
         const handleVisibilityChange = () => {
           if (document.visibilityState === 'hidden') {
@@ -433,9 +541,16 @@ export function useMediasoupRoom(
                 setReady(false);
               }
             }
-          } else {
-            void recreateMicProducer();
+            return;
           }
+          // Swiped back: always a new producer. If WS/transport died while backgrounded, remount the room.
+          void (async () => {
+            if (closed || userMutedRef.current) return;
+            const ok = await recreateMicProducer({ forceRefresh: true });
+            if (!ok && !closed) {
+              requestReconnectRef.current();
+            }
+          })();
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
         const prevCleanup = cleanupRef.current;
@@ -577,18 +692,13 @@ export function useMediasoupRoom(
     const handlePageUnload = () => {
       stopMediaTracks();
     };
-    const handlePageHide = (event: PageTransitionEvent) => {
-      if (!event.persisted) {
-        stopMediaTracks();
-      }
-    };
+    // Do not stop mic tracks on pagehide — mobile tab/app switches fire it and would
+    // kill the mediasoup send path while the separate CallJoin meter mic keeps working.
     window.addEventListener('beforeunload', handlePageUnload);
-    window.addEventListener('pagehide', handlePageHide);
 
     run(url, rid);
     return () => {
       window.removeEventListener('beforeunload', handlePageUnload);
-      window.removeEventListener('pagehide', handlePageHide);
       closed = true;
       recreateMicProducerRef.current = null;
       myProducerIdRef.current = null;
@@ -605,14 +715,17 @@ export function useMediasoupRoom(
       micTrackRef.current = null;
       setListenToSelfStateRef.current(false);
       cleanupRef.current?.();
-      pendingResolvers.forEach((queue) => queue.forEach((r) => r(null)));
+      pendingResolvers.forEach((queue) => {
+        queue.forEach((p) => p.reject(new Error('WebRTC room closed')));
+        queue.length = 0;
+      });
       webrtcWs?.close();
       localStream?.getTracks().forEach((t) => t.stop());
       micStream?.getTracks().forEach((t) => t.stop());
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken, autoGainControl]);
+  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken, autoGainControl, reconnectNonce]);
 
   useEffect(() => {
     const gain = micVolumeGainRef.current;

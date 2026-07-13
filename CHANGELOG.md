@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.13 - 2026-07-12
+
+- **Group calls:** Fixed mobile guests going silent after returning to the tab. The producer still closes on background and a new one is created on return; if the WebSocket or send transport died while away, the guest remounts the mediasoup room so the new produce succeeds.
+
 ## v1.7.12 - 2026-07-12
 
 - **Group calls:** Join links (`/call/join/...`) now serve episode/podcast Open Graph meta (cover image and title like `Episode | Join Call | HarborFM`) for link previews.
