@@ -1,10 +1,39 @@
 import { readFileSync } from "fs";
 import { extname } from "path";
+import { Agent } from "undici";
 import { readSettings } from "../settings/index.js";
 import { assertPathUnder } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import { contentTypeFromAudioPath } from "../../utils/audio.js";
-import { OPENAI_TRANSCRIPTION_DEFAULT_URL, WAVEFORM_EXTENSION } from "../../config.js";
+import {
+  OPENAI_TRANSCRIPTION_DEFAULT_URL,
+  TRANSCRIPTION_FETCH_TIMEOUT_MS,
+  WAVEFORM_EXTENSION,
+} from "../../config.js";
+
+/** Shared dispatcher so Whisper/OpenAI can run longer than Node's default 5-minute headersTimeout. */
+const transcriptionAgent = new Agent({
+  headersTimeout: TRANSCRIPTION_FETCH_TIMEOUT_MS,
+  bodyTimeout: TRANSCRIPTION_FETCH_TIMEOUT_MS,
+});
+
+type FetchWithDispatcher = RequestInit & { dispatcher: Agent };
+
+function isFetchTimeoutError(err: unknown): boolean {
+  const name = err instanceof Error ? err.name : "";
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    name === "HeadersTimeoutError" ||
+    name === "BodyTimeoutError" ||
+    name === "TimeoutError" ||
+    /timeout/i.test(msg)
+  );
+}
+
+function transcriptionTimeoutMessage(): string {
+  const minutes = Math.round(TRANSCRIPTION_FETCH_TIMEOUT_MS / 60_000);
+  return `Transcription timed out after ${minutes} minutes. The Whisper service may still be processing; try again or increase TRANSCRIPTION_FETCH_TIMEOUT_MS.`;
+}
 
 /** In-memory render status per episode: only one build per episode at a time. Cleared when returning 'done' or 'failed'. */
 export const renderStatusByEpisode = new Map<string, "building" | "done" | "failed">();
@@ -208,7 +237,11 @@ export async function generateSrtFromWhisper(
       new Blob([new Uint8Array(buffer)], { type: mime }),
       `audio.${ext}`,
     );
-    const res = await fetch(whisperUrl, { method: "POST", body: form });
+    const res = await fetch(whisperUrl, {
+      method: "POST",
+      body: form,
+      dispatcher: transcriptionAgent,
+    } as FetchWithDispatcher);
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "";
     let text: string;
@@ -242,7 +275,10 @@ export async function generateSrtFromWhisper(
       text = (await res.text()).trim();
     }
     return text || null;
-  } catch {
+  } catch (err) {
+    if (isFetchTimeoutError(err)) {
+      throw new Error(transcriptionTimeoutMessage());
+    }
     return null;
   }
 }
@@ -286,7 +322,8 @@ export async function generateSrtFromOpenAI(
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
       body: form,
-    });
+      dispatcher: transcriptionAgent,
+    } as FetchWithDispatcher);
     const bodyText = await res.text();
     if (!res.ok) return null;
     if (supportsSrt) {
@@ -302,7 +339,10 @@ export async function generateSrtFromOpenAI(
     } catch {
       return null;
     }
-  } catch {
+  } catch (err) {
+    if (isFetchTimeoutError(err)) {
+      throw new Error(transcriptionTimeoutMessage());
+    }
     return null;
   }
 }

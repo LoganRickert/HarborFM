@@ -366,6 +366,14 @@ export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
   process.env.OPENAI_TRANSCRIPTION_DEFAULT_URL?.trim() ||
   "https://api.openai.com/v1/audio/transcriptions";
 
+/**
+ * Timeout for Whisper/OpenAI transcription HTTP calls (headers + idle body).
+ * Env: TRANSCRIPTION_FETCH_TIMEOUT_MS. Default 900000 (15 minutes).
+ * Node's default undici headersTimeout is only 5 minutes, which fails long self-hosted Whisper jobs.
+ */
+export const TRANSCRIPTION_FETCH_TIMEOUT_MS =
+  Number(process.env.TRANSCRIPTION_FETCH_TIMEOUT_MS) || 900_000;
+
 /** SendGrid scopes API URL (e.g. for testing API key). Env: SENDGRID_SCOPES_URL. Default "https://api.sendgrid.com/v3/scopes". */
 export const SENDGRID_SCOPES_URL =
   process.env.SENDGRID_SCOPES_URL?.trim() ||

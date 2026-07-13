@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.15 - 2026-07-12
+
+- **Transcripts:** Raised Whisper/OpenAI transcription HTTP timeout from Node's default 5 minutes to 15 minutes (`TRANSCRIPTION_FETCH_TIMEOUT_MS`), so long self-hosted Whisper jobs no longer fail while the ASR process is still running.
+
 ## v1.7.14 - 2026-07-12
 
 - **Group calls:** Guests now send a signaling WebSocket heartbeat every 30s (same as the host), so Caddy/nginx no longer idle-drop `/api/call/ws` after ~10 minutes and remove them from the participant list while audio still works.
