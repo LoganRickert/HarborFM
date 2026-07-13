@@ -8,6 +8,11 @@ import { readSettings } from "../modules/settings/index.js";
 import * as repo from "../modules/public/repo.js";
 import { publicEpisodeDto, publicPodcastDto } from "../modules/public/utils.js";
 import { getPodcastByHost } from "./dns/custom-domain-resolver.js";
+import { getSessionForJoinInfo } from "./callSession.js";
+import {
+  getPodcastForJoinInfo,
+  getEpisodeForJoinInfo,
+} from "../modules/call/repo.js";
 
 const RESERVED_SINGLE_SEGMENTS = new Set([
   "login",
@@ -110,6 +115,82 @@ function episodeCoverUrl(
   return null;
 }
 
+function joinInfoCoverUrl(
+  origin: string,
+  podcastId: string,
+  podcast: {
+    artworkPath: string | null;
+    artworkUrl: string | null;
+  },
+  episode: {
+    id: string;
+    artworkPath: string | null;
+    artworkUrl: string | null;
+  },
+): string | null {
+  if (episode.artworkUrl) return absoluteUrl(origin, episode.artworkUrl);
+  if (episode.artworkPath) {
+    const fn = episode.artworkPath.split(/[/\\]/).pop();
+    if (fn) {
+      return absoluteUrl(
+        origin,
+        `/${API_PREFIX}/public/artwork/${podcastId}/episodes/${episode.id}/${encodeURIComponent(fn)}`,
+      );
+    }
+  }
+  if (podcast.artworkUrl) return absoluteUrl(origin, podcast.artworkUrl);
+  if (podcast.artworkPath) {
+    const fn = podcast.artworkPath.split(/[/\\]/).pop();
+    if (fn) {
+      return absoluteUrl(
+        origin,
+        `/${API_PREFIX}/public/artwork/${podcastId}/${encodeURIComponent(fn)}`,
+      );
+    }
+  }
+  return null;
+}
+
+function resolveCallJoinToken(pathname: string): string | null {
+  const clean = pathname.split("?")[0].replace(/\/$/, "") || "/";
+  const match = clean.match(/^\/call\/join\/([^/]+)$/);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+function resolveCallJoinMeta(request: FastifyRequest): SpaPageMeta | null {
+  const pathname = request.url.split("?")[0];
+  const token = resolveCallJoinToken(pathname);
+  if (!token) return null;
+
+  const session = getSessionForJoinInfo(token);
+  if (!session) return null;
+
+  const podcast = getPodcastForJoinInfo(session.podcastId);
+  const episode = getEpisodeForJoinInfo(session.episodeId, session.podcastId);
+  if (!podcast || !episode) return null;
+
+  const origin = requestOrigin(request);
+  const siteName = getSiteName();
+  const defaultImage = absoluteUrl(origin, DEFAULT_OG_IMAGE_PATH);
+  const pageUrl = absoluteUrl(origin, pathname);
+  const image =
+    joinInfoCoverUrl(origin, session.podcastId, podcast, episode) ??
+    defaultImage;
+
+  return {
+    title: `${episode.title} | Join Call | ${siteName}`,
+    description: `Join the group call for ${episode.title} on ${podcast.title}.`,
+    siteName,
+    url: pageUrl,
+    image,
+  };
+}
+
 function resolveFeedRoute(
   pathname: string,
   host: string,
@@ -147,6 +228,9 @@ function resolveFeedRoute(
 export function resolveSpaMetaForRequest(
   request: FastifyRequest,
 ): SpaPageMeta | null {
+  const callJoinMeta = resolveCallJoinMeta(request);
+  if (callJoinMeta) return callJoinMeta;
+
   if (!readSettings().public_feeds_enabled) return null;
 
   const pathname = request.url.split("?")[0];

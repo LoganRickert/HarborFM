@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.12 - 2026-07-12
+
+- **Group calls:** Join links (`/call/join/...`) now serve episode/podcast Open Graph meta (cover image and title like `Episode | Join Call | HarborFM`) for link previews.
+
 ## v1.7.11 - 2026-07-12
 
 - **Group calls:** Guest join links in the host call box use the podcast linking/managed domain when configured (e.g. `https://camerashackpodcast.com/call/join/...`) instead of the app hostname.

@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User, Settings, X, List } from 'lucide-react';
 import type { ShowNotesItem } from '@harborfm/shared';
 import { getJoinInfo, callWebSocketUrl } from '../api/call';
+import { getPublicConfig } from '../api/public';
 import { getAgcKey, getMicVolumeKey } from '../constants/micSettings';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
+import { useMeta } from '../hooks/useMeta';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { RemoteAudio, AudioUnlockBanner } from '../components/GroupCall/RemoteAudio';
 import { AudioUnlockProvider } from '../components/GroupCall/AudioUnlockContext';
@@ -15,6 +18,7 @@ import { CallShowNotesDialog } from '../components/GroupCall/CallShowNotesDialog
 import type { CallJoinInfo } from '../api/call';
 import { createAudioLevelProcessor } from '../utils/audioLevel';
 import { formatDurationHMS } from '../utils/format';
+import { getSiteDisplayName } from '../utils/siteBranding';
 import styles from './CallJoin.module.css';
 
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
@@ -25,6 +29,25 @@ export function CallJoin() {
   const [joinInfo, setJoinInfo] = useState<CallJoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { data: publicConfig } = useQuery({
+    queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
+    queryFn: getPublicConfig,
+    staleTime: 60_000,
+  });
+  const siteName = getSiteDisplayName(publicConfig?.whiteLabel);
+
+  useMeta({
+    title: joinInfo
+      ? `${joinInfo.episode.title} | Join Call | ${siteName}`
+      : undefined,
+    description: joinInfo
+      ? `Join the group call for ${joinInfo.episode.title} on ${joinInfo.podcast.title}.`
+      : undefined,
+    image: joinInfo?.artworkUrl ?? undefined,
+    siteName,
+    url: typeof window !== 'undefined' ? window.location.href : undefined,
+    favicon: joinInfo?.artworkUrl ?? undefined,
+  });
   const [name, setName] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';

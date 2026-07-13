@@ -118,6 +118,36 @@ async function resolveSpaMeta(
   proto: string,
 ): Promise<SpaPageMeta | null> {
   const origin = `${proto}://${host}`;
+  const pageUrl = absoluteUrl(origin, pathname);
+  const defaultImage = absoluteUrl(origin, DEFAULT_OG_IMAGE_PATH);
+
+  const callJoinMatch = pathname
+    .split('?')[0]
+    .replace(/\/$/, '')
+    .match(/^\/call\/join\/([^/]+)$/);
+  if (callJoinMatch) {
+    const token = decodeURIComponent(callJoinMatch[1]);
+    const joinInfo = await fetchJson<{
+      podcast?: { title?: string };
+      episode?: { title?: string };
+      artworkUrl?: string | null;
+    }>(`${API_TARGET}/api/call/join-info/${encodeURIComponent(token)}`, host);
+    const config = await fetchJson<PublicConfig>(`${API_TARGET}/api/public/config`, host);
+    const siteName = config?.whiteLabel?.trim() || 'HarborFM';
+    if (!joinInfo?.episode?.title) return null;
+    return {
+      title: `${joinInfo.episode.title} | Join Call | ${siteName}`,
+      description: `Join the group call for ${joinInfo.episode.title}${
+        joinInfo.podcast?.title ? ` on ${joinInfo.podcast.title}` : ''
+      }.`,
+      siteName,
+      url: pageUrl,
+      image: joinInfo.artworkUrl
+        ? absoluteUrl(origin, joinInfo.artworkUrl)
+        : defaultImage,
+    };
+  }
+
   const config = await fetchJson<PublicConfig>(`${API_TARGET}/api/public/config`, host);
   if (!config) return null;
 
@@ -125,8 +155,6 @@ async function resolveSpaMeta(
   if (!route) return null;
 
   const siteName = config.whiteLabel?.trim() || 'HarborFM';
-  const defaultImage = absoluteUrl(origin, DEFAULT_OG_IMAGE_PATH);
-  const pageUrl = absoluteUrl(origin, pathname);
 
   const podcast = await fetchJson<PublicPodcast>(
     `${API_TARGET}/api/public/podcasts/${encodeURIComponent(route.podcastSlug)}`,
