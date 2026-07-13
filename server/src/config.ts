@@ -310,8 +310,8 @@ export const LOGIN_WINDOW_MINUTES =
 export const RESET_TOKEN_EXPIRY_HOURS =
   Number(process.env.RESET_TOKEN_EXPIRY_HOURS) || 1;
 
-/** Global rate limit: max requests per time window. Env: RATE_LIMIT_MAX. Default 100. */
-export const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX) || 100;
+/** Global rate limit: max requests per time window. Env: RATE_LIMIT_MAX. Default 200. */
+export const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX) || 200;
 
 /** Registration rate limit: max per time window per IP. Env: REGISTRATION_RATE_LIMIT_MAX. Default 5 (burst for CAPTCHA retries). Set higher (e.g. 100) for e2e. */
 export const REGISTRATION_RATE_LIMIT_MAX =

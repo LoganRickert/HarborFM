@@ -53,6 +53,7 @@ export function WebRTCSection({ form, onFormChange }: SettingsFormProps) {
       </label>
       <p className={styles.inputHelp}>
         Public URL clients use to connect (wss:// in production). Must be reachable from browsers joining the call.
+        Defaults to the app hostname + /webrtc-ws; when you change Hostname in Access, this updates if it still matched the old host.
       </p>
 
       <label className={styles.label}>

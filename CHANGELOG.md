@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.7.11 - 2026-07-12
+
+- **Group calls:** Guest join links in the host call box use the podcast linking/managed domain when configured (e.g. `https://camerashackpodcast.com/call/join/...`) instead of the app hostname.
+
+## v1.7.10 - 2026-07-12
+
+- **Group calls:** Changing Hostname in Settings now updates the WebRTC public WebSocket URL when it still pointed at the previous host (so calls stop using a stale `wss://old-host/webrtc-ws`).
+- **Group calls:** WebRTC Settings values take precedence over `WEBRTC_*` env vars once set (env still seeds empty settings).
+
+## v1.7.9 - 2026-07-12
+
+- **API:** Doubled the default global rate limit (`RATE_LIMIT_MAX`) from 100 to 200 requests per minute so feed and editor refreshes are less likely to hit 429.
+
 ## v1.7.8 - 2026-07-12
 
 - **Podcast page:** Public Page opens the linking or managed domain when configured, instead of `/feed/{slug}` on the app host. Dashboard Feed does the same.

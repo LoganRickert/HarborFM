@@ -1,6 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { drizzleDb } from "../../db/index.js";
 import { episodes, podcasts, reusableAssets } from "../../db/schema.js";
+import { getCanonicalFeedUrl } from "../../services/dns/custom-domain-resolver.js";
+import { readSettings } from "../settings/index.js";
 
 /** Get podcast id for an episode (for call start). */
 export function getEpisodePodcastId(
@@ -12,6 +14,44 @@ export function getEpisodePodcastId(
     .where(eq(episodes.id, episodeId))
     .limit(1)
     .get();
+}
+
+/**
+ * Prefer the podcast linking/managed domain origin for guest join links when configured.
+ * Falls back to requestOrigin (app host) when no custom domain is active.
+ */
+export function getCallJoinOrigin(
+  podcastId: string,
+  fallbackOrigin: string,
+): string {
+  const row = drizzleDb
+    .select({
+      linkDomain: podcasts.linkDomain,
+      managedDomain: podcasts.managedDomain,
+      managedSubDomain: podcasts.managedSubDomain,
+    })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get();
+  if (!row) return fallbackOrigin;
+  const canonical = getCanonicalFeedUrl(row, readSettings());
+  if (!canonical) return fallbackOrigin;
+  try {
+    return new URL(canonical).origin;
+  } catch {
+    return fallbackOrigin;
+  }
+}
+
+/** Build absolute (or path-only) guest join URL for a call token. */
+export function buildCallJoinUrl(
+  podcastId: string,
+  token: string,
+  fallbackOrigin: string,
+): string {
+  const origin = getCallJoinOrigin(podcastId, fallbackOrigin);
+  return origin ? `${origin}/call/join/${token}` : `/call/join/${token}`;
 }
 
 /** Podcast fields needed for join-info page (title, artwork). */

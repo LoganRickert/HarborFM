@@ -7,6 +7,7 @@ import { normalizeHostname } from "../../utils/url.js";
 import { encryptSecret } from "../../services/secrets.js";
 import { writeSsoOidcProviders, writeSsoSamlProviders } from "../../services/ssoProviderSettings.js";
 import { runGeoIPUpdate } from "../../services/geoipupdate.js";
+import { syncPublicWsUrlForHostnameChange } from "../../services/webrtcConfig.js";
 import { checkCommand } from "../../utils/commands.js";
 import { DNS_SECRETS_AAD } from "../../config.js";
 import { settingsPatchBodySchema } from "@harborfm/shared";
@@ -555,10 +556,15 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.webrtcServiceUrl !== undefined
           ? String(body.webrtcServiceUrl).trim()
           : current.webrtc_service_url;
-      const webrtc_public_ws_url =
+      let webrtc_public_ws_url =
         body.webrtcPublicWsUrl !== undefined
           ? String(body.webrtcPublicWsUrl).trim()
           : current.webrtc_public_ws_url;
+      webrtc_public_ws_url = syncPublicWsUrlForHostnameChange(
+        current.hostname,
+        hostname,
+        webrtc_public_ws_url,
+      );
       let recording_callback_secret = current.recording_callback_secret;
       if (body.recordingCallbackSecret !== undefined) {
         const v = String(body.recordingCallbackSecret).trim();

@@ -384,7 +384,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | **WebRTC** | | |
 | `WEBRTC_ENABLED` | (false) | Set to `1` or `true` to enable group calls |
 | `WEBRTC_SERVICE_URL` | (none) | Internal URL to webrtc service (e.g. `http://webrtc:3002`) |
-| `WEBRTC_PUBLIC_WS_URL` | (none) | Public WebSocket base for clients (e.g. `wss://example.com/webrtc-ws`) |
+| `WEBRTC_PUBLIC_WS_URL` | (none) | Public WebSocket base for clients (e.g. `wss://example.com/webrtc-ws`). Seeds Settings when empty; Settings values take precedence once set |
 | `WEBRTC_SERVICE_SECRET` | (none) | Optional; auth header for server to webrtc HTTP requests |
 | `WEBRTC_RECORDINGS_DIR` | `{DATA_DIR}/webrtc-recordings` | Directory for webrtc recording output; server reads from here |
 | `RECORDING_CALLBACK_SECRET` | (none) | Secret for webrtc to server recording callback auth |
@@ -442,7 +442,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | `ADMIN_PUBLIC_FEEDS_ENABLED` | (none) | When bootstrapping: `1` = public RSS enabled |
 | `ADMIN_HOSTNAME` | (none) | Bootstrap: public base URL (e.g. `https://podcasts.example.com`) |
 | **Rate limits** | | |
-| `RATE_LIMIT_MAX` | `100` | Global rate limit: max requests per time window |
+| `RATE_LIMIT_MAX` | `200` | Global rate limit: max requests per time window |
 | `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
 | `REGISTRATION_RATE_LIMIT_MAX` | `5` | Max registration requests per IP per minute. Set higher (e.g. 100) for e2e tests. |
 | `RENDER_RATE_LIMIT_WINDOW_MS` | `60000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |

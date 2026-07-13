@@ -4,6 +4,7 @@ import {
   getEpisodePodcastId,
   getPodcastForJoinInfo,
   getEpisodeForJoinInfo,
+  buildCallJoinUrl,
 } from "./repo.js";
 import { canAccessEpisode, canEditSegments } from "../../services/access.js";
 import { assertSafeId } from "../../services/paths.js";
@@ -108,11 +109,11 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
           request.headers["origin"] as string | undefined,
           request.headers["referer"] as string | undefined
         );
-        const joinUrl = origin ? `${origin}/call/join/${existing.token}` : "";
+        const joinUrl = buildCallJoinUrl(existing.podcastId, existing.token, origin);
         const payload: Record<string, unknown> = {
           token: existing.token,
           sessionId: existing.sessionId,
-          joinUrl: joinUrl || `/call/join/${existing.token}`,
+          joinUrl,
           joinCode: existing.joinCode,
         };
         const webrtcCfg = getWebRtcConfig();
@@ -216,11 +217,11 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
           webrtcUnavailable: true,
         });
       }
-      const joinUrl = origin ? `${origin}/call/join/${session.token}` : "";
+      const joinUrl = buildCallJoinUrl(podcastId, session.token, origin);
       const payload: Record<string, unknown> = {
         token: session.token,
         sessionId: session.sessionId,
-        joinUrl: joinUrl || `/call/join/${session.token}`,
+        joinUrl,
         joinCode: session.joinCode,
       };
       if (webrtcUrl && roomId) {
@@ -472,11 +473,11 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         request.headers["origin"] as string | undefined,
         request.headers["referer"] as string | undefined
       );
-      const joinUrl = origin ? `${origin}/call/join/${session.token}` : "";
+      const joinUrl = buildCallJoinUrl(session.podcastId, session.token, origin);
       const payload: Record<string, unknown> = {
         sessionId: session.sessionId,
         token: session.token,
-        joinUrl: joinUrl || `/call/join/${session.token}`,
+        joinUrl,
         joinCode: session.joinCode,
       };
       const publicWs = getPublicWsUrl(

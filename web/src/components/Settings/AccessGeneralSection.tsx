@@ -63,6 +63,7 @@ export function AccessGeneralSection({
         />
         <p className={styles.inputHelp}>
           Base URL for RSS feed enclosures when hosting audio files on this server. Used if no S3 export is configured.
+          Changing this also updates the WebRTC public WebSocket URL when it still pointed at the previous hostname.
         </p>
       </label>
 
