@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.14 - 2026-07-12
+
+- **Group calls:** Guests now send a signaling WebSocket heartbeat every 30s (same as the host), so Caddy/nginx no longer idle-drop `/api/call/ws` after ~10 minutes and remove them from the participant list while audio still works.
+
 ## v1.7.13 - 2026-07-12
 
 - **Group calls:** Fixed mobile guests going silent after returning to the tab. The producer still closes on background and a new one is created on return; if the WebSocket or send transport died while away, the guest remounts the mediasoup room so the new produce succeeds.

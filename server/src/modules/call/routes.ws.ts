@@ -72,15 +72,20 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
         if (!sessionId) return;
 
         if (type === "heartbeat") {
-          if (isHost && updateHostHeartbeat(sessionId)) {
-            const session = getSessionById(sessionId);
-            const payload: { type: string; participants?: CallParticipant[] } = {
-              type: "heartbeatAck",
-            };
-            if (session) {
-              payload.participants = [...session.participants];
+          if (isHost) {
+            if (updateHostHeartbeat(sessionId)) {
+              const session = getSessionById(sessionId);
+              const payload: { type: string; participants?: CallParticipant[] } = {
+                type: "heartbeatAck",
+              };
+              if (session) {
+                payload.participants = [...session.participants];
+              }
+              socket.send(JSON.stringify(payload));
             }
-            socket.send(JSON.stringify(payload));
+          } else if (participantId) {
+            // Keep guest signaling WS alive through proxies (Caddy/nginx idle ~10 min).
+            socket.send(JSON.stringify({ type: "heartbeatAck" }));
           }
           return;
         }

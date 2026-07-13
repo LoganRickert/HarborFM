@@ -22,6 +22,8 @@ import { getSiteDisplayName } from '../utils/siteBranding';
 import styles from './CallJoin.module.css';
 
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
+/** Keep guest /api/call/ws alive through proxies (Caddy/nginx idle ~10 min). Matches host CallPanel. */
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 export function CallJoin() {
   const { token } = useParams<{ token: string }>();
@@ -100,6 +102,7 @@ export function CallJoin() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const myParticipantIdRef = useRef<string | null>(null);
   myParticipantIdRef.current = myParticipantId;
@@ -362,12 +365,36 @@ export function CallJoin() {
     });
   };
 
+  const clearHeartbeat = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+  }, []);
+
+  const startHeartbeat = useCallback(
+    (ws: WebSocket) => {
+      clearHeartbeat();
+      heartbeatRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'heartbeat' }));
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+    },
+    [clearHeartbeat],
+  );
+
+  useEffect(() => {
+    return () => clearHeartbeat();
+  }, [clearHeartbeat]);
+
   const handleJoin = () => {
     if (!token || !name.trim()) return;
     setError(null);
     setJoining(true);
     // Initialize microphone for level meter (user gesture from Join click)
     setupMicrophone();
+    clearHeartbeat();
     const ws = new WebSocket(callWebSocketUrl());
     wsRef.current = ws;
     let resolved = false;
@@ -405,6 +432,7 @@ export function CallJoin() {
           resolved = true;
           clearJoinTimeout();
           setJoined(true);
+          startHeartbeat(ws);
           const trimmedName = name.trim();
           if (trimmedName && typeof window !== 'undefined') {
             localStorage.setItem(DISPLAY_NAME_KEY, trimmedName);
@@ -455,6 +483,7 @@ export function CallJoin() {
           });
         } else if (msg.type === 'callEnded') {
           clearJoinTimeout();
+          clearHeartbeat();
           setHostDisconnected(null);
           setJoined(false);
           setJoining(false);
@@ -463,6 +492,7 @@ export function CallJoin() {
         } else if (msg.type === 'error') {
           resolved = true;
           clearJoinTimeout();
+          clearHeartbeat();
           setError(msg.error ?? 'Could not join');
           setJoining(false);
           ws.close();
@@ -486,6 +516,7 @@ export function CallJoin() {
           }
         } else if (msg.type === 'disconnected') {
           clearJoinTimeout();
+          clearHeartbeat();
           setHostDisconnected(null);
           setWebrtcUrl(undefined);
           setWebrtcRoomId(undefined);
@@ -501,6 +532,7 @@ export function CallJoin() {
     };
     ws.onclose = () => {
       clearJoinTimeout();
+      clearHeartbeat();
       setJoining(false);
       wsRef.current = null;
       if (!resolved) {
@@ -514,6 +546,7 @@ export function CallJoin() {
   };
 
   const handleLeave = () => {
+    clearHeartbeat();
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'leave' }));
       wsRef.current.close();
