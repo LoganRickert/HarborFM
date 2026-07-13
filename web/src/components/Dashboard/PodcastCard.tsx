@@ -86,14 +86,27 @@ export function PodcastCard({
       <div className={styles.cardFooter}>
         <div className={styles.cardActions}>
           {publicFeedsEnabled ? (
-            <Link
-              to={`/feed/${podcast.slug}`}
-              className={styles.cardAction}
-              aria-label={`RSS feed for ${podcast.title}`}
-            >
-              <Rss size={16} strokeWidth={2} aria-hidden />
-              <span className={styles.cardActionLabel}>Feed</span>
-            </Link>
+            podcast.canonicalFeedUrl?.trim() ? (
+              <a
+                href={podcast.canonicalFeedUrl.trim()}
+                className={styles.cardAction}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Public page for ${podcast.title}`}
+              >
+                <Rss size={16} strokeWidth={2} aria-hidden />
+                <span className={styles.cardActionLabel}>Feed</span>
+              </a>
+            ) : (
+              <Link
+                to={`/feed/${podcast.slug}`}
+                className={styles.cardAction}
+                aria-label={`Public page for ${podcast.title}`}
+              >
+                <Rss size={16} strokeWidth={2} aria-hidden />
+                <span className={styles.cardActionLabel}>Feed</span>
+              </Link>
+            )
           ) : (
             <a
               href={getPublicRssUrl(podcast.slug)}

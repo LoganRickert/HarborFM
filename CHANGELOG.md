@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.8 - 2026-07-12
+
+- **Podcast page:** Public Page opens the linking or managed domain when configured, instead of `/feed/{slug}` on the app host. Dashboard Feed does the same.
+
 ## v1.7.7 - 2026-07-12
 
 - **Public feed:** Podcast and episode descriptions preserve newlines (`white-space: pre-wrap`) on the feed show page and episode list cards.

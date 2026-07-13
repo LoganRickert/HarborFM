@@ -46,6 +46,7 @@ interface PodcastHeroProps {
     ownerName?: string | null;
     email?: string | null;
     explicit?: number;
+    canonicalFeedUrl?: string | null;
   };
   readOnly: boolean;
   canManageShow: boolean;
@@ -68,6 +69,7 @@ export function PodcastHero({
 }: PodcastHeroProps) {
   const showPublicRss = !(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
   const canEdit = !readOnly && canManageShow;
+  const linkingPublicPage = podcast.canonicalFeedUrl?.trim() || null;
   const artworkSrc =
     podcast.artworkUrl ??
     (podcast.artworkFilename
@@ -138,7 +140,9 @@ export function PodcastHero({
             label="Public Page"
             icon={Globe}
             iconTone="green"
-            to={`/feed/${podcast.slug}`}
+            {...(linkingPublicPage
+              ? { href: linkingPublicPage, external: true }
+              : { to: `/feed/${podcast.slug}` })}
           />
         )}
         {showPublicRss && (
