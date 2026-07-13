@@ -25,6 +25,8 @@ export interface TimelineWaveformProps {
   mode?: TimelineMode;
   readOnly?: boolean;
   className?: string;
+  /** Right-click on the timeline (no context menu). Used to cycle pan → trim → edit. */
+  onContextMenuCycle?: () => void;
 }
 
 export function TimelineWaveform({
@@ -46,6 +48,7 @@ export function TimelineWaveform({
   mode = 'drag',
   readOnly = false,
   className,
+  onContextMenuCycle,
 }: TimelineWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   /** Set when we handled pointer up (seek or pan); prevents click from triggering a second seek. */
@@ -96,6 +99,8 @@ export function TimelineWaveform({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (readOnly) return;
+      // Right-click is reserved for mode cycling (contextmenu); ignore here.
+      if (e.button === 2) return;
       const el = containerRef.current;
       if (!el || durationSec <= 0) return;
       const time = clientXToTime(e.clientX);
@@ -109,6 +114,7 @@ export function TimelineWaveform({
       const forcePan = onViewChange && (e.altKey || e.button === 1);
       if (forcePan || (mode === 'drag' && onViewChange)) {
         panHasMovedRef.current = false;
+        el.setPointerCapture(e.pointerId);
         setDragging('pan');
         setPanStartView({ start: viewStartSec, end: viewEndSec });
         setPanStartX(e.clientX);
@@ -118,8 +124,15 @@ export function TimelineWaveform({
 
       if (mode === 'trim' && onTrimRangesChange && onSelectionChange && !dragging) {
         if (pendingTrimStart !== null) {
-          const start = Math.min(pendingTrimStart, time);
-          const end = Math.max(pendingTrimStart, time);
+          const rect = el.getBoundingClientRect();
+          let endTime = time;
+          if (e.clientX >= rect.right - 2 && viewEndSec >= durationSec - 0.001) {
+            endTime = durationSec;
+          } else if (e.clientX <= rect.left + 2 && viewStartSec <= 0.001) {
+            endTime = 0;
+          }
+          const start = Math.min(pendingTrimStart, endTime);
+          const end = Math.max(pendingTrimStart, endTime);
           if (end - start >= 0.01) {
             onTrimRangesChange(mergeRanges([...trimRanges, [start, end]]));
           }
@@ -127,6 +140,7 @@ export function TimelineWaveform({
           onSelectionChange(null);
           return;
         }
+        el.setPointerCapture(e.pointerId);
         setDragging('select');
         setDragStartTime(time);
         setPendingTrimStart(time);
@@ -143,6 +157,10 @@ export function TimelineWaveform({
       if (!el || durationSec <= 0) return;
       const rect = el.getBoundingClientRect();
       const time = clientXToTime(e.clientX);
+      const atLeftEdge = e.clientX <= rect.left + 2;
+      const atRightEdge = e.clientX >= rect.right - 2;
+      const viewShowsStart = viewStartSec <= 0.001;
+      const viewShowsEnd = viewEndSec >= durationSec - 0.001;
 
       if (dragging === 'pan' && panStartView && onViewChange) {
         panHasMovedRef.current = true;
@@ -163,23 +181,28 @@ export function TimelineWaveform({
         return;
       }
       if (dragging === 'select' && onSelectionChange) {
-        const start = Math.min(dragStartTime, time);
-        const end = Math.max(dragStartTime, time);
+        let endTime = time;
+        if (atRightEdge && viewShowsEnd) endTime = durationSec;
+        if (atLeftEdge && viewShowsStart) endTime = 0;
+        const start = Math.min(dragStartTime, endTime);
+        const end = Math.max(dragStartTime, endTime);
         onSelectionChange({ start, end });
       } else if ((dragging === 'trim-start' || dragging === 'trim-end') && dragRangeIndex !== null && onTrimRangesChange) {
         const newRanges = [...trimRanges];
         const [s, end] = newRanges[dragRangeIndex]!;
         if (dragging === 'trim-start') {
-          const newStart = Math.max(0, Math.min(end - 0.01, time));
+          let newStart = Math.max(0, Math.min(end - 0.01, time));
+          if (atLeftEdge && viewShowsStart) newStart = 0;
           newRanges[dragRangeIndex] = [newStart, end];
         } else {
-          const newEnd = Math.max(s + 0.01, Math.min(durationSec, time));
+          let newEnd = Math.max(s + 0.01, Math.min(durationSec, time));
+          if (atRightEdge && viewShowsEnd) newEnd = durationSec;
           newRanges[dragRangeIndex] = [s, newEnd];
         }
         onTrimRangesChange(newRanges);
       }
     },
-    [dragging, dragRangeIndex, trimRanges, durationSec, dragStartTime, panStartView, panStartX, onSelectionChange, onTrimRangesChange, onViewChange, clientXToTime]
+    [dragging, dragRangeIndex, trimRanges, durationSec, dragStartTime, panStartView, panStartX, viewStartSec, viewEndSec, onSelectionChange, onTrimRangesChange, onViewChange, clientXToTime]
   );
 
   useEffect(() => {
@@ -281,8 +304,14 @@ export function TimelineWaveform({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onClickCapture={handleClickCapture}
+      onContextMenu={(e) => {
+        if (!onContextMenuCycle || readOnly) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenuCycle();
+      }}
       style={{ touchAction: 'none' }}
     >
       <WaveformCanvas
@@ -339,8 +368,9 @@ export function TimelineWaveform({
                     className={styles.timelineTrimHandle}
                     style={{ left: 0 }}
                     onPointerDown={(e) => {
-                      if (e.altKey || e.button === 1) return;
+                      if (e.altKey || e.button === 1 || e.button === 2) return;
                       e.stopPropagation();
+                      containerRef.current?.setPointerCapture(e.pointerId);
                       setDragging('trim-start');
                       setDragRangeIndex(i);
                     }}
@@ -349,8 +379,9 @@ export function TimelineWaveform({
                     className={styles.timelineTrimHandle}
                     style={{ right: 0, left: 'auto' }}
                     onPointerDown={(e) => {
-                      if (e.altKey || e.button === 1) return;
+                      if (e.altKey || e.button === 1 || e.button === 2) return;
                       e.stopPropagation();
+                      containerRef.current?.setPointerCapture(e.pointerId);
                       setDragging('trim-end');
                       setDragRangeIndex(i);
                     }}

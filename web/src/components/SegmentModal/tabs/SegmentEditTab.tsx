@@ -95,6 +95,13 @@ export function SegmentEditTab({
   onApplyAudioEq,
   onCancelAudioEq,
 }: SegmentEditTabProps) {
+  function cycleTimelineTool() {
+    if (audioEditActive) {
+      onCancelAudioEq();
+    }
+    onTimelineModeChange(timelineMode === 'drag' ? 'trim' : 'drag');
+  }
+
   return (
     <>
       {waveformData?.data?.length ? (
@@ -229,6 +236,7 @@ export function SegmentEditTab({
                 onRemoveTrimRange={onRemoveTrimRange}
                 mode={audioEditActive ? 'drag' : timelineMode}
                 readOnly={false}
+                onContextMenuCycle={cycleTimelineTool}
               />
             </div>
             {durationSec > 0 && markers.length > 0 && (

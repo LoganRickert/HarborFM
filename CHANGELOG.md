@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.7.16 - 2026-07-12
+
+- **Waveforms:** Default editor waveform resolution is now 6 pixels/sec (was 4); override with `WAVEFORM_PIXELS_PER_SECOND`. Existing waveforms regenerate on next audio processing.
+- **Segment editor:** Fixed trim handles/selection stopping ~1s before the end. You can now right click to cycle between pan and trim.
+
 ## v1.7.15 - 2026-07-12
 
 - **Transcripts:** Raised Whisper/OpenAI transcription HTTP timeout from Node's default 5 minutes to 15 minutes (`TRANSCRIPTION_FETCH_TIMEOUT_MS`), so long self-hosted Whisper jobs no longer fail while the ASR process is still running.

@@ -41,7 +41,7 @@ export interface WaveformCanvasProps {
 }
 
 const WAVEFORM_HEIGHT = 32;
-const MIN_BAR_WIDTH_PX = 3; // With few samples (e.g. 4/sec), bars stay visible
+const MIN_BAR_WIDTH_PX = 3; // With few samples (e.g. 6/sec), bars stay visible
 
 /** 8-bit signed: -128..127. Scale so full range maps to ±halfHeight. */
 function getScale(bits: number): number {

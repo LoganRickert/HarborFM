@@ -20,6 +20,7 @@ import {
   FFMPEG_PATH,
   AUDIOWAVEFORM_PATH,
   WAVEFORM_EXTENSION,
+  WAVEFORM_PIXELS_PER_SECOND,
   DEFAULT_LOUDNESS_TARGET_LUFS,
 } from "../config.js";
 
@@ -204,7 +205,7 @@ export async function generateWaveformFile(
   assertPathUnder(dirname(outPath), allowedBaseDir);
   await exec(
     AUDIOWAVEFORM_PATH,
-    ["-i", safeIn, "-o", outPath, "--pixels-per-second", "4", "--bits", "8"],
+    ["-i", safeIn, "-o", outPath, "--pixels-per-second", String(WAVEFORM_PIXELS_PER_SECOND), "--bits", "8"],
     { maxBuffer: 4 * 1024 * 1024 },
   );
   return assertPathUnder(outPath, allowedBaseDir);

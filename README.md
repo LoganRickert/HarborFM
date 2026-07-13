@@ -457,6 +457,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | `OPENAI_CHAT_COMPLETIONS_URL` | `https://api.openai.com/v1/chat/completions` | OpenAI chat completions API URL |
 | `OPENAI_MODELS_URL` | `https://api.openai.com/v1/models` | OpenAI models API URL (e.g. for testing API key) |
 | `TRANSCRIPTION_FETCH_TIMEOUT_MS` | `900000` | Whisper/OpenAI transcription HTTP timeout (ms); default 15 minutes |
+| `WAVEFORM_PIXELS_PER_SECOND` | `6` | audiowaveform resolution for editor/timeline waveforms |
 | **SendGrid** | | |
 | `SENDGRID_SCOPES_URL` | `https://api.sendgrid.com/v3/scopes` | SendGrid scopes API URL (e.g. for testing API key) |
 | `SENDGRID_MAIL_SEND_URL` | `https://api.sendgrid.com/v3/mail/send` | SendGrid mail send API URL |

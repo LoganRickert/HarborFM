@@ -166,6 +166,15 @@ export const GEOIP_EDITION_IDS =
 export const WAVEFORM_EXTENSION =
   process.env.WAVEFORM_EXTENSION?.trim() || ".waveform.json";
 
+/**
+ * audiowaveform --pixels-per-second for editor/timeline waveforms.
+ * Env: WAVEFORM_PIXELS_PER_SECOND. Default 6.
+ */
+export const WAVEFORM_PIXELS_PER_SECOND = Math.max(
+  1,
+  Number(process.env.WAVEFORM_PIXELS_PER_SECOND) || 6,
+);
+
 /** Directory to serve static web app from. Env: PUBLIC_DIR. Default "public" under project. */
 export const PUBLIC_DIR =
   process.env.PUBLIC_DIR ?? join(process.cwd(), "public");

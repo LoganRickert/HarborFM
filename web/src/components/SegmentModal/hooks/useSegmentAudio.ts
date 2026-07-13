@@ -20,11 +20,11 @@ export function useSegmentAudio(
       const onPlay = () => setIsPlaying(true);
       const onPause = () => setIsPlaying(false);
       const onEnded = () => {
+        audioEl.pause();
         setIsPlaying(false);
-        audioEl.currentTime = 0;
-        setCurrentTime(0);
       };
       const onTimeUpdate = () => {
+        if (audioEl.ended || audioEl.paused) return;
         const t = audioEl.currentTime;
         setCurrentTime(t);
         if (trimRangesForSkip.length > 0) {
@@ -46,7 +46,7 @@ export function useSegmentAudio(
 
       let rafId: number;
       function tick() {
-        if (!audioEl.paused) {
+        if (!audioEl.paused && !audioEl.ended) {
           const t = audioEl.currentTime;
           setCurrentTime(t);
           const ranges = trimRangesRef.current;

@@ -73,6 +73,9 @@ export function useSegmentEdit(
       newEnd = durationSec;
       newStart = Math.max(0, durationSec - win);
     }
+    if (Math.abs(newStart - viewStartSec) < 0.001 && Math.abs(newEnd - viewEndSec) < 0.001) {
+      return;
+    }
     setViewStartSec(newStart);
     setViewEndSec(newEnd);
   }, [isPlaying, currentTime, viewStartSec, viewEndSec, durationSec]);
@@ -253,9 +256,11 @@ export function useSegmentEdit(
         }
       }
       const startAt = currentTime;
+      const mediaDuration = el.duration || durationSec;
+      const atEnd = mediaDuration > 0 && startAt >= mediaDuration - 0.05;
       const url = segmentStreamUrl(episodeId, segment.id, segment.audioPath);
       const applySeekAndPlay = () => {
-        const seekTo = Math.min(startAt, el.duration || durationSec);
+        const seekTo = atEnd ? 0 : Math.min(startAt, mediaDuration);
         setIsPlaying(true);
         el.currentTime = seekTo;
         setCurrentTime(el.currentTime);
