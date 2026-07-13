@@ -514,7 +514,7 @@ export function useMediasoupRoom(
               });
             }
             return true;
-          } catch (err) {
+          } catch {
             setReady(false);
             return false;
           }
