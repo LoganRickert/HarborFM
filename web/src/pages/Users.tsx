@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Edit, Plus, Trash2, Library, Radio, X } from 'lucide-react';
@@ -6,6 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { listUsers, deleteUser, updateUser, createUser, type User } from '../api/users';
 import { formatDate, formatDateTime } from '../utils/format';
 import { FailedToLoadCard } from '../components/FailedToLoadCard';
+import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
+import { useBaselineDirty, snapshotForDirty } from '../hooks/useBaselineDirty';
 import styles from './Users.module.css';
 
 function formatBytes(bytes: number): string {
@@ -40,10 +43,12 @@ export function Users() {
   const [editMaxSubscriberTokens, setEditMaxSubscriberTokens] = useState<number | null>(null);
   const [editCanTranscribe, setEditCanTranscribe] = useState(false);
   const [editCanGenerateVideo, setEditCanGenerateVideo] = useState(false);
+  const [editFormBaseline, setEditFormBaseline] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
   const [createRole, setCreateRole] = useState<'user' | 'admin'>('user');
+  const [createFormBaseline, setCreateFormBaseline] = useState<string | null>(null);
   const limit = 50;
   const queryClient = useQueryClient();
 
@@ -85,7 +90,7 @@ export function Users() {
     }) => updateUser(userId, data as Parameters<typeof updateUser>[1]),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      setUserToEdit(null);
+      closeEditUser();
     },
   });
 
@@ -93,10 +98,7 @@ export function Users() {
     mutationFn: () => createUser({ email: createEmail.trim(), password: createPassword, role: createRole }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      setCreateUserOpen(false);
-      setCreateEmail('');
-      setCreatePassword('');
-      setCreateRole('user');
+      closeCreateUser();
     },
   });
 
@@ -107,19 +109,56 @@ export function Users() {
 
   function handleEditClick(user: User) {
     setUserToEdit(user);
-    setEditEmail(user.email ?? '');
-    setEditUsername(user.username ?? '');
-    setEditRole(user.role);
-    setEditDisabled(user.disabled === 1);
-    setEditReadOnly((user as { readOnly?: number }).readOnly === 1);
+    const next = {
+      email: user.email ?? '',
+      username: user.username ?? '',
+      role: user.role as 'user' | 'admin',
+      disabled: user.disabled === 1,
+      readOnly: (user as { readOnly?: number }).readOnly === 1,
+      password: '',
+      maxPodcasts: user.maxPodcasts ?? null,
+      maxEpisodes: user.maxEpisodes ?? null,
+      maxStorageMb: user.maxStorageMb ?? null,
+      maxCollaborators: user.maxCollaborators ?? null,
+      maxSubscriberTokens: user.maxSubscriberTokens ?? null,
+      canTranscribe: (user as { canTranscribe?: number }).canTranscribe === 1,
+      canGenerateVideo: (user as { canGenerateVideo?: number }).canGenerateVideo === 1,
+    };
+    setEditEmail(next.email);
+    setEditUsername(next.username);
+    setEditRole(next.role);
+    setEditDisabled(next.disabled);
+    setEditReadOnly(next.readOnly);
     setEditPassword('');
-    setEditMaxPodcasts(user.maxPodcasts ?? null);
-    setEditMaxEpisodes(user.maxEpisodes ?? null);
-    setEditMaxStorageMb(user.maxStorageMb ?? null);
-    setEditMaxCollaborators(user.maxCollaborators ?? null);
-    setEditMaxSubscriberTokens(user.maxSubscriberTokens ?? null);
-    setEditCanTranscribe((user as { canTranscribe?: number }).canTranscribe === 1);
-    setEditCanGenerateVideo((user as { canGenerateVideo?: number }).canGenerateVideo === 1);
+    setEditMaxPodcasts(next.maxPodcasts);
+    setEditMaxEpisodes(next.maxEpisodes);
+    setEditMaxStorageMb(next.maxStorageMb);
+    setEditMaxCollaborators(next.maxCollaborators);
+    setEditMaxSubscriberTokens(next.maxSubscriberTokens);
+    setEditCanTranscribe(next.canTranscribe);
+    setEditCanGenerateVideo(next.canGenerateVideo);
+    setEditFormBaseline(snapshotForDirty(next));
+  }
+
+  function closeEditUser() {
+    setUserToEdit(null);
+    setEditFormBaseline(null);
+  }
+
+  function openCreateUser() {
+    setCreateEmail('');
+    setCreatePassword('');
+    setCreateRole('user');
+    setCreateFormBaseline(snapshotForDirty({ email: '', password: '', role: 'user' }));
+    setCreateUserOpen(true);
+  }
+
+  function closeCreateUser() {
+    setCreateUserOpen(false);
+    setCreateEmail('');
+    setCreatePassword('');
+    setCreateRole('user');
+    setCreateFormBaseline(null);
   }
 
   function handleEditSubmit(e: React.FormEvent) {
@@ -175,7 +214,7 @@ export function Users() {
     if (Object.keys(updates).length > 0) {
       updateUserMutation.mutate({ userId: userToEdit.id, data: updates });
     } else {
-      setUserToEdit(null);
+      closeEditUser();
     }
   }
 
@@ -191,6 +230,48 @@ export function Users() {
 
   const users = data?.users ?? [];
   const pagination = data?.pagination;
+
+  const editFormCurrent = useMemo(
+    () => ({
+      email: editEmail,
+      username: editUsername,
+      role: editRole,
+      disabled: editDisabled,
+      readOnly: editReadOnly,
+      password: editPassword,
+      maxPodcasts: editMaxPodcasts,
+      maxEpisodes: editMaxEpisodes,
+      maxStorageMb: editMaxStorageMb,
+      maxCollaborators: editMaxCollaborators,
+      maxSubscriberTokens: editMaxSubscriberTokens,
+      canTranscribe: editCanTranscribe,
+      canGenerateVideo: editCanGenerateVideo,
+    }),
+    [
+      editEmail,
+      editUsername,
+      editRole,
+      editDisabled,
+      editReadOnly,
+      editPassword,
+      editMaxPodcasts,
+      editMaxEpisodes,
+      editMaxStorageMb,
+      editMaxCollaborators,
+      editMaxSubscriberTokens,
+      editCanTranscribe,
+      editCanGenerateVideo,
+    ],
+  );
+  const editIsDirty = useBaselineDirty(editFormBaseline, editFormCurrent);
+  const editCloseGuard = useDialogCloseGuard({ isDirty: editIsDirty, onClose: closeEditUser });
+
+  const createFormCurrent = useMemo(
+    () => ({ email: createEmail, password: createPassword, role: createRole }),
+    [createEmail, createPassword, createRole],
+  );
+  const createIsDirty = useBaselineDirty(createFormBaseline, createFormCurrent);
+  const createCloseGuard = useDialogCloseGuard({ isDirty: createIsDirty, onClose: closeCreateUser });
 
   return (
     <div className={styles.users}>
@@ -209,10 +290,7 @@ export function Users() {
         <button
           type="button"
           className={styles.createUserBtn}
-          onClick={() => {
-            setCreateRole('user');
-            setCreateUserOpen(true);
-          }}
+          onClick={openCreateUser}
           aria-label="Create user"
         >
           <Plus size={18} strokeWidth={2} aria-hidden />
@@ -349,17 +427,18 @@ export function Users() {
         </>
       )}
 
-      <Dialog.Root open={!!userToEdit} onOpenChange={(open) => !open && setUserToEdit(null)}>
+      <Dialog.Root open={!!userToEdit} onOpenChange={editCloseGuard.onOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}>
+          <Dialog.Content
+            className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}
+            {...editCloseGuard.dialogContentProps}
+          >
             <div className={styles.dialogHeaderRow}>
               <Dialog.Title className={styles.dialogTitle}>Edit User</Dialog.Title>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.dialogClose} aria-label="Close">
-                  <X size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </Dialog.Close>
+              <button type="button" className={styles.dialogClose} aria-label="Close" onClick={editCloseGuard.requestClose}>
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
             </div>
             <Dialog.Description className={styles.dialogDescription}>
               Update the user email, username, password, role, and limits.
@@ -583,9 +662,7 @@ export function Users() {
                 </div>
               )}
               <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
-                <Dialog.Close asChild>
-                  <button type="button" className={styles.cancel} aria-label="Cancel editing user">Cancel</button>
-                </Dialog.Close>
+                <button type="button" className={styles.cancel} aria-label="Cancel editing user" onClick={editCloseGuard.requestClose}>Cancel</button>
                 <button
                   type="submit"
                   className={styles.dialogConfirm}
@@ -598,19 +675,22 @@ export function Users() {
             </form>
           </Dialog.Content>
         </Dialog.Portal>
+        <UnsavedChangesConfirmDialog
+          open={editCloseGuard.confirmOpen}
+          onOpenChange={editCloseGuard.handleConfirmOpenChange}
+          onDiscard={editCloseGuard.handleDiscard}
+        />
       </Dialog.Root>
 
-      <Dialog.Root open={createUserOpen} onOpenChange={(open) => !open && setCreateUserOpen(false)}>
+      <Dialog.Root open={createUserOpen} onOpenChange={createCloseGuard.onOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={styles.dialogContent}>
+          <Dialog.Content className={styles.dialogContent} {...createCloseGuard.dialogContentProps}>
             <div className={styles.dialogHeaderRow}>
               <Dialog.Title className={styles.dialogTitle}>Create User</Dialog.Title>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.dialogClose} aria-label="Close">
-                  <X size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </Dialog.Close>
+              <button type="button" className={styles.dialogClose} aria-label="Close" onClick={createCloseGuard.requestClose}>
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
             </div>
             <Dialog.Description className={styles.dialogDescription}>
               Add a new user account. They can sign in with this email and password.
@@ -687,12 +767,10 @@ export function Users() {
                 </div>
               )}
               <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
-                <Dialog.Close asChild>
-                  <button type="button" className={styles.cancel} aria-label="Cancel">
-                    <X size={16} strokeWidth={2} aria-hidden />
-                    Cancel
-                  </button>
-                </Dialog.Close>
+                <button type="button" className={styles.cancel} aria-label="Cancel" onClick={createCloseGuard.requestClose}>
+                  <X size={16} strokeWidth={2} aria-hidden />
+                  Cancel
+                </button>
                 <button
                   type="submit"
                   className={styles.dialogConfirm}
@@ -706,6 +784,11 @@ export function Users() {
             </form>
           </Dialog.Content>
         </Dialog.Portal>
+        <UnsavedChangesConfirmDialog
+          open={createCloseGuard.confirmOpen}
+          onOpenChange={createCloseGuard.handleConfirmOpenChange}
+          onDiscard={createCloseGuard.handleDiscard}
+        />
       </Dialog.Root>
 
       <Dialog.Root open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>

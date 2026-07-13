@@ -9,11 +9,12 @@ import {
   podcastStatsListenDedup,
   podcastStatsRssDaily,
 } from "../db/schema.js";
+import { formatLocalDateYYYYMMDD } from "../utils/datetime.js";
 
 const DEDUP_RETAIN_DAYS = 2;
 
 function statDate(): string {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+  return formatLocalDateYYYYMMDD(); // YYYY-MM-DD in server local timezone
 }
 
 /**
@@ -314,7 +315,7 @@ export function pruneListenDedup(): void {
   drizzleDb
     .delete(podcastStatsListenDedup)
     .where(
-      sql`${podcastStatsListenDedup.statDate} < date('now', ${`-${DEDUP_RETAIN_DAYS} days`})`,
+      sql`${podcastStatsListenDedup.statDate} < date('now', 'localtime', ${`-${DEDUP_RETAIN_DAYS} days`})`,
     )
     .run();
 }

@@ -4,6 +4,9 @@ import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getPodcast, updatePodcast, type Podcast } from '../api/podcasts';
 import type { PodcastUpdate } from '@harborfm/shared';
+import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
+import { useBaselineDirty, snapshotForDirty } from '../hooks/useBaselineDirty';
 import styles from '../components/PodcastDetail/shared.module.css';
 
 export interface EditSocialLinksDialogProps {
@@ -36,6 +39,7 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
   });
 
   const [form, setForm] = useState<Record<string, string>>({});
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && podcast) {
@@ -45,6 +49,7 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
         initial[key] = val != null ? String(val) : '';
       }
       setForm(initial);
+      setFormBaseline(snapshotForDirty(initial));
     }
   }, [open, podcast]);
 
@@ -68,29 +73,45 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
     mutation.mutate(payload);
   }
 
+  const isDirty = useBaselineDirty(formBaseline, form);
+  const {
+    confirmOpen,
+    requestClose,
+    onOpenChange,
+    handleConfirmOpenChange,
+    handleDiscard,
+    dialogContentProps,
+  } = useDialogCloseGuard({ isDirty, onClose });
+
   if (!open || !podcastId) return null;
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content
           className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onPointerDownOutside(e);
+          }}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onInteractOutside(e);
+          }}
+          onEscapeKeyDown={dialogContentProps.onEscapeKeyDown}
         >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>Platform &amp; Social Links</Dialog.Title>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className={styles.dialogClose}
-                aria-label="Close"
-                disabled={mutation.isPending}
-              >
-                <X size={18} strokeWidth={2} aria-hidden="true" />
-              </button>
-            </Dialog.Close>
+            <button
+              type="button"
+              className={styles.dialogClose}
+              aria-label="Close"
+              disabled={mutation.isPending}
+              onClick={requestClose}
+            >
+              <X size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
           </div>
           <Dialog.Description className={styles.dialogDescription}>
             Add links to your podcast on listening platforms and social media. Leave blank to hide.
@@ -133,7 +154,7 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
           </div>
           {podcast && (
             <div className={`${styles.dialogFooter} ${styles.dialogFooterCancelLeft}`}>
-              <button type="button" className={styles.cancel} onClick={onClose} disabled={mutation.isPending} aria-label="Cancel">
+              <button type="button" className={styles.cancel} onClick={requestClose} disabled={mutation.isPending} aria-label="Cancel">
                 Cancel
               </button>
               <button type="submit" form="edit-social-links-form" className={styles.submit} disabled={mutation.isPending} aria-label="Save links">
@@ -143,6 +164,11 @@ export function EditSocialLinksDialog({ open, podcastId, onClose }: EditSocialLi
           )}
         </Dialog.Content>
       </Dialog.Portal>
+      <UnsavedChangesConfirmDialog
+        open={confirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        onDiscard={handleDiscard}
+      />
     </Dialog.Root>
   );
 }

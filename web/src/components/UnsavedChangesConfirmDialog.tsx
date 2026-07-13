@@ -1,18 +1,20 @@
 import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
-import styles from '../../../pages/EpisodeEditor.module.css';
+import styles from './PodcastDetail/shared.module.css';
 
-export interface SegmentCloseConfirmDialogProps {
+export interface UnsavedChangesConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDiscard: () => void;
+  description?: string;
 }
 
-export function SegmentCloseConfirmDialog({
+export function UnsavedChangesConfirmDialog({
   open,
   onOpenChange,
   onDiscard,
-}: SegmentCloseConfirmDialogProps) {
+  description = 'You have unsaved changes. Discard changes and close?',
+}: UnsavedChangesConfirmDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onOpenChange(false)}>
       <Dialog.Portal>
@@ -24,7 +26,7 @@ export function SegmentCloseConfirmDialog({
           onInteractOutside={(e) => e.preventDefault()}
         >
           <div className={styles.dialogHeaderRow}>
-            <Dialog.Title className={styles.dialogTitle}>Unsaved changes</Dialog.Title>
+            <Dialog.Title className={styles.dialogTitle}>Unsaved Changes</Dialog.Title>
             <Dialog.Close asChild>
               <button type="button" className={styles.dialogClose} aria-label="Close">
                 <X size={18} strokeWidth={2} aria-hidden="true" />
@@ -32,7 +34,7 @@ export function SegmentCloseConfirmDialog({
             </Dialog.Close>
           </div>
           <Dialog.Description className={styles.dialogDescription}>
-            You have unsaved changes on the Edit tab. Discard changes and close?
+            {description}
           </Dialog.Description>
           <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
             <button

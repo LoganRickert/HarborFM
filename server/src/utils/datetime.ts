@@ -16,3 +16,21 @@ export function parseDatetimeToMs(str: string | null | undefined): number {
   if (!str || typeof str !== "string" || !str.trim()) return NaN;
   return new Date(str.trim()).getTime();
 }
+
+/** Calendar date YYYY-MM-DD in the server process local timezone (or TZ env). */
+export function formatLocalDateYYYYMMDD(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Inclusive local-calendar window of `days` days ending today (server timezone). */
+export function lastNLocalDateRange(days: number): { startDate: string; endDate: string } {
+  const end = new Date();
+  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (days - 1));
+  return {
+    startDate: formatLocalDateYYYYMMDD(start),
+    endDate: formatLocalDateYYYYMMDD(end),
+  };
+}

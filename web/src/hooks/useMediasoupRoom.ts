@@ -692,7 +692,7 @@ export function useMediasoupRoom(
     const handlePageUnload = () => {
       stopMediaTracks();
     };
-    // Do not stop mic tracks on pagehide — mobile tab/app switches fire it and would
+    // Do not stop mic tracks on pagehide as mobile tab/app switches fire it and would
     // kill the mediasoup send path while the separate CallJoin meter mic keeps working.
     window.addEventListener('beforeunload', handlePageUnload);
 

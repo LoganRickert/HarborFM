@@ -32,6 +32,7 @@ import {
   FeedCastList,
   FeedVideoPlayer,
   ReviewsCard,
+  FeedEpisodeChapters,
 } from '../components/Feed';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import sharedStyles from '../styles/shared.module.css';
@@ -97,6 +98,7 @@ export function FeedEpisode({
     hasWaveform,
     togglePlay,
     seek,
+    seekAndPlay,
     volume,
     setVolume,
     playbackRate,
@@ -273,6 +275,15 @@ export function FeedEpisode({
               ) : (
                 <FeedSubscriberOnlyMessage />
               )
+            )}
+
+            {audioUrl && !audioLoadFailed && (episode.markers?.length ?? 0) > 0 && (
+              <FeedEpisodeChapters
+                markers={episode.markers ?? []}
+                currentTime={currentTime}
+                durationSec={durationSec}
+                onPlayChapter={seekAndPlay}
+              />
             )}
 
             {episode.description && (

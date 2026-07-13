@@ -14,6 +14,7 @@ interface ExportFormProps {
   onSubmitCreate: (body: ExportCreate) => void;
   onSubmitUpdate: (exportId: string, body: ExportUpdate) => void;
   error?: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function ExportForm({
@@ -23,6 +24,7 @@ export function ExportForm({
   onSubmitCreate,
   onSubmitUpdate,
   error,
+  onDirtyChange,
 }: ExportFormProps) {
   const currentMode = (initial?.mode as ExportMode) ?? 'S3';
   const [exportMode, setExportMode] = useState<ExportMode>(currentMode);
@@ -35,6 +37,7 @@ export function ExportForm({
     private_key: '', url: '', api_url: '', api_key: '', gateway_url: '',
     share: '', domain: '',
   }));
+  const [baseline, setBaseline] = useState<string | null>(null);
   const isEdit = formMode === 'edit';
   const privateKeyRef = useRef<HTMLTextAreaElement>(null);
   const set = (key: string, value: string | number | boolean) => setFields((p) => ({ ...p, [key]: value }));
@@ -49,14 +52,26 @@ export function ExportForm({
     setPublicBaseUrl(initial?.publicBaseUrl ?? '');
     const isEditMode = formMode === 'edit';
     const defaultPort = mode === 'SFTP' ? 22 : 21;
-    setFields({
+    const nextFields = {
       bucket: initial?.bucket ?? '', prefix: initial?.prefix ?? '', region: initial?.region ?? 'auto', endpoint_url: initial?.endpointUrl ?? '',
       access_key_id: '', secret_access_key: '',
       host: '', port: isEditMode ? '' : defaultPort, username: '', password: '', path: '', secure: false,
       private_key: '', url: '', api_url: '', api_key: '', gateway_url: '',
       share: '', domain: '',
-    });
+    };
+    setFields(nextFields);
+    setBaseline(JSON.stringify({ mode, name: initial?.name ?? '', publicBaseUrl: initial?.publicBaseUrl ?? '', fields: nextFields }));
   }, [open, initial, formMode]);
+
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    if (baseline === null) {
+      onDirtyChange(false);
+      return;
+    }
+    const current = JSON.stringify({ mode: exportMode, name, publicBaseUrl, fields });
+    onDirtyChange(current !== baseline);
+  }, [baseline, exportMode, name, publicBaseUrl, fields, onDirtyChange]);
 
   const buildCreateBody = (): ExportCreate => {
     const nameTrim = name.trim();

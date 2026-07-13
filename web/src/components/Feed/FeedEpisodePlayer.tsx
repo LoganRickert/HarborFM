@@ -4,6 +4,7 @@ import { useFeedAudioPlayer } from '../../hooks/useFeedAudioPlayer';
 import { publicEpisodeWaveformUrl, PublicEpisodeWithAuth } from '../../api/public';
 import { WaveformCanvas } from '../../pages/EpisodeEditor/WaveformCanvas';
 import { FeedPlaybackControls } from './FeedPlaybackControls';
+import { FeedEpisodeChapters } from './FeedEpisode/FeedEpisodeChapters';
 import { FadeSlide } from './FadeSlide';
 import { FeedEpisodePlayerProps } from '../../types/feed';
 import styles from './FeedEpisodePlayer.module.css';
@@ -20,6 +21,7 @@ export function FeedEpisodePlayer({
   const episodeWithAuth = episode as PublicEpisodeWithAuth;
   const audioUrl = episodeWithAuth.privateAudioUrl || episode.audioUrl || null;
   const durationSec = episode.audioDurationSec ?? 0;
+  const markers = episode.markers ?? [];
 
   useEffect(() => setAudioLoadFailed(false), [audioUrl]);
 
@@ -27,9 +29,11 @@ export function FeedEpisodePlayer({
     audioRef,
     waveformData,
     currentTime,
+    isPlaying: audioPlaying,
     hasWaveform,
     togglePlay,
     seek,
+    seekAndPlay,
     volume,
     setVolume,
     playbackRate,
@@ -65,23 +69,23 @@ export function FeedEpisodePlayer({
             type="button"
             className={styles.playPauseBtn}
             onClick={togglePlay}
-            title={isPlaying ? 'Pause' : 'Play'}
-            aria-label={isPlaying ? 'Pause' : 'Play'}
+            title={audioPlaying ? 'Pause' : 'Play'}
+            aria-label={audioPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <Pause size={22} aria-hidden /> : <Play size={22} aria-hidden />}
+            {audioPlaying ? <Pause size={22} aria-hidden /> : <Play size={22} aria-hidden />}
           </button>
           <WaveformCanvas
             data={waveformData!}
             durationSec={durationSec}
             currentTime={currentTime}
-            markers={episode.markers ?? []}
+            markers={markers}
             onSeek={seek}
             className={styles.waveform}
           />
         </div>
       ) : null}
       {hasWaveform ? (
-        <FadeSlide show={isPlaying}>
+        <FadeSlide show={isPlaying || audioPlaying}>
           <FeedPlaybackControls
             currentTime={currentTime}
             durationSec={durationSec}
@@ -91,6 +95,15 @@ export function FeedEpisodePlayer({
             cyclePlaybackRate={cyclePlaybackRate}
           />
         </FadeSlide>
+      ) : null}
+      {markers.length > 0 ? (
+        <FeedEpisodeChapters
+          markers={markers}
+          currentTime={currentTime}
+          durationSec={durationSec}
+          onPlayChapter={seekAndPlay}
+          className={styles.chapters}
+        />
       ) : null}
       {hasWaveform ? (
         <audio

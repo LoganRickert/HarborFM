@@ -14,6 +14,9 @@ import {
   getDeletePodcastStatus,
   type Podcast,
 } from '../api/podcasts';
+import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
+import { useBaselineDirty, snapshotForDirty } from '../hooks/useBaselineDirty';
 import styles from '../components/PodcastDetail/shared.module.css';
 
 export interface EditShowDetailsDialogProps {
@@ -58,6 +61,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
 
   const [form, setForm] = useState<Partial<Podcast>>({});
   const formRef = useRef(form);
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
   const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
   const [pendingArtworkFile, setPendingArtworkFile] = useState<File | null>(null);
   const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
@@ -93,7 +97,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
 
   useEffect(() => {
     if (podcast) {
-      setForm({
+      const next = {
         ...podcast,
         artworkUrl: podcast.artworkUrl ?? null,
         subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
@@ -102,7 +106,9 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
         subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
         showScheduledEpisodes: podcast.showScheduledEpisodes !== undefined ? Boolean(podcast.showScheduledEpisodes) : false,
-      });
+      };
+      setForm(next);
+      setFormBaseline(snapshotForDirty(next));
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setCoverMode(podcast.artworkFilename ? 'upload' : 'url');
       setPendingArtworkFile(null);
@@ -111,7 +117,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
 
   useEffect(() => {
     if (open && podcast) {
-      setForm({
+      const next = {
         ...podcast,
         artworkUrl: podcast.artworkUrl ?? null,
         subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
@@ -120,7 +126,9 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
         subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
         showScheduledEpisodes: podcast.showScheduledEpisodes !== undefined ? Boolean(podcast.showScheduledEpisodes) : false,
-      });
+      };
+      setForm(next);
+      setFormBaseline(snapshotForDirty(next));
       setDebouncedArtworkUrl((podcast.artworkUrl ?? '').trim());
       setPendingArtworkFile(null);
     }
@@ -315,29 +323,46 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
     return out;
   }
 
+  const formDirty = useBaselineDirty(formBaseline, form);
+  const isDirty = formDirty || pendingArtworkFile != null;
+  const {
+    confirmOpen,
+    requestClose,
+    onOpenChange,
+    handleConfirmOpenChange,
+    handleDiscard,
+    dialogContentProps,
+  } = useDialogCloseGuard({ isDirty, onClose });
+
   if (!open || !podcastId) return null;
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content
           className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable} ${styles.dialogShowDetailsGrid}`}
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onPointerDownOutside(e);
+          }}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onInteractOutside(e);
+          }}
+          onEscapeKeyDown={dialogContentProps.onEscapeKeyDown}
         >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>Edit Podcast Details</Dialog.Title>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className={styles.dialogClose}
-                aria-label="Close"
-                disabled={mutation.isPending || uploadArtworkMutation.isPending}
-              >
-                <X size={18} strokeWidth={2} aria-hidden="true" />
-              </button>
-            </Dialog.Close>
+            <button
+              type="button"
+              className={styles.dialogClose}
+              aria-label="Close"
+              disabled={mutation.isPending || uploadArtworkMutation.isPending}
+              onClick={requestClose}
+            >
+              <X size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
           </div>
           <Dialog.Description className={styles.dialogDescription}>
             Update the podcast title, slug, and other feed details.
@@ -1131,7 +1156,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
           </div>
           {podcast && (
             <div className={`${styles.dialogFooter} ${styles.dialogFooterCancelLeft}`}>
-              <button type="button" className={styles.cancel} onClick={onClose} aria-label="Cancel editing show">
+              <button type="button" className={styles.cancel} onClick={requestClose} aria-label="Cancel editing show">
                 Cancel
               </button>
               <button type="submit" form="edit-show-details-form" className={styles.dialogConfirm} disabled={mutation.isPending || uploadArtworkMutation.isPending} aria-label="Save show changes">
@@ -1141,6 +1166,12 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
           )}
         </Dialog.Content>
       </Dialog.Portal>
+
+      <UnsavedChangesConfirmDialog
+        open={confirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        onDiscard={handleDiscard}
+      />
 
       <Dialog.Root open={deleteConfirmOpen} onOpenChange={(o) => !o && deletePhase === 'idle' && setDeleteConfirmOpen(false)}>
         <Dialog.Portal>

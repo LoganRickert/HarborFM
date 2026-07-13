@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.8.0 - 2026-07-13
+
+- **Editor dialogs:** Cancel/close on major edit dialogs now prompts when there are unsaved changes (Keep editing / Discard), including podcast and episode details, social links, transcript, library item edit, users create/edit, delivery exports, cast members, and OIDC/SAML provider dialogs.
+- **Podcast page:** Public Page and Reviews rows always show the external-link icon.
+- **Analytics:** Empty chart messages ("No data in the last 2 weeks") are centered in the chart area instead of squeezed to one side. Daily stats and the default “last 2 weeks” window use the server’s local timezone (including today), so same-day traffic shows without waiting until tomorrow.
+- **Episode editor:** Publishing panel content no longer peeks through when the panel is collapsed on desktop.
+- **Feed player:** Playback speed control is centered between the time and volume controls. Episode and podcast feed players with chapter markers show a collapsible Chapters list that highlights the current chapter and lets listeners jump/play from each one. Each chapter row shows a progress bar for how far through that chapter playback is.
+
 ## v1.7.16 - 2026-07-12
 
 - **Waveforms:** Default editor waveform resolution is now 6 pixels/sec (was 4); override with `WAVEFORM_PIXELS_PER_SECOND`. Existing waveforms regenerate on next audio processing.

@@ -25,6 +25,9 @@ import { me, isReadOnly } from '../api/auth';
 import { getUser } from '../api/users';
 import { formatDateShort } from '../utils/format';
 import { FailedToLoadCard } from '../components/FailedToLoadCard';
+import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
+import { useBaselineDirty, snapshotForDirty } from '../hooks/useBaselineDirty';
 import styles from './Library.module.css';
 
 const LIBRARY_PAGE_SIZE = 25;
@@ -160,6 +163,7 @@ export function Library() {
   const [editGlobalAsset, setEditGlobalAsset] = useState(false);
   const [assetToDelete, setAssetToDelete] = useState<LibraryAsset | null>(null);
   const [assetToEdit, setAssetToEdit] = useState<LibraryAsset | null>(null);
+  const [editFormBaseline, setEditFormBaseline] = useState<string | null>(null);
   const [editPendingAudioFile, setEditPendingAudioFile] = useState<File | null>(null);
   const [editReplaceError, setEditReplaceError] = useState<string | null>(null);
   const [replaceInProgress, setReplaceInProgress] = useState(false);
@@ -387,16 +391,30 @@ export function Library() {
     setEditGlobalAsset(Boolean(asset.globalAsset));
     setEditPendingAudioFile(null);
     setEditReplaceError(null);
+    let tag = '';
+    let customTag = '';
     if (!asset.tag) {
-      setEditTag('');
-      setEditCustomTag('');
+      tag = '';
+      customTag = '';
     } else if (LIBRARY_TAGS.includes(asset.tag as (typeof LIBRARY_TAGS)[number])) {
-      setEditTag(asset.tag);
-      setEditCustomTag('');
+      tag = asset.tag;
+      customTag = '';
     } else {
-      setEditTag('Other');
-      setEditCustomTag(asset.tag);
+      tag = 'Other';
+      customTag = asset.tag;
     }
+    setEditTag(tag);
+    setEditCustomTag(customTag);
+    setEditFormBaseline(
+      snapshotForDirty({
+        name: asset.name,
+        tag,
+        customTag,
+        copyright: asset.copyright ?? '',
+        license: asset.license ?? '',
+        globalAsset: Boolean(asset.globalAsset),
+      }),
+    );
   }
 
   function handleEditCancel() {
@@ -408,6 +426,7 @@ export function Library() {
     setEditGlobalAsset(false);
     setEditPendingAudioFile(null);
     setEditReplaceError(null);
+    setEditFormBaseline(null);
     setAssetToEdit(null);
     if (editAudioInputRef.current) editAudioInputRef.current.value = '';
   }
@@ -467,6 +486,21 @@ export function Library() {
     setCustomTag('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
+
+  const editFormCurrent = {
+    name: editName,
+    tag: editTag,
+    customTag: editCustomTag,
+    copyright: editCopyright,
+    license: editLicense,
+    globalAsset: editGlobalAsset,
+  };
+  const editFormDirty = useBaselineDirty(editFormBaseline, editFormCurrent);
+  const editIsDirty = editFormDirty || editPendingAudioFile != null;
+  const editCloseGuard = useDialogCloseGuard({
+    isDirty: editIsDirty,
+    onClose: handleEditCancel,
+  });
 
   return (
     <div className={styles.page}>
@@ -840,17 +874,18 @@ export function Library() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      <Dialog.Root open={!!assetToEdit} onOpenChange={(open) => !open && handleEditCancel()}>
+      <Dialog.Root open={!!assetToEdit} onOpenChange={editCloseGuard.onOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.dialogOverlay} />
-          <Dialog.Content className={`${styles.dialogContent} ${styles.dialogContentScrollable}`}>
+          <Dialog.Content
+            className={`${styles.dialogContent} ${styles.dialogContentScrollable}`}
+            {...editCloseGuard.dialogContentProps}
+          >
             <div className={styles.dialogHeaderRow}>
               <Dialog.Title className={styles.dialogTitle}>Edit library item</Dialog.Title>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.dialogClose} aria-label="Close">
-                  <X size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </Dialog.Close>
+              <button type="button" className={styles.dialogClose} aria-label="Close" onClick={editCloseGuard.requestClose}>
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
             </div>
             <Dialog.Description className={styles.dialogDescription}>
               Update the name and tag for this library item.
@@ -981,9 +1016,7 @@ export function Library() {
             </div>
             </div>
             <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.cancel} aria-label="Cancel editing library item">Cancel</button>
-              </Dialog.Close>
+              <button type="button" className={styles.cancel} aria-label="Cancel editing library item" onClick={editCloseGuard.requestClose}>Cancel</button>
               <button
                 type="button"
                 className={styles.dialogConfirm}
@@ -996,6 +1029,11 @@ export function Library() {
             </div>
           </Dialog.Content>
         </Dialog.Portal>
+        <UnsavedChangesConfirmDialog
+          open={editCloseGuard.confirmOpen}
+          onOpenChange={editCloseGuard.handleConfirmOpenChange}
+          onDiscard={editCloseGuard.handleDiscard}
+        />
       </Dialog.Root>
     </div>
   );

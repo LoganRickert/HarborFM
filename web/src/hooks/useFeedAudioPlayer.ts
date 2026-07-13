@@ -38,6 +38,7 @@ export function useFeedAudioPlayer({
 }: UseFeedAudioPlayerParams) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const restoredPositionRef = useRef(false);
+  const pendingSeekRef = useRef<number | null>(null);
   const wasActiveRef = useRef(isActive);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -64,6 +65,13 @@ export function useFeedAudioPlayer({
 
   const restorePlaybackPosition = useCallback(
     (el: HTMLAudioElement) => {
+      if (pendingSeekRef.current != null) {
+        const target = pendingSeekRef.current;
+        el.currentTime = target;
+        setCurrentTime(target);
+        restoredPositionRef.current = true;
+        return;
+      }
       if (!persistPlaybackPosition || !podcastSlug || !episodeSlug || restoredPositionRef.current) {
         return;
       }
@@ -248,6 +256,101 @@ export function useFeedAudioPlayer({
     }
   }, [savePlaybackPosition]);
 
+  /**
+   * Jump to `time` and play. Waits for the seek to finish before play() so Chromium does not
+   * abort playback (AbortError) while the UI still looks active. Pending-seek wins over restore.
+   */
+  const seekAndPlay = useCallback(
+    (time: number) => {
+      const el = audioRef.current;
+      if (!el || !audioUrl) return;
+
+      const target = Math.max(0, time);
+      pendingSeekRef.current = target;
+      restoredPositionRef.current = true;
+      setCurrentTime(target);
+      onPlay?.();
+
+      if (persistPlaybackPosition && podcastSlug && episodeSlug) {
+        writeEpisodePlaybackPosition(podcastSlug, episodeSlug, target, durationSec);
+      }
+
+      const playAtTarget = () => {
+        const seekTo = pendingSeekRef.current ?? target;
+        pendingSeekRef.current = null;
+        restoredPositionRef.current = true;
+        applyPlaybackSettings(el);
+
+        const startPlayback = () => {
+          setCurrentTime(el.currentTime);
+          const result = el.play();
+          if (result && typeof result.then === 'function') {
+            result
+              .then(() => {
+                if (el.paused) {
+                  setIsPlaying(false);
+                  onPause?.();
+                } else {
+                  setIsPlaying(true);
+                }
+              })
+              .catch(() => {
+                setIsPlaying(false);
+                onPause?.();
+              });
+          } else if (el.paused) {
+            setIsPlaying(false);
+            onPause?.();
+          } else {
+            setIsPlaying(true);
+          }
+        };
+
+        const alreadyThere = Math.abs(el.currentTime - seekTo) < 0.05 && !el.seeking;
+        if (alreadyThere) {
+          startPlayback();
+          return;
+        }
+
+        let started = false;
+        const startOnce = () => {
+          if (started) return;
+          started = true;
+          window.clearTimeout(fallbackTimer);
+          startPlayback();
+        };
+
+        const fallbackTimer = window.setTimeout(startOnce, 750);
+        el.addEventListener('seeked', startOnce, { once: true });
+        try {
+          el.currentTime = seekTo;
+          setCurrentTime(seekTo);
+        } catch {
+          pendingSeekRef.current = seekTo;
+          window.clearTimeout(fallbackTimer);
+          el.removeEventListener('seeked', startOnce);
+        }
+      };
+
+      if (!el.currentSrc || el.ended) {
+        el.src = audioUrl;
+        el.addEventListener('canplay', playAtTarget, { once: true });
+      } else {
+        playAtTarget();
+      }
+    },
+    [
+      audioUrl,
+      onPlay,
+      onPause,
+      persistPlaybackPosition,
+      podcastSlug,
+      episodeSlug,
+      durationSec,
+      applyPlaybackSettings,
+    ],
+  );
+
   return {
     audioRef,
     waveformData,
@@ -256,6 +359,7 @@ export function useFeedAudioPlayer({
     hasWaveform,
     togglePlay,
     seek,
+    seekAndPlay,
     setIsPlaying,
     setCurrentTime,
     volume,

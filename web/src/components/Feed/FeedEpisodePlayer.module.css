@@ -63,3 +63,8 @@
   font-size: 0.875rem;
   color: var(--text-muted);
 }
+
+.chapters {
+  margin-top: 0.65rem;
+  margin-bottom: 0;
+}

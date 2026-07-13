@@ -43,6 +43,7 @@ import { runDnsUpdateTask } from "../../services/dns/update-task.js";
 import { podcastRowWithFilename } from "./utils.js";
 import * as repo from "./repo.js";
 import * as service from "./service.js";
+import { lastNLocalDateRange } from "../../utils/datetime.js";
 
 export async function registerCoreRoutes(app: FastifyInstance) {
   // GET /podcasts - list
@@ -446,7 +447,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         tags: ["Podcasts"],
         summary: "Get podcast analytics",
         description:
-          "Returns listen and episode analytics for a show. Optional startDate, endDate (YYYY-MM-DD), limit, and offset filter and paginate daily stats.",
+          "Returns listen and episode analytics for a show. Optional startDate, endDate (YYYY-MM-DD in the server local timezone), limit, and offset filter and paginate daily stats. When both dates are omitted, defaults to the last 14 local calendar days including today.",
         params: {
           type: "object",
           properties: { id: { type: "string" } },
@@ -485,10 +486,16 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           });
       }
       const query = queryParsed.data;
-      const startDate = query.startDate;
-      const endDate = query.endDate;
+      let startDate = query.startDate;
+      let endDate = query.endDate;
       const limit = query.limit;
       const offset = query.offset ?? 0;
+
+      if (startDate === undefined && endDate === undefined) {
+        const range = lastNLocalDateRange(14);
+        startDate = range.startDate;
+        endDate = range.endDate;
+      }
 
       if (startDate !== undefined && endDate !== undefined && startDate > endDate) {
         return reply.status(400).send({ error: "startDate must be <= endDate" });

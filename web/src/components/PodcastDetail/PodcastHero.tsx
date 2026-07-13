@@ -140,8 +140,9 @@ export function PodcastHero({
             label="Public Page"
             icon={Globe}
             iconTone="green"
+            external
             {...(linkingPublicPage
-              ? { href: linkingPublicPage, external: true }
+              ? { href: linkingPublicPage }
               : { to: `/feed/${podcast.slug}` })}
           />
         )}
@@ -160,6 +161,7 @@ export function PodcastHero({
             icon={MessageSquare}
             iconTone="slate"
             to={`/podcasts/${podcast.id}/reviews`}
+            external
           />
         )}
         {canEdit && (

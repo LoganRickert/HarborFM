@@ -23,8 +23,9 @@ import { SegmentTranscriptTab } from './tabs/SegmentTranscriptTab';
 import { SegmentAskTab } from './tabs/SegmentAskTab';
 import { RemoveSilenceConfirmDialog } from './dialogs/RemoveSilenceConfirmDialog';
 import { NoiseSuppressionConfirmDialog } from './dialogs/NoiseSuppressionConfirmDialog';
-import { SegmentCloseConfirmDialog } from './dialogs/SegmentCloseConfirmDialog';
 import { RemoveMarkerConfirmDialog } from './dialogs/RemoveMarkerConfirmDialog';
+import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { detectSilencePeriods } from './utils/detectSilence';
 import { mergeTrimRanges, getTrimContainingEntry } from './utils/transcriptTrimUtils';
 
@@ -65,7 +66,6 @@ export function SegmentModal({
   const [addSilenceTrimsConfirmOpen, setAddSilenceTrimsConfirmOpen] = useState(false);
   const [removeSilenceConfirmOpen, setRemoveSilenceConfirmOpen] = useState(false);
   const [noiseSuppressionConfirmOpen, setNoiseSuppressionConfirmOpen] = useState(false);
-  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [removeMarkerConfirmIndex, setRemoveMarkerConfirmIndex] = useState<number | null>(null);
   const [askQuestion, setAskQuestion] = useState('');
   const [askResponse, setAskResponse] = useState<string | null>(null);
@@ -106,6 +106,18 @@ export function SegmentModal({
   });
 
   const hasAnyUnsavedChanges = edit.hasEditUnsavedChanges;
+
+  const {
+    confirmOpen: closeConfirmOpen,
+    requestClose,
+    onOpenChange: handleCloseRequest,
+    handleConfirmOpenChange,
+    handleDiscard: handleConfirmDiscard,
+    dialogContentProps: closeGuardContentProps,
+  } = useDialogCloseGuard({
+    isDirty: hasAnyUnsavedChanges,
+    onClose,
+  });
 
   const { data: llmData } = useQuery({
     queryKey: ['settings', 'llm-available'],
@@ -180,20 +192,6 @@ export function SegmentModal({
       setActiveTab(asrAvailable ? 'transcript' : 'edit');
     }
   }, [activeTab, llmAvailable, asrAvailable, hasTranscript]);
-
-  function handleCloseRequest(open: boolean) {
-    if (open) return;
-    if (hasAnyUnsavedChanges) {
-      setCloseConfirmOpen(true);
-    } else {
-      onClose();
-    }
-  }
-
-  function handleConfirmDiscard() {
-    setCloseConfirmOpen(false);
-    onClose();
-  }
 
   function handleAddSilenceTrimsConfirm() {
     setAddSilenceTrimsConfirmOpen(false);
@@ -324,14 +322,13 @@ export function SegmentModal({
           <Dialog.Content
             className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.segmentTranscriptDialog} ${sharedStyles.dialogContentScrollable} ${sharedStyles.dialogShowDetailsGrid}`}
             aria-describedby={undefined}
+            {...closeGuardContentProps}
           >
             <div className={styles.dialogHeaderRow}>
               <Dialog.Title className={styles.dialogTitle}>{segmentName}</Dialog.Title>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.dialogClose} aria-label="Close">
-                  <X size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </Dialog.Close>
+              <button type="button" className={styles.dialogClose} aria-label="Close" onClick={requestClose}>
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
             </div>
             <div className={sharedStyles.editDetailsTabSelectWrap}>
               <select
@@ -398,12 +395,10 @@ export function SegmentModal({
             </div>
             {(activeTab !== 'edit' || edit.selectedMarkerIndex == null) && (
             <div className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}>
-              <Dialog.Close asChild>
-                <button type="button" className={styles.cancel} aria-label="Close">
-                  <X size={18} strokeWidth={2} aria-hidden />
-                  Close
-                </button>
-              </Dialog.Close>
+              <button type="button" className={styles.cancel} aria-label="Close" onClick={requestClose}>
+                <X size={18} strokeWidth={2} aria-hidden />
+                Close
+              </button>
               <div style={{ flex: 1 }} />
               {hasAnyUnsavedChanges && (
                 <button
@@ -421,6 +416,12 @@ export function SegmentModal({
             )}
           </Dialog.Content>
         </Dialog.Portal>
+
+        <UnsavedChangesConfirmDialog
+          open={closeConfirmOpen}
+          onOpenChange={handleConfirmOpenChange}
+          onDiscard={handleConfirmDiscard}
+        />
       </Dialog.Root>
 
       <RemoveSilenceConfirmDialog
@@ -465,12 +466,6 @@ export function SegmentModal({
             .finally(() => setApplyingNoiseSuppression(false));
         }}
         loading={applyingNoiseSuppression}
-      />
-
-      <SegmentCloseConfirmDialog
-        open={closeConfirmOpen}
-        onOpenChange={setCloseConfirmOpen}
-        onDiscard={handleConfirmDiscard}
       />
 
       <RemoveMarkerConfirmDialog

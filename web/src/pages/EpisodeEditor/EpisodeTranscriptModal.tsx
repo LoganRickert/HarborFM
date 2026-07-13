@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Upload } from 'lucide-react';
 import { getEpisodeTranscript, updateEpisodeTranscript } from '../../api/segments';
+import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeTranscriptModalProps {
@@ -84,24 +86,31 @@ export function EpisodeTranscriptModal({
     updateMutation.mutate(editValue);
   };
 
-  const hasChanges = text != null && editValue !== text;
+  const hasChanges = canEdit && text != null && editValue !== text;
   const isSaving = updateMutation.isPending;
+  const {
+    confirmOpen,
+    requestClose,
+    onOpenChange,
+    handleConfirmOpenChange,
+    handleDiscard,
+    dialogContentProps,
+  } = useDialogCloseGuard({ isDirty: hasChanges, onClose });
 
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root open onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content
           className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.episodeTranscriptDialog}`}
           aria-describedby="episode-transcript-description"
+          {...dialogContentProps}
         >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>Episode Transcript</Dialog.Title>
-            <Dialog.Close asChild>
-              <button type="button" className={styles.dialogClose} aria-label="Close" disabled={isSaving}>
-                <X size={18} strokeWidth={2} aria-hidden />
-              </button>
-            </Dialog.Close>
+            <button type="button" className={styles.dialogClose} aria-label="Close" disabled={isSaving} onClick={requestClose}>
+              <X size={18} strokeWidth={2} aria-hidden />
+            </button>
           </div>
           <Dialog.Description id="episode-transcript-description" className={styles.dialogDescription}>
             {canEdit
@@ -156,7 +165,7 @@ export function EpisodeTranscriptModal({
                     <button
                       type="button"
                       className={styles.cancel}
-                      onClick={onClose}
+                      onClick={requestClose}
                       disabled={isSaving}
                       aria-label="Cancel"
                     >
@@ -178,6 +187,11 @@ export function EpisodeTranscriptModal({
           </div>
         </Dialog.Content>
       </Dialog.Portal>
+      <UnsavedChangesConfirmDialog
+        open={confirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        onDiscard={handleDiscard}
+      />
     </Dialog.Root>
   );
 }

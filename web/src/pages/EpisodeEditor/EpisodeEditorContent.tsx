@@ -30,6 +30,9 @@ import { DeleteSegmentDialog } from './DeleteSegmentDialog';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { SegmentModal } from '../../components/SegmentModal';
+import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
+import { useBaselineDirty, snapshotForDirty } from '../../hooks/useBaselineDirty';
 import { EpisodeTranscriptModal } from './EpisodeTranscriptModal';
 import { GenerateVideoModal } from './GenerateVideoModal';
 import {
@@ -99,6 +102,7 @@ export function EpisodeEditorContent({
   const [showRecord, setShowRecord] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [dialogFormBaseline, setDialogFormBaseline] = useState<string | null>(null);
   const [episodeDetailsActiveTab, setEpisodeDetailsActiveTab] = useState<EpisodeDetailsTab>('overview');
   const [segmentToDelete, setSegmentToDelete] = useState<string | null>(null);
   const [segmentIdForInfo, setSegmentIdForInfo] = useState<string | null>(null);
@@ -345,6 +349,7 @@ export function EpisodeEditorContent({
   useEffect(() => {
     if (detailsDialogOpen) {
       setDialogForm(episodeForm);
+      setDialogFormBaseline(snapshotForDirty(episodeForm));
       setCoverMode(episode.artworkFilename ? 'upload' : 'url');
       setPendingArtworkFile(null);
       setDebouncedArtworkUrl((episodeForm.artworkUrl ?? '').trim());
@@ -484,6 +489,16 @@ export function EpisodeEditorContent({
     { label: 'Episodes', href: `/podcasts/${podcastId}/episodes` },
     { label: episode.title, hideOnMobile: true },
   ];
+
+  const detailsFormDirty = useBaselineDirty(dialogFormBaseline, dialogForm);
+  const detailsIsDirty = detailsFormDirty || pendingArtworkFile != null;
+  const detailsCloseGuard = useDialogCloseGuard({
+    isDirty: detailsIsDirty,
+    onClose: () => {
+      setDetailsDialogOpen(false);
+      setEpisodeDetailsActiveTab('overview');
+    },
+  });
 
   return (
     <div className={styles.page}>
@@ -704,32 +719,35 @@ export function EpisodeEditorContent({
 
       <Dialog.Root
         open={detailsDialogOpen}
-        onOpenChange={(o) => {
-          if (!o) {
-            setDetailsDialogOpen(false);
-            setEpisodeDetailsActiveTab('overview');
-          }
-        }}
+        onOpenChange={detailsCloseGuard.onOpenChange}
       >
         <Dialog.Portal>
           <Dialog.Overlay className={sharedStyles.dialogOverlay} />
           <Dialog.Content
             className={`${sharedStyles.dialogContent} ${sharedStyles.dialogContentWide} ${sharedStyles.dialogContentScrollable} ${sharedStyles.dialogShowDetailsGrid}`}
+            onPointerDownOutside={(e) => {
+              e.preventDefault();
+              detailsCloseGuard.dialogContentProps.onPointerDownOutside(e);
+            }}
+            onInteractOutside={(e) => {
+              e.preventDefault();
+              detailsCloseGuard.dialogContentProps.onInteractOutside(e);
+            }}
+            onEscapeKeyDown={detailsCloseGuard.dialogContentProps.onEscapeKeyDown}
           >
             <div className={sharedStyles.dialogHeaderRow}>
               <Dialog.Title className={sharedStyles.dialogTitle}>
                 Episode Details
               </Dialog.Title>
-              <Dialog.Close asChild>
-                <button
-                  type="button"
-                  className={sharedStyles.dialogClose}
-                  aria-label="Close"
-                  disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
-                >
-                  <X size={18} strokeWidth={2} aria-hidden="true" />
-                </button>
-              </Dialog.Close>
+              <button
+                type="button"
+                className={sharedStyles.dialogClose}
+                aria-label="Close"
+                disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
+                onClick={detailsCloseGuard.requestClose}
+              >
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
             </div>
             <Dialog.Description className={sharedStyles.dialogDescription}>
               Edit the episode title, description, and publish settings.
@@ -804,7 +822,7 @@ export function EpisodeEditorContent({
                     coverMode === 'upload' ? (() => { const { artworkUrl: _artworkUrl, ...rest } = payload; void _artworkUrl; return rest; })() : payload;
                   updateMutation.mutate(finalPayload as EpisodeUpdate);
                 }}
-                onCancel={() => setDetailsDialogOpen(false)}
+                onCancel={detailsCloseGuard.requestClose}
                 isSaving={updateMutation.isPending}
                 saveError={
                   updateMutation.isError
@@ -834,7 +852,7 @@ export function EpisodeEditorContent({
               />
             </div>
             <div className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}>
-              <button type="button" className={sharedStyles.cancel} onClick={() => setDetailsDialogOpen(false)} aria-label="Cancel editing episode">
+              <button type="button" className={sharedStyles.cancel} onClick={detailsCloseGuard.requestClose} aria-label="Cancel editing episode">
                 Cancel
               </button>
               <button
@@ -849,6 +867,11 @@ export function EpisodeEditorContent({
             </div>
           </Dialog.Content>
         </Dialog.Portal>
+        <UnsavedChangesConfirmDialog
+          open={detailsCloseGuard.confirmOpen}
+          onOpenChange={detailsCloseGuard.handleConfirmOpenChange}
+          onDiscard={detailsCloseGuard.handleDiscard}
+        />
       </Dialog.Root>
 
       <EndCallConfirmDialog

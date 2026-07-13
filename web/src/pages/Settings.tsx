@@ -581,7 +581,7 @@ export function Settings() {
         aria-hidden={!isDirty}
       >
         <div className={styles.floatingSaveBar}>
-          <span className={styles.floatingSaveLabel}>Unsaved changes</span>
+          <span className={styles.floatingSaveLabel}>Unsaved Changes</span>
           <button
             type="button"
             className={styles.floatingSaveBtn}

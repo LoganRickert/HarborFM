@@ -931,7 +931,12 @@
 }
 
 .publishPanelExpandInner {
+  min-height: 0;
   overflow: hidden;
+  padding: 0;
+}
+
+.publishPanelExpandOpen .publishPanelExpandInner {
   padding: 0 1rem 0.85rem;
 }
 

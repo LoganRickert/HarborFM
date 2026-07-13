@@ -15,17 +15,18 @@ const LOCATIONS = [
 const SOURCES = ["Other", "Apple Podcasts", "Spotify", "Google Podcasts", "Pocket Casts", "Overcast"];
 
 function dateString(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-/** Last 30 days ending yesterday (YYYY-MM-DD). */
+/** Last N days ending today in the process local timezone (YYYY-MM-DD). */
 function last30Days(): string[] {
   const end = new Date();
-  end.setUTCDate(end.getUTCDate() - 1);
   const dates: string[] = [];
   for (let i = DAYS - 1; i >= 0; i--) {
-    const d = new Date(end);
-    d.setUTCDate(d.getUTCDate() - i);
+    const d = new Date(end.getFullYear(), end.getMonth(), end.getDate() - i);
     dates.push(dateString(d));
   }
   return dates;

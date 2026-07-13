@@ -41,17 +41,6 @@ function truncateEpisodeAxisTitle(title: string, maxLen: number): string {
   return title.slice(0, Math.max(0, maxLen - 1)) + '…';
 }
 
-function last14Days(): { startDate: string; endDate: string } {
-  const end = new Date();
-  end.setUTCDate(end.getUTCDate() - 1);
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 13);
-  return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
-  };
-}
-
 function sumRss(analytics: PodcastAnalytics) {
   let bot = 0;
   let human = 0;
@@ -114,8 +103,10 @@ function sourceTotals(analytics: PodcastAnalytics) {
 }
 
 function formatShortDate(iso: string) {
-  const d = new Date(iso + 'T00:00:00Z');
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  // Calendar day label (server-local YYYY-MM-DD).
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function tooltipLabelFormatter(label: unknown): string {
@@ -185,16 +176,14 @@ export function PodcastAnalytics() {
   const chartMargin = narrow ? { top: 8, right: 4, left: 0, bottom: 8 } : { top: 8, right: 8, left: 8, bottom: 8 };
   const verticalYAxisWidth = narrow ? 72 : 120;
 
-  const dateRange = useMemo(() => last14Days(), []);
-
   const { data: podcast, isLoading: podcastLoading } = useQuery({
     queryKey: ['podcast', id],
     queryFn: () => getPodcast(id!),
     enabled: !!id,
   });
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ['podcast-analytics', id, dateRange.startDate, dateRange.endDate],
-    queryFn: () => getPodcastAnalytics(id!, dateRange),
+    queryKey: ['podcast-analytics', id],
+    queryFn: () => getPodcastAnalytics(id!),
     enabled: !!id,
   });
 
@@ -344,7 +333,6 @@ export function PodcastAnalytics() {
     series: { key: string; name: string; color: string }[],
     viewType: TimeViewType
   ) => {
-    if (data.length === 0) return <p className={styles.empty}>No data in the last 2 weeks.</p>;
     const common = { data, margin: chartMargin };
     if (viewType === 'line') {
       return (
@@ -405,10 +393,6 @@ export function PodcastAnalytics() {
         <p className={styles.sectionSub}>
           See how your show is doing over the last 2 weeks: feed check-ins, episode plays, and where listeners are from.
         </p>
-        <p className={styles.sectionSub}>
-          Overview charts show listeners only. Directory crawlers and bots are listed separately as Crawlers where broken out.
-          Tiny audio probes (partial ranges under 250 KB) are not counted as episode requests or listens.
-        </p>
       </div>
 
       {!hasAnyData && (
@@ -454,12 +438,14 @@ export function PodcastAnalytics() {
                   </tbody>
                 </table>
               </div>
+            ) : overviewData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No data in the last 2 weeks.</p>
+              </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer width="100%" height={300}>
-                  {overviewData.length === 0 ? (
-                    <p className={styles.empty}>No data in the last 2 weeks.</p>
-                  ) : overviewView === 'line' ? (
+                  {overviewView === 'line' ? (
                     <LineChart data={overviewData} margin={chartMargin}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                       <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
@@ -549,6 +535,10 @@ export function PodcastAnalytics() {
                   </tbody>
                 </table>
               </div>
+            ) : feedData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No data in the last 2 weeks.</p>
+              </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer width="100%" height={300}>
@@ -600,31 +590,31 @@ export function PodcastAnalytics() {
                   </tbody>
                 </table>
               </div>
+            ) : episodeBarChartData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No episode data in the last 2 weeks.</p>
+              </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer
                   width="100%"
                   height={Math.min(420, Math.max(260, 52 + episodeBarChartData.length * 44))}
                 >
-                  {episodeBarChartData.length === 0 ? (
-                    <p className={styles.empty}>No episode data in the last 2 weeks.</p>
-                  ) : (
-                    <BarChart data={episodeBarChartData} layout="vertical" margin={episodeChartMargin} barCategoryGap="12%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                      <XAxis type="number" {...axisProps} />
-                      <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
-                      <Tooltip
-                        contentStyle={tooltipContentStyle}
-                        formatter={(value: number | undefined) => [value ?? 0, '']}
-                        labelFormatter={(_: unknown, payload: readonly unknown[]) =>
-                          (payload?.[0] as { payload?: { fullName?: string } } | undefined)?.payload?.fullName ?? ''
-                        }
-                      />
-                      <Legend />
-                      <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
-                      <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
-                    </BarChart>
-                  )}
+                  <BarChart data={episodeBarChartData} layout="vertical" margin={episodeChartMargin} barCategoryGap="12%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                    <XAxis type="number" {...axisProps} />
+                    <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
+                    <Tooltip
+                      contentStyle={tooltipContentStyle}
+                      formatter={(value: number | undefined) => [value ?? 0, '']}
+                      labelFormatter={(_: unknown, payload: readonly unknown[]) =>
+                        (payload?.[0] as { payload?: { fullName?: string } } | undefined)?.payload?.fullName ?? ''
+                      }
+                    />
+                    <Legend />
+                    <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
+                    <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
@@ -667,31 +657,31 @@ export function PodcastAnalytics() {
                   </tbody>
                 </table>
               </div>
+            ) : listensBarChartData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No listen data in the last 2 weeks.</p>
+              </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer
                   width="100%"
                   height={Math.min(420, Math.max(260, 52 + listensBarChartData.length * 44))}
                 >
-                  {listensBarChartData.length === 0 ? (
-                    <p className={styles.empty}>No listen data in the last 2 weeks.</p>
-                  ) : (
-                    <BarChart data={listensBarChartData} layout="vertical" margin={episodeChartMargin} barCategoryGap="12%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                      <XAxis type="number" {...axisProps} />
-                      <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
-                      <Tooltip
-                        contentStyle={tooltipContentStyle}
-                        formatter={(value: number | undefined) => [value ?? 0, '']}
-                        labelFormatter={(_: unknown, payload: readonly unknown[]) =>
-                          (payload?.[0] as { payload?: { fullName?: string } } | undefined)?.payload?.fullName ?? ''
-                        }
-                      />
-                      <Legend />
-                      <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
-                      <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
-                    </BarChart>
-                  )}
+                  <BarChart data={listensBarChartData} layout="vertical" margin={episodeChartMargin} barCategoryGap="12%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                    <XAxis type="number" {...axisProps} />
+                    <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
+                    <Tooltip
+                      contentStyle={tooltipContentStyle}
+                      formatter={(value: number | undefined) => [value ?? 0, '']}
+                      labelFormatter={(_: unknown, payload: readonly unknown[]) =>
+                        (payload?.[0] as { payload?: { fullName?: string } } | undefined)?.payload?.fullName ?? ''
+                      }
+                    />
+                    <Legend />
+                    <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
+                    <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
@@ -735,12 +725,14 @@ export function PodcastAnalytics() {
                   </tbody>
                 </table>
               </div>
+            ) : locationPieData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No location data in the last 2 weeks.</p>
+              </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer width="100%" height={300}>
-                  {locationPieData.length === 0 ? (
-                    <p className={styles.empty}>No location data in the last 2 weeks.</p>
-                  ) : locationsView === 'pie' ? (
+                  {locationsView === 'pie' ? (
                     <PieChart>
                       <Pie
                         data={locationPieData}
@@ -809,29 +801,29 @@ export function PodcastAnalytics() {
                   </tbody>
                 </table>
               </div>
+            ) : sourcePieData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No source data in the last 2 weeks.</p>
+              </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer width="100%" height={300}>
-                  {sourcePieData.length === 0 ? (
-                    <p className={styles.empty}>No source data in the last 2 weeks.</p>
-                  ) : (
-                    <PieChart>
-                      <Pie
-                        data={sourcePieData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                      >
-                        {sourcePieData.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={tooltipContentStyle} formatter={(value: number | undefined) => [value ?? 0, 'Listens']} />
-                    </PieChart>
-                  )}
+                  <PieChart>
+                    <Pie
+                      data={sourcePieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                    >
+                      {sourcePieData.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipContentStyle} formatter={(value: number | undefined) => [value ?? 0, 'Listens']} />
+                  </PieChart>
                 </ResponsiveContainer>
               </div>
             )}

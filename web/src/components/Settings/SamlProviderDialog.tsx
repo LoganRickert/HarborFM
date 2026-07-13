@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Copy, Check } from 'lucide-react';
+import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
+import { useBaselineDirty, snapshotForDirty } from '../../hooks/useBaselineDirty';
 import sharedStyles from '../PodcastDetail/shared.module.css';
 import styles from '../../pages/Settings.module.css';
 
@@ -52,12 +55,13 @@ export function SamlProviderDialog({
   onSubmit,
 }: SamlProviderDialogProps) {
   const [form, setForm] = useState<SamlProvider>(() => emptyProvider());
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setForm(
-        provider ? { ...emptyProvider(), ...provider } : emptyProvider()
-      );
+      const next = provider ? { ...emptyProvider(), ...provider } : emptyProvider();
+      setForm(next);
+      setFormBaseline(snapshotForDirty(next));
     }
   }, [open, provider]);
 
@@ -90,26 +94,44 @@ export function SamlProviderDialog({
     setTimeout(() => setCopiedKey(null), 1000);
   };
 
+  const isDirty = useBaselineDirty(formBaseline, form);
+  const {
+    confirmOpen,
+    requestClose,
+    onOpenChange,
+    handleConfirmOpenChange,
+    handleDiscard,
+    dialogContentProps,
+  } = useDialogCloseGuard({ isDirty, onClose });
+
   return (
-    <Dialog.Root open={open} onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={sharedStyles.dialogOverlay} />
         <Dialog.Content
           className={`${sharedStyles.dialogContent} ${sharedStyles.dialogContentWide} ${sharedStyles.dialogContentScrollable}`}
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onPointerDownOutside(e);
+          }}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onInteractOutside(e);
+          }}
+          onEscapeKeyDown={dialogContentProps.onEscapeKeyDown}
         >
           <div className={sharedStyles.dialogHeaderRow}>
             <Dialog.Title className={sharedStyles.dialogTitle}>
               {isEdit ? 'Edit SAML Provider' : 'Add SAML Provider'}
             </Dialog.Title>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className={sharedStyles.dialogClose}
-                aria-label="Close"
-              >
-                <X size={18} strokeWidth={2} aria-hidden="true" />
-              </button>
-            </Dialog.Close>
+            <button
+              type="button"
+              className={sharedStyles.dialogClose}
+              aria-label="Close"
+              onClick={requestClose}
+            >
+              <X size={18} strokeWidth={2} aria-hidden="true" />
+            </button>
           </div>
           <Dialog.Description className={sharedStyles.dialogDescription}>
             {isEdit
@@ -322,16 +344,14 @@ export function SamlProviderDialog({
           <div
             className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}
           >
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className={sharedStyles.cancel}
-                onClick={onClose}
-                aria-label="Cancel"
-              >
-                Cancel
-              </button>
-            </Dialog.Close>
+            <button
+              type="button"
+              className={sharedStyles.cancel}
+              onClick={requestClose}
+              aria-label="Cancel"
+            >
+              Cancel
+            </button>
             <button
               type="button"
               className={sharedStyles.submit}
@@ -346,6 +366,11 @@ export function SamlProviderDialog({
           </div>
         </Dialog.Content>
       </Dialog.Portal>
+      <UnsavedChangesConfirmDialog
+        open={confirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        onDiscard={handleDiscard}
+      />
     </Dialog.Root>
   );
 }

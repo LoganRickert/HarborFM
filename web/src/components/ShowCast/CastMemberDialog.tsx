@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { useMutation } from '@tanstack/react-query';
 import { X, User } from 'lucide-react';
@@ -11,6 +11,9 @@ import {
   type CastMember,
 } from '../../api/podcasts';
 import type { CastCreate } from '@harborfm/shared';
+import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
+import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
+import { useBaselineDirty, snapshotForDirty } from '../../hooks/useBaselineDirty';
 import sharedStyles from '../PodcastDetail/shared.module.css';
 import localStyles from './ShowCast.module.css';
 
@@ -61,6 +64,7 @@ export function CastMemberDialog({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
@@ -69,25 +73,34 @@ export function CastMemberDialog({
   useEffect(() => {
     if (open) {
       setError(null);
-      if (cast) {
-        setName(cast.name);
-        setRole(cast.role as 'host' | 'guest');
-        setDescription(cast.description ?? '');
-        setPhotoUrl(cast.photoUrl ?? '');
-        setSocialLinkText(cast.socialLinkText ?? '');
-        setIsPublic(cast.isPublic ?? 1);
-        setCoverMode(cast.photoFilename ? 'upload' : 'url');
-        setPendingFile(null);
-      } else {
-        setName('');
-        setRole(isFirstEntry ? 'host' : 'guest');
-        setDescription('');
-        setPhotoUrl('');
-        setSocialLinkText('');
-        setIsPublic(1);
-        setCoverMode('url');
-        setPendingFile(null);
-      }
+      const next = cast
+        ? {
+            name: cast.name,
+            role: cast.role as 'host' | 'guest',
+            description: cast.description ?? '',
+            photoUrl: cast.photoUrl ?? '',
+            socialLinkText: cast.socialLinkText ?? '',
+            isPublic: cast.isPublic ?? 1,
+            coverMode: (cast.photoFilename ? 'upload' : 'url') as 'url' | 'upload',
+          }
+        : {
+            name: '',
+            role: (isFirstEntry ? 'host' : 'guest') as 'host' | 'guest',
+            description: '',
+            photoUrl: '',
+            socialLinkText: '',
+            isPublic: 1,
+            coverMode: 'url' as const,
+          };
+      setName(next.name);
+      setRole(next.role);
+      setDescription(next.description);
+      setPhotoUrl(next.photoUrl);
+      setSocialLinkText(next.socialLinkText);
+      setIsPublic(next.isPublic);
+      setCoverMode(next.coverMode);
+      setPendingFile(null);
+      setFormBaseline(snapshotForDirty(next));
     }
   }, [open, cast, isFirstEntry]);
 
@@ -170,27 +183,49 @@ export function CastMemberDialog({
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const currentForm = useMemo(
+    () => ({ name, role, description, photoUrl, socialLinkText, isPublic, coverMode }),
+    [name, role, description, photoUrl, socialLinkText, isPublic, coverMode],
+  );
+  const isDirty = useBaselineDirty(formBaseline, currentForm) || pendingFile != null;
+  const {
+    confirmOpen,
+    requestClose,
+    onOpenChange,
+    handleConfirmOpenChange,
+    handleDiscard,
+    dialogContentProps,
+  } = useDialogCloseGuard({ isDirty, onClose });
+
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content
           className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}
+          onPointerDownOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onPointerDownOutside(e);
+          }}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+            dialogContentProps.onInteractOutside(e);
+          }}
+          onEscapeKeyDown={dialogContentProps.onEscapeKeyDown}
         >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>
               {isEdit ? 'Edit cast member' : 'Add cast member'}
             </Dialog.Title>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className={styles.dialogClose}
-                aria-label="Close"
-                disabled={isPending}
-              >
-                <X size={18} strokeWidth={2} aria-hidden />
-              </button>
-            </Dialog.Close>
+            <button
+              type="button"
+              className={styles.dialogClose}
+              aria-label="Close"
+              disabled={isPending}
+              onClick={requestClose}
+            >
+              <X size={18} strokeWidth={2} aria-hidden />
+            </button>
           </div>
           <Dialog.Description className={styles.dialogDescription}>
             {isEdit ? 'Update the cast member details.' : ''}
@@ -348,7 +383,7 @@ export function CastMemberDialog({
               <button
                 type="button"
                 className={styles.cancel}
-                onClick={onClose}
+                onClick={requestClose}
                 disabled={isPending}
               >
                 Cancel
@@ -364,6 +399,11 @@ export function CastMemberDialog({
           </form>
         </Dialog.Content>
       </Dialog.Portal>
+      <UnsavedChangesConfirmDialog
+        open={confirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        onDiscard={handleDiscard}
+      />
     </Dialog.Root>
   );
 }
