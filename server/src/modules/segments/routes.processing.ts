@@ -14,7 +14,7 @@ import { promisify } from "util";
 import { nanoid } from "nanoid";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { canAccessEpisode, canEditSegments } from "../../services/access.js";
-import { assertPathUnder } from "../../services/paths.js";
+import { assertPathUnder, assertResolvedPathUnder, pathRelativeToData, segmentPath } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { FFMPEG_PATH } from "../../config.js";
@@ -23,6 +23,7 @@ import {
   segmentTrimBodySchema,
   segmentRemoveSilenceBodySchema,
   segmentNoiseSuppressionBodySchema,
+  segmentSplitBodySchema,
 } from "@harborfm/shared";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import * as repo from "./repo.js";
@@ -31,8 +32,13 @@ import {
   parseSrt,
   parseSrtTime,
   formatSrtTime,
+  adjustSrtEntriesForWindow,
+  formatSrtEntries,
+  partitionMarkersAtSplit,
+  partitionTrimRangesAtSplit,
   type SrtEntry,
 } from "./utils.js";
+import { redactSegmentForClient } from "../../utils/segment.js";
 
 const exec = promisify(execFile);
 
@@ -640,6 +646,333 @@ export async function registerProcessingRoutes(app: FastifyInstance) {
         return reply
           .status(500)
           .send({ error: "Failed to apply noise suppression" });
+      }
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/split",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({ bucket: "ffmpeg", windowMs: 1000 }),
+      ],
+      schema: {
+        tags: ["Segments"],
+        summary: "Split segment",
+        description:
+          "Split segment audio at minutes+seconds into two segments. Body: minutes, seconds.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            minutes: { type: "number" },
+            seconds: { type: "number" },
+          },
+          required: ["minutes", "seconds"],
+        },
+        response: {
+          204: { description: "Split complete" },
+          400: { description: "Validation failed" },
+          403: { description: "Permission denied" },
+          404: { description: "Not found" },
+          500: { description: "Processing failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const paramsParsed = segmentEpisodeSegmentIdParamSchema.safeParse(
+        request.params,
+      );
+      if (!paramsParsed.success) {
+        return reply.status(400).send({
+          error:
+            paramsParsed.error.issues[0]?.message ?? "Validation failed",
+          details: paramsParsed.error.flatten(),
+        });
+      }
+      const { episodeId, segmentId } = paramsParsed.data;
+      const bodyParsed = segmentSplitBodySchema.safeParse(request.body);
+      if (!bodyParsed.success) {
+        return reply.status(400).send({
+          error: bodyParsed.error.issues[0]?.message ?? "Validation failed",
+          details: bodyParsed.error.flatten(),
+        });
+      }
+      const splitSec =
+        bodyParsed.data.minutes * 60 + bodyParsed.data.seconds;
+
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access)
+        return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role))
+        return reply
+          .status(403)
+          .send({ error: "You do not have permission to edit segments." });
+
+      let segment: Record<string, unknown> | undefined = repo.getSegmentById(
+        segmentId,
+        episodeId,
+      );
+      if (!segment)
+        return reply.status(404).send({ error: "Segment not found" });
+      if (segment.inProgress)
+        return reply
+          .status(400)
+          .send({ error: "Cannot split a segment while recording is in progress" });
+
+      if (segment.type === "reusable") {
+        try {
+          segment = await repo.promoteReusableSegmentToRecorded(
+            segment,
+            episodeId,
+            access.podcastId,
+          );
+        } catch (err) {
+          request.log.error(err);
+          return reply.status(500).send({
+            error:
+              err instanceof Error
+                ? err.message
+                : "Failed to prepare segment for editing",
+          });
+        }
+      } else if (segment.type !== "recorded") {
+        return reply
+          .status(400)
+          .send({ error: "Only recorded or library segments can be split" });
+      }
+
+      const audio = repo.getSegmentAudioPath(
+        segment,
+        access.podcastId,
+        episodeId,
+      );
+      if (!audio || !existsSync(audio.path))
+        return reply.status(404).send({ error: "Segment audio not found" });
+      assertPathUnder(audio.path, audio.base);
+
+      const probe = await audioService.probeAudio(audio.path, audio.base);
+      const currentDurationSec = probe.durationSec;
+      if (
+        !(splitSec > 0) ||
+        !(splitSec < currentDurationSec) ||
+        !Number.isFinite(splitSec)
+      ) {
+        return reply.status(400).send({
+          error:
+            "Split time must be greater than 0 and less than the segment duration",
+        });
+      }
+
+      const durationA = splitSec;
+      const durationB = currentDurationSec - splitSec;
+      const newSegmentId = nanoid();
+      const dir = dirname(audio.path);
+      assertPathUnder(dir, audio.base);
+      const finalPathA = join(
+        dir,
+        basename(audio.path, extname(audio.path)) + ".wav",
+      );
+      const finalPathB = segmentPath(
+        access.podcastId,
+        episodeId,
+        newSegmentId,
+        "wav",
+      );
+      // Output paths may not exist yet; use resolve-only check.
+      assertResolvedPathUnder(finalPathA, audio.base);
+      assertResolvedPathUnder(finalPathB, audio.base);
+
+      const tempPathA = join(tmpdir(), `${nanoid()}.wav`);
+      const tempPathB = join(tmpdir(), `${nanoid()}.wav`);
+
+      try {
+        await audioService.trimAudioToWav(
+          audio.path,
+          audio.base,
+          0,
+          splitSec,
+          tempPathA,
+        );
+        await audioService.trimAudioToWav(
+          audio.path,
+          audio.base,
+          splitSec,
+          currentDurationSec,
+          tempPathB,
+        );
+
+        if (!existsSync(tempPathA) || statSync(tempPathA).size === 0) {
+          throw new Error("First half audio was not created or is empty");
+        }
+        if (!existsSync(tempPathB) || statSync(tempPathB).size === 0) {
+          throw new Error("Second half audio was not created or is empty");
+        }
+
+        // Write B first so we can safely overwrite A's path if it equals the source.
+        copyFileSync(tempPathB, finalPathB);
+        unlinkSync(tempPathB);
+        copyFileSync(tempPathA, finalPathA);
+        unlinkSync(tempPathA);
+
+        try {
+          await audioService.generateWaveformFile(finalPathA, audio.base);
+        } catch (err) {
+          request.log.warn(
+            { err, finalPathA },
+            "Waveform generation failed after split (A)",
+          );
+        }
+        try {
+          await audioService.generateWaveformFile(finalPathB, audio.base);
+        } catch (err) {
+          request.log.warn(
+            { err, finalPathB },
+            "Waveform generation failed after split (B)",
+          );
+        }
+
+        const txtPath = transcriptPath(audio.path);
+        if (existsSync(txtPath)) {
+          assertPathUnder(txtPath, audio.base);
+          const srtText = readFileSync(txtPath, "utf-8");
+          const entries = parseSrt(srtText);
+          const entriesA = adjustSrtEntriesForWindow(entries, 0, splitSec);
+          const entriesB = adjustSrtEntriesForWindow(
+            entries,
+            splitSec,
+            currentDurationSec,
+          );
+          writeFileSync(
+            transcriptPath(finalPathA),
+            formatSrtEntries(entriesA),
+            "utf-8",
+          );
+          writeFileSync(
+            transcriptPath(finalPathB),
+            formatSrtEntries(entriesB),
+            "utf-8",
+          );
+          if (txtPath !== transcriptPath(finalPathA)) {
+            try {
+              unlinkSync(txtPath);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+
+        let markersRaw: unknown[] = [];
+        if (typeof segment.markers === "string" && segment.markers) {
+          try {
+            const parsed = JSON.parse(segment.markers);
+            if (Array.isArray(parsed)) markersRaw = parsed;
+          } catch {
+            /* ignore */
+          }
+        }
+        let trimRaw: Array<[number, number]> = [];
+        if (typeof segment.trimRanges === "string" && segment.trimRanges) {
+          try {
+            const parsed = JSON.parse(segment.trimRanges);
+            if (Array.isArray(parsed)) {
+              trimRaw = parsed as Array<[number, number]>;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+
+        const { before: markersA, after: markersB } = partitionMarkersAtSplit(
+          markersRaw as Array<{
+            time: number;
+            title?: string;
+            color?: string;
+            markerType?: "" | "chapter" | "soundbite";
+            duration?: number;
+          }>,
+          splitSec,
+          durationA,
+          durationB,
+        );
+        const { before: trimsA, after: trimsB } = partitionTrimRangesAtSplit(
+          trimRaw,
+          splitSec,
+        );
+
+        const audioEqRaw =
+          typeof segment.audioEq === "string" && segment.audioEq
+            ? segment.audioEq
+            : null;
+        const name =
+          typeof segment.name === "string" ? segment.name : "";
+        const disabled = Boolean(segment.disabled);
+        const currentPos = Number(segment.position);
+
+        repo.updateSegmentAudio(
+          segmentId,
+          episodeId,
+          finalPathA,
+          durationA,
+          {
+            trimRanges: JSON.stringify(trimsA),
+            markers: JSON.stringify(markersA),
+          },
+        );
+
+        repo.shiftSegmentPositionsAfter(episodeId, currentPos);
+        repo.insertSegmentRecorded({
+          id: newSegmentId,
+          episodeId,
+          position: currentPos + 1,
+          name,
+          audioPath: pathRelativeToData(finalPathB),
+          durationSec: durationB,
+          trimRanges: JSON.stringify(trimsB),
+          markers: JSON.stringify(markersB),
+          audioEq: audioEqRaw,
+          disabled,
+        });
+
+        if (audio.path !== finalPathA && audio.path !== finalPathB) {
+          try {
+            unlinkSync(audio.path);
+          } catch {
+            /* ignore */
+          }
+        }
+
+        const rowB = repo.getSegmentById(newSegmentId, episodeId);
+        broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
+        if (rowB) {
+          broadcastToEpisode(episodeId, {
+            type: "segmentAdded",
+            segment: redactSegmentForClient(rowB as Record<string, unknown>),
+          });
+        }
+        return reply.status(204).send();
+      } catch (err) {
+        try {
+          if (existsSync(tempPathA)) unlinkSync(tempPathA);
+        } catch {
+          /* ignore */
+        }
+        try {
+          if (existsSync(tempPathB)) unlinkSync(tempPathB);
+        } catch {
+          /* ignore */
+        }
+        request.log.error(err);
+        return reply.status(500).send({ error: "Failed to split segment" });
       }
     },
   );

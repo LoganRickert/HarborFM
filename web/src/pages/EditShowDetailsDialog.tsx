@@ -15,9 +15,22 @@ import {
   type Podcast,
 } from '../api/podcasts';
 import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
+import { HrefTextListField } from '../components/EpisodeEditor/HrefTextListField';
+import { StructuredListField } from '../components/EpisodeEditor/StructuredListField';
+import { ObjectFieldsSection } from '../components/EpisodeEditor/ObjectFieldsSection';
+import { PodrollListField } from '../components/EpisodeEditor/PodrollListField';
+import { ValueBlocksField } from '../components/EpisodeEditor/ValueBlocksField';
 import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
 import { useBaselineDirty, snapshotForDirty } from '../hooks/useBaselineDirty';
+import {
+  emptyShowPodcast2Form,
+  podcastToShowPodcast2Form,
+  showPodcast2FormToApiPayload,
+  type ShowPodcast2Form,
+} from './EditShowDetails/showPodcast2Form';
 import styles from '../components/PodcastDetail/shared.module.css';
+
+type ShowDetailsForm = Omit<Partial<Podcast>, keyof ShowPodcast2Form> & ShowPodcast2Form;
 
 export interface EditShowDetailsDialogProps {
   open: boolean;
@@ -59,7 +72,7 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
     enabled: open && !!podcastId,
   });
 
-  const [form, setForm] = useState<Partial<Podcast>>({});
+  const [form, setForm] = useState<ShowDetailsForm>({ ...emptyShowPodcast2Form() });
   const formRef = useRef(form);
   const [formBaseline, setFormBaseline] = useState<string | null>(null);
   const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
@@ -97,8 +110,9 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
 
   useEffect(() => {
     if (podcast) {
-      const next = {
+      const next: ShowDetailsForm = {
         ...podcast,
+        ...podcastToShowPodcast2Form(podcast),
         artworkUrl: podcast.artworkUrl ?? null,
         subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
         publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
@@ -117,8 +131,9 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
 
   useEffect(() => {
     if (open && podcast) {
-      const next = {
+      const next: ShowDetailsForm = {
         ...podcast,
+        ...podcastToShowPodcast2Form(podcast),
         artworkUrl: podcast.artworkUrl ?? null,
         subscriberOnlyFeedEnabled: Boolean(podcast.subscriberOnlyFeedEnabled),
         publicFeedDisabled: Boolean(podcast.publicFeedDisabled),
@@ -262,14 +277,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       copyright: currentForm.copyright,
       podcastGuid: currentForm.podcastGuid,
       locked: currentForm.locked !== undefined ? (currentForm.locked === 1 ? 1 : 0) : undefined,
-      license: currentForm.license,
       itunesType: currentForm.itunesType,
       medium: currentForm.medium,
-      fundingUrl: currentForm.fundingUrl ?? null,
-      fundingLabel: currentForm.fundingLabel ?? null,
+      ...showPodcast2FormToApiPayload(currentForm),
       persons: currentForm.persons ?? null,
-      updateFrequencyRrule: currentForm.updateFrequencyRrule ?? null,
-      updateFrequencyLabel: currentForm.updateFrequencyLabel ?? null,
       spotifyRecentCount: currentForm.spotifyRecentCount ?? null,
       spotifyCountryOfOrigin: currentForm.spotifyCountryOfOrigin ?? null,
       applePodcastsVerify: currentForm.applePodcastsVerify ?? null,
@@ -844,13 +855,13 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                   />
                 </label>
                 <label className={styles.label}>
-                  License
+                  Apple Podcasts Verification Code
                   <input
                     type="text"
-                    value={form.license ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, license: e.target.value || null }))}
+                    value={form.applePodcastsVerify ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, applePodcastsVerify: e.target.value.trim() || null }))}
                     className={styles.input}
-                    placeholder="e.g. All rights reserved"
+                    placeholder="From Apple Podcasts Connect"
                   />
                 </label>
 
@@ -1018,26 +1029,272 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                           <option value="blog">Blog</option>
                         </select>
                       </label>
-                      <label className={styles.label}>
-                        Funding URL
-                        <input
-                          type="url"
-                          value={form.fundingUrl ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, fundingUrl: e.target.value.trim() || null }))}
-                          className={styles.input}
-                          placeholder="e.g. https://patreon.com/myshow"
+                      <HrefTextListField
+                        label="Funding"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/funding"
+                        hint="Donation / support links for the show (multiple allowed)."
+                        value={form.fundingLinks}
+                        onChange={(fundingLinks) => setForm((f) => ({ ...f, fundingLinks }))}
+                        hrefPlaceholder="e.g. https://patreon.com/myshow"
+                        textPlaceholder="e.g. Support the show"
+                        addLabel="Add funding link"
+                        textMaxLength={128}
+                      />
+                      <StructuredListField
+                        label="Txt"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/txt"
+                        hint="Free-form Podcast 2.0 txt records (verification, AI disclosure, etc.)."
+                        value={form.podcastTxts}
+                        onChange={(podcastTxts) => setForm((f) => ({ ...f, podcastTxts }))}
+                        emptyRow={() => ({ purpose: '', value: '' })}
+                        addLabel="Add txt"
+                        fields={[
+                          { key: 'purpose', label: 'Purpose', placeholder: 'e.g. verify', maxLength: 128 },
+                          { key: 'value', label: 'Value', placeholder: 'Text content', maxLength: 4000 },
+                        ]}
+                      />
+                      <StructuredListField
+                        label="Social Interact"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/social-interact"
+                        hint="Comment thread root posts. Use protocol “disabled” for no public comments."
+                        value={form.socialInteracts}
+                        onChange={(socialInteracts) => setForm((f) => ({ ...f, socialInteracts }))}
+                        emptyRow={() => ({
+                          protocol: 'activitypub',
+                          uri: '',
+                          accountId: '',
+                          accountUrl: '',
+                          priority: '',
+                        })}
+                        addLabel="Add social interact"
+                        fields={[
+                          { key: 'protocol', label: 'Protocol', placeholder: 'activitypub', maxLength: 128 },
+                          { key: 'uri', label: 'URI', type: 'url', placeholder: 'https://…', maxLength: 2000 },
+                          { key: 'accountId', label: 'Account ID', placeholder: '@user', maxLength: 512 },
+                          {
+                            key: 'accountUrl',
+                            label: 'Account URL',
+                            type: 'url',
+                            placeholder: 'https://…',
+                            maxLength: 2000,
+                          },
+                          { key: 'priority', label: 'Priority', type: 'number', placeholder: '1' },
+                        ]}
+                      />
+                      <StructuredListField
+                        label="Location"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/location"
+                        hint="Where the show is about or was made."
+                        value={form.locations}
+                        onChange={(locations) => setForm((f) => ({ ...f, locations }))}
+                        emptyRow={() => ({
+                          name: '',
+                          rel: 'subject',
+                          geo: '',
+                          osm: '',
+                          country: '',
+                        })}
+                        addLabel="Add location"
+                        fields={[
+                          { key: 'name', label: 'Name', placeholder: 'Austin, TX', maxLength: 128 },
+                          {
+                            key: 'rel',
+                            label: 'Relation',
+                            type: 'select',
+                            options: [
+                              { value: 'subject', label: 'Subject (about)' },
+                              { value: 'creator', label: 'Creator (made/recorded)' },
+                            ],
+                          },
+                          { key: 'geo', label: 'Geo URI', placeholder: 'geo:30.2672,-97.7431', maxLength: 128 },
+                          { key: 'osm', label: 'OSM ID', placeholder: 'R113314', maxLength: 64 },
+                          { key: 'country', label: 'Country', placeholder: 'US', maxLength: 2 },
+                        ]}
+                      />
+                      <ObjectFieldsSection
+                        label="License"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/license"
+                        hint="Show license identifier (e.g. CC-BY-4.0). Include a URL for custom licenses."
+                        value={form.license}
+                        onChange={(license) =>
+                          setForm((f) => ({
+                            ...f,
+                            license: {
+                              identifier: license.identifier ?? '',
+                              url: license.url ?? '',
+                            },
+                          }))
+                        }
+                        fields={[
+                          {
+                            key: 'identifier',
+                            label: 'Identifier',
+                            placeholder: 'CC-BY-4.0',
+                            maxLength: 128,
+                          },
+                          {
+                            key: 'url',
+                            label: 'URL',
+                            type: 'url',
+                            placeholder: 'https://…',
+                            maxLength: 2000,
+                            hint: 'Required for custom licenses',
+                          },
+                        ]}
+                      />
+                      <ObjectFieldsSection
+                        label="Chat"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/chat"
+                        hint="Always-on chat for the show."
+                        value={form.chat}
+                        onChange={(chat) =>
+                          setForm((f) => ({
+                            ...f,
+                            chat: {
+                              server: chat.server ?? '',
+                              protocol: chat.protocol ?? '',
+                              accountId: chat.accountId ?? '',
+                              space: chat.space ?? '',
+                            },
+                          }))
+                        }
+                        fields={[
+                          { key: 'server', label: 'Server', placeholder: 'irc.example.com', maxLength: 512 },
+                          { key: 'protocol', label: 'Protocol', placeholder: 'irc', maxLength: 128 },
+                          { key: 'accountId', label: 'Account ID', placeholder: '@host', maxLength: 512 },
+                          { key: 'space', label: 'Space / room', placeholder: '#show', maxLength: 512 },
+                        ]}
+                      />
+                      <ObjectFieldsSection
+                        label="Publisher"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/publisher"
+                        hint="Link this feed to a publisher feed (remoteItem feedGuid required)."
+                        value={form.publisher}
+                        onChange={(publisher) =>
+                          setForm((f) => ({
+                            ...f,
+                            publisher: {
+                              feedGuid: publisher.feedGuid ?? '',
+                              feedUrl: publisher.feedUrl ?? '',
+                              medium: publisher.medium ?? 'publisher',
+                            },
+                          }))
+                        }
+                        fields={[
+                          {
+                            key: 'feedGuid',
+                            label: 'Feed GUID',
+                            placeholder: 'publisher feed guid',
+                            maxLength: 256,
+                          },
+                          {
+                            key: 'feedUrl',
+                            label: 'Feed URL',
+                            type: 'url',
+                            placeholder: 'https://…/publisher.xml',
+                            maxLength: 2000,
+                          },
+                          {
+                            key: 'medium',
+                            label: 'Medium',
+                            placeholder: 'publisher',
+                            maxLength: 64,
+                          },
+                        ]}
+                      />
+                      <PodrollListField
+                        label="Podroll"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/podroll"
+                        hint="Recommend other shows. Feed GUID is required to save. Cover art is stored for HarborFM only (not emitted in RSS)."
+                        value={form.podroll}
+                        onChange={(podroll) => setForm((f) => ({ ...f, podroll }))}
+                        addLabel="Add recommendation"
+                      />
+                      <StructuredListField
+                        label="Block"
+                        docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/block"
+                        hint="Control which platforms may ingest this feed. Optional id is a service slug (e.g. google)."
+                        value={form.blocks}
+                        onChange={(blocks) => setForm((f) => ({ ...f, blocks }))}
+                        emptyRow={() => ({ id: '', value: 'yes' })}
+                        addLabel="Add block"
+                        fields={[
+                          { key: 'id', label: 'Service id (optional)', placeholder: 'google', maxLength: 128 },
+                          {
+                            key: 'value',
+                            label: 'Block',
+                            type: 'select',
+                            options: [
+                              { value: 'yes', label: 'yes (block)' },
+                              { value: 'no', label: 'no (allow)' },
+                            ],
+                          },
+                        ]}
+                      />
+                      <div className={styles.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        <ObjectFieldsSection
+                          label="Update Frequency"
+                          docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/update-frequency"
+                          hint="Release schedule as RRULE + optional label, dtstart, and complete."
+                          value={{
+                            rrule: form.updateFrequency.rrule,
+                            label: form.updateFrequency.label,
+                            dtstart: form.updateFrequency.dtstart,
+                          }}
+                          onChange={(next) =>
+                            setForm((f) => ({
+                              ...f,
+                              updateFrequency: {
+                                ...f.updateFrequency,
+                                rrule: next.rrule ?? '',
+                                label: next.label ?? '',
+                                dtstart: next.dtstart ?? '',
+                              },
+                            }))
+                          }
+                          fields={[
+                            {
+                              key: 'rrule',
+                              label: 'RRULE',
+                              placeholder: 'FREQ=WEEKLY',
+                              maxLength: 512,
+                            },
+                            {
+                              key: 'label',
+                              label: 'Label',
+                              placeholder: 'Weekly',
+                              maxLength: 128,
+                            },
+                            {
+                              key: 'dtstart',
+                              label: 'DTSTART',
+                              placeholder: '2025-01-01T00:00:00.000Z',
+                              maxLength: 64,
+                            },
+                          ]}
                         />
-                      </label>
-                      <label className={styles.label}>
-                        Funding Label
-                        <input
-                          type="text"
-                          value={form.fundingLabel ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, fundingLabel: e.target.value.trim() || null }))}
-                          className={styles.input}
-                          placeholder="e.g. Support the show"
-                        />
-                      </label>
+                        <label className="toggle">
+                          <input
+                            type="checkbox"
+                            checked={form.updateFrequency.complete}
+                            onChange={(e) =>
+                              setForm((f) => ({
+                                ...f,
+                                updateFrequency: {
+                                  ...f.updateFrequency,
+                                  complete: e.target.checked,
+                                },
+                              }))
+                            }
+                          />
+                          <span className="toggle__track" aria-hidden="true" />
+                          <span>Complete (no further episodes planned)</span>
+                        </label>
+                      </div>
+                      <ValueBlocksField
+                        value={form.valueBlocks}
+                        onChange={(valueBlocks) => setForm((f) => ({ ...f, valueBlocks }))}
+                      />
                       <label className={styles.label}>
                         Hosts and contributors
                         <input
@@ -1066,26 +1323,6 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         />
                       </label>
                       <label className={styles.label}>
-                        Update schedule (Spotify)
-                        <input
-                          type="text"
-                          value={form.updateFrequencyRrule ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, updateFrequencyRrule: e.target.value.trim() || null }))}
-                          className={styles.input}
-                          placeholder="e.g. FREQ=WEEKLY or FREQ=DAILY"
-                        />
-                      </label>
-                      <label className={styles.label}>
-                        Update schedule label (Spotify)
-                        <input
-                          type="text"
-                          value={form.updateFrequencyLabel ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, updateFrequencyLabel: e.target.value.trim() || null }))}
-                          className={styles.input}
-                          placeholder="e.g. Weekly or Daily"
-                        />
-                      </label>
-                      <label className={styles.label}>
                         Spotify Recent Count
                         <input
                           type="number"
@@ -1101,23 +1338,13 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                         />
                       </label>
                       <label className={styles.label}>
-                        Spotify country of origin
+                        Spotify Country of Origin
                         <input
                           type="text"
                           value={form.spotifyCountryOfOrigin ?? ''}
                           onChange={(e) => setForm((f) => ({ ...f, spotifyCountryOfOrigin: e.target.value.trim() || null }))}
                           className={styles.input}
                           placeholder="e.g. US"
-                        />
-                      </label>
-                      <label className={styles.label}>
-                        Apple Podcasts verification code
-                        <input
-                          type="text"
-                          value={form.applePodcastsVerify ?? ''}
-                          onChange={(e) => setForm((f) => ({ ...f, applePodcastsVerify: e.target.value.trim() || null }))}
-                          className={styles.input}
-                          placeholder="From Apple Podcasts Connect"
                         />
                       </label>
 

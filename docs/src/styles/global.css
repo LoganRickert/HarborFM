@@ -262,7 +262,7 @@ a:hover {
 .section {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 2.5rem 1.5rem;
+  padding: 1.5rem 1.5rem 2rem;
 }
 
 .section h2 {
@@ -319,6 +319,11 @@ a:hover {
   color: var(--text);
 }
 
+.video-section {
+  padding-top: 1.5rem;
+  padding-bottom: 1.25rem;
+}
+
 .video-embed {
   position: relative;
   width: 100%;
@@ -335,6 +340,119 @@ a:hover {
   width: 100%;
   height: 100%;
   border: 0;
+}
+
+.video-section .video-more {
+  margin: 2.5rem 0 0.25rem;
+}
+
+.video-more-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 0.85rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.video-more-link:hover {
+  color: var(--bg);
+  text-decoration: none;
+  background: var(--accent);
+  opacity: 1;
+}
+
+.video-more-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 6px;
+  color: var(--accent);
+  background: var(--accent-glow);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  flex-shrink: 0;
+}
+
+.video-more-link:hover .video-more-icon {
+  color: var(--bg);
+  background: rgba(0, 0, 0, 0.18);
+  border-color: transparent;
+}
+
+.video-more-icon :global(svg) {
+  display: block;
+}
+
+.demo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem 1.35rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.demo-section .demo-copy {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.demo-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.85rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.demo-link:hover {
+  color: var(--bg);
+  text-decoration: none;
+  background: var(--accent);
+  opacity: 1;
+}
+
+.demo-link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  color: var(--accent);
+  background: var(--accent-glow);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  flex-shrink: 0;
+}
+
+.demo-link:hover .demo-link-icon {
+  color: var(--bg);
+  background: rgba(0, 0, 0, 0.18);
+  border-color: transparent;
+}
+
+.demo-link-icon :global(svg) {
+  display: block;
 }
 
 /* Screenshots grid */
@@ -423,7 +541,7 @@ a:hover {
 /* Features grid */
 .features {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   margin-top: 1rem;
 }
@@ -432,20 +550,46 @@ a:hover {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 1rem;
+  padding: 1.1rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-bottom: 0.15rem;
+  color: var(--accent);
+  background: var(--accent-glow);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 0.5rem;
+}
+
+.feature-icon :global(svg) {
+  display: block;
 }
 
 .feature-card strong {
   display: block;
   color: var(--text);
   font-size: 0.9375rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0;
 }
 
-.feature-card span {
+.feature-card span:not(.feature-icon) {
   font-size: 0.8125rem;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .features {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* CTA */

@@ -79,9 +79,9 @@ function main() {
       email, category_primary, category_secondary, category_primary_two, category_secondary_two,
       category_primary_three, category_secondary_three, explicit, site_url, artwork_url,
       copyright, podcast_guid, locked, license, itunes_type, medium,
-      funding_url, funding_label, persons, update_frequency_rrule, update_frequency_label,
+      funding_links, persons, update_frequency,
       spotify_recent_count, spotify_country_of_origin, apple_podcasts_verify, max_episodes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     podcastId,
     ownerUserId,
@@ -109,8 +109,6 @@ function main() {
     null,
     "episodic",
     "podcast",
-    null,
-    null,
     null,
     null,
     null,

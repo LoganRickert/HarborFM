@@ -33,8 +33,11 @@ import {
   FeedVideoPlayer,
   ReviewsCard,
   FeedEpisodeChapters,
+  FeedEpisodeSoundbites,
+  FeedFundingSupport,
 } from '../components/Feed';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
+import { feedAccentCssVars } from '../utils/feedAccent';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedEpisode.module.css';
 
@@ -178,13 +181,13 @@ export function FeedEpisode({
           : `${origin}/${videoUrlRaw}`;
 
   return (
-    <div className={sharedStyles.wrapper}>
+    <div className={sharedStyles.wrapper} style={feedAccentCssVars(podcast.feedAccent)}>
       <div className={sharedStyles.container}>
         <FeedSiteHeader />
         <main>
           <FeedBreadcrumbs podcast={podcast} episode={episode} podcastSlug={podcastSlug} feedRootTo={isCustomFeed ? '/' : undefined} />
 
-          <div className={sharedStyles.card}>
+          <div className={`${sharedStyles.card} ${styles.mainCard}`}>
             <FeedEpisodeHeader
               episode={episode}
               podcast={podcast}
@@ -193,6 +196,11 @@ export function FeedEpisode({
               shareUrl={shareUrl}
               shareTitle={shareTitle}
               embedCode={embedCode}
+              transcriptUrl={
+                (episode as PublicEpisodeWithAuth).privateSrtUrl || episode.srtUrl || null
+              }
+              onTranscriptSeek={seekAndPlay}
+              currentTime={currentTime}
             />
 
             {videoUrl && (
@@ -282,18 +290,41 @@ export function FeedEpisode({
                 markers={episode.markers ?? []}
                 currentTime={currentTime}
                 durationSec={durationSec}
+                isPlaying={isPlaying}
                 onPlayChapter={seekAndPlay}
+                onPause={togglePlay}
+                onResume={togglePlay}
               />
             )}
 
-            {episode.description && (
+            {audioUrl && !audioLoadFailed && (episode.soundbites?.length ?? 0) > 0 && (
+              <FeedEpisodeSoundbites
+                soundbites={episode.soundbites ?? []}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                seekAndPlay={seekAndPlay}
+                onPause={togglePlay}
+                onResume={togglePlay}
+              />
+            )}
+
+            {podcast.feedShowEpisodeDescription !== false && episode.description && (
               <div className={styles.description}>
                 <p>{episode.description}</p>
               </div>
             )}
+            {podcast.feedShowFunding !== false && (
+              <FeedFundingSupport
+                fundingLinks={
+                  (episode.fundingLinks?.length
+                    ? episode.fundingLinks
+                    : podcast.fundingLinks) ?? null
+                }
+              />
+            )}
           </div>
 
-          {(episodeHosts.length > 0 || episodeGuests.length > 0) && (
+          {podcast.feedShowCast !== false && (episodeHosts.length > 0 || episodeGuests.length > 0) && (
             <div className={`${sharedStyles.card} ${styles.castCard}`}>
               <h2 className={styles.castTitle}>Cast</h2>
               {episodeHosts.length > 0 && (
@@ -311,7 +342,7 @@ export function FeedEpisode({
             </div>
           )}
 
-          {publicConfig?.reviewsEnabled === true && (
+          {publicConfig?.reviewsEnabled === true && podcast.feedShowReviewsEpisode !== false && (
             <ReviewsCard podcastSlug={podcastSlug} episodeSlug={episodeSlug} enabled showWriteButton={canWriteReview} />
           )}
 

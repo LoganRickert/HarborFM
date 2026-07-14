@@ -7,12 +7,13 @@ import {
 } from "fs";
 import { basename, extname, join } from "path";
 import { drizzleDb } from "../db/index.js";
-import { and, desc, eq, sql } from "drizzle-orm";
-import { episodes, exports, podcasts, settings } from "../db/schema.js";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { episodes, exports, podcastCast, podcasts, settings } from "../db/schema.js";
 import { getExportPathPrefix } from "./export-config.js";
 import {
   assertPathUnder,
   assertResolvedPathUnder,
+  castPhotoDir,
   chaptersJsonPath,
   getDataDir,
   processedDir,
@@ -53,6 +54,39 @@ function enclosureExt(audioFinalPath: unknown): string {
     return ".mp3";
   const ext = extname(audioFinalPath.trim());
   return ext || ".mp3";
+}
+
+/** Public enclosure URL for an episode (same rules as RSS item <enclosure>). */
+function episodeEnclosureUrl(
+  ep: { id: unknown; audioFinalPath: unknown },
+  opts: {
+    publicBaseNoSlash: string;
+    podcastId: string;
+    slugEnc: string;
+    slugRaw: string;
+    tokenIdPlaceholder?: string;
+    exportPrefix: string | null;
+  },
+): string {
+  const { publicBaseNoSlash, podcastId, slugEnc, slugRaw, tokenIdPlaceholder, exportPrefix } =
+    opts;
+  if (!publicBaseNoSlash || !ep.id) return "";
+  const validEpisodeId = String(ep.id).trim();
+  if (!validEpisodeId) return "";
+  const ext = enclosureExt(ep.audioFinalPath);
+  if (tokenIdPlaceholder && slugRaw) {
+    return `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/episodes/${encodeURIComponent(validEpisodeId)}${ext}`;
+  }
+  if (exportPrefix != null) {
+    return `${publicBaseNoSlash}/${exportPrefix}/episodes/${validEpisodeId}${ext}`;
+  }
+  if (ep.audioFinalPath && podcastId) {
+    const validPodcastId = String(podcastId).trim();
+    if (validPodcastId) {
+      return `${publicBaseNoSlash}/${API_PREFIX}/${encodeURIComponent(validPodcastId)}/episodes/${encodeURIComponent(validEpisodeId)}${ext}`;
+    }
+  }
+  return "";
 }
 
 function escapeXml(s: string): string {
@@ -265,7 +299,6 @@ export function generateRss(
     ? escapeXml(String(podcast.podcastGuid))
     : "";
   const locked = podcast.locked ? "yes" : "no";
-  const license = podcast.license ? escapeCdata(String(podcast.license)) : "";
   const itunesType = escapeXml(
     String((podcast.itunesType as string) || "episodic"),
   );
@@ -388,41 +421,373 @@ ${channelLink ? `      <link>${escapeXml(channelLink)}</link>\n` : ""}    </imag
 `;
   }
   out += `    <podcast:locked>${locked}</podcast:locked>\n`;
-  if (license)
-    out += `    <podcast:license><![CDATA[${license}]]></podcast:license>\n`;
-  const fundingUrl =
-    podcast.fundingUrl != null ? sanitizeHttpUrl(podcast.fundingUrl) : "";
-  if (fundingUrl) {
-    const fundingLabel =
-      podcast.fundingLabel != null
-        ? escapeCdata(String(podcast.fundingLabel).trim())
-        : "";
-    out += `    <podcast:funding url="${escapeXml(fundingUrl)}">${fundingLabel ? `<![CDATA[${fundingLabel}]]>` : ""}</podcast:funding>\n`;
-  }
-  const personsJson = podcast.persons;
-  if (personsJson && typeof personsJson === "string") {
-    try {
-      const arr = JSON.parse(personsJson) as unknown[];
-      if (Array.isArray(arr)) {
-        for (const p of arr) {
-          if (typeof p === "string" && p.trim())
-            out += `    <podcast:person><![CDATA[${escapeCdata(p.trim())}]]></podcast:person>\n`;
+  // Podcast 2.0 channel metadata
+  {
+    type ChannelMeta = {
+      license?: string | null;
+      fundingLinks?: string | null;
+      podcastTxts?: string | null;
+      socialInteracts?: string | null;
+      locations?: string | null;
+      chat?: string | null;
+      valueBlocks?: string | null;
+      blocks?: string | null;
+      publisher?: string | null;
+      podroll?: string | null;
+      updateFrequency?: string | null;
+    };
+    const meta = podcast as ChannelMeta;
+    const parseArr = <T extends object>(raw: string | null | undefined): T[] => {
+      if (typeof raw !== "string" || !raw.trim()) return [];
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        return Array.isArray(parsed)
+          ? parsed.filter((x): x is T => typeof x === "object" && x != null)
+          : [];
+      } catch {
+        return [];
+      }
+    };
+    const parseObj = <T extends object>(raw: string | null | undefined): T | null => {
+      if (typeof raw !== "string" || !raw.trim()) return null;
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        return typeof parsed === "object" && parsed != null && !Array.isArray(parsed)
+          ? (parsed as T)
+          : null;
+      } catch {
+        return null;
+      }
+    };
+
+    {
+      let licenseObj = parseObj<{ identifier?: string; url?: string | null }>(meta.license);
+      if (
+        !licenseObj &&
+        typeof meta.license === "string" &&
+        meta.license.trim() &&
+        !meta.license.trim().startsWith("{")
+      ) {
+        licenseObj = { identifier: meta.license.trim() };
+      }
+      const identifier =
+        licenseObj && typeof licenseObj.identifier === "string"
+          ? licenseObj.identifier.trim().slice(0, 128)
+          : "";
+      if (identifier) {
+        const url = sanitizeHttpUrl(licenseObj?.url);
+        if (url) {
+          out += `    <podcast:license url="${escapeXml(url)}">${escapeXml(identifier)}</podcast:license>\n`;
+        } else {
+          out += `    <podcast:license>${escapeXml(identifier)}</podcast:license>\n`;
         }
       }
-    } catch {
-      // ignore invalid JSON
+    }
+
+    for (const fund of parseArr<{ url?: string; text?: string | null }>(meta.fundingLinks)) {
+      const url = sanitizeHttpUrl(fund.url);
+      if (!url) continue;
+      const text =
+        typeof fund.text === "string" && fund.text.trim()
+          ? fund.text.trim().slice(0, 128)
+          : "";
+      if (text) {
+        out += `    <podcast:funding url="${escapeXml(url)}">${escapeXml(text)}</podcast:funding>\n`;
+      } else {
+        out += `    <podcast:funding url="${escapeXml(url)}"/>\n`;
+      }
+    }
+
+    for (const block of parseArr<{ id?: string | null; value?: string }>(meta.blocks)) {
+      const value = block.value === "yes" || block.value === "no" ? block.value : "";
+      if (!value) continue;
+      const id = typeof block.id === "string" && block.id.trim() ? block.id.trim() : "";
+      if (id) {
+        out += `    <podcast:block id="${escapeXml(id)}">${value}</podcast:block>\n`;
+      } else {
+        out += `    <podcast:block>${value}</podcast:block>\n`;
+      }
+    }
+
+    for (const txt of parseArr<{ purpose?: string | null; value?: string }>(meta.podcastTxts)) {
+      const value = typeof txt.value === "string" ? txt.value.trim() : "";
+      if (!value) continue;
+      const purpose =
+        typeof txt.purpose === "string" && txt.purpose.trim()
+          ? txt.purpose.trim().slice(0, 128)
+          : "";
+      if (purpose) {
+        out += `    <podcast:txt purpose="${escapeXml(purpose)}">${escapeXml(value.slice(0, 4000))}</podcast:txt>\n`;
+      } else {
+        out += `    <podcast:txt>${escapeXml(value.slice(0, 4000))}</podcast:txt>\n`;
+      }
+    }
+
+    for (const si of parseArr<{
+      protocol?: string;
+      uri?: string | null;
+      accountId?: string | null;
+      accountUrl?: string | null;
+      priority?: number | null;
+    }>(meta.socialInteracts)) {
+      const protocol = typeof si.protocol === "string" ? si.protocol.trim() : "";
+      if (!protocol) continue;
+      if (protocol.toLowerCase() === "disabled") {
+        out += `    <podcast:socialInteract protocol="disabled"/>\n`;
+        continue;
+      }
+      const uri = sanitizeHttpUrl(si.uri);
+      if (!uri) continue;
+      let attrs = `protocol="${escapeXml(protocol)}" uri="${escapeXml(uri)}"`;
+      if (typeof si.accountId === "string" && si.accountId.trim()) {
+        attrs += ` accountId="${escapeXml(si.accountId.trim())}"`;
+      }
+      const accountUrl = sanitizeHttpUrl(si.accountUrl);
+      if (accountUrl) attrs += ` accountUrl="${escapeXml(accountUrl)}"`;
+      if (typeof si.priority === "number" && Number.isFinite(si.priority) && si.priority >= 0) {
+        attrs += ` priority="${Math.floor(si.priority)}"`;
+      }
+      out += `    <podcast:socialInteract ${attrs}/>\n`;
+    }
+
+    for (const loc of parseArr<{
+      name?: string;
+      rel?: string | null;
+      geo?: string | null;
+      osm?: string | null;
+      country?: string | null;
+    }>(meta.locations)) {
+      const name = typeof loc.name === "string" ? loc.name.trim().slice(0, 128) : "";
+      if (!name) continue;
+      let attrs = "";
+      if (loc.rel === "subject" || loc.rel === "creator") attrs += ` rel="${loc.rel}"`;
+      if (typeof loc.geo === "string" && loc.geo.trim()) {
+        attrs += ` geo="${escapeXml(loc.geo.trim())}"`;
+      }
+      if (typeof loc.osm === "string" && loc.osm.trim()) {
+        attrs += ` osm="${escapeXml(loc.osm.trim())}"`;
+      }
+      if (typeof loc.country === "string" && /^[A-Za-z]{2}$/.test(loc.country.trim())) {
+        attrs += ` country="${escapeXml(loc.country.trim().toUpperCase())}"`;
+      }
+      out += `    <podcast:location${attrs}>${escapeXml(name)}</podcast:location>\n`;
+    }
+
+    {
+      const chat = parseObj<{
+        server?: string;
+        protocol?: string;
+        accountId?: string | null;
+        space?: string | null;
+      }>(meta.chat);
+      const server = chat && typeof chat.server === "string" ? chat.server.trim() : "";
+      const protocol = chat && typeof chat.protocol === "string" ? chat.protocol.trim() : "";
+      if (server && protocol) {
+        let attrs = `server="${escapeXml(server)}" protocol="${escapeXml(protocol)}"`;
+        if (typeof chat?.accountId === "string" && chat.accountId.trim()) {
+          attrs += ` accountId="${escapeXml(chat.accountId.trim())}"`;
+        }
+        if (typeof chat?.space === "string" && chat.space.trim()) {
+          attrs += ` space="${escapeXml(chat.space.trim())}"`;
+        }
+        out += `    <podcast:chat ${attrs}/>\n`;
+      }
+    }
+
+    {
+      const pub = parseObj<{
+        feedGuid?: string;
+        feedUrl?: string | null;
+        medium?: string | null;
+      }>(meta.publisher);
+      const feedGuid = pub && typeof pub.feedGuid === "string" ? pub.feedGuid.trim() : "";
+      if (feedGuid) {
+        const med =
+          pub && typeof pub.medium === "string" && pub.medium.trim()
+            ? pub.medium.trim()
+            : "publisher";
+        let attrs = `medium="${escapeXml(med)}" feedGuid="${escapeXml(feedGuid)}"`;
+        const feedUrl = sanitizeHttpUrl(pub?.feedUrl);
+        if (feedUrl) attrs += ` feedUrl="${escapeXml(feedUrl)}"`;
+        out += `    <podcast:publisher>\n      <podcast:remoteItem ${attrs}/>\n    </podcast:publisher>\n`;
+      }
+    }
+
+    {
+      const rollItems = parseArr<{
+        feedGuid?: string;
+        feedUrl?: string | null;
+        title?: string | null;
+      }>(meta.podroll).filter(
+        (item) => typeof item.feedGuid === "string" && item.feedGuid.trim(),
+      );
+      if (rollItems.length > 0) {
+        out += `    <podcast:podroll>\n`;
+        for (const item of rollItems) {
+          const feedGuid = String(item.feedGuid).trim();
+          let attrs = `feedGuid="${escapeXml(feedGuid)}"`;
+          const feedUrl = sanitizeHttpUrl(item.feedUrl);
+          if (feedUrl) attrs += ` feedUrl="${escapeXml(feedUrl)}"`;
+          const title =
+            typeof item.title === "string" ? item.title.trim() : "";
+          if (title) attrs += ` title="${escapeXml(title.slice(0, 256))}"`;
+          out += `      <podcast:remoteItem ${attrs}/>\n`;
+        }
+        out += `    </podcast:podroll>\n`;
+      }
+    }
+
+    for (const block of parseArr<{
+      type?: string;
+      method?: string;
+      suggested?: string | null;
+      recipients?: Array<{
+        type?: string;
+        address?: string;
+        split?: number;
+        name?: string | null;
+        customKey?: string | null;
+        customValue?: string | null;
+        fee?: boolean | null;
+      }>;
+    }>(meta.valueBlocks)) {
+      const type = typeof block.type === "string" ? block.type.trim() : "";
+      const method = typeof block.method === "string" ? block.method.trim() : "";
+      if (!type || !method) continue;
+      const recipients = Array.isArray(block.recipients) ? block.recipients : [];
+      const validRecipients = recipients.filter(
+        (r) =>
+          typeof r?.type === "string" &&
+          r.type.trim() &&
+          typeof r?.address === "string" &&
+          r.address.trim() &&
+          typeof r?.split === "number" &&
+          Number.isFinite(r.split) &&
+          r.split >= 0,
+      );
+      if (validRecipients.length === 0) continue;
+      let attrs = `type="${escapeXml(type)}" method="${escapeXml(method)}"`;
+      if (typeof block.suggested === "string" && block.suggested.trim()) {
+        attrs += ` suggested="${escapeXml(block.suggested.trim())}"`;
+      }
+      out += `    <podcast:value ${attrs}>\n`;
+      for (const r of validRecipients) {
+        let rAttrs = `type="${escapeXml(r.type!.trim())}" address="${escapeXml(r.address!.trim())}" split="${Math.floor(r.split!)}"`;
+        if (typeof r.name === "string" && r.name.trim()) {
+          rAttrs += ` name="${escapeXml(r.name.trim())}"`;
+        }
+        if (typeof r.customKey === "string" && r.customKey.trim()) {
+          rAttrs += ` customKey="${escapeXml(r.customKey.trim())}"`;
+        }
+        if (typeof r.customValue === "string" && r.customValue.trim()) {
+          rAttrs += ` customValue="${escapeXml(r.customValue.trim())}"`;
+        }
+        if (r.fee === true) rAttrs += ` fee="true"`;
+        out += `      <podcast:valueRecipient ${rAttrs}/>\n`;
+      }
+      out += `    </podcast:value>\n`;
+    }
+
+    {
+      const uf = parseObj<{
+        rrule?: string | null;
+        label?: string | null;
+        complete?: boolean | null;
+        dtstart?: string | null;
+      }>(meta.updateFrequency);
+      if (uf) {
+        const rrule = typeof uf.rrule === "string" ? uf.rrule.trim() : "";
+        const label =
+          typeof uf.label === "string" && uf.label.trim()
+            ? uf.label.trim().slice(0, 128)
+            : "";
+        const dtstart = typeof uf.dtstart === "string" ? uf.dtstart.trim() : "";
+        const complete = uf.complete === true;
+        if (complete || rrule || dtstart || label) {
+          let attrs = "";
+          if (complete) attrs += ` complete="true"`;
+          if (dtstart) attrs += ` dtstart="${escapeXml(dtstart)}"`;
+          if (rrule) attrs += ` rrule="${escapeXml(rrule)}"`;
+          if (label) {
+            out += `    <podcast:updateFrequency${attrs}>${escapeXml(label)}</podcast:updateFrequency>\n`;
+          } else {
+            out += `    <podcast:updateFrequency${attrs}/>\n`;
+          }
+        }
+      }
     }
   }
-  const updateRrule =
-    podcast.updateFrequencyRrule != null
-      ? String(podcast.updateFrequencyRrule).trim()
-      : "";
-  if (updateRrule) {
-    const updateLabel =
-      podcast.updateFrequencyLabel != null
-        ? escapeCdata(String(podcast.updateFrequencyLabel).trim())
-        : "";
-    out += `    <podcast:updateFrequency rrule="${escapeXml(updateRrule)}">${updateLabel ? `<![CDATA[${updateLabel}]]>` : ""}</podcast:updateFrequency>\n`;
+  // Podcast 2.0 <podcast:person> for channel: public show-cast hosts when present.
+  // Spec: https://podcasting2.org/docs/podcast-namespace/tags/person
+  // (role defaults to host; group defaults to cast; we set role explicitly.)
+  {
+    const hosts = drizzleDb
+      .select({
+        id: podcastCast.id,
+        name: podcastCast.name,
+        photoPath: podcastCast.photoPath,
+        photoUrl: podcastCast.photoUrl,
+        socialLinkText: podcastCast.socialLinkText,
+      })
+      .from(podcastCast)
+      .where(
+        and(
+          eq(podcastCast.podcastId, podcastId),
+          eq(podcastCast.role, "host"),
+          eq(podcastCast.isPublic, true),
+        ),
+      )
+      .orderBy(asc(podcastCast.createdAt))
+      .all();
+
+    if (hosts.length > 0) {
+      for (const host of hosts) {
+        const name = String(host.name ?? "").trim().slice(0, 128);
+        if (!name) continue;
+
+        let img = "";
+        if (host.photoPath && publicBaseNoSlash) {
+          try {
+            const resolved = resolveDataPath(host.photoPath);
+            assertPathUnder(resolved, castPhotoDir(podcastId));
+            const filename = basename(host.photoPath);
+            img = `${publicBaseNoSlash}/${API_PREFIX}/public/artwork/${encodeURIComponent(podcastId)}/cast/${encodeURIComponent(host.id)}/${encodeURIComponent(filename)}`;
+          } catch {
+            img = "";
+          }
+        }
+        if (!img && host.photoUrl) {
+          img = sanitizeHttpUrl(host.photoUrl);
+        }
+
+        const href = host.socialLinkText
+          ? sanitizeHttpUrl(host.socialLinkText)
+          : "";
+
+        let attrs = `role="host"`;
+        if (href) attrs += ` href="${escapeXml(href)}"`;
+        if (img) attrs += ` img="${escapeXml(img)}"`;
+        out += `    <podcast:person ${attrs}>${escapeXml(name)}</podcast:person>\n`;
+      }
+    } else {
+      // Fallback: legacy free-form persons list from show More tab
+      const personsJson = podcast.persons;
+      if (personsJson && typeof personsJson === "string") {
+        try {
+          const arr = JSON.parse(personsJson) as unknown[];
+          if (Array.isArray(arr)) {
+            for (const p of arr) {
+              if (typeof p === "string" && p.trim()) {
+                const name = p.trim().slice(0, 128);
+                out += `    <podcast:person role="host">${escapeXml(name)}</podcast:person>\n`;
+              }
+            }
+          }
+        } catch {
+          // ignore invalid JSON
+        }
+      }
+    }
   }
   const spotifyCount = podcast.spotifyRecentCount;
   const spotifyCountNum =
@@ -483,6 +848,41 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
   out += `    <podcast:medium>${medium}</podcast:medium>
 `;
 
+  // Podcast 2.0 channel trailers: every in-feed episode marked episodeType=trailer.
+  const enclosureOpts = {
+    publicBaseNoSlash,
+    podcastId,
+    slugEnc,
+    slugRaw,
+    tokenIdPlaceholder,
+    exportPrefix,
+  };
+  for (const ep of episodesList) {
+    const epType = String(ep.episodeType ?? "").toLowerCase();
+    if (epType !== "trailer") continue;
+    if (!ep.audioFinalPath) continue;
+    const trailerUrl = episodeEnclosureUrl(ep, enclosureOpts);
+    if (!trailerUrl) continue;
+    const trailerTitleRaw = String(ep.title ?? "").trim() || "Trailer";
+    const trailerTitle = escapeXml(
+      trailerTitleRaw.length > 128 ? trailerTitleRaw.slice(0, 128) : trailerTitleRaw,
+    );
+    const trailerPubDate = ep.publishAt
+      ? new Date(String(ep.publishAt)).toUTCString()
+      : new Date(String(ep.updatedAt ?? Date.now())).toUTCString();
+    const trailerBytes = ep.audioBytes != null ? Number(ep.audioBytes) : 0;
+    const trailerMime =
+      typeof ep.audioMime === "string" && ep.audioMime.trim()
+        ? ep.audioMime.trim()
+        : "audio/mpeg";
+    const seasonNum = ep.seasonNumber != null ? Number(ep.seasonNumber) : null;
+    const seasonAttr =
+      seasonNum != null && Number.isFinite(seasonNum) && seasonNum > 0
+        ? ` season="${seasonNum}"`
+        : "";
+    out += `    <podcast:trailer pubdate="${escapeXml(trailerPubDate)}" url="${escapeXml(trailerUrl)}" length="${trailerBytes}" type="${escapeXml(trailerMime)}"${seasonAttr}>${trailerTitle}</podcast:trailer>\n`;
+  }
+
   for (const ep of episodesList) {
     const epTitle = escapeCdata(String(ep.title ?? ""));
     const baseDesc = String(ep.description ?? "");
@@ -516,25 +916,14 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       ep.episodeNumber != null ? Number(ep.episodeNumber) : null;
     const episodeType = (ep.episodeType as string) || "full";
 
-    let enclosureUrl = "";
-    if (publicBaseNoSlash && ep.id) {
-      const validEpisodeId = String(ep.id).trim();
-      if (validEpisodeId) {
-        const ext = enclosureExt(ep.audioFinalPath);
-        if (tokenIdPlaceholder && slugRaw) {
-          enclosureUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${tokenIdPlaceholder}/episodes/${encodeURIComponent(validEpisodeId)}${ext}`;
-        } else if (exportPrefix != null) {
-          // S3 export: public base + prefix + episodes/{id}.ext (matches deployPodcastToS3 keys)
-          enclosureUrl = `${publicBaseNoSlash}/${exportPrefix}/episodes/${validEpisodeId}${ext}`;
-        } else if (ep.audioFinalPath && podcastId) {
-          // Self-hosted: API path with file extension so enclosure URLs end in .mp3 etc.
-          const validPodcastId = String(podcastId).trim();
-          if (validPodcastId) {
-            enclosureUrl = `${publicBaseNoSlash}/${API_PREFIX}/${encodeURIComponent(validPodcastId)}/episodes/${encodeURIComponent(validEpisodeId)}${ext}`;
-          }
-        }
-      }
-    }
+    const enclosureUrl = episodeEnclosureUrl(ep, {
+      publicBaseNoSlash,
+      podcastId,
+      slugEnc,
+      slugRaw,
+      tokenIdPlaceholder,
+      exportPrefix,
+    });
 
     const epLink = sanitizeHttpUrl(ep.episodeLink);
     const epSlugRaw =
@@ -659,6 +1048,317 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       }
       if (chaptersUrl)
         out += `      <podcast:chapters url="${escapeXml(chaptersUrl)}" type="application/json+chapters"/>\n`;
+    }
+    // Soundbites: same visibility gate as chapters (public base + episode slug), without requiring chapters.json
+    if (publicBaseNoSlash && epSlugRaw) {
+      const rawSoundbites = (ep as { finalSoundbites?: string | null }).finalSoundbites;
+      let soundbites: Array<{
+        time?: number;
+        duration?: number;
+        title?: string;
+      }> = [];
+      if (typeof rawSoundbites === "string" && rawSoundbites.trim()) {
+        try {
+          const parsed = JSON.parse(rawSoundbites) as unknown;
+          if (Array.isArray(parsed)) {
+            soundbites = parsed.filter(
+              (s): s is { time?: number; duration?: number; title?: string } =>
+                typeof s === "object" && s != null,
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      for (const sb of soundbites) {
+        const startTime = typeof sb.time === "number" && Number.isFinite(sb.time) ? sb.time : null;
+        if (startTime == null || startTime < 0) continue;
+        let duration =
+          typeof sb.duration === "number" && Number.isFinite(sb.duration) ? sb.duration : 30;
+        if (duration < 15) duration = 15;
+        if (duration > 120) duration = 120;
+        const titleRaw = typeof sb.title === "string" ? sb.title.trim() : "";
+        const title =
+          titleRaw.length > 127 ? titleRaw.slice(0, 127) : titleRaw;
+        const startAttr = Number.isInteger(startTime)
+          ? String(startTime)
+          : startTime.toFixed(1);
+        const durationAttr = Number.isInteger(duration)
+          ? String(duration)
+          : duration.toFixed(1);
+        if (title) {
+          out += `      <podcast:soundbite startTime="${escapeXml(startAttr)}" duration="${escapeXml(durationAttr)}">${escapeXml(title)}</podcast:soundbite>\n`;
+        } else {
+          out += `      <podcast:soundbite startTime="${escapeXml(startAttr)}" duration="${escapeXml(durationAttr)}"/>\n`;
+        }
+      }
+    }
+    // Podcast 2.0 content links (alternate platforms)
+    {
+      const rawContentLinks = (ep as { contentLinks?: string | null }).contentLinks;
+      let contentLinks: Array<{ href?: string; text?: string | null }> = [];
+      if (typeof rawContentLinks === "string" && rawContentLinks.trim()) {
+        try {
+          const parsed = JSON.parse(rawContentLinks) as unknown;
+          if (Array.isArray(parsed)) {
+            contentLinks = parsed.filter(
+              (l): l is { href?: string; text?: string | null } =>
+                typeof l === "object" && l != null,
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      for (const link of contentLinks) {
+        const href = sanitizeHttpUrl(link.href);
+        if (!href) continue;
+        const textRaw = typeof link.text === "string" ? link.text.trim() : "";
+        const text = textRaw || href;
+        out += `      <podcast:contentLink href="${escapeXml(href)}">${escapeXml(text)}</podcast:contentLink>\n`;
+      }
+    }
+    // Podcast 2.0 More-tab metadata (txt, socialInteract, location, license, image, funding, chat, value)
+    {
+      type EpMeta = {
+        podcastTxts?: string | null;
+        socialInteracts?: string | null;
+        locations?: string | null;
+        license?: string | null;
+        podcastImages?: string | null;
+        fundingLinks?: string | null;
+        chat?: string | null;
+        valueBlocks?: string | null;
+      };
+      const meta = ep as EpMeta;
+      const parseArr = <T extends object>(raw: string | null | undefined): T[] => {
+        if (typeof raw !== "string" || !raw.trim()) return [];
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          return Array.isArray(parsed)
+            ? parsed.filter((x): x is T => typeof x === "object" && x != null)
+            : [];
+        } catch {
+          return [];
+        }
+      };
+      const parseObj = <T extends object>(raw: string | null | undefined): T | null => {
+        if (typeof raw !== "string" || !raw.trim()) return null;
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          return typeof parsed === "object" && parsed != null && !Array.isArray(parsed)
+            ? (parsed as T)
+            : null;
+        } catch {
+          return null;
+        }
+      };
+
+      for (const txt of parseArr<{ purpose?: string | null; value?: string }>(meta.podcastTxts)) {
+        const value = typeof txt.value === "string" ? txt.value.trim() : "";
+        if (!value) continue;
+        const purpose =
+          typeof txt.purpose === "string" && txt.purpose.trim()
+            ? txt.purpose.trim().slice(0, 128)
+            : "";
+        if (purpose) {
+          out += `      <podcast:txt purpose="${escapeXml(purpose)}">${escapeXml(value.slice(0, 4000))}</podcast:txt>\n`;
+        } else {
+          out += `      <podcast:txt>${escapeXml(value.slice(0, 4000))}</podcast:txt>\n`;
+        }
+      }
+
+      for (const si of parseArr<{
+        protocol?: string;
+        uri?: string | null;
+        accountId?: string | null;
+        accountUrl?: string | null;
+        priority?: number | null;
+      }>(meta.socialInteracts)) {
+        const protocol = typeof si.protocol === "string" ? si.protocol.trim() : "";
+        if (!protocol) continue;
+        if (protocol.toLowerCase() === "disabled") {
+          out += `      <podcast:socialInteract protocol="disabled"/>\n`;
+          continue;
+        }
+        const uri = sanitizeHttpUrl(si.uri);
+        if (!uri) continue;
+        let attrs = `protocol="${escapeXml(protocol)}" uri="${escapeXml(uri)}"`;
+        if (typeof si.accountId === "string" && si.accountId.trim()) {
+          attrs += ` accountId="${escapeXml(si.accountId.trim())}"`;
+        }
+        const accountUrl = sanitizeHttpUrl(si.accountUrl);
+        if (accountUrl) attrs += ` accountUrl="${escapeXml(accountUrl)}"`;
+        if (
+          typeof si.priority === "number" &&
+          Number.isFinite(si.priority) &&
+          si.priority >= 0
+        ) {
+          attrs += ` priority="${Math.floor(si.priority)}"`;
+        }
+        out += `      <podcast:socialInteract ${attrs}/>\n`;
+      }
+
+      for (const loc of parseArr<{
+        name?: string;
+        rel?: string | null;
+        geo?: string | null;
+        osm?: string | null;
+        country?: string | null;
+      }>(meta.locations)) {
+        const name = typeof loc.name === "string" ? loc.name.trim().slice(0, 128) : "";
+        if (!name) continue;
+        let attrs = "";
+        if (loc.rel === "subject" || loc.rel === "creator") {
+          attrs += ` rel="${loc.rel}"`;
+        }
+        if (typeof loc.geo === "string" && loc.geo.trim()) {
+          attrs += ` geo="${escapeXml(loc.geo.trim())}"`;
+        }
+        if (typeof loc.osm === "string" && loc.osm.trim()) {
+          attrs += ` osm="${escapeXml(loc.osm.trim())}"`;
+        }
+        if (typeof loc.country === "string" && /^[A-Za-z]{2}$/.test(loc.country.trim())) {
+          attrs += ` country="${escapeXml(loc.country.trim().toUpperCase())}"`;
+        }
+        out += `      <podcast:location${attrs}>${escapeXml(name)}</podcast:location>\n`;
+      }
+
+      {
+        const license = parseObj<{ identifier?: string; url?: string | null }>(meta.license);
+        const identifier =
+          license && typeof license.identifier === "string"
+            ? license.identifier.trim().slice(0, 128)
+            : "";
+        if (identifier) {
+          const url = sanitizeHttpUrl(license?.url);
+          if (url) {
+            out += `      <podcast:license url="${escapeXml(url)}">${escapeXml(identifier)}</podcast:license>\n`;
+          } else {
+            out += `      <podcast:license>${escapeXml(identifier)}</podcast:license>\n`;
+          }
+        }
+      }
+
+      for (const img of parseArr<{
+        href?: string;
+        alt?: string | null;
+        aspectRatio?: string | null;
+        width?: number | null;
+        height?: number | null;
+        type?: string | null;
+        purpose?: string | null;
+      }>(meta.podcastImages)) {
+        const href = sanitizeHttpUrl(img.href);
+        if (!href) continue;
+        let attrs = `href="${escapeXml(href)}"`;
+        if (typeof img.alt === "string" && img.alt.trim()) {
+          attrs += ` alt="${escapeXml(img.alt.trim())}"`;
+        }
+        if (typeof img.aspectRatio === "string" && img.aspectRatio.trim()) {
+          attrs += ` aspect-ratio="${escapeXml(img.aspectRatio.trim())}"`;
+        }
+        if (typeof img.width === "number" && Number.isFinite(img.width) && img.width > 0) {
+          attrs += ` width="${Math.floor(img.width)}"`;
+        }
+        if (typeof img.height === "number" && Number.isFinite(img.height) && img.height > 0) {
+          attrs += ` height="${Math.floor(img.height)}"`;
+        }
+        if (typeof img.type === "string" && img.type.trim()) {
+          attrs += ` type="${escapeXml(img.type.trim())}"`;
+        }
+        if (typeof img.purpose === "string" && img.purpose.trim()) {
+          attrs += ` purpose="${escapeXml(img.purpose.trim().slice(0, 128))}"`;
+        }
+        out += `      <podcast:image ${attrs}/>\n`;
+      }
+
+      for (const fund of parseArr<{ url?: string; text?: string | null }>(meta.fundingLinks)) {
+        const url = sanitizeHttpUrl(fund.url);
+        if (!url) continue;
+        const text =
+          typeof fund.text === "string" && fund.text.trim()
+            ? fund.text.trim().slice(0, 128)
+            : "";
+        if (text) {
+          out += `      <podcast:funding url="${escapeXml(url)}">${escapeXml(text)}</podcast:funding>\n`;
+        } else {
+          out += `      <podcast:funding url="${escapeXml(url)}"/>\n`;
+        }
+      }
+
+      {
+        const chat = parseObj<{
+          server?: string;
+          protocol?: string;
+          accountId?: string | null;
+          space?: string | null;
+        }>(meta.chat);
+        const server = chat && typeof chat.server === "string" ? chat.server.trim() : "";
+        const protocol =
+          chat && typeof chat.protocol === "string" ? chat.protocol.trim() : "";
+        if (server && protocol) {
+          let attrs = `server="${escapeXml(server)}" protocol="${escapeXml(protocol)}"`;
+          if (typeof chat?.accountId === "string" && chat.accountId.trim()) {
+            attrs += ` accountId="${escapeXml(chat.accountId.trim())}"`;
+          }
+          if (typeof chat?.space === "string" && chat.space.trim()) {
+            attrs += ` space="${escapeXml(chat.space.trim())}"`;
+          }
+          out += `      <podcast:chat ${attrs}/>\n`;
+        }
+      }
+
+      for (const block of parseArr<{
+        type?: string;
+        method?: string;
+        suggested?: string | null;
+        recipients?: Array<{
+          type?: string;
+          address?: string;
+          split?: number;
+          name?: string | null;
+          customKey?: string | null;
+          customValue?: string | null;
+          fee?: boolean | null;
+        }>;
+      }>(meta.valueBlocks)) {
+        const type = typeof block.type === "string" ? block.type.trim() : "";
+        const method = typeof block.method === "string" ? block.method.trim() : "";
+        if (!type || !method) continue;
+        const recipients = Array.isArray(block.recipients) ? block.recipients : [];
+        const validRecipients = recipients.filter(
+          (r) =>
+            typeof r?.type === "string" &&
+            r.type.trim() &&
+            typeof r?.address === "string" &&
+            r.address.trim() &&
+            typeof r?.split === "number" &&
+            Number.isFinite(r.split) &&
+            r.split >= 0,
+        );
+        if (validRecipients.length === 0) continue;
+        let attrs = `type="${escapeXml(type)}" method="${escapeXml(method)}"`;
+        if (typeof block.suggested === "string" && block.suggested.trim()) {
+          attrs += ` suggested="${escapeXml(block.suggested.trim())}"`;
+        }
+        out += `      <podcast:value ${attrs}>\n`;
+        for (const r of validRecipients) {
+          let rAttrs = `type="${escapeXml(r.type!.trim())}" address="${escapeXml(r.address!.trim())}" split="${Math.floor(r.split!)}"`;
+          if (typeof r.name === "string" && r.name.trim()) {
+            rAttrs += ` name="${escapeXml(r.name.trim())}"`;
+          }
+          if (typeof r.customKey === "string" && r.customKey.trim()) {
+            rAttrs += ` customKey="${escapeXml(r.customKey.trim())}"`;
+          }
+          if (typeof r.customValue === "string" && r.customValue.trim()) {
+            rAttrs += ` customValue="${escapeXml(r.customValue.trim())}"`;
+          }
+          if (r.fee === true) rAttrs += ` fee="true"`;
+          out += `        <podcast:valueRecipient ${rAttrs}/>\n`;
+        }
+        out += `      </podcast:value>\n`;
+      }
     }
     out += `      <itunes:explicit>${epExplicit}</itunes:explicit>
       <pubDate>${pubDate}</pubDate>

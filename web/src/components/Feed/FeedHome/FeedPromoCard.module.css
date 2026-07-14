@@ -1,8 +1,8 @@
 .promo {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(0, 212, 170, 0.15), rgba(0, 128, 255, 0.12));
-  border: 1px solid rgba(0, 212, 170, 0.3);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 15%, transparent), rgba(0, 128, 255, 0.12));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: 16px;
   padding: 2rem;
   margin-bottom: 2rem;
@@ -14,7 +14,7 @@
   inset: 0;
   border-radius: 16px;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(0, 212, 170, 0.4), rgba(0, 128, 255, 0.3));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 40%, transparent), rgba(0, 128, 255, 0.3));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;

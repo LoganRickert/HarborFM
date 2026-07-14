@@ -232,6 +232,10 @@ export function insertSegmentRecorded(values: {
   name: string;
   audioPath: string;
   durationSec: number;
+  trimRanges?: string | null;
+  markers?: string | null;
+  audioEq?: string | null;
+  disabled?: boolean;
 }): void {
   drizzleDb.insert(episodeSegments).values({
     id: values.id,
@@ -241,7 +245,31 @@ export function insertSegmentRecorded(values: {
     name: values.name,
     audioPath: values.audioPath,
     durationSec: values.durationSec,
+    trimRanges: values.trimRanges ?? null,
+    markers: values.markers ?? null,
+    audioEq: values.audioEq ?? null,
+    disabled: values.disabled ?? false,
   }).run();
+}
+
+/**
+ * Bump position by +1 for every segment with position > afterPosition.
+ * Used to insert a new segment immediately below another.
+ */
+export function shiftSegmentPositionsAfter(
+  episodeId: string,
+  afterPosition: number,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ position: sql`${episodeSegments.position} + 1` })
+    .where(
+      and(
+        eq(episodeSegments.episodeId, episodeId),
+        sql`${episodeSegments.position} > ${afterPosition}`,
+      ),
+    )
+    .run();
 }
 
 /** Add disk bytes to podcast owner (after recorded upload or promote). */
@@ -544,6 +572,7 @@ export function updateEpisodeAfterRender(
     audioDurationSec: number;
     descriptionCopyrightSnapshot: string | null;
     finalMarkers: string;
+    finalSoundbites: string;
   },
 ): void {
   drizzleDb
@@ -556,6 +585,7 @@ export function updateEpisodeAfterRender(
       audioDurationSec: data.audioDurationSec,
       descriptionCopyrightSnapshot: data.descriptionCopyrightSnapshot,
       finalMarkers: data.finalMarkers,
+      finalSoundbites: data.finalSoundbites,
       updatedAt: sqlNow(),
     })
     .where(eq(episodes.id, episodeId))

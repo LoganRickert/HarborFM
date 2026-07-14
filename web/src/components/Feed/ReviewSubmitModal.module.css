@@ -58,8 +58,8 @@
 }
 
 .close:hover {
-  background: rgba(0, 212, 170, 0.14);
-  border-color: rgba(0, 212, 170, 0.45);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--text);
 }
 

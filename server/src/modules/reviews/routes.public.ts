@@ -254,7 +254,8 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
       }
 
       const verified = Boolean(auth.userId);
-      const approved = Boolean(auth.userId);
+      // Keep spam-flagged reviews unapproved so moderators can approve and clear the flag.
+      const approved = Boolean(auth.userId) && !spam;
 
       let emailVerificationTokenHash: string | null = null;
       let emailVerificationExpiresAt: string | null = null;

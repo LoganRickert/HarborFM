@@ -13,7 +13,13 @@ export interface SegmentEditTabProps {
   durationSec: number;
   waveformData: WaveformData | null;
   trimRanges: Array<[number, number]>;
-  markers: Array<{ time: number; title?: string; color?: string; markerType?: '' | 'chapter' }>;
+  markers: Array<{
+    time: number;
+    title?: string;
+    color?: string;
+    markerType?: '' | 'chapter' | 'soundbite';
+    duration?: number;
+  }>;
   selection: { start: number; end: number } | null;
   timelineMode: 'drag' | 'trim';
   selectedMarkerIndex: number | null;
@@ -32,10 +38,16 @@ export interface SegmentEditTabProps {
   onRemoveTrimRange: (index: number) => void;
   onMarkerTitleChange: (index: number, title: string) => void;
   onMarkerColorChange: (index: number, color: string) => void;
-  onMarkerTypeChange: (index: number, markerType: '' | 'chapter') => void;
+  onMarkerTypeChange: (index: number, markerType: '' | 'chapter' | 'soundbite') => void;
+  onMarkerDurationChange: (index: number, duration: string) => void;
   onMarkerDone: () => void;
   onRequestRemoveMarker: (index: number) => void;
-  markerDraft: { title: string; color: string; markerType: '' | 'chapter' } | null;
+  markerDraft: {
+    title: string;
+    color: string;
+    markerType: '' | 'chapter' | 'soundbite';
+    duration: string;
+  } | null;
   onTimelineModeChange: (mode: 'drag' | 'trim') => void;
   onSelectedMarkerIndexChange: (index: number | null) => void;
   onZoomIn: () => void;
@@ -77,6 +89,7 @@ export function SegmentEditTab({
   onMarkerTitleChange,
   onMarkerColorChange,
   onMarkerTypeChange,
+  onMarkerDurationChange,
   onMarkerDone,
   onRequestRemoveMarker,
   markerDraft,
@@ -247,20 +260,39 @@ export function SegmentEditTab({
                   .map(({ m, i }) => {
                     const left =
                       ((m.time - viewStartSec) / (viewEndSec - viewStartSec)) * 100;
-                    const color = m.color ?? MARKER_COLORS[0];
                     const isSelected = selectedMarkerIndex === i;
+                    const color =
+                      isSelected && markerDraft ? markerDraft.color : (m.color ?? MARKER_COLORS[0]);
+                    const markerType =
+                      isSelected && markerDraft
+                        ? markerDraft.markerType
+                        : (m.markerType ?? '');
+                    const shapeClass =
+                      markerType === 'chapter'
+                        ? styles.markerHandleChapter
+                        : markerType === 'soundbite'
+                          ? styles.markerHandleSoundbite
+                          : '';
+                    const isSoundbite = markerType === 'soundbite';
                     return (
                       <button
                         key={i}
                         type="button"
-                        className={`${styles.markerHandle} ${
+                        className={`${styles.markerHandle} ${shapeClass} ${
                           isSelected ? styles.markerHandleSelected : ''
                         }`}
-                        style={{
-                          left: `${left}%`,
-                          borderColor: color,
-                          backgroundColor: isSelected ? color : 'transparent',
-                        }}
+                        style={
+                          isSoundbite
+                            ? {
+                                left: `${left}%`,
+                                color,
+                              }
+                            : {
+                                left: `${left}%`,
+                                borderColor: color,
+                                backgroundColor: isSelected ? color : 'transparent',
+                              }
+                        }
                         onClick={() =>
                           onSelectedMarkerIndexChange(selectedMarkerIndex === i ? null : i)
                         }
@@ -269,7 +301,23 @@ export function SegmentEditTab({
                           m.title ? `Marker: ${m.title}` : `Marker at ${m.time.toFixed(1)}s`
                         }
                         aria-pressed={selectedMarkerIndex === i}
-                      />
+                      >
+                        {isSoundbite && (
+                          <svg
+                            className={styles.markerHandleSoundbiteSvg}
+                            viewBox="0 0 12 11"
+                            aria-hidden
+                          >
+                            <polygon
+                              points="6,1 1,10 11,10"
+                              fill={isSelected ? 'currentColor' : 'none'}
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </button>
                     );
                   })}
               </div>
@@ -332,19 +380,38 @@ export function SegmentEditTab({
             })}
           </div>
           <div className={styles.markerTypeRow} role="group" aria-label="Marker type">
-            {(['', 'chapter'] as const).map((t) => (
+            {([
+              { value: '' as const, label: 'None' },
+              { value: 'chapter' as const, label: 'Chapter' },
+              { value: 'soundbite' as const, label: 'Soundbite' },
+            ]).map(({ value, label }) => (
               <button
-                key={t || 'none'}
+                key={value || 'none'}
                 type="button"
-                className={markerDraft.markerType === t ? styles.statusToggleActive : styles.statusToggleBtn}
-                onClick={() => onMarkerTypeChange(selectedMarkerIndex, t)}
-                aria-pressed={markerDraft.markerType === t}
-                aria-label={t === '' ? 'None' : 'Chapter'}
+                className={markerDraft.markerType === value ? styles.statusToggleActive : styles.statusToggleBtn}
+                onClick={() => onMarkerTypeChange(selectedMarkerIndex, value)}
+                aria-pressed={markerDraft.markerType === value}
+                aria-label={label}
               >
-                {t === '' ? 'None' : 'Chapter'}
+                {label}
               </button>
             ))}
           </div>
+          {markerDraft.markerType === 'soundbite' && (
+            <label className={styles.markerSoundbiteDuration}>
+              <span>Duration (seconds)</span>
+              <input
+                type="number"
+                min={15}
+                max={120}
+                step={1}
+                inputMode="numeric"
+                value={markerDraft.duration}
+                onChange={(e) => onMarkerDurationChange(selectedMarkerIndex, e.target.value)}
+                aria-label="Soundbite duration in seconds"
+              />
+            </label>
+          )}
         </div>
       )}
       {audioEditActive && selectedMarkerIndex == null && (

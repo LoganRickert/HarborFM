@@ -13,6 +13,8 @@ export { SubscriptionInfoDialog } from './SubscriptionInfoDialog';
 export { ReviewStars } from './ReviewStars';
 export { ReviewSubmitModal } from './ReviewSubmitModal';
 export { ReviewsCard } from './ReviewsCard';
+export { FeedPodrollCard } from './FeedPodrollCard';
+export { FeedFundingSupport } from './FeedFundingSupport';
 
 // Page-specific components
 export * from './FeedHome';

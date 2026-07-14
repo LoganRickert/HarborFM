@@ -1,8 +1,12 @@
 import { useRef } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { Image } from 'lucide-react';
-import { slugify, type EpisodeForm } from './utils';
+import { type EpisodeForm } from './utils';
 import { EpisodePublishControls } from './EpisodePublishControls';
+import { HrefTextListField } from '../../components/EpisodeEditor/HrefTextListField';
+import { StructuredListField } from '../../components/EpisodeEditor/StructuredListField';
+import { ObjectFieldsSection } from '../../components/EpisodeEditor/ObjectFieldsSection';
+import { ValueBlocksField } from '../../components/EpisodeEditor/ValueBlocksField';
 import localStyles from '../EpisodeEditor.module.css';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 
@@ -59,6 +63,8 @@ export interface EpisodeDetailsFormProps {
     debouncedArtworkUrl: string;
     uploadArtworkPending: boolean;
   };
+  /** When false, Published and Scheduled cannot be selected in the publish UI. */
+  hasFinalAudio: boolean;
 }
 
 export function EpisodeDetailsForm({
@@ -76,6 +82,7 @@ export function EpisodeDetailsForm({
   deleteError,
   onRequestDeleteEpisode,
   coverImageConfig,
+  hasFinalAudio,
 }: EpisodeDetailsFormProps) {
   const cover = coverImageConfig;
   const savingOrUploading = isSaving || (cover?.uploadArtworkPending ?? false);
@@ -110,11 +117,7 @@ export function EpisodeDetailsForm({
               value={form.title}
               onChange={(e) => {
                 const v = e.target.value;
-                setForm((prev) => ({
-                  ...prev,
-                  title: v,
-                  ...((!prev.slug || prev.slug === slugify(prev.title)) ? { slug: slugify(v) } : {}),
-                }));
+                setForm((prev) => ({ ...prev, title: v }));
               }}
               className={styles.input}
               placeholder="e.g. Episode 1: Getting Started"
@@ -297,6 +300,7 @@ export function EpisodeDetailsForm({
             }}
             onChange={(fields) => setForm((prev) => ({ ...prev, ...fields }))}
             variant="form"
+            hasFinalAudio={hasFinalAudio}
           />
           <label className="toggle">
             <input
@@ -374,6 +378,179 @@ export function EpisodeDetailsForm({
               Optional. Shown in apps that support full show notes.
             </p>
           </label>
+          <HrefTextListField
+            label="Content Link"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/content-link"
+            hint="Optional Podcast 2.0 links to alternate platforms (e.g. YouTube). If link text is blank, the URL is used as the label in the feed."
+            value={form.contentLinks}
+            onChange={(contentLinks) => setForm((prev) => ({ ...prev, contentLinks }))}
+            hrefPlaceholder="e.g. https://youtube.com/watch?v=…"
+            textPlaceholder="e.g. Watch on YouTube"
+            addLabel="Add content link"
+          />
+          <StructuredListField
+            label="Txt"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/txt"
+            hint="Free-form Podcast 2.0 txt records (verification, AI disclosure, etc.). Purpose max 128 chars; value max 4000."
+            value={form.podcastTxts}
+            onChange={(podcastTxts) => setForm((prev) => ({ ...prev, podcastTxts }))}
+            emptyRow={() => ({ purpose: '', value: '' })}
+            addLabel="Add txt"
+            fields={[
+              { key: 'purpose', label: 'Purpose', placeholder: 'e.g. verify', maxLength: 128 },
+              { key: 'value', label: 'Value', placeholder: 'Text content', maxLength: 4000 },
+            ]}
+          />
+          <StructuredListField
+            label="Social Interact"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/social-interact"
+            hint="Comment thread root posts. Use protocol “disabled” to signal no public comments (no URI needed)."
+            value={form.socialInteracts}
+            onChange={(socialInteracts) => setForm((prev) => ({ ...prev, socialInteracts }))}
+            emptyRow={() => ({
+              protocol: 'activitypub',
+              uri: '',
+              accountId: '',
+              accountUrl: '',
+              priority: '',
+            })}
+            addLabel="Add social interact"
+            fields={[
+              { key: 'protocol', label: 'Protocol', placeholder: 'activitypub', maxLength: 128 },
+              { key: 'uri', label: 'URI', type: 'url', placeholder: 'https://…', maxLength: 2000 },
+              { key: 'accountId', label: 'Account ID', placeholder: '@user', maxLength: 512 },
+              {
+                key: 'accountUrl',
+                label: 'Account URL',
+                type: 'url',
+                placeholder: 'https://…',
+                maxLength: 2000,
+              },
+              { key: 'priority', label: 'Priority', type: 'number', placeholder: '1' },
+            ]}
+          />
+          <StructuredListField
+            label="Location"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/location"
+            hint="Where the episode is about or was made. Name max 128 chars; country is ISO alpha-2 (e.g. US)."
+            value={form.locations}
+            onChange={(locations) => setForm((prev) => ({ ...prev, locations }))}
+            emptyRow={() => ({
+              name: '',
+              rel: 'subject',
+              geo: '',
+              osm: '',
+              country: '',
+            })}
+            addLabel="Add location"
+            fields={[
+              { key: 'name', label: 'Name', placeholder: 'Austin, TX', maxLength: 128 },
+              {
+                key: 'rel',
+                label: 'Relation',
+                type: 'select',
+                options: [
+                  { value: 'subject', label: 'Subject (About)' },
+                  { value: 'creator', label: 'Creator (Recorded)' },
+                ],
+              },
+              { key: 'geo', label: 'Geo URI', placeholder: 'geo:30.2672,-97.7431', maxLength: 128 },
+              { key: 'osm', label: 'OSM ID', placeholder: 'R113314', maxLength: 64 },
+              { key: 'country', label: 'Country', placeholder: 'US', maxLength: 2 },
+            ]}
+          />
+          <ObjectFieldsSection
+            label="License"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/license"
+            hint="Episode license identifier (e.g. CC-BY-4.0). Include a URL for custom licenses."
+            value={form.license}
+            onChange={(license) =>
+              setForm((prev) => ({
+                ...prev,
+                license: { identifier: license.identifier ?? '', url: license.url ?? '' },
+              }))
+            }
+            fields={[
+              {
+                key: 'identifier',
+                label: 'Identifier',
+                placeholder: 'CC-BY-4.0',
+                maxLength: 128,
+              },
+              {
+                key: 'url',
+                label: 'URL',
+                type: 'url',
+                placeholder: 'https://…',
+                maxLength: 2000,
+                hint: 'Required for custom licenses',
+              },
+            ]}
+          />
+          <StructuredListField
+            label="Image"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/image"
+            hint="Podcast 2.0 images by URL only (no upload). Use purpose tokens like artwork, social, canvas."
+            value={form.podcastImages}
+            onChange={(podcastImages) => setForm((prev) => ({ ...prev, podcastImages }))}
+            emptyRow={() => ({
+              href: '',
+              alt: '',
+              aspectRatio: '',
+              width: '',
+              height: '',
+              type: '',
+              purpose: '',
+            })}
+            addLabel="Add image"
+            fields={[
+              { key: 'href', label: 'URL', type: 'url', placeholder: 'https://…', maxLength: 2000 },
+              { key: 'alt', label: 'Alt text', maxLength: 512 },
+              { key: 'aspectRatio', label: 'Aspect ratio', placeholder: '16/9', maxLength: 32 },
+              { key: 'width', label: 'Width (px)', type: 'number' },
+              { key: 'height', label: 'Height (px)', type: 'number' },
+              { key: 'type', label: 'MIME type', placeholder: 'image/jpeg', maxLength: 128 },
+              { key: 'purpose', label: 'Purpose', placeholder: 'artwork social', maxLength: 128 },
+            ]}
+          />
+          <HrefTextListField
+            label="Funding"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/funding"
+            hint="Episode funding / donation links (separate from show-level funding)."
+            value={form.fundingLinks}
+            onChange={(fundingLinks) => setForm((prev) => ({ ...prev, fundingLinks }))}
+            hrefPlaceholder="e.g. https://example.com/donate"
+            textPlaceholder="e.g. Support this episode"
+            addLabel="Add funding link"
+            textMaxLength={128}
+          />
+          <ObjectFieldsSection
+            label="Chat"
+            docsUrl="https://podcasting2.org/docs/podcast-namespace/tags/chat"
+            hint="Official chat for this episode (overrides show-level chat when set)."
+            value={form.chat}
+            onChange={(chat) =>
+              setForm((prev) => ({
+                ...prev,
+                chat: {
+                  server: chat.server ?? '',
+                  protocol: chat.protocol ?? '',
+                  accountId: chat.accountId ?? '',
+                  space: chat.space ?? '',
+                },
+              }))
+            }
+            fields={[
+              { key: 'server', label: 'Server', placeholder: 'irc.example.com', maxLength: 512 },
+              { key: 'protocol', label: 'Protocol', placeholder: 'irc', maxLength: 128 },
+              { key: 'accountId', label: 'Account ID', placeholder: '@host', maxLength: 512 },
+              { key: 'space', label: 'Space / room', placeholder: '#episode', maxLength: 512 },
+            ]}
+          />
+          <ValueBlocksField
+            value={form.valueBlocks}
+            onChange={(valueBlocks) => setForm((prev) => ({ ...prev, valueBlocks }))}
+          />
           <label className={styles.label}>
             GUID
             <input

@@ -33,11 +33,17 @@ export interface PodcastListRow {
   license: string | null;
   itunesType: string | null;
   medium: string | null;
-  fundingUrl: string | null;
-  fundingLabel: string | null;
+  fundingLinks: string | null;
   persons: string | null;
-  updateFrequencyRrule: string | null;
-  updateFrequencyLabel: string | null;
+  updateFrequency: string | null;
+  podcastTxts: string | null;
+  socialInteracts: string | null;
+  locations: string | null;
+  chat: string | null;
+  valueBlocks: string | null;
+  blocks: string | null;
+  publisher: string | null;
+  podroll: string | null;
   spotifyRecentCount: number | null;
   spotifyCountryOfOrigin: string | null;
   applePodcastsVerify: string | null;
@@ -67,6 +73,15 @@ export interface PodcastListRow {
   subscriberOnlyReviews: number;
   subscriberOnlyMessages: number;
   showScheduledEpisodes: number;
+  feedAccent: string;
+  feedShowPodcastDescription: number;
+  feedShowEpisodeDescription: number;
+  feedShowFunding: number;
+  feedShowReviewsPodcast: number;
+  feedShowReviewsEpisode: number;
+  feedShowAuthor: number;
+  feedShowPodroll: number;
+  feedShowCast: number;
   maxEpisodes: number | null;
   episodeCount: number;
 }
@@ -111,11 +126,17 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
     license: podcasts.license,
     itunesType: podcasts.itunesType,
     medium: podcasts.medium,
-    fundingUrl: podcasts.fundingUrl,
-    fundingLabel: podcasts.fundingLabel,
+    fundingLinks: podcasts.fundingLinks,
     persons: podcasts.persons,
-    updateFrequencyRrule: podcasts.updateFrequencyRrule,
-    updateFrequencyLabel: podcasts.updateFrequencyLabel,
+    updateFrequency: podcasts.updateFrequency,
+    podcastTxts: podcasts.podcastTxts,
+    socialInteracts: podcasts.socialInteracts,
+    locations: podcasts.locations,
+    chat: podcasts.chat,
+    valueBlocks: podcasts.valueBlocks,
+    blocks: podcasts.blocks,
+    publisher: podcasts.publisher,
+    podroll: podcasts.podroll,
     spotifyRecentCount: podcasts.spotifyRecentCount,
     spotifyCountryOfOrigin: podcasts.spotifyCountryOfOrigin,
     applePodcastsVerify: podcasts.applePodcastsVerify,
@@ -147,6 +168,23 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
     subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
     subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
     showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
+    feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
+    feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
+      "feedShowPodcastDescription",
+    ),
+    feedShowEpisodeDescription: sql<number>`COALESCE(${podcasts.feedShowEpisodeDescription}, 1)`.as(
+      "feedShowEpisodeDescription",
+    ),
+    feedShowFunding: sql<number>`COALESCE(${podcasts.feedShowFunding}, 1)`.as("feedShowFunding"),
+    feedShowReviewsPodcast: sql<number>`COALESCE(${podcasts.feedShowReviewsPodcast}, 1)`.as(
+      "feedShowReviewsPodcast",
+    ),
+    feedShowReviewsEpisode: sql<number>`COALESCE(${podcasts.feedShowReviewsEpisode}, 1)`.as(
+      "feedShowReviewsEpisode",
+    ),
+    feedShowAuthor: sql<number>`COALESCE(${podcasts.feedShowAuthor}, 1)`.as("feedShowAuthor"),
+    feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
+    feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
     maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as(
       "maxEpisodes",
     ),
@@ -259,11 +297,17 @@ export function getByIdWithFilenameForCreate(
       license: podcasts.license,
       itunesType: podcasts.itunesType,
       medium: podcasts.medium,
-      fundingUrl: podcasts.fundingUrl,
-      fundingLabel: podcasts.fundingLabel,
+      fundingLinks: podcasts.fundingLinks,
       persons: podcasts.persons,
-      updateFrequencyRrule: podcasts.updateFrequencyRrule,
-      updateFrequencyLabel: podcasts.updateFrequencyLabel,
+      updateFrequency: podcasts.updateFrequency,
+      podcastTxts: podcasts.podcastTxts,
+      socialInteracts: podcasts.socialInteracts,
+      locations: podcasts.locations,
+      chat: podcasts.chat,
+      valueBlocks: podcasts.valueBlocks,
+      blocks: podcasts.blocks,
+      publisher: podcasts.publisher,
+      podroll: podcasts.podroll,
       spotifyRecentCount: podcasts.spotifyRecentCount,
       spotifyCountryOfOrigin: podcasts.spotifyCountryOfOrigin,
       applePodcastsVerify: podcasts.applePodcastsVerify,
@@ -291,6 +335,23 @@ export function getByIdWithFilenameForCreate(
       subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
       subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
       showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
+      feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
+      feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
+        "feedShowPodcastDescription",
+      ),
+      feedShowEpisodeDescription: sql<number>`COALESCE(${podcasts.feedShowEpisodeDescription}, 1)`.as(
+        "feedShowEpisodeDescription",
+      ),
+      feedShowFunding: sql<number>`COALESCE(${podcasts.feedShowFunding}, 1)`.as("feedShowFunding"),
+      feedShowReviewsPodcast: sql<number>`COALESCE(${podcasts.feedShowReviewsPodcast}, 1)`.as(
+        "feedShowReviewsPodcast",
+      ),
+      feedShowReviewsEpisode: sql<number>`COALESCE(${podcasts.feedShowReviewsEpisode}, 1)`.as(
+        "feedShowReviewsEpisode",
+      ),
+      feedShowAuthor: sql<number>`COALESCE(${podcasts.feedShowAuthor}, 1)`.as("feedShowAuthor"),
+      feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
+      feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
       maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as("maxEpisodes"),
       episodeCount: sql<number>`0`.as("episodeCount"),
       cloudflareApiKeyEnc: podcasts.cloudflareApiKeyEnc,

@@ -6,14 +6,17 @@
 # Non-interaction: use --no-interaction, -y, -n, or env CI=1 / NON_INTERACTIVE=1
 set -e
 
-# Non-interaction: skip all prompts, use defaults (overwrite configs)
-NON_INTERACTIVE=false
+# Non-interaction: honor env CI=1 / NON_INTERACTIVE=1, or flags --no-interaction / -y / -n
+if [ "${CI:-0}" = "1" ] || [ "${NON_INTERACTIVE:-0}" = "1" ]; then
+  NON_INTERACTIVE=true
+else
+  NON_INTERACTIVE=false
+fi
 for arg in "$@"; do
   case "$arg" in
     --no-interaction|-y|-n) NON_INTERACTIVE=true; break ;;
   esac
 done
-[ "${CI:-0}" = "1" ] || [ "${NON_INTERACTIVE:-0}" = "1" ] && NON_INTERACTIVE=true
 
 # Install directory: first non-flag argument or directory containing this script
 INSTALL_DIR=""
@@ -74,17 +77,31 @@ if [ -f "$INSTALL_DIR/.env" ]; then
   source "$INSTALL_DIR/.env"
   set +a
 fi
-REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
+
+if [ ! -f "$INSTALL_DIR/.env" ]; then
+  touch "$INSTALL_DIR/.env"
+fi
+if grep -q '^REVERSE_PROXY=' "$INSTALL_DIR/.env" 2>/dev/null; then
+  grep -v '^REVERSE_PROXY=' "$INSTALL_DIR/.env" > "$INSTALL_DIR/.env.tmp"
+  mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env"
+fi
+echo "REVERSE_PROXY=$REVERSE_PROXY" >> "$INSTALL_DIR/.env"
+
+# Collect all prompts up front so the rest of the update can run unattended
+if [ "$NON_INTERACTIVE" = true ]; then
+  overwrite_compose="n"
+  prune_harborfm="n"
+else
+  read -r -p "Overwrite docker-compose.yml with version from GitHub? [y/N] " overwrite_compose </dev/tty || true
+  read -r -p "Prune old harborfm images after pull (keep :latest)? [y/N] " prune_harborfm </dev/tty || true
+  echo ""
+fi
 
 echo "Stopping containers..."
 docker compose down
 
 echo "Downloading latest configs from GitHub (main)..."
-if [ "$NON_INTERACTIVE" = true ]; then
-  overwrite_compose="y"
-else
-  read -r -p "Overwrite docker-compose.yml with version from GitHub? [y/N] " overwrite_compose </dev/tty || true
-fi
 if [[ "$overwrite_compose" =~ ^[yY] ]]; then
   download "$BASE_URL/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
 else
@@ -146,11 +163,6 @@ clean_old_harborfm_images() {
     done
   done
 }
-if [ "$NON_INTERACTIVE" = true ]; then
-  prune_harborfm="n"
-else
-  read -r -p "Prune harborfm images? [y/N] " prune_harborfm </dev/tty || true
-fi
 if [[ "$prune_harborfm" =~ ^[yY] ]]; then
   echo "Cleaning old HarborFM / HarborFM-webrtc images (keeping :latest)..."
   clean_old_harborfm_images

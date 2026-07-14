@@ -54,13 +54,20 @@ export const trimRangeSchema = z.tuple([
 export const trimRangesSchema = z.array(trimRangeSchema);
 
 /** Single marker: point in time with optional title, color (hex), and markerType. */
-export const markerSchema = z.object({
-  time: z.number().min(0),
-  title: z.string().optional(),
-  color: z.string().optional(),
-  /** '' | undefined = None, 'chapter' = Chapter */
-  markerType: z.union([z.literal(''), z.literal('chapter')]).optional(),
-});
+export const markerSchema = z
+  .object({
+    time: z.number().min(0),
+    title: z.string().optional(),
+    color: z.string().optional(),
+    /** '' | undefined = None, 'chapter' = Chapter, 'soundbite' = Soundbite */
+    markerType: z.union([z.literal(''), z.literal('chapter'), z.literal('soundbite')]).optional(),
+    /** Duration in seconds when markerType is soundbite (15–120). */
+    duration: z.number().min(15).max(120).optional(),
+  })
+  .refine(
+    (m) => m.markerType !== 'soundbite' || (typeof m.duration === 'number' && m.duration >= 15 && m.duration <= 120),
+    { message: 'Soundbite markers require duration between 15 and 120 seconds', path: ['duration'] },
+  );
 
 /** Array of markers. */
 export const markersSchema = z.array(markerSchema);
@@ -80,8 +87,13 @@ export interface Marker {
   time: number;
   title?: string;
   color?: string;
-  markerType?: '' | 'chapter';
+  markerType?: '' | 'chapter' | 'soundbite';
+  /** Duration in seconds when markerType is soundbite (15–120). */
+  duration?: number;
 }
+
+/** Default duration (seconds) when creating a soundbite marker. */
+export const SOUNDBITE_DEFAULT_DURATION = 30;
 
 /** Body for PATCH /episodes/:episodeId/segments/:segmentId (update name, trim_ranges, markers). */
 export const segmentUpdateNameBodySchema = z.object({
@@ -116,6 +128,13 @@ export const segmentRemoveSilenceBodySchema = z.object({
 /** Body for POST /episodes/:episodeId/segments/:segmentId/noise-suppression. */
 export const segmentNoiseSuppressionBodySchema = z.object({
   nf: z.number().finite().optional(),
+});
+
+/** Body for POST /episodes/:episodeId/segments/:segmentId/split. */
+export const segmentSplitBodySchema = z.object({
+  minutes: z.number().int().min(0),
+  /** Fractional seconds allowed (0 <= seconds < 60). */
+  seconds: z.number().min(0).lt(60),
 });
 
 /** Body for PATCH /episodes/:episodeId/segments/:segmentId/transcript. */
@@ -249,6 +268,7 @@ export type TrimRange = z.infer<typeof trimRangeSchema>;
 export type SegmentTrimBody = z.infer<typeof segmentTrimBodySchema>;
 export type SegmentRemoveSilenceBody = z.infer<typeof segmentRemoveSilenceBodySchema>;
 export type SegmentNoiseSuppressionBody = z.infer<typeof segmentNoiseSuppressionBodySchema>;
+export type SegmentSplitBody = z.infer<typeof segmentSplitBodySchema>;
 export type SegmentTranscriptBody = z.infer<typeof segmentTranscriptBodySchema>;
 export type SegmentEpisodeTranscriptBody = z.infer<typeof segmentEpisodeTranscriptBodySchema>;
 export type SegmentTranscriptGenerateQuery = z.infer<typeof segmentTranscriptGenerateQuerySchema>;

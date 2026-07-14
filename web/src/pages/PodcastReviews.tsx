@@ -284,16 +284,16 @@ function ReviewsList({
           </p>
           <div className={styles.reviewActions}>
             <div className={styles.reviewActionsLeft}>
-              {!r.approved ? (
+              {!r.approved || r.spam ? (
                 <button
                   type="button"
                   className={styles.approveBtn}
                   onClick={() => onApprove(r.id)}
                   disabled={isApproving(r.id)}
-                  aria-label="Approve review"
+                  aria-label={r.spam ? 'Approve and clear spam flag' : 'Approve review'}
                 >
                   <CheckCircle size={16} strokeWidth={2} aria-hidden />
-                  {isApproving(r.id) ? 'Approving…' : 'Approve'}
+                  {isApproving(r.id) ? 'Approving…' : r.spam ? 'Approve (clear spam)' : 'Approve'}
                 </button>
               ) : (
                 <span className={styles.approvedLabel}>

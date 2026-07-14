@@ -1,10 +1,39 @@
 import { z } from 'zod';
+import {
+  blockSchema,
+  chatSchema,
+  fundingLinkSchema,
+  licenseSchema,
+  locationSchema,
+  podcastTxtSchema,
+  podrollItemSchema,
+  publisherSchema,
+  socialInteractSchema,
+  updateFrequencySchema,
+  valueBlockSchema,
+} from './podcastNamespace.js';
 
 const emptyStringToNull = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (v === '' ? null : v), schema);
 
 const nullableOptionalString = emptyStringToNull(z.string().nullable().optional());
 const nullableOptionalUrl = emptyStringToNull(z.string().url().nullable().optional());
+
+/** Named accent for public feed page theming. */
+export const feedAccentSchema = z.enum([
+  'green',
+  'cyan',
+  'blue',
+  'indigo',
+  'violet',
+  'pink',
+  'red',
+  'orange',
+  'amber',
+  'lime',
+]);
+
+export type FeedAccent = z.infer<typeof feedAccentSchema>;
 
 export const podcastCreateSchema = z.object({
   title: z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string().min(1, { error: 'Title is required' })),
@@ -30,14 +59,30 @@ export const podcastCreateSchema = z.object({
   // GUID can be any persistent string (UUID, URL, or feed-specific id)
   podcastGuid: nullableOptionalString,
   locked: z.union([z.literal(0), z.literal(1)]).default(0),
-  license: nullableOptionalString,
+  license: licenseSchema.optional().nullable(),
   itunesType: z.enum(['episodic', 'serial']).default('episodic'),
   medium: z.enum(['podcast', 'music', 'video', 'film', 'audiobook', 'newsletter', 'blog']).default('podcast'),
-  fundingUrl: emptyStringToNull(z.string().url().nullable().optional()),
-  fundingLabel: nullableOptionalString,
+  fundingLinks: z.array(fundingLinkSchema).optional().nullable(),
   persons: nullableOptionalString,
-  updateFrequencyRrule: nullableOptionalString,
-  updateFrequencyLabel: nullableOptionalString,
+  updateFrequency: z.preprocess((v) => {
+    if (v == null || v === '') return null;
+    if (typeof v !== 'object' || Array.isArray(v)) return v;
+    const o = v as Record<string, unknown>;
+    const empty =
+      o.complete !== true &&
+      !(typeof o.rrule === 'string' && o.rrule.trim()) &&
+      !(typeof o.dtstart === 'string' && o.dtstart.trim()) &&
+      !(typeof o.label === 'string' && o.label.trim());
+    return empty ? null : v;
+  }, updateFrequencySchema.nullable().optional()),
+  podcastTxts: z.array(podcastTxtSchema).optional().nullable(),
+  socialInteracts: z.array(socialInteractSchema).optional().nullable(),
+  locations: z.array(locationSchema).optional().nullable(),
+  chat: chatSchema.optional().nullable(),
+  valueBlocks: z.array(valueBlockSchema).optional().nullable(),
+  blocks: z.array(blockSchema).optional().nullable(),
+  publisher: publisherSchema.optional().nullable(),
+  podroll: z.array(podrollItemSchema).optional().nullable(),
   spotifyRecentCount: z.number().int().min(0).nullable().optional(),
   spotifyCountryOfOrigin: nullableOptionalString,
   applePodcastsVerify: nullableOptionalString,
@@ -97,6 +142,16 @@ export const podcastUpdateSchema = podcastCreateSchema
     subscriberOnlyMessages: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     /** When true, episodes scheduled for a future date appear on the public feed with a placeholder. Accept boolean or 0/1. */
     showScheduledEpisodes: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** Primary accent color for the public feed page. */
+    feedAccent: feedAccentSchema.optional(),
+    feedShowPodcastDescription: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowEpisodeDescription: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowFunding: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowReviewsPodcast: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowReviewsEpisode: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowAuthor: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowPodroll: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowCast: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     /** DNS: link domain (hostname only, no https://). */
     linkDomain: z.string().nullable().optional(),
     /** DNS: managed domain (hostname only, no https://). */
@@ -129,7 +184,11 @@ export const podcastImportBodySchema = z.object({
     }, { message: 'feedUrl must be a valid http or https URL' }),
 });
 
+/** Body for POST /podcasts/feed-preview (podroll RSS autofill). */
+export const podcastFeedPreviewBodySchema = podcastImportBodySchema;
+
 export type PodcastImportBody = z.infer<typeof podcastImportBodySchema>;
+export type PodcastFeedPreviewBody = z.infer<typeof podcastFeedPreviewBodySchema>;
 
 export type PodcastCreate = z.infer<typeof podcastCreateSchema>;
 export type PodcastUpdate = z.infer<typeof podcastUpdateSchema>;

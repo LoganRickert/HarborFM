@@ -1,0 +1,47 @@
+.rssRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.rssField {
+  flex: 1;
+  min-width: 0;
+}
+
+.fetchBtn {
+  flex-shrink: 0;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.fetchBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.fetchBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--danger, #ef4444);
+  line-height: 1.4;
+}
+
+.coverPreview {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}

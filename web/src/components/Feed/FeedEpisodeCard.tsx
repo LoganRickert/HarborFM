@@ -15,6 +15,7 @@ export function FeedEpisodeCard({
   onPlay,
   onPause,
   useShortEpisodeUrls = false,
+  showDescription = true,
 }: FeedEpisodeCardProps) {
   const isPlaying = playingEpisodeId === episode.id;
   const episodeLinkTo = useShortEpisodeUrls ? `/${episode.slug}` : `/feed/${podcastSlug}/${episode.slug}`;
@@ -23,6 +24,7 @@ export function FeedEpisodeCard({
   const episodeWithAuth = episode as PublicEpisodeWithAuth;
   const hasAudio = !!(episodeWithAuth.privateAudioUrl || episode.audioUrl);
   const scheduledNotReleased = Boolean(episode.scheduledNotReleased);
+  const episodeType = String(episode.episodeType ?? '').toLowerCase();
 
   return (
     <li
@@ -32,6 +34,15 @@ export function FeedEpisodeCard({
           : styles.episode
       }
     >
+      {(episodeType === 'trailer' || episodeType === 'bonus') && (
+        <span
+          className={`${styles.typePill} ${
+            episodeType === 'trailer' ? styles.typePillTrailer : styles.typePillBonus
+          }`}
+        >
+          {episodeType === 'trailer' ? 'Trailer' : 'Bonus'}
+        </span>
+      )}
       <div className={styles.header}>
         <div className={styles.headerContent}>
           <h3 className={styles.title}>{episode.title}</h3>
@@ -56,7 +67,7 @@ export function FeedEpisodeCard({
           <ArrowRight size={14} strokeWidth={2.5} />
         </Link>
       </div>
-      {episode.description && (
+      {showDescription && episode.description && (
         <p className={styles.description}>{episode.description}</p>
       )}
       {showPlayer && hasAudio ? (

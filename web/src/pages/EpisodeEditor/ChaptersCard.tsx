@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Play, Pencil, Trash2, Plus } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { ChevronDown, ChevronUp, Play, Pencil, Trash2, Plus, TriangleAlert } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { formatDuration } from './utils';
+import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
+import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
 import styles from '../EpisodeEditor.module.css';
 
 export type ChapterMarker = { time: number; title?: string; color?: string };
@@ -22,6 +24,8 @@ export interface ChaptersCardProps {
   hasFinalAudio: boolean;
   /** Duration of final audio in seconds. Used to validate chapter times. */
   finalDurationSec: number;
+  /** Current final-episode playhead time (seconds). Used as default when adding. */
+  playheadTimeSec?: number;
   /** Controlled expanded state (optional). */
   expanded?: boolean;
   /** Called when expanded state changes. */
@@ -55,6 +59,13 @@ function parseTimeInput(s: string): number {
   return NaN;
 }
 
+function clampPlayheadTime(playheadTimeSec: number | undefined, maxTimeSec: number): number {
+  const t = Math.floor(playheadTimeSec ?? 0);
+  if (!Number.isFinite(t) || t < 0) return 0;
+  if (maxTimeSec > 0 && t > maxTimeSec) return Math.floor(maxTimeSec);
+  return t;
+}
+
 function ChapterEditDialog({
   open,
   onOpenChange,
@@ -68,24 +79,29 @@ function ChapterEditDialog({
   onOpenChange: (open: boolean) => void;
   marker: ChapterMarker | null;
   mode: 'add' | 'edit';
-  /** When mode is 'add', the default start time in seconds (e.g. 0 or last chapter time + 1). */
+  /** When mode is 'add', the default start time in seconds (playhead). */
   defaultTimeSec?: number;
   maxTimeSec: number;
   onSave: (m: ChapterMarker) => void;
 }) {
-  const getDefaultTimeStr = () =>
+  const initialTitle = marker?.title ?? '';
+  const initialTimeStr =
     mode === 'add' && defaultTimeSec !== undefined
       ? formatDuration(Math.floor(defaultTimeSec))
       : marker != null
         ? formatDuration(Math.floor(marker.time))
         : '0:00';
+  const initialColor = marker?.color ?? CHAPTER_COLORS[0];
 
-  const getDefaultColor = () => marker?.color ?? CHAPTER_COLORS[0];
-
-  const [title, setTitle] = useState(marker?.title ?? '');
-  const [timeStr, setTimeStr] = useState(getDefaultTimeStr());
-  const [color, setColor] = useState(getDefaultColor());
+  const [title, setTitle] = useState(initialTitle);
+  const [timeStr, setTimeStr] = useState(initialTimeStr);
+  const [color, setColor] = useState(initialColor);
   const [error, setError] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState({
+    title: initialTitle,
+    timeStr: initialTimeStr,
+    color: initialColor,
+  });
 
   useEffect(() => {
     if (open) {
@@ -95,22 +111,30 @@ function ChapterEditDialog({
           : marker != null
             ? formatDuration(Math.floor(marker.time))
             : '0:00';
-      setTitle(marker?.title ?? '');
+      const nextTitle = marker?.title ?? '';
+      const nextColor = marker?.color ?? CHAPTER_COLORS[0];
+      setTitle(nextTitle);
       setTimeStr(timeStrVal);
-      setColor(marker?.color ?? CHAPTER_COLORS[0]);
+      setColor(nextColor);
       setError(null);
+      setBaseline({ title: nextTitle, timeStr: timeStrVal, color: nextColor });
     }
   }, [open, marker, mode, defaultTimeSec]);
 
-  const handleOpenChange = (o: boolean) => {
-    if (!o) {
-      setTitle(marker?.title ?? '');
-      setTimeStr(getDefaultTimeStr());
-      setColor(getDefaultColor());
-      setError(null);
-    }
-    onOpenChange(o);
-  };
+  const isDirty = useMemo(
+    () => title !== baseline.title || timeStr !== baseline.timeStr || color !== baseline.color,
+    [title, timeStr, color, baseline],
+  );
+
+  const close = () => onOpenChange(false);
+  const {
+    confirmOpen,
+    requestClose,
+    onOpenChange: guardOnOpenChange,
+    handleConfirmOpenChange,
+    handleDiscard,
+    dialogContentProps,
+  } = useDialogCloseGuard({ isDirty, onClose: close });
 
   const handleSave = () => {
     const timeSec = parseTimeInput(timeStr);
@@ -129,101 +153,115 @@ function ChapterEditDialog({
     }
     setError(null);
     onSave({ time: timeSec, title: t, color: color || undefined });
-    handleOpenChange(false);
+    close();
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className={`${styles.dialogOverlay} ${styles.dialogOverlayOnModal}`} />
-        <Dialog.Content
-          className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentOnModal}`}
-          onEscapeKeyDown={(e) => e.stopPropagation()}
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
-        >
-          <div className={styles.dialogHeaderRow}>
-            <Dialog.Title className={styles.dialogTitle}>
-              {mode === 'add' ? 'Add Chapter' : 'Edit Chapter'}
-            </Dialog.Title>
-            <Dialog.Close asChild>
-              <button type="button" className={styles.dialogClose} aria-label="Close">
+    <>
+      <Dialog.Root open={open} onOpenChange={guardOnOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Overlay className={styles.dialogOverlay} />
+          <Dialog.Content
+            className={`${styles.dialogContent} ${styles.dialogContentWide}`}
+            onEscapeKeyDown={(e) => {
+              e.stopPropagation();
+              dialogContentProps.onEscapeKeyDown(e);
+            }}
+            onPointerDownOutside={(e) => {
+              e.preventDefault();
+              dialogContentProps.onPointerDownOutside(e);
+            }}
+            onInteractOutside={(e) => {
+              e.preventDefault();
+              dialogContentProps.onInteractOutside(e);
+            }}
+          >
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>
+                {mode === 'add' ? 'Add Chapter' : 'Edit Chapter'}
+              </Dialog.Title>
+              <button type="button" className={styles.dialogClose} aria-label="Close" onClick={requestClose}>
                 <X size={18} strokeWidth={2} aria-hidden="true" />
               </button>
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className={styles.dialogDescription}>
-            {mode === 'add'
-              ? 'Add a chapter marker. Use mm:ss format (e.g. 1:30) or seconds.'
-              : 'Edit the chapter name and start time.'}
-          </Dialog.Description>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-            <label className={styles.chapterEditLabel}>
-              <span>Chapter name</span>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Introduction"
-                className={styles.chapterEditInput}
-                autoFocus
-              />
-            </label>
-            <label className={styles.chapterEditLabel}>
-              <span>Start time</span>
-              <input
-                type="text"
-                value={timeStr}
-                onChange={(e) => setTimeStr(e.target.value)}
-                placeholder="0:00 or 90"
-                className={styles.chapterEditInput}
-              />
-            </label>
-            <div className={styles.chapterEditLabel}>
-              <span>Color</span>
-              <div className={styles.chapterColorRow} role="group" aria-label="Marker color">
-                {CHAPTER_COLORS.map((c) => {
-                  const isSelected = (color ?? CHAPTER_COLORS[0]) === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`${styles.chapterColorBtn} ${isSelected ? styles.chapterColorBtnSelected : ''}`}
-                      style={{
-                        borderColor: c,
-                        backgroundColor: isSelected ? c : 'transparent',
-                      }}
-                      onClick={() => setColor(c)}
-                      title={`Set color to ${c}`}
-                      aria-label={`Set color`}
-                      aria-pressed={isSelected}
-                    />
-                  );
-                })}
-              </div>
             </div>
-            {error && (
-              <p className={styles.error} role="alert" style={{ margin: 0 }}>
-                {error}
-              </p>
-            )}
-          </div>
-          <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`} style={{ marginTop: '1.25rem' }}>
-            <button type="button" className={styles.cancel} onClick={() => handleOpenChange(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={styles.renderBtnPrimary}
-              onClick={handleSave}
-              aria-label={mode === 'add' ? 'Add chapter' : 'Save changes'}
-            >
-              {mode === 'add' ? 'Add Chapter' : 'Save'}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+            <Dialog.Description className={styles.dialogDescription}>
+              {mode === 'add'
+                ? 'Add a chapter marker. Use mm:ss format (e.g. 1:30) or seconds.'
+                : 'Edit the chapter name and start time.'}
+            </Dialog.Description>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+              <label className={styles.chapterEditLabel}>
+                <span>Chapter name</span>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Introduction"
+                  className={styles.chapterEditInput}
+                  autoFocus
+                />
+              </label>
+              <label className={styles.chapterEditLabel}>
+                <span>Start time</span>
+                <input
+                  type="text"
+                  value={timeStr}
+                  onChange={(e) => setTimeStr(e.target.value)}
+                  placeholder="0:00 or 90"
+                  className={styles.chapterEditInput}
+                />
+              </label>
+              <div className={styles.chapterEditLabel}>
+                <span>Color</span>
+                <div className={styles.chapterColorRow} role="group" aria-label="Marker color">
+                  {CHAPTER_COLORS.map((c) => {
+                    const isSelected = (color ?? CHAPTER_COLORS[0]) === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`${styles.chapterColorBtn} ${isSelected ? styles.chapterColorBtnSelected : ''}`}
+                        style={{
+                          borderColor: c,
+                          backgroundColor: isSelected ? c : 'transparent',
+                        }}
+                        onClick={() => setColor(c)}
+                        title={`Set color to ${c}`}
+                        aria-label={`Set color`}
+                        aria-pressed={isSelected}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+              {error && (
+                <p className={styles.error} role="alert" style={{ margin: 0 }}>
+                  {error}
+                </p>
+              )}
+            </div>
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`} style={{ marginTop: '1.25rem' }}>
+              <button type="button" className={styles.cancel} onClick={requestClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.renderBtnPrimary}
+                onClick={handleSave}
+                aria-label={mode === 'add' ? 'Add chapter' : 'Save changes'}
+              >
+                {mode === 'add' ? 'Add Chapter' : 'Save'}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <UnsavedChangesConfirmDialog
+        open={confirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        onDiscard={handleDiscard}
+      />
+    </>
   );
 }
 
@@ -234,6 +272,7 @@ export function ChaptersCard({
   canEdit,
   hasFinalAudio,
   finalDurationSec,
+  playheadTimeSec,
   expanded: expandedProp,
   onExpandedChange,
   hideHeader = false,
@@ -298,6 +337,15 @@ export function ChaptersCard({
         className={styles.chaptersCardBody}
         style={{ display: expanded ? 'block' : 'none' }}
       >
+        {canEdit && (
+          <div className={styles.chaptersRebuildWarning} role="status">
+            <TriangleAlert size={16} strokeWidth={2} aria-hidden className={styles.chaptersRebuildWarningIcon} />
+            <span>
+              Any new markers or changes made here will be overwritten when you rebuild the episode.
+              Make permanent changes in the segment editor.
+            </span>
+          </div>
+        )}
         {sortedMarkers.length === 0 ? (
           <div className={styles.chaptersEmpty}>
             {canEdit ? (
@@ -424,11 +472,7 @@ export function ChaptersCard({
         onOpenChange={setAddOpen}
         marker={null}
         mode="add"
-        defaultTimeSec={
-          sortedMarkers.length === 0
-            ? 0
-            : Math.floor(Math.max(...sortedMarkers.map((m) => m.time))) + 1
-        }
+        defaultTimeSec={clampPlayheadTime(playheadTimeSec, finalDurationSec)}
         maxTimeSec={finalDurationSec}
         onSave={handleSaveAdd}
       />

@@ -42,6 +42,25 @@ export interface PublicPodcast {
   tiktokUrl?: string | null;
   youtubeUrl?: string | null;
   discordUrl?: string | null;
+  /** Creator recommendations (Podcast 2.0 podroll). */
+  podroll?: Array<{
+    feedGuid: string;
+    feedUrl: string | null;
+    title: string | null;
+    coverArtUrl: string | null;
+    homeUrl: string | null;
+  }> | null;
+  fundingLinks?: Array<{ url: string; text?: string | null }> | null;
+  /** Named accent for public feed theming (default green). */
+  feedAccent?: string;
+  feedShowPodcastDescription?: boolean;
+  feedShowEpisodeDescription?: boolean;
+  feedShowFunding?: boolean;
+  feedShowReviewsPodcast?: boolean;
+  feedShowReviewsEpisode?: boolean;
+  feedShowAuthor?: boolean;
+  feedShowPodroll?: boolean;
+  feedShowCast?: boolean;
 }
 
 /** camelCase shape for public episode (transformed from server snake_case). */
@@ -73,8 +92,10 @@ export interface PublicEpisode {
   privateVideoUrl?: string | null;
   privateSrtUrl?: string | null;
   markers?: Array<{ time: number; title?: string; color?: string }> | null;
+  soundbites?: Array<{ time: number; duration: number; title?: string; color?: string }> | null;
   /** When true, episode is scheduled for a future date and audio/markers are not available yet. */
   scheduledNotReleased?: boolean;
+  fundingLinks?: Array<{ url: string; text?: string | null }> | null;
 }
 
 function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
@@ -110,7 +131,92 @@ function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
     tiktokUrl: r.tiktok_url != null ? String(r.tiktok_url) : null,
     youtubeUrl: r.youtube_url != null ? String(r.youtube_url) : null,
     discordUrl: r.discord_url != null ? String(r.discord_url) : null,
+    podroll: Array.isArray(r.podroll)
+      ? (r.podroll as Array<Record<string, unknown>>)
+          .map((p) => {
+            const feedGuid =
+              typeof p.feed_guid === 'string'
+                ? p.feed_guid
+                : typeof p.feedGuid === 'string'
+                  ? p.feedGuid
+                  : '';
+            if (!feedGuid.trim()) return null;
+            return {
+              feedGuid: feedGuid.trim(),
+              feedUrl:
+                typeof p.feed_url === 'string'
+                  ? p.feed_url
+                  : typeof p.feedUrl === 'string'
+                    ? p.feedUrl
+                    : null,
+              title:
+                typeof p.title === 'string' ? p.title : null,
+              coverArtUrl:
+                typeof p.cover_art_url === 'string'
+                  ? p.cover_art_url
+                  : typeof p.coverArtUrl === 'string'
+                    ? p.coverArtUrl
+                    : null,
+              homeUrl:
+                typeof p.home_url === 'string'
+                  ? p.home_url
+                  : typeof p.homeUrl === 'string'
+                    ? p.homeUrl
+                    : null,
+            };
+          })
+          .filter((p): p is NonNullable<typeof p> => p != null)
+      : null,
+    fundingLinks: parsePublicFundingLinks(r.funding_links ?? r.fundingLinks),
+    feedAccent:
+      typeof r.feed_accent === 'string' && r.feed_accent.trim()
+        ? r.feed_accent.trim()
+        : typeof r.feedAccent === 'string' && r.feedAccent.trim()
+          ? r.feedAccent.trim()
+          : 'green',
+    feedShowPodcastDescription: asPublicBool(
+      r.feed_show_podcast_description ?? r.feedShowPodcastDescription,
+      true,
+    ),
+    feedShowEpisodeDescription: asPublicBool(
+      r.feed_show_episode_description ?? r.feedShowEpisodeDescription,
+      true,
+    ),
+    feedShowFunding: asPublicBool(r.feed_show_funding ?? r.feedShowFunding, true),
+    feedShowReviewsPodcast: asPublicBool(
+      r.feed_show_reviews_podcast ?? r.feedShowReviewsPodcast,
+      true,
+    ),
+    feedShowReviewsEpisode: asPublicBool(
+      r.feed_show_reviews_episode ?? r.feedShowReviewsEpisode,
+      true,
+    ),
+    feedShowAuthor: asPublicBool(r.feed_show_author ?? r.feedShowAuthor, true),
+    feedShowPodroll: asPublicBool(r.feed_show_podroll ?? r.feedShowPodroll, true),
+    feedShowCast: asPublicBool(r.feed_show_cast ?? r.feedShowCast, true),
   };
+}
+
+function asPublicBool(v: unknown, defaultValue: boolean): boolean {
+  if (v === undefined || v === null) return defaultValue;
+  return v === 1 || v === true;
+}
+
+function parsePublicFundingLinks(
+  raw: unknown,
+): Array<{ url: string; text: string | null }> | null {
+  if (!Array.isArray(raw)) return null;
+  const items = (raw as Array<Record<string, unknown>>)
+    .map((f) => {
+      const url = typeof f.url === 'string' ? f.url.trim() : '';
+      if (!url) return null;
+      return {
+        url,
+        text: typeof f.text === 'string' && f.text.trim() ? f.text.trim() : null,
+      };
+    })
+    .filter((f): f is NonNullable<typeof f> => f != null);
+  return items.length > 0 ? items : null;
 }
 
 function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
@@ -142,7 +248,17 @@ function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
     privateVideoUrl: (r.private_video_url as string | null) ?? null,
     privateSrtUrl: (r.private_srt_url as string | null) ?? null,
     markers: Array.isArray(r.markers) ? r.markers : [],
+    soundbites: Array.isArray(r.soundbites)
+      ? (r.soundbites as Array<{ time: number; duration: number; title?: string; color?: string }>).filter(
+          (s) =>
+            typeof s?.time === 'number' &&
+            typeof s?.duration === 'number' &&
+            s.duration >= 15 &&
+            s.duration <= 120,
+        )
+      : [],
     scheduledNotReleased: r.scheduled_not_released === 1 || r.scheduled_not_released === true,
+    fundingLinks: parsePublicFundingLinks(r.funding_links ?? r.fundingLinks),
   };
 }
 
@@ -209,13 +325,15 @@ export function getPublicEpisodes(
   limit = 50,
   offset = 0,
   sort: 'newest' | 'oldest' = 'newest',
-  q?: string
+  q?: string,
+  episodeType?: 'full' | 'trailer' | 'bonus',
 ) {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   params.set('offset', String(offset));
   params.set('sort', sort);
   if (q?.trim()) params.set('q', q.trim());
+  if (episodeType) params.set('episodeType', episodeType);
   return apiGet<PublicEpisodesResponse>(`/public/podcasts/${podcastSlug}/episodes?${params.toString()}`).then((data) => ({
     ...data,
     episodes: (data.episodes ?? []).map((e) => toPublicEpisode(e as Record<string, unknown>)),

@@ -1,5 +1,47 @@
 # Changelog
 
+## v1.9.0 - 2026-07-13
+
+- **Public feed:** Featured Trailer (playable trailer above Listen on / Follow; hidden when not listenable; omitted from the Episodes list while featured). Trailer and Bonus type pills on cards. Recommended Podcasts (podroll) above Reviews. Support The Show when funding links are set (podcast page, and episode page with episode links falling back to show links). Per-show accent color and visibility toggles for author, descriptions, funding, podroll, cast, and reviews.
+- **Episode feed player:** Transcript button opens a cue list; timestamps seek and play. Collapsible Soundbites under Chapters; playing one advances to the next and auto-pauses at the end.
+- **Soundbites:** Segment markers can be None, Chapter, or Soundbite (15–120s). Edit on the final waveform; download a clip from the export. RSS emits `<podcast:soundbite>` when the episode has a public URL.
+- **Podcast 2.0:** Show and episode More tabs edit funding, license, update frequency, block, chat, location, publisher, podroll, social interact, txt, value, and (episodes) content links / image. Podroll can Fetch from an RSS URL to autofill fields. Channel/item RSS emits the matching tags (including trailers, multi-funding, podroll, soundbites, and host `<podcast:person>` from public cast). Legacy single funding / update-frequency columns migrate into JSON.
+- **Episode editor:** Publish/Scheduled stay disabled until a final build exists. Add Chapter / Soundbite defaults to the playhead; cancel prompts on unsaved chapter/soundbite edits. Segment Split cuts at a chosen time and adjusts later markers.
+- **Reviews:** Hiding a review no longer blocks a new submit with the same email. Spam-flagged reviews from verified accounts stay unapproved so Approve can clear the flag.
+- **Install:** `install.sh` defaults to Caddy.
+
+Featured Trailer on the public podcast feed:
+
+![Featured Trailer card on the public podcast feed](screenshots/trailer-preview-card.jpg)
+
+Support The Show funding block:
+
+![Support The Show panel on the public feed](screenshots/support-the-show-preview.jpg)
+
+Recommended Podcasts (podroll) on the public feed:
+
+![Recommended Podcasts card on the public feed](screenshots/recommended-podcasts.jpg)
+
+Episode transcript popup with seekable cues:
+
+![Transcript dialog on the public episode feed](screenshots/feed-transcript-popup.jpg)
+
+Chapters on the public episode player:
+
+![Chapter markers on the public episode feed](screenshots/feed-chapter-markers.jpg)
+
+Page Customizations (accent color and visibility toggles):
+
+![Page Customizations dialog](screenshots/page-customization-menu.jpg)
+
+Episode More tab Podcast 2.0 metadata editors:
+
+![Episode details Podcast 2.0 fields](screenshots/episode-details-podcast-2.0.jpg)
+
+Soundbite markers in the episode editor:
+
+![Soundbite marker editor on the final waveform](screenshots/soundbite-marker-editor.jpg)
+
 ## v1.8.0 - 2026-07-13
 
 - **Editor dialogs:** Cancel/close on major edit dialogs now prompts when there are unsaved changes (Keep editing / Discard), including podcast and episode details, social links, transcript, library item edit, users create/edit, delivery exports, cast members, and OIDC/SAML provider dialogs.

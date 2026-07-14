@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react';
-import { ChevronRight, Play } from 'lucide-react';
+import { ChevronRight, Play, Pause } from 'lucide-react';
 import styles from './FeedEpisodeChapters.module.css';
 
 export type FeedChapterMarker = { time: number; title?: string; color?: string };
@@ -11,7 +11,12 @@ export interface FeedEpisodeChaptersProps {
   currentTime: number;
   /** Episode duration in seconds - used for the last chapter’s progress end. */
   durationSec?: number;
+  /** True while episode audio is playing. */
+  isPlaying?: boolean;
   onPlayChapter: (time: number) => void;
+  onPause?: () => void;
+  /** Resume from current playhead (used when the active chapter is paused). */
+  onResume?: () => void;
   className?: string;
 }
 
@@ -53,7 +58,10 @@ export function FeedEpisodeChapters({
   markers,
   currentTime,
   durationSec = 0,
+  isPlaying = false,
   onPlayChapter,
+  onPause,
+  onResume,
   className,
 }: FeedEpisodeChaptersProps) {
   const panelId = useId();
@@ -99,6 +107,7 @@ export function FeedEpisodeChapters({
               const title = marker.title?.trim() || `Chapter ${i + 1}`;
               const timeLabel = formatChapterTime(marker.time);
               const isActive = i === activeIndex;
+              const showPause = isActive && isPlaying;
               const startSec = marker.time;
               const endSec = sorted[i + 1]?.time ?? lastEnd;
               const progress = chapterProgress(currentTime, startSec, endSec);
@@ -114,11 +123,31 @@ export function FeedEpisodeChapters({
                     <button
                       type="button"
                       className={styles.playBtn}
-                      onClick={() => onPlayChapter(marker.time)}
-                      aria-label={`Play ${title} at ${timeLabel}`}
-                      title={`Play from ${timeLabel}`}
+                      onClick={() => {
+                        if (showPause) onPause?.();
+                        else if (isActive && onResume) onResume();
+                        else onPlayChapter(marker.time);
+                      }}
+                      aria-label={
+                        showPause
+                          ? `Pause ${title}`
+                          : isActive
+                            ? `Resume ${title}`
+                            : `Play ${title} at ${timeLabel}`
+                      }
+                      title={
+                        showPause
+                          ? 'Pause'
+                          : isActive
+                            ? 'Resume'
+                            : `Play from ${timeLabel}`
+                      }
                     >
-                      <Play size={16} strokeWidth={2.25} aria-hidden />
+                      {showPause ? (
+                        <Pause size={16} strokeWidth={2.25} aria-hidden />
+                      ) : (
+                        <Play size={16} strokeWidth={2.25} aria-hidden />
+                      )}
                     </button>
                     <span className={styles.title}>{title}</span>
                     <span className={styles.time}>{timeLabel}</span>

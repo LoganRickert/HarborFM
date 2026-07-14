@@ -19,7 +19,16 @@ const changelogPath = findChangelog();
 let changelogHtml = '<p>Changelog not found.</p>';
 if (changelogPath) {
   try {
-    const raw = readFileSync(changelogPath, 'utf-8');
+    let raw = readFileSync(changelogPath, 'utf-8');
+    // CHANGELOG uses repo-root-relative paths (e.g. screenshots/foo.jpg). On /updates/
+    // those would resolve to /updates/screenshots/... — rewrite to site-root absolute.
+    raw = raw.replace(
+      /!\[([^\]]*)\]\((?!https?:\/\/|\/|data:|#)([^)\s]+)\)/g,
+      (_match, alt, src) => {
+        const clean = String(src).replace(/^\.\//, '');
+        return `![${alt}](/${clean})`;
+      },
+    );
     marked.setOptions({ gfm: true, breaks: true });
     changelogHtml = marked.parse(raw, { async: false });
   } catch {

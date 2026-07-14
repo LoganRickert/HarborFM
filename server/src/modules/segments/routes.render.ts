@@ -229,6 +229,12 @@ export async function registerRenderRoutes(app: FastifyInstance) {
           try {
             const paths: string[] = [];
             const finalMarkers: Array<{ time: number; title?: string; color?: string }> = [];
+            const finalSoundbites: Array<{
+              time: number;
+              duration: number;
+              title?: string;
+              color?: string;
+            }> = [];
             let offsetSec = 0;
             for (const s of segments) {
               if (s.disabled || s.inProgress || s.recordFailed) continue;
@@ -280,14 +286,32 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                   : durationSec;
 
               const markersRaw = s.markers;
-              let markers: Array<{ time: number; title?: string; color?: string; marker_type?: string; markerType?: string }> = [];
+              let markers: Array<{
+                time: number;
+                title?: string;
+                color?: string;
+                duration?: number;
+                marker_type?: string;
+                markerType?: string;
+              }> = [];
               if (typeof markersRaw === "string" && markersRaw) {
                 try {
                   const parsed = JSON.parse(markersRaw) as unknown;
                   if (Array.isArray(parsed)) {
                     markers = parsed.filter(
-                      (m): m is { time: number; title?: string; color?: string; marker_type?: string; markerType?: string } =>
-                        typeof m === "object" && m != null && typeof (m as { time?: number }).time === "number"
+                      (
+                        m,
+                      ): m is {
+                        time: number;
+                        title?: string;
+                        color?: string;
+                        duration?: number;
+                        marker_type?: string;
+                        markerType?: string;
+                      } =>
+                        typeof m === "object" &&
+                        m != null &&
+                        typeof (m as { time?: number }).time === "number",
                     );
                   }
                 } catch {
@@ -300,6 +324,20 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                   const effTime = ranges.length > 0 ? toEffectiveTime(m.time, ranges) : m.time;
                   finalMarkers.push({
                     time: offsetSec + effTime,
+                    title: m.title,
+                    color: m.color,
+                  });
+                } else if (markerType === "soundbite") {
+                  const effTime = ranges.length > 0 ? toEffectiveTime(m.time, ranges) : m.time;
+                  let duration =
+                    typeof m.duration === "number" && Number.isFinite(m.duration)
+                      ? m.duration
+                      : 30;
+                  if (duration < 15) duration = 15;
+                  if (duration > 120) duration = 120;
+                  finalSoundbites.push({
+                    time: offsetSec + effTime,
+                    duration,
                     title: m.title,
                     color: m.color,
                   });
@@ -368,6 +406,7 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               settings.final_format,
             );
             const finalMarkersJson = JSON.stringify(finalMarkers);
+            const finalSoundbitesJson = JSON.stringify(finalSoundbites);
             repo.updateEpisodeAfterRender(episodeId, {
               audioFinalPath: outPath,
               audioSourcePath: outPath,
@@ -376,6 +415,7 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               audioDurationSec: meta.durationSec,
               descriptionCopyrightSnapshot,
               finalMarkers: finalMarkersJson,
+              finalSoundbites: finalSoundbitesJson,
             });
             const epRow = repo.getEpisodeStatusPublishAt(episodeId);
             const isPublic =

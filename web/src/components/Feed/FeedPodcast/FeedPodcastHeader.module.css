@@ -101,7 +101,7 @@
 
 .lockButton:hover {
   border-color: var(--accent);
-  background: rgba(0, 212, 170, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .lockButton:focus-visible {
@@ -145,7 +145,7 @@
 .shareBtn:hover {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(0, 212, 170, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .shareBtn:focus-visible {
@@ -172,7 +172,7 @@
 .rssButton:hover {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(0, 212, 170, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   text-decoration: none;
 }
 

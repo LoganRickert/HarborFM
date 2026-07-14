@@ -157,13 +157,13 @@ docker compose --profile nginx --profile webrtc up -d
 
 ### Docker Compose Quick Start (Curl)
 
-To run the full stack on a fresh machine (app, nginx, Let's Encrypt, Whisper, Fail2Ban) without cloning the repo:
+To run the full stack on a fresh machine (app, Caddy or nginx, Whisper, Fail2Ban) without cloning the repo:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/loganrickert/harborfm/main/install.sh | bash
 ```
 
-The script downloads the compose file and configs, prompts for domain and cert email (unless non-interactive), then starts the stack. When not using Let's Encrypt, you can optionally use a self-signed certificate for HTTPS (browsers will show a warning). This script assumes you have docker and docker compose installed.
+The script downloads the compose file and configs, prompts for domain and reverse proxy (Caddy by default; nginx optional with Let's Encrypt), then starts the stack. When using nginx without Let's Encrypt, you can optionally use a self-signed certificate for HTTPS (browsers will show a warning). This script assumes you have docker and docker compose installed.
 
 To auto-renew Let's Encrypt certificates, add a cron job (run `crontab -e` and add a line like the following, adjusting the path to your install directory):
 

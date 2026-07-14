@@ -86,7 +86,7 @@
 }
 
 .itemActive {
-  background: rgba(0, 212, 170, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -112,7 +112,7 @@
 .progressFill {
   height: 100%;
   width: 0;
-  background: rgba(0, 212, 170, 0.45);
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
   transition: width 0.15s linear;
 }
 

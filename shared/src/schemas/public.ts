@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fundingLinkResponseSchema } from './podcastNamespace.js';
 
 /** Single public podcast (list and by-slug). */
 export const publicPodcastSchema = z.object({
@@ -33,6 +34,16 @@ export const publicPodcastSchema = z.object({
   tiktokUrl: z.string().nullable().optional(),
   youtubeUrl: z.string().nullable().optional(),
   discordUrl: z.string().nullable().optional(),
+  fundingLinks: z.array(fundingLinkResponseSchema).optional().nullable(),
+  feedAccent: z.string().optional(),
+  feedShowPodcastDescription: z.boolean().optional(),
+  feedShowEpisodeDescription: z.boolean().optional(),
+  feedShowFunding: z.boolean().optional(),
+  feedShowReviewsPodcast: z.boolean().optional(),
+  feedShowReviewsEpisode: z.boolean().optional(),
+  feedShowAuthor: z.boolean().optional(),
+  feedShowPodroll: z.boolean().optional(),
+  feedShowCast: z.boolean().optional(),
 });
 
 /** Querystring for GET /public/podcasts (paginated list). */
@@ -81,6 +92,19 @@ export const publicEpisodeSchema = z.object({
   privateSrtUrl: z.string().nullish(),
   /** Chapter markers; time in seconds of final audio. */
   markers: z.array(z.object({ time: z.number(), title: z.string().optional(), color: z.string().optional() })).optional().nullable(),
+  /** Soundbite markers; time/duration in seconds of final audio. */
+  soundbites: z
+    .array(
+      z.object({
+        time: z.number(),
+        duration: z.number().min(15).max(120),
+        title: z.string().optional(),
+        color: z.string().optional(),
+      }),
+    )
+    .optional()
+    .nullable(),
+  fundingLinks: z.array(fundingLinkResponseSchema).optional().nullable(),
 });
 
 /** Response for GET /public/podcasts/:slug/episodes. */

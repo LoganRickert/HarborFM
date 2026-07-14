@@ -88,6 +88,19 @@ export function getEpisodeAudioFinalPath(
     .get();
 }
 
+/** Podcast title for download filenames. */
+export function getPodcastTitle(
+  podcastId: string,
+): string | null {
+  const row = drizzleDb
+    .select({ title: podcasts.title })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId))
+    .limit(1)
+    .get();
+  return row?.title ?? null;
+}
+
 /** Podcast fields for public stream (id, publicFeedDisabled). */
 export function getPublicPodcastForStream(
   podcastId: string,

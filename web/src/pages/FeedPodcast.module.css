@@ -3,6 +3,23 @@
   border-color: #d4a84b !important;
 }
 
+/* Featured trailer above Listen on / Follow */
+.trailerCard {
+  margin-top: 1rem;
+  background: color-mix(in srgb, var(--success) 7%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--success) 22%, var(--border));
+}
+
+.trailerCard :global(li) {
+  background: color-mix(in srgb, var(--success) 3%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--success) 16%, var(--border));
+}
+
+.trailerCard :global(li:hover) {
+  border-color: var(--success);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--success) 18%, transparent);
+}
+
 /* Links card spacing (only renders when links exist) */
 .linksCardWrap {
   margin-top: 1rem;

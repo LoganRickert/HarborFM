@@ -9,12 +9,14 @@ import {
   Video,
   Download,
   List,
+  AudioLines,
 } from 'lucide-react';
 import { downloadEpisodeUrl, finalEpisodeWaveformUrl } from '../../api/audio';
 import { FeedVideoPlayer } from '../../components/Feed/FeedVideoPlayer';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import { formatDuration } from './utils';
 import { ChaptersCard } from './ChaptersCard';
+import { SoundbitesCard } from './SoundbitesCard';
 import { CollapsiblePublishPanel } from './CollapsiblePublishPanel';
 import { ActionTile } from './ActionTile';
 import type { PublishFormFields } from './EpisodePublishControls';
@@ -44,6 +46,10 @@ export interface GenerateFinalBarProps {
   canGenerateTranscript?: boolean;
   finalMarkers?: Array<{ time: number; title?: string; color?: string }>;
   onMarkersChange?: (markers: Array<{ time: number; title?: string; color?: string }>) => void;
+  finalSoundbites?: Array<{ time: number; duration: number; title?: string; color?: string }>;
+  onSoundbitesChange?: (
+    soundbites: Array<{ time: number; duration: number; title?: string; color?: string }>,
+  ) => void;
   hasVideo?: boolean;
   isGeneratingVideo?: boolean;
   onOpenGenerateVideo?: () => void;
@@ -75,6 +81,8 @@ export function GenerateFinalBar({
   canGenerateTranscript = true,
   finalMarkers,
   onMarkersChange,
+  finalSoundbites,
+  onSoundbitesChange,
   hasVideo = false,
   isGeneratingVideo = false,
   onOpenGenerateVideo,
@@ -83,11 +91,15 @@ export function GenerateFinalBar({
 }: GenerateFinalBarProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastLoadedUrlRef = useRef<string | null>(null);
+  const soundbiteAutoPauseRef = useRef<{ end: number } | null>(null);
+  const programmaticSeekRef = useRef(false);
+  const autoPausingRef = useRef(false);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isGeneratingTranscript, setIsGeneratingTranscript] = useState(false);
   const [chaptersExpanded, setChaptersExpanded] = useState(false);
+  const [soundbitesExpanded, setSoundbitesExpanded] = useState(false);
 
   const waveformCacheKey = finalUpdatedAt ?? episodeId ?? '';
   const waveformUrl =
@@ -126,26 +138,55 @@ export function GenerateFinalBar({
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
+    const cancelSoundbiteAutoPause = () => {
+      soundbiteAutoPauseRef.current = null;
+    };
     const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    const onPause = () => {
+      setIsPlaying(false);
+      if (!autoPausingRef.current) {
+        cancelSoundbiteAutoPause();
+      }
+    };
     const onEnded = () => {
       setIsPlaying(false);
       el.currentTime = 0;
       setCurrentTime(0);
+      cancelSoundbiteAutoPause();
     };
-    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onTimeUpdate = () => {
+      setCurrentTime(el.currentTime);
+      const session = soundbiteAutoPauseRef.current;
+      if (session && el.currentTime >= session.end - 0.05) {
+        autoPausingRef.current = true;
+        cancelSoundbiteAutoPause();
+        el.pause();
+        autoPausingRef.current = false;
+      }
+    };
     const onLoadedMetadata = () => setCurrentTime(el.currentTime);
+    const onSeeking = () => {
+      if (programmaticSeekRef.current) return;
+      cancelSoundbiteAutoPause();
+    };
+    const onSeeked = () => {
+      programmaticSeekRef.current = false;
+    };
     el.addEventListener('play', onPlay);
     el.addEventListener('pause', onPause);
     el.addEventListener('ended', onEnded);
     el.addEventListener('timeupdate', onTimeUpdate);
     el.addEventListener('loadedmetadata', onLoadedMetadata);
+    el.addEventListener('seeking', onSeeking);
+    el.addEventListener('seeked', onSeeked);
     return () => {
       el.removeEventListener('play', onPlay);
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnded);
       el.removeEventListener('timeupdate', onTimeUpdate);
       el.removeEventListener('loadedmetadata', onLoadedMetadata);
+      el.removeEventListener('seeking', onSeeking);
+      el.removeEventListener('seeked', onSeeked);
     };
   }, [finalDurationSec]);
 
@@ -154,6 +195,7 @@ export function GenerateFinalBar({
     pauseAndResetRef.current = () => {
       const el = audioRef.current;
       if (el) {
+        soundbiteAutoPauseRef.current = null;
         el.pause();
         el.currentTime = 0;
         setCurrentTime(0);
@@ -171,6 +213,7 @@ export function GenerateFinalBar({
       el.pause();
       setIsPlaying(false);
     } else {
+      soundbiteAutoPauseRef.current = null;
       onFinalPlayStart?.();
       const urlChanged = downloadUrl !== lastLoadedUrlRef.current;
       const needsLoad = !el.src || el.ended || urlChanged;
@@ -194,10 +237,16 @@ export function GenerateFinalBar({
     }
   }
 
-  function seekAndPlay(time: number) {
+  function seekAndPlay(time: number, opts?: { soundbiteDurationSec?: number }) {
     const el = audioRef.current;
     if (!el || !downloadUrl) return;
     onFinalPlayStart?.();
+    if (opts?.soundbiteDurationSec != null && opts.soundbiteDurationSec > 0) {
+      soundbiteAutoPauseRef.current = { end: time + opts.soundbiteDurationSec };
+    } else {
+      soundbiteAutoPauseRef.current = null;
+    }
+    programmaticSeekRef.current = true;
     const urlChanged = downloadUrl !== lastLoadedUrlRef.current;
     const needsLoad = !el.src || el.ended || urlChanged;
     if (needsLoad) {
@@ -206,6 +255,7 @@ export function GenerateFinalBar({
       el.addEventListener(
         'canplay',
         () => {
+          programmaticSeekRef.current = true;
           el.currentTime = time;
           setCurrentTime(time);
           el.play().catch(() => setIsPlaying(false));
@@ -217,6 +267,10 @@ export function GenerateFinalBar({
       setCurrentTime(time);
       el.play().catch(() => setIsPlaying(false));
     }
+  }
+
+  function seekAndPlaySoundbite(time: number, duration: number) {
+    seekAndPlay(time, { soundbiteDurationSec: duration });
   }
 
   async function handleTranscriptClick() {
@@ -238,6 +292,7 @@ export function GenerateFinalBar({
 
   const durationSec = finalDurationSec > 0 ? finalDurationSec : 0;
   const chapterCount = finalMarkers?.length ?? 0;
+  const soundbiteCount = finalSoundbites?.length ?? 0;
   const showTranscriptTile =
     (hasTranscript && onOpenTranscript) ||
     (!hasTranscript && hasFinalAudio && !isBuilding && (onGenerateTranscript || onOpenTranscript));
@@ -260,6 +315,7 @@ export function GenerateFinalBar({
         onSave={onPublishSave}
         isSaving={publishSaving}
         saveError={publishSaveError}
+        hasFinalAudio={hasFinalAudio}
       />
 
       {(error || buildMessage) && (
@@ -383,10 +439,30 @@ export function GenerateFinalBar({
               : undefined
           }
           color="amber"
-          onClick={() => setChaptersExpanded((e) => !e)}
+          onClick={() => {
+            setChaptersExpanded((e) => !e);
+            if (!chaptersExpanded) setSoundbitesExpanded(false);
+          }}
           active={chaptersExpanded}
           disabled={!hasFinalAudio}
           infoText="Add chapter markers so listeners can skip to sections in podcast apps."
+        />
+        <ActionTile
+          icon={<AudioLines size={22} strokeWidth={1.75} aria-hidden />}
+          label="Soundbites"
+          sublabel={
+            soundbiteCount > 0
+              ? `${soundbiteCount} soundbite${soundbiteCount === 1 ? '' : 's'}`
+              : undefined
+          }
+          color="cyan"
+          onClick={() => {
+            setSoundbitesExpanded((e) => !e);
+            if (!soundbitesExpanded) setChaptersExpanded(false);
+          }}
+          active={soundbitesExpanded}
+          disabled={!hasFinalAudio}
+          infoText="Highlight short clips (15–120s) for podcast apps that support Podcast 2.0 soundbites."
         />
         {showDownloadMp3 && (
           <ActionTile
@@ -417,8 +493,22 @@ export function GenerateFinalBar({
         canEdit={!readOnly && !!onMarkersChange}
         hasFinalAudio={hasFinalAudio}
         finalDurationSec={finalDurationSec}
+        playheadTimeSec={currentTime}
         expanded={chaptersExpanded}
         onExpandedChange={setChaptersExpanded}
+        hideHeader
+      />
+      <SoundbitesCard
+        episodeId={episodeId}
+        soundbites={finalSoundbites ?? []}
+        onSoundbitesChange={(s) => onSoundbitesChange?.(s)}
+        onSeekTo={seekAndPlaySoundbite}
+        canEdit={!readOnly && !!onSoundbitesChange}
+        hasFinalAudio={hasFinalAudio}
+        finalDurationSec={finalDurationSec}
+        playheadTimeSec={currentTime}
+        expanded={soundbitesExpanded}
+        onExpandedChange={setSoundbitesExpanded}
         hideHeader
       />
     </div>

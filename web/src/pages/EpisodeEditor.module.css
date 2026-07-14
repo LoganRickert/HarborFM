@@ -507,7 +507,10 @@
   border-radius: 2px;
   cursor: pointer;
   transform: translateY(50%);
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.markerHandleChapter {
+  border-radius: 50%;
 }
 .markerHandle:hover {
   border-color: var(--text-muted);
@@ -516,6 +519,31 @@
 .markerHandleSelected {
   border-color: #1d4ed8;
   background: #1d4ed8;
+}
+.markerHandleSoundbite {
+  width: 12px;
+  height: 11px;
+  margin-left: -6px;
+  border: none !important;
+  border-radius: 0;
+  background: transparent !important;
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.markerHandleSoundbite:hover,
+.markerHandleSoundbite.markerHandleSelected {
+  background: transparent !important;
+  border: none !important;
+  opacity: 1;
+}
+.markerHandleSoundbiteSvg {
+  display: block;
+  width: 12px;
+  height: 11px;
+  overflow: visible;
 }
 .markerTitleEditRow {
   display: flex;
@@ -545,6 +573,25 @@
   overflow: hidden;
   margin-top: 0.75rem;
   flex-basis: 100%;
+}
+.markerSoundbiteDuration {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  flex-basis: 100%;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+.markerSoundbiteDuration input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 .markerColorBtn {
   flex: 1;
@@ -1037,6 +1084,31 @@
   color: var(--text);
 }
 
+.publishStatusBtn:disabled,
+.publishStatusActive:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.publishStatusBtn:disabled:hover {
+  color: var(--text-muted);
+}
+
+.publishStatusField {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.publishStatusFinalHint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 .publishStatusActive {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text);
@@ -1256,12 +1328,17 @@
   background: rgba(100, 116, 139, 0.48);
 }
 
+.actionTileCyan .actionTileGlyph {
+  background: rgba(6, 182, 212, 0.48);
+}
+
 .actionTileTeal { background-color: rgba(0, 212, 170, 0.08); }
 .actionTileBlue { background-color: rgba(59, 130, 246, 0.08); }
 .actionTilePurple { background-color: rgba(168, 85, 247, 0.08); }
 .actionTileAmber { background-color: rgba(245, 158, 11, 0.08); }
 .actionTileGreen { background-color: rgba(34, 197, 94, 0.08); }
 .actionTileSlate { background-color: rgba(100, 116, 139, 0.08); }
+.actionTileCyan { background-color: rgba(6, 182, 212, 0.08); }
 
 .actionTileLabel {
   font-size: 0.8125rem;
@@ -1498,6 +1575,26 @@
   margin: 0;
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.chaptersRebuildWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 10px;
+}
+
+.chaptersRebuildWarningIcon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: rgba(234, 179, 8, 0.95);
 }
 
 .chaptersTable {
@@ -2733,8 +2830,12 @@
 }
 
 .libraryPageBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.35rem 0.6rem;
   font-size: 0.875rem;
+  line-height: 1;
   color: var(--text);
   background: var(--bg-muted);
   border: 1px solid var(--border);
@@ -3101,12 +3202,25 @@
   color: var(--text);
   background: var(--bg-elevated);
 }
+.statusToggleBtn:disabled,
+.statusToggleActive:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.statusToggleBtn:disabled:hover {
+  color: var(--text-muted);
+  background: var(--bg-muted);
+}
 .statusToggleActive {
   background: var(--accent);
   color: var(--bg);
 }
 .statusToggleActive:hover {
   background: var(--accent-dim);
+  color: var(--bg);
+}
+.statusToggleActive:disabled:hover {
+  background: var(--accent);
   color: var(--bg);
 }
 

@@ -171,6 +171,113 @@ export function parseSrt(srtText: string): SrtEntry[] {
   return entries;
 }
 
+/** Clip SRT entries to [windowStart, windowEnd) and shift times so windowStart becomes 0. */
+export function adjustSrtEntriesForWindow(
+  entries: SrtEntry[],
+  windowStart: number,
+  windowEnd: number,
+): SrtEntry[] {
+  return entries
+    .map((entry) => {
+      const entryStartSec = parseSrtTime(entry.start);
+      const entryEndSec = parseSrtTime(entry.end);
+      if (entryEndSec <= windowStart || entryStartSec >= windowEnd) return null;
+      const adjustedStart = Math.max(0, entryStartSec - windowStart);
+      const adjustedEnd = Math.min(
+        windowEnd - windowStart,
+        entryEndSec - windowStart,
+      );
+      if (adjustedEnd <= adjustedStart) return null;
+      return {
+        ...entry,
+        start: formatSrtTime(adjustedStart),
+        end: formatSrtTime(adjustedEnd),
+      };
+    })
+    .filter((e): e is SrtEntry => e !== null);
+}
+
+export function formatSrtEntries(entries: SrtEntry[]): string {
+  return entries
+    .map(
+      (entry, i) =>
+        `${i + 1}\n${entry.start} --> ${entry.end}\n${entry.text}\n`,
+    )
+    .join("\n");
+}
+
+type MarkerLike = {
+  time: number;
+  title?: string;
+  color?: string;
+  markerType?: "" | "chapter" | "soundbite";
+  duration?: number;
+};
+
+function clampSoundbiteMarker(
+  marker: MarkerLike,
+  segmentDuration: number,
+): MarkerLike {
+  const out = { ...marker };
+  if (out.markerType !== "soundbite" || typeof out.duration !== "number") {
+    return out;
+  }
+  const maxDur = Math.max(0, segmentDuration - out.time);
+  if (maxDur < 15) {
+    out.markerType = "";
+    delete out.duration;
+    return out;
+  }
+  out.duration = Math.min(120, Math.min(out.duration, maxDur));
+  return out;
+}
+
+/** Partition markers at splitSec. Markers at/after split move to the second segment (time shifted). */
+export function partitionMarkersAtSplit(
+  markers: MarkerLike[],
+  splitSec: number,
+  durationA: number,
+  durationB: number,
+): { before: MarkerLike[]; after: MarkerLike[] } {
+  const before: MarkerLike[] = [];
+  const after: MarkerLike[] = [];
+  for (const m of markers) {
+    if (typeof m.time !== "number" || !Number.isFinite(m.time)) continue;
+    if (m.time < splitSec) {
+      before.push(clampSoundbiteMarker(m, durationA));
+    } else {
+      after.push(
+        clampSoundbiteMarker({ ...m, time: m.time - splitSec }, durationB),
+      );
+    }
+  }
+  return { before, after };
+}
+
+/** Partition trim ranges at splitSec; ranges that cross the split are clipped into both halves. */
+export function partitionTrimRangesAtSplit(
+  ranges: Array<[number, number]>,
+  splitSec: number,
+): { before: Array<[number, number]>; after: Array<[number, number]> } {
+  const before: Array<[number, number]> = [];
+  const after: Array<[number, number]> = [];
+  for (const range of ranges) {
+    if (!Array.isArray(range) || range.length < 2) continue;
+    const start = Number(range[0]);
+    const end = Number(range[1]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) continue;
+    if (end <= splitSec) {
+      before.push([start, end]);
+    } else if (start >= splitSec) {
+      after.push([start - splitSec, end - splitSec]);
+    } else {
+      if (start < splitSec) before.push([start, splitSec]);
+      if (end > splitSec) after.push([0, end - splitSec]);
+    }
+  }
+  return { before, after };
+}
+
 /**
  * Run transcription (Whisper or OpenAI) on an audio file. Returns SRT text.
  * Throws if provider not configured or transcription fails. May throw with message "CHUNK_TOO_LARGE".

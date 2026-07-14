@@ -55,6 +55,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
   const [listenToSelf, setListenToSelf] = useState(false);
   const [markerTimestamps, setMarkerTimestamps] = useState<number[]>([]);
   const [showMarkerCheck, setShowMarkerCheck] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
   const markerCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const settingsStreamRef = useRef<MediaStream | null>(null);
@@ -482,6 +483,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
 
   async function startRecording() {
     try {
+      setMicError(null);
       stopSettingsPreview();
       let rawStream: MediaStream;
       const preRecord = preRecordStreamRef.current;
@@ -570,7 +572,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
       }
     } catch (err) {
       console.error(err);
-      alert('Could not access microphone.');
+      setMicError('Could not access microphone.');
     }
   }
 
@@ -933,6 +935,7 @@ export function RecordModal({ onClose, onAdd, isAdding, error }: RecordModalProp
           </>
         )}
 
+        {micError && <p className={styles.error} role="alert" style={{ marginTop: '0.5rem' }}>{micError}</p>}
         {error && <p className={styles.error} style={{ marginTop: '0.5rem' }}>{error}</p>}
       </div>
 

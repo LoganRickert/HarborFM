@@ -375,6 +375,45 @@ export async function extractSegment(
   return safeOut;
 }
 
+/**
+ * Cut a clip from already-final episode audio into the same container/codec as the
+ * final export (re-encode without loudnorm so cuts are reliable).
+ */
+export async function extractClipFromFinal(
+  sourcePath: string,
+  allowedBaseDir: string,
+  startSec: number,
+  durationSec: number,
+  outputPath: string,
+  format: FinalAudioFormat,
+  opts?: { bitrateKbps?: number; channels?: FinalAudioChannels },
+): Promise<string> {
+  const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
+  prepareOutputPath(outputPath, allowedBaseDir);
+  const safeOut = resolve(outputPath);
+  const bitrateKbps = opts?.bitrateKbps ?? 128;
+  const bitrate = `${Math.max(16, bitrateKbps)}k`;
+  const channels = opts?.channels === "stereo" ? 2 : 1;
+  const args = [
+    "-ss",
+    String(Math.max(0, startSec)),
+    "-i",
+    safeSource,
+    "-t",
+    String(Math.max(0.1, durationSec)),
+    "-ac",
+    String(channels),
+  ];
+  if (format === "m4a") {
+    args.push("-c:a", "aac", "-b:a", bitrate, "-movflags", "+faststart");
+  } else {
+    args.push("-acodec", "libmp3lame", "-b:a", bitrate);
+  }
+  args.push("-y", safeOut);
+  await exec(FFMPEG_PATH, args, { maxBuffer: 1024 * 1024 });
+  return safeOut;
+}
+
 /** Concatenate multiple audio files into final output format. Paths must be under DATA_DIR or tmpdir(). */
 export async function concatToFinal(
   segmentPaths: string[],

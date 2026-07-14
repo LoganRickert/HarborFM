@@ -32,6 +32,7 @@ export function FeedEpisodesList({
             onPlay={onPlay}
             onPause={onPause}
             useShortEpisodeUrls={useShortEpisodeUrls}
+            showDescription={podcast.feedShowEpisodeDescription !== false}
           />
         ))}
       </ul>

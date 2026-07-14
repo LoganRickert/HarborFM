@@ -4,6 +4,7 @@ import {
   getSegmentTranscript,
   removeSilenceFromSegment,
   applyNoiseSuppressionToSegment,
+  splitSegment,
   updateSegment,
 } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
@@ -23,6 +24,7 @@ import { SegmentTranscriptTab } from './tabs/SegmentTranscriptTab';
 import { SegmentAskTab } from './tabs/SegmentAskTab';
 import { RemoveSilenceConfirmDialog } from './dialogs/RemoveSilenceConfirmDialog';
 import { NoiseSuppressionConfirmDialog } from './dialogs/NoiseSuppressionConfirmDialog';
+import { SegmentSplitConfirmDialog } from './dialogs/SegmentSplitConfirmDialog';
 import { RemoveMarkerConfirmDialog } from './dialogs/RemoveMarkerConfirmDialog';
 import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
@@ -66,6 +68,7 @@ export function SegmentModal({
   const [addSilenceTrimsConfirmOpen, setAddSilenceTrimsConfirmOpen] = useState(false);
   const [removeSilenceConfirmOpen, setRemoveSilenceConfirmOpen] = useState(false);
   const [noiseSuppressionConfirmOpen, setNoiseSuppressionConfirmOpen] = useState(false);
+  const [segmentSplitConfirmOpen, setSegmentSplitConfirmOpen] = useState(false);
   const [removeMarkerConfirmIndex, setRemoveMarkerConfirmIndex] = useState<number | null>(null);
   const [askQuestion, setAskQuestion] = useState('');
   const [askResponse, setAskResponse] = useState<string | null>(null);
@@ -176,6 +179,7 @@ export function SegmentModal({
 
   const [removingSilence, setRemovingSilence] = useState(false);
   const [applyingNoiseSuppression, setApplyingNoiseSuppression] = useState(false);
+  const [splittingSegment, setSplittingSegment] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'edit') setTrimError(null);
@@ -228,6 +232,7 @@ export function SegmentModal({
         onMarkerTitleChange={edit.handleMarkerTitleChange}
         onMarkerColorChange={edit.handleMarkerColorChange}
         onMarkerTypeChange={edit.handleMarkerTypeChange}
+        onMarkerDurationChange={edit.handleMarkerDurationChange}
         onMarkerDone={edit.handleMarkerDone}
         onRequestRemoveMarker={(index) => setRemoveMarkerConfirmIndex(index)}
         markerDraft={edit.markerDraft}
@@ -266,8 +271,12 @@ export function SegmentModal({
         addSilenceTrimsDisabled={!edit.waveformData?.data?.length || edit.durationSec <= 0}
         onRemoveSilence={() => setRemoveSilenceConfirmOpen(true)}
         onNoiseSuppression={() => setNoiseSuppressionConfirmOpen(true)}
+        onSegmentSplit={() => {
+          setSegmentSplitConfirmOpen(true);
+        }}
         removingSilence={removingSilence}
         applyingNoiseSuppression={applyingNoiseSuppression}
+        splittingSegment={splittingSegment}
         trimError={trimError}
       />
     </div>
@@ -466,6 +475,31 @@ export function SegmentModal({
             .finally(() => setApplyingNoiseSuppression(false));
         }}
         loading={applyingNoiseSuppression}
+      />
+
+      <SegmentSplitConfirmDialog
+        open={segmentSplitConfirmOpen}
+        onOpenChange={setSegmentSplitConfirmOpen}
+        durationSec={edit.durationSec > 0 ? edit.durationSec : segment.durationSec}
+        loading={splittingSegment}
+        onConfirm={({ minutes, seconds }) => {
+          setSegmentSplitConfirmOpen(false);
+          setSplittingSegment(true);
+          setTrimError(null);
+          splitSegment(episodeId, segmentId, { minutes, seconds })
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
+              return getSegmentTranscript(episodeId, segmentId)
+                .then((r) => {
+                  transcript.setText(r.text ?? null);
+                })
+                .catch(() => {
+                  transcript.setText(null);
+                });
+            })
+            .catch((err) => setTrimError(err?.message ?? 'Failed to split segment'))
+            .finally(() => setSplittingSegment(false));
+        }}
       />
 
       <RemoveMarkerConfirmDialog

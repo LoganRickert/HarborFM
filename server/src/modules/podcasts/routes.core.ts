@@ -40,7 +40,7 @@ import { readSettings } from "../settings/index.js";
 import { encryptSecret } from "../../services/secrets.js";
 import { getCanonicalFeedUrl } from "../../services/dns/custom-domain-resolver.js";
 import { runDnsUpdateTask } from "../../services/dns/update-task.js";
-import { podcastRowWithFilename } from "./utils.js";
+import { podcastRowWithFilename, jsonArrayOrNull, jsonObjectOrNull } from "./utils.js";
 import * as repo from "./repo.js";
 import * as service from "./service.js";
 import { lastNLocalDateRange } from "../../utils/datetime.js";
@@ -290,14 +290,20 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             copyright: data.copyright ?? null,
             podcastGuid,
             locked: (data.locked ?? 0) !== 0,
-            license: data.license ?? null,
+            license: jsonObjectOrNull(data.license ?? null) ?? null,
             itunesType: data.itunesType ?? "episodic",
             medium: data.medium ?? "podcast",
-            fundingUrl: data.fundingUrl ?? null,
-            fundingLabel: data.fundingLabel ?? null,
+            fundingLinks: jsonArrayOrNull(data.fundingLinks ?? null) ?? null,
             persons: data.persons ?? null,
-            updateFrequencyRrule: data.updateFrequencyRrule ?? null,
-            updateFrequencyLabel: data.updateFrequencyLabel ?? null,
+            updateFrequency: jsonObjectOrNull(data.updateFrequency ?? null) ?? null,
+            podcastTxts: jsonArrayOrNull(data.podcastTxts ?? null) ?? null,
+            socialInteracts: jsonArrayOrNull(data.socialInteracts ?? null) ?? null,
+            locations: jsonArrayOrNull(data.locations ?? null) ?? null,
+            chat: jsonObjectOrNull(data.chat ?? null) ?? null,
+            valueBlocks: jsonArrayOrNull(data.valueBlocks ?? null) ?? null,
+            blocks: jsonArrayOrNull(data.blocks ?? null) ?? null,
+            publisher: jsonObjectOrNull(data.publisher ?? null) ?? null,
+            podroll: jsonArrayOrNull(data.podroll ?? null) ?? null,
             spotifyRecentCount: data.spotifyRecentCount ?? null,
             spotifyCountryOfOrigin: data.spotifyCountryOfOrigin ?? null,
             applePodcastsVerify: data.applePodcastsVerify ?? null,
@@ -834,7 +840,13 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.copyright !== undefined) set.copyright = data.copyright;
       if (data.podcastGuid !== undefined) set.podcastGuid = data.podcastGuid;
       if (data.locked !== undefined) set.locked = data.locked !== 0;
-      if (data.license !== undefined) set.license = data.license;
+      if (data.license !== undefined) {
+        set.license =
+          data.license == null ||
+          !String((data.license as { identifier?: string }).identifier ?? "").trim()
+            ? null
+            : JSON.stringify(data.license);
+      }
       if (data.itunesType !== undefined) set.itunesType = data.itunesType;
       if (data.medium !== undefined) set.medium = data.medium;
       if (data.maxCollaborators !== undefined) set.maxCollaborators = data.maxCollaborators;
@@ -861,11 +873,59 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.showScheduledEpisodes !== undefined) {
         set.showScheduledEpisodes = Boolean(data.showScheduledEpisodes);
       }
-      if (data.fundingUrl !== undefined) set.fundingUrl = data.fundingUrl;
-      if (data.fundingLabel !== undefined) set.fundingLabel = data.fundingLabel;
+      if (data.feedAccent !== undefined) set.feedAccent = data.feedAccent;
+      if (data.feedShowPodcastDescription !== undefined) {
+        set.feedShowPodcastDescription = Boolean(data.feedShowPodcastDescription);
+      }
+      if (data.feedShowEpisodeDescription !== undefined) {
+        set.feedShowEpisodeDescription = Boolean(data.feedShowEpisodeDescription);
+      }
+      if (data.feedShowFunding !== undefined) {
+        set.feedShowFunding = Boolean(data.feedShowFunding);
+      }
+      if (data.feedShowReviewsPodcast !== undefined) {
+        set.feedShowReviewsPodcast = Boolean(data.feedShowReviewsPodcast);
+      }
+      if (data.feedShowReviewsEpisode !== undefined) {
+        set.feedShowReviewsEpisode = Boolean(data.feedShowReviewsEpisode);
+      }
+      if (data.feedShowAuthor !== undefined) {
+        set.feedShowAuthor = Boolean(data.feedShowAuthor);
+      }
+      if (data.feedShowPodroll !== undefined) {
+        set.feedShowPodroll = Boolean(data.feedShowPodroll);
+      }
+      if (data.feedShowCast !== undefined) {
+        set.feedShowCast = Boolean(data.feedShowCast);
+      }
+      if (data.fundingLinks !== undefined) set.fundingLinks = jsonArrayOrNull(data.fundingLinks);
       if (data.persons !== undefined) set.persons = data.persons;
-      if (data.updateFrequencyRrule !== undefined) set.updateFrequencyRrule = data.updateFrequencyRrule;
-      if (data.updateFrequencyLabel !== undefined) set.updateFrequencyLabel = data.updateFrequencyLabel;
+      if (data.updateFrequency !== undefined) {
+        set.updateFrequency = jsonObjectOrNull(data.updateFrequency);
+      }
+      if (data.podcastTxts !== undefined) set.podcastTxts = jsonArrayOrNull(data.podcastTxts);
+      if (data.socialInteracts !== undefined) {
+        set.socialInteracts = jsonArrayOrNull(data.socialInteracts);
+      }
+      if (data.locations !== undefined) set.locations = jsonArrayOrNull(data.locations);
+      if (data.chat !== undefined) {
+        set.chat =
+          data.chat == null ||
+          !String((data.chat as { server?: string }).server ?? "").trim() ||
+          !String((data.chat as { protocol?: string }).protocol ?? "").trim()
+            ? null
+            : JSON.stringify(data.chat);
+      }
+      if (data.valueBlocks !== undefined) set.valueBlocks = jsonArrayOrNull(data.valueBlocks);
+      if (data.blocks !== undefined) set.blocks = jsonArrayOrNull(data.blocks);
+      if (data.publisher !== undefined) {
+        set.publisher =
+          data.publisher == null ||
+          !String((data.publisher as { feedGuid?: string }).feedGuid ?? "").trim()
+            ? null
+            : JSON.stringify(data.publisher);
+      }
+      if (data.podroll !== undefined) set.podroll = jsonArrayOrNull(data.podroll);
       if (data.spotifyRecentCount !== undefined) set.spotifyRecentCount = data.spotifyRecentCount;
       if (data.spotifyCountryOfOrigin !== undefined) set.spotifyCountryOfOrigin = data.spotifyCountryOfOrigin;
       if (data.applePodcastsVerify !== undefined) set.applePodcastsVerify = data.applePodcastsVerify;

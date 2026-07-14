@@ -1,5 +1,34 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import {
+  Podcast,
+  Layers,
+  ListOrdered,
+  AudioLines,
+  Video,
+  UsersRound,
+  Library,
+  Captions,
+  Rss,
+  Mic,
+  Share2,
+  Shield,
+  KeyRound,
+  Ticket,
+  Globe,
+  UserPlus,
+  Mail,
+  BarChart3,
+  MailCheck,
+  Eye,
+  Cloud,
+  Palette,
+  Star,
+  HeartHandshake,
+  Radio,
+  MonitorPlay,
+  ExternalLink,
+} from '@lucide/astro';
 ---
 
 <Layout title="HarborFM - Open source podcast creation" description="HarborFM is a free, open-source platform built as a modern alternative to Anchor.fm. Produce shows, publish episodes from segments, record remote guests via WebRTC, export audio and RSS. PWA support. Install via Docker, Terraform (AWS/Vultr), or run locally.">
@@ -26,25 +55,25 @@ import Layout from '../layouts/Layout.astro';
 
       <div class="install-bar" role="region" aria-label="Install options">
         <div class="install-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected="true" aria-controls="panel-compose-nginx" id="tab-compose-nginx">Docker Compose + Nginx</button>
-          <button type="button" role="tab" aria-selected="false" aria-controls="panel-compose-caddy" id="tab-compose-caddy">Docker Compose + Caddy</button>
+          <button type="button" role="tab" aria-selected="true" aria-controls="panel-compose-caddy" id="tab-compose-caddy">Docker Compose + Caddy</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="panel-compose-nginx" id="tab-compose-nginx">Docker Compose + Nginx</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-docker" id="tab-docker">Docker only</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-terraform-aws" id="tab-terraform-aws">Terraform (AWS)</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-local" id="tab-local">Install locally</button>
         </div>
-        <div class="install-panel" id="panel-compose-nginx" data-active role="tabpanel" aria-labelledby="tab-compose-nginx">
-          <div class="code-block-wrap">
-            <pre><code>curl -fsSL https://raw.githubusercontent.com/LoganRickert/harborfm/main/install.sh | bash</code></pre>
-            <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
-          </div>
-          <p class="help">When prompted, choose <strong>nginx</strong> and enter your domain and Let's Encrypt email. Best for a single domain: nginx, certbot for SSL, optional Fail2Ban. After install, run certbot once to get the cert; use a cron job to renew.</p>
-        </div>
-        <div class="install-panel" id="panel-compose-caddy" role="tabpanel" aria-labelledby="tab-compose-caddy">
+        <div class="install-panel" id="panel-compose-caddy" data-active role="tabpanel" aria-labelledby="tab-compose-caddy">
           <div class="code-block-wrap">
             <pre><code>curl -fsSL https://raw.githubusercontent.com/LoganRickert/harborfm/main/install.sh | bash</code></pre>
             <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
           </div>
           <p class="help">When prompted, choose <strong>Caddy</strong>. Best for automatic HTTPS and dynamic or multiple hostnames - Caddy obtains and renews TLS certificates with no certbot. Ideal if you want custom subdomains per show or user. Works with or without WebRTC.</p>
+        </div>
+        <div class="install-panel" id="panel-compose-nginx" role="tabpanel" aria-labelledby="tab-compose-nginx">
+          <div class="code-block-wrap">
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/LoganRickert/harborfm/main/install.sh | bash</code></pre>
+            <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
+          </div>
+          <p class="help">When prompted, choose <strong>nginx</strong> and enter your domain and Let's Encrypt email. Best for a single domain: nginx, certbot for SSL, optional Fail2Ban. After install, run certbot once to get the cert; use a cron job to renew.</p>
         </div>
         <div class="install-panel" id="panel-docker" role="tabpanel" aria-labelledby="tab-docker">
           <div class="code-block-wrap">
@@ -58,7 +87,7 @@ docker run --name harborfm -p 3001:3001 \
   ghcr.io/loganrickert/harborfm:latest</code></pre>
             <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
           </div>
-          <p class="help">Runs HarborFM as a single container. Use nginx or Caddy on the host for HTTPS. Open <code>http://localhost:3001</code> and complete the one-time setup from the container logs.</p>
+          <p class="help">Runs HarborFM as a single container. Use Caddy or nginx on the host for HTTPS. Open <code>http://localhost:3001</code> and complete the one-time setup from the container logs.</p>
         </div>
         <div class="install-panel" id="panel-terraform-aws" role="tabpanel" aria-labelledby="tab-terraform-aws">
           <div class="code-block-wrap">
@@ -98,43 +127,45 @@ pnpm run dev</code></pre>
           allowfullscreen
         ></iframe>
       </div>
+      <p class="video-more">
+        <a
+          class="video-more-link"
+          href="https://www.youtube.com/@HarborFMPodcastCreator"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="video-more-icon" aria-hidden="true"><MonitorPlay size={24} stroke-width={2} /></span>
+          Check out more tutorials on our YouTube
+        </a>
+      </p>
     </section>
 
     <section class="section" id="about">
       <h2>About</h2>
       <p>HarborFM is a free, open-source platform built as a modern alternative to Anchor.fm. Produce shows, publish episodes, and assemble each from segments-record or upload audio, record remote guests via WebRTC, insert intros and bumpers from your library, add chapters (Podcast 2.0), and export audio plus RSS. PWA support; install on your home screen.</p>
-      <p>Optional: transcripts (Whisper ASR or upload SRT), LLM helpers (Ollama or OpenAI), real-time collaboration, cast (hosts & guests), Listen on links (Apple, Spotify, etc.), subscriber-only episodes, and public feed pages. Deploy to S3, R2, FTP, SFTP, WebDAV, IPFS, or SMB. Terraform for AWS and Vultr.</p>
     </section>
 
-    <section class="section" id="features">
-      <h2>Features</h2>
-      <div class="features">
-        <div class="feature-card"><strong>Podcasts & episodes</strong><span>Create shows with metadata, artwork, categories. Add episodes with title, description, season/episode numbers. Episodes grouped as Draft, Scheduled, Published. Delete episode or podcast with confirm.</span></div>
-        <div class="feature-card"><strong>Segments</strong><span>Build each episode from segments: recorded clips or library assets. Non-destructive trim ranges and markers (None/Chapter); Add Silence Trims; Server Remove Silence and noise suppression. Trim, split, remove silence; ffmpeg concatenates to final audio.</span></div>
-        <div class="feature-card"><strong>Episode chapters</strong><span>Add, edit, delete chapters with color picker. Play from chapter time. Podcast 2.0: chapters.json and podcast:chapters in RSS; included in exports. Chapter markers on waveforms.</span></div>
-        <div class="feature-card"><strong>Group calls</strong><span>Record remote guests via WebRTC. Host starts a call, guests join by link or 4-digit code; in-call chat, soundboard with waveform preview, settings panel. Recordings become segments.</span></div>
-        <div class="feature-card"><strong>Real-time collaboration</strong><span>Episode editor WebSocket; collaborators see live segment, call, and render updates. Transcript generation synced.</span></div>
-        <div class="feature-card"><strong>Library</strong><span>Upload reusable audio (intros, outros, bumpers). Tag and insert into any episode.</span></div>
-        <div class="feature-card"><strong>Transcripts</strong><span>Generate via Whisper ASR or upload SRT. Transcript editor with trim integration; trimmed text excluded from LLM. Optional LLM (Ollama or OpenAI) for summaries and copy suggestions.</span></div>
-        <div class="feature-card"><strong>RSS & export</strong><span>RSS feed per podcast; Podcast 2.0 chapters. Deploy to S3, R2, FTP, SFTP, WebDAV, IPFS, SMB. Only changed files uploaded.</span></div>
-        <div class="feature-card"><strong>Cast</strong><span>Add hosts and guests to podcasts and episodes. Assign per episode; cast shown on public feed.</span></div>
-        <div class="feature-card"><strong>Listen on & share</strong><span>Per-podcast links for Apple Podcasts, Spotify, Amazon Music, etc.; social links (X, Instagram, YouTube). Share button with embed options.</span></div>
-        <div class="feature-card"><strong>Auth & users</strong><span>First-user setup, registration, login, password reset. Optional 2FA (TOTP or email). Admin and user management. Public feed pages when enabled.</span></div>
-        <div class="feature-card"><strong>API keys</strong><span>Create API keys for programmatic access. Optional name and expiry. Keys hashed; raw key shown once on create.</span></div>
-        <div class="feature-card"><strong>Subscription tokens</strong><span>Per-podcast tokenized RSS for private or subscriber-only feeds. Subscriber-only episodes excluded from public RSS. Optional validity and limits.</span></div>
-        <div class="feature-card"><strong>Automatic DNS</strong><span>Optional Cloudflare integration: managed domains and subdomains so listeners use custom URLs. Link domain, managed domain, subdomain.</span></div>
-        <div class="feature-card"><strong>Collaborators</strong><span>Share shows with view, editor, or manager roles. Invite by email; optional platform invites for new users.</span></div>
-        <div class="feature-card"><strong>Contact page</strong><span>Built-in contact form; messages stored and optionally emailed to admins. Configurable from settings.</span></div>
-        <div class="feature-card"><strong>Analytics & GeoIP</strong><span>Podcast stats: RSS hits, episode requests, listens by location. Optional GeoLite2 for country/city.</span></div>
-        <div class="feature-card"><strong>Email & captcha</strong><span>Email verification, password reset. Optional captcha (reCAPTCHA or hCaptcha) for registration and reset.</span></div>
-        <div class="feature-card"><strong>Read-only accounts</strong><span>Per-user limits for podcasts, episodes, storage. Read-only accounts. Per-user transcription toggle.</span></div>
-        <div class="feature-card"><strong>Terraform</strong><span>Deploy via Terraform: AWS EC2 or Vultr. PM2, nginx, or Caddy; Let's Encrypt; optional WebRTC. Cloudflare DNS integration.</span></div>
+    <section class="section demo-section" id="demo">
+      <h2>Demo</h2>
+      <div class="demo-panel">
+        <p class="demo-copy">
+          Try HarborFM with the live demo. The login page shows the demo username and password, and the account includes several pre-made podcasts and episodes to explore.
+        </p>
+        <a
+          class="demo-link"
+          href="https://app.harborfm.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="demo-link-icon" aria-hidden="true"><ExternalLink size={20} stroke-width={2} /></span>
+          Open the demo site
+        </a>
       </div>
     </section>
 
     <section class="section" id="screenshots">
       <h2>Screenshots</h2>
-      <p>Dashboard, episode editor, recording, and podcast delivery. Click any image to open in a lightbox; click again to close.</p>
+      <p>Dashboard, episode editor, public feed, and Podcast 2.0 tools. Click any image to open in a lightbox; click again to close.</p>
       <div class="screenshots-grid">
         <figure>
           <button type="button" class="screenshot-trigger" data-src="/screenshots/screenshota_0.jpg" aria-label="Open: Dashboard - your shows">
@@ -172,12 +203,167 @@ pnpm run dev</code></pre>
           </button>
           <figcaption>Transcripts &amp; LLM help</figcaption>
         </figure>
+        <figure>
+          <button type="button" class="screenshot-trigger" data-src="/screenshots/support-the-show-preview.jpg" aria-label="Open: Support The Show on the public feed">
+            <img src="/screenshots/support-the-show-preview.jpg" alt="Support The Show funding panel on the public feed" loading="lazy" />
+          </button>
+          <figcaption>Support The Show</figcaption>
+        </figure>
+        <figure>
+          <button type="button" class="screenshot-trigger" data-src="/screenshots/episode-details-podcast-2.0.jpg" aria-label="Open: Episode Podcast 2.0 details">
+            <img src="/screenshots/episode-details-podcast-2.0.jpg" alt="Episode details Podcast 2.0 metadata editors" loading="lazy" />
+          </button>
+          <figcaption>Episode Podcast 2.0 details</figcaption>
+        </figure>
+        <figure>
+          <button type="button" class="screenshot-trigger" data-src="/screenshots/feed-transcript-popup.jpg" aria-label="Open: Feed transcript popup">
+            <img src="/screenshots/feed-transcript-popup.jpg" alt="Transcript dialog on the public episode feed" loading="lazy" />
+          </button>
+          <figcaption>Feed transcript popup</figcaption>
+        </figure>
+        <figure>
+          <button type="button" class="screenshot-trigger" data-src="/screenshots/feed-chapter-markers.jpg" aria-label="Open: Feed chapter markers">
+            <img src="/screenshots/feed-chapter-markers.jpg" alt="Chapter markers on the public episode feed" loading="lazy" />
+          </button>
+          <figcaption>Feed chapter markers</figcaption>
+        </figure>
       </div>
     </section>
     <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot full size" hidden>
       <button type="button" class="lightbox-backdrop" aria-label="Close lightbox"></button>
       <img src="" alt="" class="lightbox-img" />
     </div>
+
+    <section class="section" id="features">
+      <h2>Features</h2>
+      <div class="features">
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Podcast size={22} stroke-width={2} /></span>
+          <strong>Podcasts & episodes</strong>
+          <span>Create shows with metadata, artwork, categories. Add episodes with title, description, season/episode numbers. Episodes grouped as Draft, Scheduled, Published. Delete episode or podcast with confirm.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Layers size={22} stroke-width={2} /></span>
+          <strong>Segments</strong>
+          <span>Build each episode from segments: recorded clips or library assets. Non-destructive trim ranges and markers (None/Chapter/Soundbite); Add Silence Trims; Server Remove Silence and noise suppression. Trim, split, remove silence; ffmpeg concatenates to final audio.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><ListOrdered size={22} stroke-width={2} /></span>
+          <strong>Episode chapters</strong>
+          <span>Add, edit, delete chapters with color picker. Play from chapter time. Podcast 2.0: chapters.json and podcast:chapters in RSS; included in exports. Chapter markers on waveforms.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><AudioLines size={22} stroke-width={2} /></span>
+          <strong>Soundbites</strong>
+          <span>Mark 15–120s clips on the final waveform or as segment markers. Edit start, duration, name, and color; play and download clips on the public feed. Podcast 2.0 podcast:soundbite in RSS.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Video size={22} stroke-width={2} /></span>
+          <strong>Group calls</strong>
+          <span>Record remote guests via WebRTC. Host starts a call, guests join by link or 4-digit code; in-call chat, soundboard with waveform preview, settings panel. Recordings become segments.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><UsersRound size={22} stroke-width={2} /></span>
+          <strong>Real-time collaboration</strong>
+          <span>Episode editor WebSocket; collaborators see live segment, call, and render updates. Transcript generation synced.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Library size={22} stroke-width={2} /></span>
+          <strong>Library</strong>
+          <span>Upload reusable audio (intros, outros, bumpers). Tag and insert into any episode.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Captions size={22} stroke-width={2} /></span>
+          <strong>Transcripts</strong>
+          <span>Generate via Whisper ASR or upload SRT. Transcript editor with trim integration; trimmed text excluded from LLM. Optional LLM (Ollama or OpenAI) for summaries and copy suggestions.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Rss size={22} stroke-width={2} /></span>
+          <strong>RSS & export</strong>
+          <span>RSS feed per podcast with Podcast 2.0 chapters, soundbites, trailers, funding, podroll, and more. Deploy to S3, R2, FTP, SFTP, WebDAV, IPFS, SMB. Only changed files uploaded.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Palette size={22} stroke-width={2} /></span>
+          <strong>Page customizations</strong>
+          <span>Per-show public feed theme: pick a primary accent color, and toggle author, descriptions, Support The Show, recommended podcasts, cast, and reviews on podcast vs episode pages.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Star size={22} stroke-width={2} /></span>
+          <strong>Reviews</strong>
+          <span>Listener reviews on public podcast and episode feeds. Optional approval, subscriber-only writing, spam checks, and admin moderation.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Radio size={22} stroke-width={2} /></span>
+          <strong>Recommended podcasts</strong>
+          <span>Podroll recommendations on the public feed. Paste an RSS URL to autofill feed GUID, title, cover, and home URL; emit Podcast 2.0 podcast:podroll in the show RSS.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><HeartHandshake size={22} stroke-width={2} /></span>
+          <strong>Support The Show</strong>
+          <span>Multiple funding links (Podcast 2.0). Shown as a Support The Show panel on public podcast and episode pages when enabled.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Mic size={22} stroke-width={2} /></span>
+          <strong>Cast</strong>
+          <span>Add hosts and guests to podcasts and episodes. Assign per episode; cast shown on public feed.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Share2 size={22} stroke-width={2} /></span>
+          <strong>Listen on & share</strong>
+          <span>Per-podcast links for Apple Podcasts, Spotify, Amazon Music, etc.; social links (X, Instagram, YouTube). Share button with embed options.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Shield size={22} stroke-width={2} /></span>
+          <strong>Auth & users</strong>
+          <span>First-user setup, registration, login, password reset. Optional 2FA (TOTP or email). Admin and user management. Public feed pages when enabled.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><KeyRound size={22} stroke-width={2} /></span>
+          <strong>API keys</strong>
+          <span>Create API keys for programmatic access. Optional name and expiry. Keys hashed; raw key shown once on create.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Ticket size={22} stroke-width={2} /></span>
+          <strong>Subscription tokens</strong>
+          <span>Per-podcast tokenized RSS for private or subscriber-only feeds. Subscriber-only episodes excluded from public RSS. Optional validity and limits.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Globe size={22} stroke-width={2} /></span>
+          <strong>Automatic DNS</strong>
+          <span>Optional Cloudflare integration: managed domains and subdomains so listeners use custom URLs. Link domain, managed domain, subdomain.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><UserPlus size={22} stroke-width={2} /></span>
+          <strong>Collaborators</strong>
+          <span>Share shows with view, editor, or manager roles. Invite by email; optional platform invites for new users.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Mail size={22} stroke-width={2} /></span>
+          <strong>Contact page</strong>
+          <span>Built-in contact form; messages stored and optionally emailed to admins. Configurable from settings.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><BarChart3 size={22} stroke-width={2} /></span>
+          <strong>Analytics & GeoIP</strong>
+          <span>Podcast stats: RSS hits, episode requests, listens by location. Optional GeoLite2 for country/city.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><MailCheck size={22} stroke-width={2} /></span>
+          <strong>Email & captcha</strong>
+          <span>Email verification, password reset. Optional captcha (reCAPTCHA or hCaptcha) for registration and reset.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Eye size={22} stroke-width={2} /></span>
+          <strong>Read-only accounts</strong>
+          <span>Per-user limits for podcasts, episodes, storage. Read-only accounts. Per-user transcription toggle.</span>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon" aria-hidden="true"><Cloud size={22} stroke-width={2} /></span>
+          <strong>Terraform</strong>
+          <span>Deploy via Terraform: AWS EC2 or Vultr. PM2, Caddy, or nginx; Let's Encrypt; optional WebRTC. Cloudflare DNS integration.</span>
+        </div>
+      </div>
+    </section>
 
     <section class="section" id="tech-stack">
       <h2>Tech stack</h2>

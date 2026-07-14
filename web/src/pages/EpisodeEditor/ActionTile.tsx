@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Info } from 'lucide-react';
 import styles from '../EpisodeEditor.module.css';
 
-export type ActionTileColor = 'teal' | 'blue' | 'purple' | 'amber' | 'slate' | 'green';
+export type ActionTileColor = 'teal' | 'blue' | 'purple' | 'amber' | 'slate' | 'green' | 'cyan';
 
 export interface ActionTileProps {
   icon: React.ReactNode;

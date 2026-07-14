@@ -8,7 +8,9 @@
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
     "preview": "astro preview"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@lucide/astro": "^1.24.0"
+  },
   "devDependencies": {
     "astro": "5.17.0",
     "marked": "^17.0.1"

@@ -177,10 +177,7 @@ async function main() {
   const startTime = now();
   const allResults = [];
 
-  const onlySeed = process.env.E2E_SUITE === 'Seed';
-  const suites = onlySeed
-    ? [join(E2E_DIR, 'tests', 'Seed', 'seed.js')]
-    : [
+  const allSuites = [
     join(E2E_DIR, 'tests', 'Health', 'health.js'),
     join(E2E_DIR, 'tests', 'Setup', 'setup.js'),
     join(E2E_DIR, 'tests', 'Auth', 'auth.js'),
@@ -227,8 +224,25 @@ async function main() {
     join(E2E_DIR, 'tests', 'scenarios', 'dns-use-cname-a-record.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'show-cast-permissions.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'show-cast-list.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'page-customizations.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'podcast-stats-source.js'),
   ];
+
+  const suiteFilter = process.env.E2E_SUITE?.trim();
+  let suites;
+  if (suiteFilter === 'Seed') {
+    suites = [join(E2E_DIR, 'tests', 'Seed', 'seed.js')];
+  } else if (suiteFilter) {
+    const tokens = suiteFilter.split(',').map((s) => s.trim()).filter(Boolean);
+    suites = allSuites.filter((p) =>
+      tokens.some((t) => p.includes(t) || p.endsWith(`${t}.js`)),
+    );
+    if (suites.length === 0) {
+      throw new Error(`E2E_SUITE=${suiteFilter} matched no suites`);
+    }
+  } else {
+    suites = allSuites;
+  }
 
   console.log('E2E tests starting...\n');
 

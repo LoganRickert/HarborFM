@@ -233,8 +233,6 @@
   overflow: hidden;
 }
 
-.podcastShowListExpanded .groupListRow:last-of-type .groupListRowAccessory,
-.podcastShowListExpanded > button.groupListRow .groupListRowAccessory,
 .podcastShowDetailsToggle[aria-expanded='true'] .groupListRowAccessory {
   transform: rotate(90deg);
 }
@@ -349,10 +347,6 @@ a.groupListRow:hover .groupListRowLabel {
   flex-shrink: 0;
   color: rgba(0, 212, 170, 0.65);
   transition: transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.groupListExpanded .groupListRow:first-child .groupListRowAccessory {
-  transform: rotate(90deg);
 }
 
 .groupListExpand {

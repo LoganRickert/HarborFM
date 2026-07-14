@@ -22,6 +22,34 @@ export function ensurePublicFeedsEnabled(
   return true;
 }
 
+function parseFundingLinks(
+  raw: unknown,
+): Array<{ url: string; text: string | null }> | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const items = parsed
+      .filter(
+        (x): x is Record<string, unknown> =>
+          typeof x === "object" && x != null,
+      )
+      .map((x) => {
+        const url = typeof x.url === "string" ? x.url.trim() : "";
+        if (!url) return null;
+        return {
+          url,
+          text:
+            typeof x.text === "string" && x.text.trim() ? x.text.trim() : null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    return items.length > 0 ? items : null;
+  } catch {
+    return null;
+  }
+}
+
 export function publicPodcastDto(
   row: Record<string, unknown> & {
     artworkPath?: string | null;
@@ -42,9 +70,58 @@ export function publicPodcastDto(
     tiktokUrl?: string | null;
     youtubeUrl?: string | null;
     discordUrl?: string | null;
+    podroll?: string | null;
+    fundingLinks?: string | null;
   },
 ) {
   const path = row.artworkPath as string | null | undefined;
+  let podroll: Array<{
+    feed_guid: string;
+    feed_url: string | null;
+    title: string | null;
+    cover_art_url: string | null;
+    home_url: string | null;
+  }> | null = null;
+  if (typeof row.podroll === "string" && row.podroll.trim()) {
+    try {
+      const parsed = JSON.parse(row.podroll) as unknown;
+      if (Array.isArray(parsed)) {
+        const items = parsed
+          .filter(
+            (x): x is Record<string, unknown> =>
+              typeof x === "object" && x != null,
+          )
+          .map((x) => {
+            const feedGuid =
+              typeof x.feedGuid === "string" ? x.feedGuid.trim() : "";
+            if (!feedGuid) return null;
+            return {
+              feed_guid: feedGuid,
+              feed_url:
+                typeof x.feedUrl === "string" && x.feedUrl.trim()
+                  ? x.feedUrl.trim()
+                  : null,
+              title:
+                typeof x.title === "string" && x.title.trim()
+                  ? x.title.trim()
+                  : null,
+              cover_art_url:
+                typeof x.coverArtUrl === "string" && x.coverArtUrl.trim()
+                  ? x.coverArtUrl.trim()
+                  : null,
+              home_url:
+                typeof x.homeUrl === "string" && x.homeUrl.trim()
+                  ? x.homeUrl.trim()
+                  : null,
+            };
+          })
+          .filter((x): x is NonNullable<typeof x> => x != null);
+        if (items.length > 0) podroll = items;
+      }
+    } catch {
+      podroll = null;
+    }
+  }
   return {
     id: row.id,
     title: row.title,
@@ -74,6 +151,33 @@ export function publicPodcastDto(
     tiktok_url: row.tiktokUrl ?? null,
     youtube_url: row.youtubeUrl ?? null,
     discord_url: row.discordUrl ?? null,
+    podroll,
+    funding_links: parseFundingLinks(row.fundingLinks ?? null),
+    feed_accent:
+      typeof (row as { feedAccent?: unknown }).feedAccent === "string" &&
+      String((row as { feedAccent: string }).feedAccent).trim()
+        ? String((row as { feedAccent: string }).feedAccent).trim()
+        : "green",
+    feed_show_podcast_description:
+      (row as { feedShowPodcastDescription?: number | boolean | null })
+        .feedShowPodcastDescription ?? 1,
+    feed_show_episode_description:
+      (row as { feedShowEpisodeDescription?: number | boolean | null })
+        .feedShowEpisodeDescription ?? 1,
+    feed_show_funding:
+      (row as { feedShowFunding?: number | boolean | null }).feedShowFunding ?? 1,
+    feed_show_reviews_podcast:
+      (row as { feedShowReviewsPodcast?: number | boolean | null })
+        .feedShowReviewsPodcast ?? 1,
+    feed_show_reviews_episode:
+      (row as { feedShowReviewsEpisode?: number | boolean | null })
+        .feedShowReviewsEpisode ?? 1,
+    feed_show_author:
+      (row as { feedShowAuthor?: number | boolean | null }).feedShowAuthor ?? 1,
+    feed_show_podroll:
+      (row as { feedShowPodroll?: number | boolean | null }).feedShowPodroll ?? 1,
+    feed_show_cast:
+      (row as { feedShowCast?: number | boolean | null }).feedShowCast ?? 1,
   };
 }
 
@@ -137,6 +241,27 @@ export function publicEpisodeDto(
     }
   }
 
+  const rawSoundbites = row.finalSoundbites as string | null | undefined;
+  let soundbites: Array<{ time: number; duration: number; title?: string; color?: string }> = [];
+  if (!isScheduledNotReleased && rawSoundbites != null && typeof rawSoundbites === "string" && rawSoundbites.trim()) {
+    try {
+      const parsed = JSON.parse(rawSoundbites) as unknown;
+      if (Array.isArray(parsed)) {
+        soundbites = parsed.filter(
+          (m): m is { time: number; duration: number; title?: string; color?: string } =>
+            typeof m === "object" &&
+            m != null &&
+            typeof (m as { time?: number }).time === "number" &&
+            typeof (m as { duration?: number }).duration === "number" &&
+            (m as { duration: number }).duration >= 15 &&
+            (m as { duration: number }).duration <= 120,
+        );
+      }
+    } catch {
+      /* leave soundbites as [] */
+    }
+  }
+
   return {
     id: row.id,
     podcast_id: row.podcastId,
@@ -175,6 +300,8 @@ export function publicEpisodeDto(
     created_at: row.createdAt,
     updated_at: row.updatedAt,
     markers,
+    soundbites,
+    funding_links: parseFundingLinks(row.fundingLinks ?? null),
   };
 }
 

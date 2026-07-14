@@ -527,20 +527,51 @@ export function SegmentEditorModal({
                         const left = ((m.time - viewStartSec) / (viewEndSec - viewStartSec)) * 100;
                         const color = m.color ?? MARKER_COLORS[0];
                         const isSelected = selectedMarkerIndex === i;
+                        const markerType = m.markerType ?? '';
+                        const shapeClass =
+                          markerType === 'chapter'
+                            ? styles.markerHandleChapter
+                            : markerType === 'soundbite'
+                              ? styles.markerHandleSoundbite
+                              : '';
+                        const isSoundbite = markerType === 'soundbite';
                         return (
                           <button
                             key={i}
                             type="button"
-                            className={`${styles.markerHandle} ${isSelected ? styles.markerHandleSelected : ''}`}
-                            style={{
-                              left: `${left}%`,
-                              borderColor: color,
-                              backgroundColor: isSelected ? color : 'transparent',
-                            }}
+                            className={`${styles.markerHandle} ${shapeClass} ${isSelected ? styles.markerHandleSelected : ''}`}
+                            style={
+                              isSoundbite
+                                ? {
+                                    left: `${left}%`,
+                                    color,
+                                  }
+                                : {
+                                    left: `${left}%`,
+                                    borderColor: color,
+                                    backgroundColor: isSelected ? color : 'transparent',
+                                  }
+                            }
                             onClick={() => setSelectedMarkerIndex(selectedMarkerIndex === i ? null : i)}
                             title={m.title ?? `Marker at ${m.time.toFixed(1)}s`}
                             aria-pressed={selectedMarkerIndex === i}
-                          />
+                          >
+                            {isSoundbite && (
+                              <svg
+                                className={styles.markerHandleSoundbiteSvg}
+                                viewBox="0 0 12 11"
+                                aria-hidden
+                              >
+                                <polygon
+                                  points="6,1 1,10 11,10"
+                                  fill={isSelected ? 'currentColor' : 'none'}
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            )}
+                          </button>
                         );
                       })}
                   </div>

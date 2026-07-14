@@ -48,10 +48,12 @@ function getScale(bits: number): number {
   return 2 ** (bits - 1);
 }
 
-/** Canvas 2D doesn't resolve CSS variables; read computed color from the document. */
-function getThemeColor(variable: string, fallback: string): string {
+/** Canvas 2D doesn't resolve CSS variables; read computed color from an element in the tree. */
+function getThemeColor(el: Element | null, variable: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+  const value = getComputedStyle(el ?? document.documentElement)
+    .getPropertyValue(variable)
+    .trim();
   return value || fallback;
 }
 
@@ -88,9 +90,9 @@ export function WaveformCanvas({ data, durationSec, currentTime, viewStartSec = 
     ctx.scale(dpr, dpr);
 
     const halfH = height / 2;
-    const bgColor = getThemeColor('--bg-elevated', '#1e293b');
-    const accentColor = getThemeColor('--accent', '#0ea5e9');
-    const mutedColor = getThemeColor('--text-muted', '#94a3b8');
+    const bgColor = getThemeColor(container, '--bg-elevated', '#1e293b');
+    const accentColor = getThemeColor(container, '--accent', '#0ea5e9');
+    const mutedColor = getThemeColor(container, '--text-muted', '#94a3b8');
 
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);

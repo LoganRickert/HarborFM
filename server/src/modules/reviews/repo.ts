@@ -92,7 +92,7 @@ export function getReviewById(reviewId: string): {
   };
 }
 
-/** Count reviews for this podcast + email (podcast-level: episode_id IS NULL). */
+/** Count non-hidden reviews for this podcast + email (podcast-level: episode_id IS NULL). */
 export function countReviewsByPodcastAndEmail(
   podcastId: string,
   email: string,
@@ -104,6 +104,7 @@ export function countReviewsByPodcastAndEmail(
       and(
         eq(reviews.podcastId, podcastId),
         eq(reviews.email, email),
+        eq(reviews.hidden, false),
         sql`${reviews.episodeId} IS NULL`,
       ),
     )
@@ -111,7 +112,7 @@ export function countReviewsByPodcastAndEmail(
   return row?.count ?? 0;
 }
 
-/** Count reviews for this episode + email. */
+/** Count non-hidden reviews for this episode + email. */
 export function countReviewsByEpisodeAndEmail(
   episodeId: string,
   email: string,
@@ -119,7 +120,13 @@ export function countReviewsByEpisodeAndEmail(
   const row = drizzleDb
     .select({ count: sql<number>`COUNT(*)` })
     .from(reviews)
-    .where(and(eq(reviews.episodeId, episodeId), eq(reviews.email, email)))
+    .where(
+      and(
+        eq(reviews.episodeId, episodeId),
+        eq(reviews.email, email),
+        eq(reviews.hidden, false),
+      ),
+    )
     .get();
   return row?.count ?? 0;
 }

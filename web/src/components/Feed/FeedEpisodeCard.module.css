@@ -1,4 +1,5 @@
 .episode {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-elevated);
@@ -12,6 +13,10 @@
 }
 
 .episodeSubscriberOnly {
+  border-color: #d4a84b;
+}
+
+.episodeSubscriberOnly .typePill {
   border-color: #d4a84b;
 }
 
@@ -31,6 +36,35 @@
 .headerContent {
   flex: 1;
   min-width: 0;
+}
+
+.typePill {
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  transform: translateY(-50%);
+}
+
+.typePillTrailer {
+  color: #fff;
+  background: #9a3412;
+}
+
+.typePillBonus {
+  color: #fff;
+  background: #4c1d95;
 }
 
 .title {

@@ -47,7 +47,7 @@
 
 .linkIcon:hover {
   color: var(--accent);
-  background: rgba(0, 212, 170, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .linkIcon:focus-visible {

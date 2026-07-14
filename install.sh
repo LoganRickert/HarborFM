@@ -6,14 +6,34 @@
 # Non-interaction: use --no-interaction, -y, -n, or env CI=1 / NON_INTERACTIVE=1
 set -e
 
-# Non-interaction: skip all prompts, use defaults
-NON_INTERACTIVE=false
+# Docker checks (fail fast before any downloads or prompts)
+if ! command -v docker &>/dev/null; then
+  echo "Error: docker is not installed or not in PATH." >&2
+  echo "Install Docker first: https://docs.docker.com/engine/install/" >&2
+  exit 1
+fi
+if [ "$(id -u)" -ne 0 ] && ! id -nG | grep -qw docker; then
+  echo "Error: current user is not in the docker group." >&2
+  echo "Add yourself with: sudo usermod -aG docker \$USER" >&2
+  echo "Then log out and back in (or run: newgrp docker) and re-run this install." >&2
+  exit 1
+fi
+if ! docker compose version &>/dev/null; then
+  echo "Error: docker compose is not available. Need Docker Compose v2." >&2
+  exit 1
+fi
+
+# Non-interaction: honor env CI=1 / NON_INTERACTIVE=1, or flags --no-interaction / -y / -n
+if [ "${CI:-0}" = "1" ] || [ "${NON_INTERACTIVE:-0}" = "1" ]; then
+  NON_INTERACTIVE=true
+else
+  NON_INTERACTIVE=false
+fi
 for arg in "$@"; do
   case "$arg" in
     --no-interaction|-y|-n) NON_INTERACTIVE=true; break ;;
   esac
 done
-[ "${CI:-0}" = "1" ] || [ "${NON_INTERACTIVE:-0}" = "1" ] && NON_INTERACTIVE=true
 
 # Where to fetch configs from (override with env if you mirror the repo)
 HARBORFM_REPO="${HARBORFM_REPO:-loganrickert/harborfm}"
@@ -34,16 +54,6 @@ INSTALL_DIR="$(cd -P "$(dirname "$INSTALL_DIR")" && pwd)/$(basename "$INSTALL_DI
 echo "=== HarborFM Docker install ==="
 echo "Install directory: $INSTALL_DIR"
 echo ""
-
-# Docker checks
-if ! command -v docker &>/dev/null; then
-  echo "Error: docker is not installed or not in PATH." >&2
-  exit 1
-fi
-if ! docker compose version &>/dev/null; then
-  echo "Error: docker compose is not available. Need Docker Compose v2." >&2
-  exit 1
-fi
 
 # curl or wget for downloads
 download() {
@@ -101,7 +111,7 @@ if [ -f .env ]; then
     CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
     SELF_SIGNED_CERT="${SELF_SIGNED_CERT:-0}"
     TZ="${TZ:-}"
-    REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+    REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
   else
     overwrite_env=true
   fi
@@ -113,7 +123,7 @@ if [ "${overwrite_env:-false}" = true ]; then
   echo ""
   if [ "$NON_INTERACTIVE" = true ]; then
     DOMAIN="${DOMAIN:-localhost}"
-    REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+    REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
     CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
     SELF_SIGNED_CERT="${SELF_SIGNED_CERT:-0}"
     COOKIE_SECURE=""
@@ -125,10 +135,10 @@ if [ "${overwrite_env:-false}" = true ]; then
     read -r -p "Domain name (e.g. harborfm.example.com) [localhost]: " DOMAIN </dev/tty
     DOMAIN="${DOMAIN:-localhost}"
 
-    echo "Reverse proxy: nginx = single domain, certbot for SSL; Caddy = automatic HTTPS, better for multiple/dynamic hostnames."
-    read -r -p "Use nginx or Caddy? [nginx]: " REVERSE_PROXY </dev/tty
-    REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
-    if [[ ! "$REVERSE_PROXY" =~ ^[cC]addy ]]; then
+    echo "Reverse proxy: Caddy = automatic HTTPS, better for multiple/dynamic hostnames; nginx = single domain, certbot for SSL."
+    read -r -p "Use Caddy or nginx? [caddy]: " REVERSE_PROXY </dev/tty
+    REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
+    if [[ "$REVERSE_PROXY" =~ ^[nN][gG][iI][nN][xX]$ ]]; then
       REVERSE_PROXY=nginx
     else
       REVERSE_PROXY=caddy
@@ -202,21 +212,26 @@ if [ "${overwrite_env:-false}" = true ]; then
   echo ""
 fi
 
-# Default REVERSE_PROXY for existing .env without it
+# Default REVERSE_PROXY if unset, then always persist it to .env
 if [ -f .env ]; then
   set -a
   # shellcheck source=/dev/null
   source .env
   set +a
 fi
-REVERSE_PROXY="${REVERSE_PROXY:-nginx}"
+REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
+if [ ! -f .env ]; then
+  touch .env
+fi
+if grep -q '^REVERSE_PROXY=' .env 2>/dev/null; then
+  grep -v '^REVERSE_PROXY=' .env > .env.tmp
+  mv .env.tmp .env
+fi
+echo "REVERSE_PROXY=$REVERSE_PROXY" >> .env
 
-# Ensure .env has INSTALL_DIR and REVERSE_PROXY (avoids wrong path when reusing old volumes; backward compat for proxy choice)
+# Ensure .env has INSTALL_DIR (avoids wrong path when reusing old volumes)
 if ! grep -q '^INSTALL_DIR=' .env 2>/dev/null; then
   echo "INSTALL_DIR=$INSTALL_DIR" >> .env
-fi
-if ! grep -q '^REVERSE_PROXY=' .env 2>/dev/null; then
-  echo "REVERSE_PROXY=${REVERSE_PROXY:-nginx}" >> .env
 fi
 if [ "$REVERSE_PROXY" = "caddy" ] && ! grep -q '^CADDY_TLS_CHECK_SECRET=' .env 2>/dev/null; then
   echo "CADDY_TLS_CHECK_SECRET=$(openssl rand -hex 32)" >> .env

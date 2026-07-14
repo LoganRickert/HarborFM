@@ -516,6 +516,9 @@
 }
 
 .pageBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
   border-radius: 8px;
@@ -523,6 +526,7 @@
   background: transparent;
   color: var(--text);
   cursor: pointer;
+  line-height: 1;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 

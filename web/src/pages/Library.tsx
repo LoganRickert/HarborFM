@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Download, Edit, Play, Pause, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Download, Edit, Play, Pause, Trash2, Upload, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   createLibraryAsset,
@@ -824,7 +824,7 @@ export function Library() {
                   disabled={pageClamped <= 1}
                   aria-label="Previous page of library"
                 >
-                  ←
+                  <ChevronLeft size={16} strokeWidth={2} aria-hidden />
                 </button>
                 <button
                   type="button"
@@ -833,7 +833,7 @@ export function Library() {
                   disabled={pageClamped >= totalPages}
                   aria-label="Next page of library"
                 >
-                  to
+                  <ChevronRight size={16} strokeWidth={2} aria-hidden />
                 </button>
               </div>
             </div>

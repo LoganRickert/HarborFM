@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Upload, ArrowDown, ArrowUp } from 'lucide-react';
+import { Upload, ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { listLibrary, createLibraryAsset, type LibraryAsset } from '../../api/library';
 import { formatDuration, formatLibraryDate } from './utils';
 import styles from '../EpisodeEditor.module.css';
@@ -301,10 +301,10 @@ export function LibraryModal({ onClose, onSelect, isAdding, error }: LibraryModa
                   </span>
                   <div className={styles.libraryPaginationBtns}>
                     <button type="button" className={styles.libraryPageBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pageClamped <= 1} aria-label="Previous page">
-                      ←
+                      <ChevronLeft size={16} strokeWidth={2} aria-hidden />
                     </button>
                     <button type="button" className={styles.libraryPageBtn} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={pageClamped >= totalPages} aria-label="Next page">
-                      to
+                      <ChevronRight size={16} strokeWidth={2} aria-hidden />
                     </button>
                   </div>
                 </div>

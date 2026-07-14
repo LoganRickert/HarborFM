@@ -3,6 +3,7 @@ import { Rss, MessageCircle, Lock, Share2 } from 'lucide-react';
 import { FeedPodcastHeaderProps } from '../../../types/feed';
 import { SubscriptionInfoDialog } from '../SubscriptionInfoDialog';
 import { ShareDialog } from '../../ShareDialog';
+import { FeedFundingSupport } from '../FeedFundingSupport';
 import { useSubscriberAuth } from '../../../hooks/useSubscriberAuth';
 import styles from './FeedPodcastHeader.module.css';
 
@@ -43,7 +44,7 @@ export function FeedPodcastHeader({
           <div className={styles.top}>
             <div>
               <h1 className={styles.title}>{podcast.title}</h1>
-              {podcast.authorName && (
+              {podcast.feedShowAuthor !== false && podcast.authorName && (
                 <p className={styles.author}>by {podcast.authorName}</p>
               )}
             </div>
@@ -101,11 +102,14 @@ export function FeedPodcastHeader({
               )}
             </div>
           </div>
-          {podcast.description && (
+          {podcast.feedShowPodcastDescription !== false && podcast.description && (
             <p className={styles.description}>{podcast.description}</p>
           )}
         </div>
       </div>
+      {podcast.feedShowFunding !== false && (
+        <FeedFundingSupport fundingLinks={podcast.fundingLinks} />
+      )}
       {showLockInfo && (
         <SubscriptionInfoDialog
           open={showLockInfo}

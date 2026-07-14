@@ -63,6 +63,13 @@ import * as m061 from "./migrations/061_podcast_show_scheduled_episodes.js";
 import * as m062 from "./migrations/062_podcast_stats_source.js";
 import * as m063 from "./migrations/063_podcast_discord_url.js";
 import * as m064 from "./migrations/064_show_notes.js";
+import * as m065 from "./migrations/065_episodes_final_soundbites.js";
+import * as m066 from "./migrations/066_episodes_content_links.js";
+import * as m067 from "./migrations/067_episodes_podcast_meta.js";
+import * as m068 from "./migrations/068_podcasts_podcast_meta.js";
+import * as m069 from "./migrations/069_podcasts_podroll.js";
+import * as m070 from "./migrations/070_podcasts_feed_customizations.js";
+import * as m071 from "./migrations/071_podcasts_feed_visibility_more.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -129,6 +136,13 @@ const migrations = [
   { name: "062_podcast_stats_source", ...m062 },
   { name: "063_podcast_discord_url", ...m063 },
   { name: "064_show_notes", ...m064 },
+  { name: "065_episodes_final_soundbites", ...m065 },
+  { name: "066_episodes_content_links", ...m066 },
+  { name: "067_episodes_podcast_meta", ...m067 },
+  { name: "068_podcasts_podcast_meta", ...m068 },
+  { name: "069_podcasts_podroll", ...m069 },
+  { name: "070_podcasts_feed_customizations", ...m070 },
+  { name: "071_podcasts_feed_visibility_more", ...m071 },
 ];
 
 const MIGRATIONS_TABLE = `

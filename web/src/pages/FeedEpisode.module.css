@@ -3,6 +3,11 @@
   margin-top: 1rem;
 }
 
+/* Main episode card: positioned so Trailer/Bonus pill can sit on the top border */
+.mainCard {
+  position: relative;
+}
+
 /* Episode video: full width above player (Plyr). Constrain height so portrait (9:16) videos don't overflow. */
 .videoWrap {
   position: relative;

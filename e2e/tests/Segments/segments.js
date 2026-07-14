@@ -104,6 +104,117 @@ export async function run({ runOne }) {
   );
 
   results.push(
+    await runOne('PATCH segment soundbite marker persists', async () => {
+      const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Soundbite Seg Ep', status: 'draft' });
+      const seg = await addRecordedSegment(jar, patchEp.id);
+      const durationSec = seg.durationSec ?? 60;
+      const markers = [
+        {
+          time: Math.min(2, durationSec),
+          title: 'Clip',
+          color: '#06b6d4',
+          markerType: 'soundbite',
+          duration: 30,
+        },
+      ];
+
+      const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markers }),
+      }, jar);
+      if (res.status !== 200) throw new Error(`PATCH segment failed: ${res.status} ${await res.text()}`);
+      const patched = await res.json();
+      const m = patched.markers?.[0];
+      if (!m || m.markerType !== 'soundbite' || m.duration !== 30 || m.title !== 'Clip') {
+        throw new Error(`Expected soundbite marker, got ${JSON.stringify(patched.markers)}`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('PATCH segment soundbite without duration returns 400', async () => {
+      const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Soundbite No Dur Ep', status: 'draft' });
+      const seg = await addRecordedSegment(jar, patchEp.id);
+      const durationSec = seg.durationSec ?? 60;
+
+      const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          markers: [{ time: Math.min(1, durationSec), markerType: 'soundbite', title: 'Bad' }],
+        }),
+      }, jar);
+      if (res.status !== 400) throw new Error(`Expected 400 for soundbite without duration, got ${res.status}`);
+    })
+  );
+
+  results.push(
+    await runOne('PATCH segment soundbite with invalid duration returns 400', async () => {
+      const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Soundbite Bad Dur Ep', status: 'draft' });
+      const seg = await addRecordedSegment(jar, patchEp.id);
+      const durationSec = seg.durationSec ?? 60;
+
+      for (const duration of [14, 121]) {
+        const res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            markers: [
+              {
+                time: Math.min(1, durationSec),
+                markerType: 'soundbite',
+                title: 'Bad',
+                duration,
+              },
+            ],
+          }),
+        }, jar);
+        if (res.status !== 400) {
+          throw new Error(`Expected 400 for soundbite duration ${duration}, got ${res.status}`);
+        }
+      }
+    })
+  );
+
+  results.push(
+    await runOne('PATCH episode finalSoundbites persists', async () => {
+      const sbEp = await createEpisode(jar, podcast.id, { title: 'E2E Final Soundbites Ep', status: 'draft' });
+      const soundbites = [{ time: 5, duration: 45, title: 'Highlight', color: '#22c55e' }];
+
+      const res = await apiFetch(`/episodes/${sbEp.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ finalSoundbites: soundbites }),
+      }, jar);
+      if (res.status !== 200) throw new Error(`PATCH episode failed: ${res.status} ${await res.text()}`);
+
+      const getRes = await apiFetch(`/episodes/${sbEp.id}`, {}, jar);
+      if (getRes.status !== 200) throw new Error(`GET episode failed: ${getRes.status}`);
+      const ep = await getRes.json();
+      const sb = ep.finalSoundbites?.[0];
+      if (!sb || sb.title !== 'Highlight' || sb.duration !== 45 || sb.time !== 5) {
+        throw new Error(`finalSoundbites: expected Highlight@5/45s, got ${JSON.stringify(ep.finalSoundbites)}`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('PATCH episode invalid finalSoundbites returns 400', async () => {
+      const sbEp = await createEpisode(jar, podcast.id, { title: 'E2E Invalid Soundbites Ep', status: 'draft' });
+
+      const res = await apiFetch(`/episodes/${sbEp.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          finalSoundbites: [{ time: 0, duration: 10, title: 'Too short' }],
+        }),
+      }, jar);
+      if (res.status !== 400) throw new Error(`Expected 400 for invalid finalSoundbites, got ${res.status}`);
+    })
+  );
+
+  results.push(
     await runOne('POST render returns 202 and completes', async () => {
       const renderEp = await createEpisode(jar, podcast.id, { title: 'E2E Render Ep', status: 'draft' });
       await addRecordedSegment(jar, renderEp.id);
@@ -158,6 +269,70 @@ export async function run({ runOne }) {
       const data = await res.json();
       if (!data.error || !data.error.includes('one section')) {
         throw new Error(`Expected error about adding section, got ${data.error || 'no error'}`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('Render aggregates soundbite markers into finalSoundbites', async () => {
+      await new Promise((r) => setTimeout(r, 1100));
+      const renderEp = await createEpisode(jar, podcast.id, { title: 'E2E Render Soundbites Ep', status: 'draft' });
+      const seg = await addRecordedSegment(jar, renderEp.id);
+      const durationSec = seg.durationSec ?? 60;
+      const markerTime = Math.min(3, durationSec);
+
+      let res = await apiFetch(`/episodes/${renderEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          markers: [
+            {
+              time: markerTime,
+              title: 'Built bite',
+              color: '#a855f7',
+              markerType: 'soundbite',
+              duration: 60,
+            },
+            {
+              time: Math.min(1, durationSec),
+              title: 'Chapter A',
+              markerType: 'chapter',
+            },
+          ],
+        }),
+      }, jar);
+      if (res.status !== 200) throw new Error(`PATCH segment failed: ${res.status} ${await res.text()}`);
+
+      res = await apiFetch(`/episodes/${renderEp.id}/render`, { method: 'POST' }, jar);
+      if (res.status !== 202) throw new Error(`Expected 202, got ${res.status}`);
+
+      const timeoutMs = 120_000;
+      const pollIntervalMs = 2000;
+      const start = Date.now();
+      let statusData;
+      while (Date.now() - start < timeoutMs) {
+        res = await apiFetch(`/episodes/${renderEp.id}/render-status`, {}, jar);
+        statusData = await res.json();
+        if (statusData.status === 'done') break;
+        if (statusData.status === 'failed') {
+          throw new Error(`Render failed: ${statusData.error || 'unknown'}`);
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+      }
+      if (statusData?.status !== 'done') throw new Error('Render timeout');
+
+      res = await apiFetch(`/episodes/${renderEp.id}`, {}, jar);
+      if (res.status !== 200) throw new Error(`GET episode failed: ${res.status}`);
+      const ep = await res.json();
+      if (!ep.finalMarkers?.some((m) => m.title === 'Chapter A')) {
+        throw new Error(`Expected chapter in finalMarkers, got ${JSON.stringify(ep.finalMarkers)}`);
+      }
+      const sb = ep.finalSoundbites?.find((s) => s.title === 'Built bite');
+      if (!sb || sb.duration !== 60) {
+        throw new Error(`Expected soundbite in finalSoundbites, got ${JSON.stringify(ep.finalSoundbites)}`);
+      }
+      if (typeof sb.time !== 'number' || Math.abs(sb.time - markerTime) > 0.05) {
+        throw new Error(`Expected soundbite time ~${markerTime}, got ${sb.time}`);
       }
     })
   );

@@ -2,7 +2,7 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 1.5rem;
-  background: linear-gradient(135deg, rgba(0, 212, 170, 0.08), rgba(0, 0, 0, 0)), var(--bg-elevated);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), rgba(0, 0, 0, 0)), var(--bg-elevated);
   position: relative;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   margin-top: 1.5rem;
@@ -15,7 +15,7 @@
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(120deg, rgba(0, 212, 170, 0.5), rgba(0, 0, 0, 0));
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 50%, transparent), rgba(0, 0, 0, 0));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -121,7 +121,7 @@
 
 .reviewVerified {
   color: var(--accent);
-  background: rgba(0, 212, 170, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .reviewNotVerified {
@@ -267,8 +267,8 @@
 }
 
 .confirmClose:hover {
-  background: rgba(0, 212, 170, 0.14);
-  border-color: rgba(0, 212, 170, 0.45);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   color: var(--text);
 }
 

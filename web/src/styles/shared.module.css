@@ -3,7 +3,22 @@
   min-height: 100vh;
   overflow-x: hidden;
   background-color: var(--bg);
-  background-image: url('/feed-bg.svg');
+  background-image:
+    radial-gradient(
+      ellipse 60% 55% at 50% 38%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 55% 50% at 50% 70%,
+      color-mix(in srgb, var(--accent) 5%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 74% 74% at 50% 50%,
+      transparent 50%,
+      rgba(0, 0, 0, 0.32) 100%
+    );
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

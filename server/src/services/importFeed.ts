@@ -29,16 +29,22 @@ export interface ImportChannelMeta {
   site_url: string | null;
   artwork_url: string | null;
   copyright: string | null;
-  license: string | null;
+  license: string | null; // JSON string {"identifier","url?"} or null
   itunes_type: string;
   medium: string;
   podcast_guid: string | null;
   locked: number;
-  funding_url: string | null;
-  funding_label: string | null;
+  funding_links: string | null; // JSON array
   persons: string | null;
-  update_frequency_rrule: string | null;
-  update_frequency_label: string | null;
+  update_frequency: string | null; // JSON object
+  podcast_txts: string | null;
+  social_interacts: string | null;
+  locations: string | null;
+  chat: string | null;
+  value_blocks: string | null;
+  blocks: string | null;
+  publisher: string | null;
+  podroll: string | null;
   spotify_recent_count: number | null;
   spotify_country_of_origin: string | null;
   apple_podcasts_verify: string | null;
@@ -230,6 +236,67 @@ function getNextPageUrl(
   return null;
 }
 
+/**
+ * Channel website URL: prefer RSS text `<link>`, then `<atom:link href>`
+ * (rel=alternate / empty, then any href that is not self/hub/pagination).
+ * With removeNSPrefix, atom:link is also keyed as "link".
+ */
+function resolveChannelHomeUrl(channelOrFeed: Record<string, unknown>): string {
+  const links = [
+    ...ensureArray(channelOrFeed["link"]),
+    ...ensureArray(channelOrFeed["atom:link"]),
+  ];
+
+  for (const link of links) {
+    const text = textOf(link);
+    if (text.startsWith("http")) return text;
+  }
+
+  const hrefOf = (link: unknown): string => {
+    if (!link || typeof link !== "object") return "";
+    const l = link as Record<string, unknown>;
+    const href =
+      (typeof l["@_href"] === "string" && l["@_href"]) ||
+      (typeof l["href"] === "string" && l["href"]) ||
+      "";
+    return href.trim();
+  };
+  const relOf = (link: unknown): string => {
+    if (!link || typeof link !== "object") return "";
+    const l = link as Record<string, unknown>;
+    const rel =
+      (typeof l["@_rel"] === "string" && l["@_rel"]) ||
+      (typeof l["rel"] === "string" && l["rel"]) ||
+      "";
+    return rel.trim().toLowerCase();
+  };
+
+  for (const link of links) {
+    const href = hrefOf(link);
+    if (!href.startsWith("http")) continue;
+    const rel = relOf(link);
+    if (rel === "alternate" || rel === "") return href;
+  }
+
+  const skipRels = new Set([
+    "self",
+    "hub",
+    "next",
+    "prev",
+    "previous",
+    "first",
+    "last",
+    "enclosure",
+  ]);
+  for (const link of links) {
+    const href = hrefOf(link);
+    if (!href.startsWith("http")) continue;
+    if (!skipRels.has(relOf(link))) return href;
+  }
+
+  return "";
+}
+
 function parseExplicit(val: unknown): number {
   if (val == null) return 0;
   const s = String(val).toLowerCase();
@@ -281,13 +348,7 @@ function parseChannelMeta(
     "email" in ownerBlock
       ? textOfAny((ownerBlock as Record<string, unknown>)["email"])
       : "";
-  const link =
-    textOf(first(ensureArray(channelOrFeed["link"]))) ||
-    (channelOrFeed["link"] &&
-    typeof (channelOrFeed["link"] as Record<string, unknown>)["@_href"] ===
-      "string"
-      ? String((channelOrFeed["link"] as Record<string, unknown>)["@_href"])
-      : "");
+  const link = resolveChannelHomeUrl(channelOrFeed);
   // With removeNSPrefix, itunes:category becomes "category". Flatten: each item's @_text, then nested category/category[] @_text.
   const rawCategoryList = ensureArray(
     channelOrFeed["itunes:category"] ?? channelOrFeed["category"],
@@ -345,21 +406,24 @@ function parseChannelMeta(
   const locked =
     lockedRaw === "yes" || lockedRaw === "true" || lockedRaw === "1" ? 1 : 0;
 
-  const fundingFirst = first(
-    ensureArray(channelOrFeed["podcast:funding"] ?? channelOrFeed["funding"]),
+  const fundingList = ensureArray(
+    channelOrFeed["podcast:funding"] ?? channelOrFeed["funding"],
   );
-  let funding_url: string | null = null;
-  let funding_label: string | null = null;
-  if (
-    fundingFirst &&
-    typeof fundingFirst === "object" &&
-    fundingFirst !== null
-  ) {
-    const rec = fundingFirst as Record<string, unknown>;
+  const fundingLinksArr: Array<{ url: string; text: string | null }> = [];
+  for (const fundingEl of fundingList) {
+    if (!fundingEl || typeof fundingEl !== "object") continue;
+    const rec = fundingEl as Record<string, unknown>;
     const url = rec["@_url"];
-    funding_url = typeof url === "string" && url.trim() ? url.trim() : null;
-    funding_label = textOfAny(rec["#text"] ?? rec)?.trim() || null;
+    const href = typeof url === "string" && url.trim() ? url.trim() : "";
+    if (!href) continue;
+    fundingLinksArr.push({
+      url: href,
+      text: textOfAny(rec["#text"] ?? rec)?.trim() || null,
+    });
   }
+  const funding_links =
+    fundingLinksArr.length > 0 ? JSON.stringify(fundingLinksArr) : null;
+
   const personList = ensureArray(
     channelOrFeed["podcast:person"] ?? channelOrFeed["person"],
   );
@@ -367,18 +431,246 @@ function parseChannelMeta(
     .map((p) => textOfAny(p))
     .filter((s) => s.length > 0);
   const persons = personsArr.length > 0 ? JSON.stringify(personsArr) : null;
+
   const updateFreq =
     channelOrFeed["podcast:updateFrequency"] ??
     channelOrFeed["updateFrequency"];
-  let update_frequency_rrule: string | null = null;
-  let update_frequency_label: string | null = null;
+  let update_frequency: string | null = null;
   if (updateFreq && typeof updateFreq === "object" && updateFreq !== null) {
     const rec = updateFreq as Record<string, unknown>;
-    const rrule = rec["@_rrule"];
-    update_frequency_rrule =
-      typeof rrule === "string" && rrule.trim() ? rrule.trim() : null;
-    update_frequency_label = textOfAny(rec["#text"] ?? rec)?.trim() || null;
+    const rrule = typeof rec["@_rrule"] === "string" ? rec["@_rrule"].trim() : "";
+    const dtstart =
+      typeof rec["@_dtstart"] === "string" ? rec["@_dtstart"].trim() : "";
+    const completeRaw = String(rec["@_complete"] ?? "").toLowerCase();
+    const complete = completeRaw === "true" || completeRaw === "1" || completeRaw === "yes";
+    const label = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+    if (rrule || dtstart || complete || label) {
+      update_frequency = JSON.stringify({
+        rrule: rrule || null,
+        label: label ? label.slice(0, 128) : null,
+        complete: complete || null,
+        dtstart: dtstart || null,
+      });
+    }
   }
+
+  const licenseEl =
+    channelOrFeed["podcast:license"] ?? channelOrFeed["license"];
+  let license: string | null = null;
+  if (licenseEl != null) {
+    let identifier = "";
+    let url: string | null = null;
+    if (typeof licenseEl === "object" && licenseEl !== null) {
+      const rec = licenseEl as Record<string, unknown>;
+      identifier = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+      const u = rec["@_url"];
+      url = typeof u === "string" && u.trim() ? u.trim() : null;
+    } else {
+      identifier = textOfAny(licenseEl)?.trim() || "";
+    }
+    if (identifier) {
+      license = JSON.stringify({ identifier: identifier.slice(0, 128), url });
+    }
+  }
+
+  // Optional channel Podcast 2.0 arrays/objects (best-effort)
+  const parseTxts = () => {
+    const list = ensureArray(channelOrFeed["podcast:txt"] ?? channelOrFeed["txt"]);
+    const out: Array<{ purpose: string | null; value: string }> = [];
+    for (const el of list) {
+      if (el == null) continue;
+      if (typeof el === "object") {
+        const rec = el as Record<string, unknown>;
+        const value = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+        if (!value) continue;
+        const purpose =
+          typeof rec["@_purpose"] === "string" && rec["@_purpose"].trim()
+            ? rec["@_purpose"].trim()
+            : null;
+        out.push({ purpose, value });
+      } else {
+        const value = String(el).trim();
+        if (value) out.push({ purpose: null, value });
+      }
+    }
+    return out.length > 0 ? JSON.stringify(out) : null;
+  };
+
+  const parseSocial = () => {
+    const list = ensureArray(
+      channelOrFeed["podcast:socialInteract"] ?? channelOrFeed["socialInteract"],
+    );
+    const out: Array<Record<string, unknown>> = [];
+    for (const el of list) {
+      if (!el || typeof el !== "object") continue;
+      const rec = el as Record<string, unknown>;
+      const protocol =
+        typeof rec["@_protocol"] === "string" ? rec["@_protocol"].trim() : "";
+      if (!protocol) continue;
+      const item: Record<string, unknown> = { protocol };
+      if (typeof rec["@_uri"] === "string" && rec["@_uri"].trim()) {
+        item.uri = rec["@_uri"].trim();
+      }
+      if (typeof rec["@_accountId"] === "string" && rec["@_accountId"].trim()) {
+        item.accountId = rec["@_accountId"].trim();
+      }
+      if (typeof rec["@_accountUrl"] === "string" && rec["@_accountUrl"].trim()) {
+        item.accountUrl = rec["@_accountUrl"].trim();
+      }
+      if (rec["@_priority"] != null) {
+        const n = parseInt(String(rec["@_priority"]), 10);
+        if (Number.isFinite(n)) item.priority = n;
+      }
+      out.push(item);
+    }
+    return out.length > 0 ? JSON.stringify(out) : null;
+  };
+
+  const parseLocations = () => {
+    const list = ensureArray(
+      channelOrFeed["podcast:location"] ?? channelOrFeed["location"],
+    );
+    const out: Array<Record<string, unknown>> = [];
+    for (const el of list) {
+      if (!el || typeof el !== "object") continue;
+      const rec = el as Record<string, unknown>;
+      const name = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+      if (!name) continue;
+      const item: Record<string, unknown> = { name: name.slice(0, 128) };
+      const rel = typeof rec["@_rel"] === "string" ? rec["@_rel"] : "";
+      if (rel === "subject" || rel === "creator") item.rel = rel;
+      if (typeof rec["@_geo"] === "string" && rec["@_geo"].trim()) item.geo = rec["@_geo"].trim();
+      if (typeof rec["@_osm"] === "string" && rec["@_osm"].trim()) item.osm = rec["@_osm"].trim();
+      if (typeof rec["@_country"] === "string" && /^[A-Za-z]{2}$/.test(rec["@_country"].trim())) {
+        item.country = rec["@_country"].trim().toUpperCase();
+      }
+      out.push(item);
+    }
+    return out.length > 0 ? JSON.stringify(out) : null;
+  };
+
+  const parseBlocks = () => {
+    const list = ensureArray(channelOrFeed["podcast:block"] ?? channelOrFeed["block"]);
+    const out: Array<{ id: string | null; value: "yes" | "no" }> = [];
+    for (const el of list) {
+      let valueRaw = "";
+      let id: string | null = null;
+      if (typeof el === "object" && el !== null) {
+        const rec = el as Record<string, unknown>;
+        valueRaw = textOfAny(rec["#text"] ?? rec)?.trim().toLowerCase() || "";
+        if (typeof rec["@_id"] === "string" && rec["@_id"].trim()) id = rec["@_id"].trim();
+      } else {
+        valueRaw = String(el).trim().toLowerCase();
+      }
+      if (valueRaw !== "yes" && valueRaw !== "no") continue;
+      out.push({ id, value: valueRaw });
+    }
+    return out.length > 0 ? JSON.stringify(out) : null;
+  };
+
+  let chat: string | null = null;
+  {
+    const chatEl = channelOrFeed["podcast:chat"] ?? channelOrFeed["chat"];
+    const firstChat = first(ensureArray(chatEl));
+    if (firstChat && typeof firstChat === "object") {
+      const rec = firstChat as Record<string, unknown>;
+      const server = typeof rec["@_server"] === "string" ? rec["@_server"].trim() : "";
+      const protocol =
+        typeof rec["@_protocol"] === "string" ? rec["@_protocol"].trim() : "";
+      if (server && protocol) {
+        chat = JSON.stringify({
+          server,
+          protocol,
+          accountId:
+            typeof rec["@_accountId"] === "string" && rec["@_accountId"].trim()
+              ? rec["@_accountId"].trim()
+              : null,
+          space:
+            typeof rec["@_space"] === "string" && rec["@_space"].trim()
+              ? rec["@_space"].trim()
+              : null,
+        });
+      }
+    }
+  }
+
+  let publisher: string | null = null;
+  {
+    const pubEl = channelOrFeed["podcast:publisher"] ?? channelOrFeed["publisher"];
+    const firstPub = first(ensureArray(pubEl));
+    if (firstPub && typeof firstPub === "object") {
+      const rec = firstPub as Record<string, unknown>;
+      const remote =
+        first(ensureArray(rec["podcast:remoteItem"] ?? rec["remoteItem"])) ??
+        first(ensureArray(rec["remoteItem"]));
+      if (remote && typeof remote === "object") {
+        const r = remote as Record<string, unknown>;
+        const feedGuid =
+          typeof r["@_feedGuid"] === "string" ? r["@_feedGuid"].trim() : "";
+        if (feedGuid) {
+          publisher = JSON.stringify({
+            feedGuid,
+            feedUrl:
+              typeof r["@_feedUrl"] === "string" && r["@_feedUrl"].trim()
+                ? r["@_feedUrl"].trim()
+                : null,
+            medium:
+              typeof r["@_medium"] === "string" && r["@_medium"].trim()
+                ? r["@_medium"].trim()
+                : "publisher",
+          });
+        }
+      }
+    }
+  }
+
+  let podroll: string | null = null;
+  {
+    const rollEl = channelOrFeed["podcast:podroll"] ?? channelOrFeed["podroll"];
+    const firstRoll = first(ensureArray(rollEl));
+    const remotes =
+      firstRoll && typeof firstRoll === "object"
+        ? ensureArray(
+            (firstRoll as Record<string, unknown>)["podcast:remoteItem"] ??
+              (firstRoll as Record<string, unknown>)["remoteItem"],
+          )
+        : ensureArray(rollEl);
+    const items: Array<{
+      feedGuid: string;
+      feedUrl: string | null;
+      title: string | null;
+      coverArtUrl: string | null;
+      homeUrl: string | null;
+    }> = [];
+    for (const remote of remotes) {
+      if (!remote || typeof remote !== "object") continue;
+      const r = remote as Record<string, unknown>;
+      const feedGuid =
+        typeof r["@_feedGuid"] === "string" ? r["@_feedGuid"].trim() : "";
+      if (!feedGuid) continue;
+      items.push({
+        feedGuid,
+        feedUrl:
+          typeof r["@_feedUrl"] === "string" && r["@_feedUrl"].trim()
+            ? r["@_feedUrl"].trim()
+            : null,
+        title:
+          typeof r["@_title"] === "string" && r["@_title"].trim()
+            ? r["@_title"].trim()
+            : null,
+        coverArtUrl: null,
+        homeUrl: null,
+      });
+    }
+    if (items.length > 0) podroll = JSON.stringify(items);
+  }
+
+  const podcast_txts = parseTxts();
+  const social_interacts = parseSocial();
+  const locations = parseLocations();
+  const blocks = parseBlocks();
+  const value_blocks: string | null = null; // complex nested; skip full import for now
+
   const limitEl = channelOrFeed["spotify:limit"] ?? channelOrFeed["limit"];
   let spotify_recent_count: number | null = null;
   if (limitEl && typeof limitEl === "object" && limitEl !== null) {
@@ -429,25 +721,30 @@ function parseChannelMeta(
       textOfAny(channelOrFeed["copyright"]) ||
       textOfAny(channelOrFeed["rights"]) ||
       null,
-    license:
-      textOfAny(channelOrFeed["podcast:license"]) ||
-      textOfAny(channelOrFeed["license"]) ||
-      null,
+    license,
     itunes_type:
       (textOfAny(channelOrFeed["itunes:type"]) || "episodic").toLowerCase() ===
       "serial"
         ? "serial"
         : "episodic",
     medium: (
-      textOfAny(channelOrFeed["itunes:medium"]) || "podcast"
+      textOfAny(channelOrFeed["podcast:medium"]) ||
+      textOfAny(channelOrFeed["itunes:medium"]) ||
+      "podcast"
     ).toLowerCase() as ImportChannelMeta["medium"],
     podcast_guid: podcastGuid,
     locked,
-    funding_url,
-    funding_label,
+    funding_links,
     persons,
-    update_frequency_rrule,
-    update_frequency_label,
+    update_frequency,
+    podcast_txts,
+    social_interacts,
+    locations,
+    chat,
+    value_blocks,
+    blocks,
+    publisher,
+    podroll,
     spotify_recent_count,
     spotify_country_of_origin,
     apple_podcasts_verify,
@@ -692,11 +989,17 @@ export async function fetchAndParseFeed(
       medium: "podcast",
       podcast_guid: null,
       locked: 0,
-      funding_url: null,
-      funding_label: null,
+      funding_links: null,
       persons: null,
-      update_frequency_rrule: null,
-      update_frequency_label: null,
+      update_frequency: null,
+      podcast_txts: null,
+      social_interacts: null,
+      locations: null,
+      chat: null,
+      value_blocks: null,
+      blocks: null,
+      publisher: null,
+      podroll: null,
       spotify_recent_count: null,
       spotify_country_of_origin: null,
       apple_podcasts_verify: null,
@@ -712,4 +1015,47 @@ export async function fetchAndParseFeed(
   });
 
   return { channel: channelMeta, episodes: sorted };
+}
+
+export interface FeedChannelPreview {
+  feedGuid: string | null;
+  feedUrl: string;
+  title: string;
+  coverArtUrl: string | null;
+  homeUrl: string | null;
+}
+
+/**
+ * Fetch a single feed page (no pagination) and return channel fields for podroll autofill.
+ */
+export async function previewFeedChannel(
+  feedUrl: string,
+  signal?: AbortSignal,
+): Promise<FeedChannelPreview> {
+  const controller = new AbortController();
+  if (signal) {
+    signal.addEventListener("abort", () => controller.abort());
+  }
+  await assertUrlNotPrivate(feedUrl);
+  const { body, finalUrl } = await fetchWithRetry(feedUrl, controller);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parser.parse(body) as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(
+      "Invalid XML: " + (err instanceof Error ? err.message : String(err)),
+    );
+  }
+  const { channel } = extractItemsFromPage(parsed, finalUrl);
+  if (!channel || Object.keys(channel).length === 0) {
+    throw new Error("Feed has no channel metadata");
+  }
+  const meta = parseChannelMeta(channel, finalUrl);
+  return {
+    feedGuid: meta.podcast_guid,
+    feedUrl: finalUrl || feedUrl,
+    title: meta.title,
+    coverArtUrl: meta.artwork_url,
+    homeUrl: meta.site_url,
+  };
 }

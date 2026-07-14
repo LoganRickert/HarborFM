@@ -2,7 +2,13 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useParams } from 'react-router-dom';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublicPodcast, getPublicEpisodes, getPublicConfig, getPublicPodcastArtworkUrl } from '../api/public';
+import {
+  getPublicPodcast,
+  getPublicEpisodes,
+  getPublicConfig,
+  getPublicPodcastArtworkUrl,
+  type PublicEpisodeWithAuth,
+} from '../api/public';
 import { FullPageLoading } from '../components/Loading';
 import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
@@ -16,12 +22,20 @@ import {
   hasPodcastLinks,
   FeedSearchControls,
   FeedEpisodesList,
+  FeedEpisodeCard,
   FeedCastCard,
   ReviewsCard,
+  FeedPodrollCard,
 } from '../components/Feed';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
+import { feedAccentCssVars } from '../utils/feedAccent';
 import sharedStyles from '../styles/shared.module.css';
+import listStyles from '../components/Feed/FeedPodcast/FeedEpisodesList.module.css';
 import styles from './FeedPodcast.module.css';
+
+function episodeHasPlayableAudio(ep: PublicEpisodeWithAuth): boolean {
+  return Boolean(ep.privateAudioUrl || ep.audioUrl);
+}
 
 export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: string } = {}) {
   const queryClient = useQueryClient();
@@ -40,6 +54,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   }, [queryClient]);
 
   const { isAuthenticatedForPodcast } = useSubscriberAuth();
+  const subscriberAuthed = isAuthenticatedForPodcast(podcastSlug);
 
   const { data: publicConfig } = useQuery({
     queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
@@ -61,7 +76,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     isFetchingNextPage,
     isLoading: episodesLoading,
   } = useInfiniteQuery({
-    queryKey: ['public-episodes', podcastSlug, sortNewestFirst, searchDebounced],
+    queryKey: ['public-episodes', podcastSlug, sortNewestFirst, searchDebounced, subscriberAuthed],
     queryFn: ({ pageParam = 0 }) =>
       getPublicEpisodes(
         podcastSlug!,
@@ -80,6 +95,24 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     },
     initialPageParam: 0,
   });
+
+  const { data: trailerEpisodesData } = useQuery({
+    queryKey: ['public-episodes-trailers', podcastSlug, subscriberAuthed],
+    queryFn: () => getPublicEpisodes(podcastSlug!, 20, 0, 'newest', undefined, 'trailer'),
+    enabled: !!podcastSlug,
+    refetchOnMount: 'always',
+  });
+
+  const featuredTrailer = useMemo(() => {
+    const trailers = trailerEpisodesData?.episodes ?? [];
+    return (
+      trailers.find(
+        (ep) =>
+          String(ep.episodeType ?? '').toLowerCase() === 'trailer' &&
+          episodeHasPlayableAudio(ep as PublicEpisodeWithAuth),
+      ) ?? null
+    );
+  }, [trailerEpisodesData]);
 
   // Flatten all loaded episodes
   const allEpisodes = useMemo(() => {
@@ -100,14 +133,17 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     setPlayingEpisodeId((current) => (current === episodeId ? null : current));
   }, []);
 
-  // Episodes from server are already filtered (by search) and sorted
+  // Episodes from server are already filtered (by search) and sorted; exclude featured trailer when shown
   const filteredAndSortedEpisodes = useMemo(() => {
-    return [...allEpisodes].sort((a, b) => {
-      const dateA = a.publishAt ? new Date(a.publishAt).getTime() : new Date(a.createdAt).getTime();
-      const dateB = b.publishAt ? new Date(b.publishAt).getTime() : new Date(b.createdAt).getTime();
-      return sortNewestFirst ? dateB - dateA : dateA - dateB;
-    });
-  }, [allEpisodes, sortNewestFirst]);
+    const featuredId = featuredTrailer?.id;
+    return [...allEpisodes]
+      .filter((ep) => !featuredId || ep.id !== featuredId)
+      .sort((a, b) => {
+        const dateA = a.publishAt ? new Date(a.publishAt).getTime() : new Date(a.createdAt).getTime();
+        const dateB = b.publishAt ? new Date(b.publishAt).getTime() : new Date(b.createdAt).getTime();
+        return sortNewestFirst ? dateB - dateA : dateA - dateB;
+      });
+  }, [allEpisodes, sortNewestFirst, featuredTrailer?.id]);
 
   const siteName = getSiteDisplayName(publicConfig?.whiteLabel);
   const podcastArtwork = podcast ? getPublicPodcastArtworkUrl(podcast) : null;
@@ -156,7 +192,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   const canShowMessage = !podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug);
 
   return (
-    <div className={sharedStyles.wrapper}>
+    <div className={sharedStyles.wrapper} style={feedAccentCssVars(podcast.feedAccent)}>
       <div className={sharedStyles.container}>
         <FeedSiteHeader />
         <main>
@@ -172,6 +208,26 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               shareTitle={podcast ? `${podcast.title} - HarborFM` : undefined}
             />
           </div>
+
+          {featuredTrailer && (
+            <div className={`${sharedStyles.card} ${styles.trailerCard}`}>
+              <ul className={listStyles.list}>
+                <FeedEpisodeCard
+                  episode={featuredTrailer}
+                  podcastSlug={podcastSlug}
+                  isSubscriberOnly={
+                    Boolean(featuredTrailer.subscriberOnly) || Boolean(podcast.publicFeedDisabled)
+                  }
+                  showPlayer={true}
+                  playingEpisodeId={playingEpisodeId}
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  useShortEpisodeUrls={!!podcastSlugOverride}
+                  showDescription={podcast.feedShowEpisodeDescription !== false}
+                />
+              </ul>
+            </div>
+          )}
 
           {podcast && hasPodcastLinks(podcast) && (
             <div className={styles.linksCardWrap}>
@@ -194,7 +250,11 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               {episodesLoading && <p className={sharedStyles.muted}>Loading episodes...</p>}
               {!episodesLoading && filteredAndSortedEpisodes.length === 0 && (
                 <p className={sharedStyles.muted}>
-                  {searchQuery ? 'No episodes match your search.' : 'No episodes yet.'}
+                  {searchQuery
+                    ? 'No episodes match your search.'
+                    : featuredTrailer
+                      ? 'No other episodes yet.'
+                      : 'No episodes yet.'}
                 </p>
               )}
               {!episodesLoading && filteredAndSortedEpisodes.length > 0 && (
@@ -214,8 +274,9 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
             </div>
           </div>
 
-          <FeedCastCard podcastSlug={podcastSlug} />
-          {publicConfig?.reviewsEnabled === true && (
+          {podcast.feedShowCast !== false && <FeedCastCard podcastSlug={podcastSlug} />}
+          {podcast.feedShowPodroll !== false && <FeedPodrollCard podroll={podcast.podroll} />}
+          {publicConfig?.reviewsEnabled === true && podcast.feedShowReviewsPodcast !== false && (
             <ReviewsCard podcastSlug={podcastSlug} enabled showWriteButton={canWriteReview} />
           )}
         </main>

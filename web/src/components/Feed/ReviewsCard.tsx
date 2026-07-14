@@ -55,7 +55,7 @@ export function ReviewsCard({ podcastSlug, episodeSlug, enabled = true, showWrit
     <section className={styles.card} aria-labelledby="reviews-card-title">
       <div className={styles.header}>
         <h2 id="reviews-card-title" className={styles.title}>
-          Reviews
+          {episodeSlug ? 'Episode Reviews' : 'Reviews'}
         </h2>
         {showWriteButton && (
           <button

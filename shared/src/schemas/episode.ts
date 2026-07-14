@@ -1,4 +1,22 @@
 import { z } from 'zod';
+import {
+  chatResponseSchema,
+  chatSchema,
+  fundingLinkResponseSchema,
+  fundingLinkSchema,
+  licenseResponseSchema,
+  licenseSchema,
+  locationResponseSchema,
+  locationSchema,
+  podcastImageSchema,
+  podcastTxtResponseSchema,
+  podcastTxtSchema,
+  socialInteractResponseSchema,
+  socialInteractSchema,
+  valueBlockResponseSchema,
+  valueBlockSchema,
+  PODCAST_NS_URL_MAX,
+} from './podcastNamespace.js';
 
 const emptyStringToNull = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (v === '' ? null : v), schema);
@@ -38,6 +56,18 @@ const finalMarkerSchema = z.object({
   color: z.string().optional(),
 });
 
+const finalSoundbiteSchema = z.object({
+  time: z.number().min(0),
+  duration: z.number().min(15).max(120),
+  title: z.string().optional(),
+  color: z.string().optional(),
+});
+
+const contentLinkSchema = z.object({
+  href: z.string().url().max(PODCAST_NS_URL_MAX),
+  text: z.string().max(PODCAST_NS_URL_MAX).optional().nullable(),
+});
+
 /**
  * Partial update schema. Do not use episodeCreateSchema.partial() alone: Zod 4 still
  * applies .default() for omitted keys (e.g. description "" / status draft), which
@@ -59,6 +89,18 @@ export const episodeUpdateSchema = episodeCreateSchema
     subscriberOnly: subscriberOnlySchema,
     /** Chapter markers for the final audio. Overwrites markers from render. */
     finalMarkers: z.array(finalMarkerSchema).optional().nullable(),
+    /** Soundbite markers for the final audio. Overwrites markers from render. */
+    finalSoundbites: z.array(finalSoundbiteSchema).optional().nullable(),
+    /** Podcast 2.0 content links (href + optional label). */
+    contentLinks: z.array(contentLinkSchema).optional().nullable(),
+    podcastTxts: z.array(podcastTxtSchema).optional().nullable(),
+    socialInteracts: z.array(socialInteractSchema).optional().nullable(),
+    locations: z.array(locationSchema).optional().nullable(),
+    license: licenseSchema.optional().nullable(),
+    podcastImages: z.array(podcastImageSchema).optional().nullable(),
+    fundingLinks: z.array(fundingLinkSchema).optional().nullable(),
+    chat: chatSchema.optional().nullable(),
+    valueBlocks: z.array(valueBlockSchema).optional().nullable(),
   });
 
 /** Episode as returned by GET /episodes/:id and list endpoints. Includes server-computed fields. */
@@ -96,6 +138,49 @@ export const episodeResponseSchema = z.object({
   subscriberOnly: z.boolean().optional(),
   /** Chapter markers from segments (marker_type === 'chapter'); time in seconds of final audio. */
   finalMarkers: z.array(z.object({ time: z.number(), title: z.string().optional(), color: z.string().optional() })).optional().nullable(),
+  /** Soundbite markers from segments (marker_type === 'soundbite'); time/duration in seconds of final audio. */
+  finalSoundbites: z
+    .array(
+      z.object({
+        time: z.number(),
+        duration: z.number(),
+        title: z.string().optional(),
+        color: z.string().optional(),
+      }),
+    )
+    .optional()
+    .nullable(),
+  /** Podcast 2.0 content links for alternate platforms. */
+  contentLinks: z
+    .array(
+      z.object({
+        href: z.string(),
+        text: z.string().optional().nullable(),
+      }),
+    )
+    .optional()
+    .nullable(),
+  podcastTxts: z.array(podcastTxtResponseSchema).optional().nullable(),
+  socialInteracts: z.array(socialInteractResponseSchema).optional().nullable(),
+  locations: z.array(locationResponseSchema).optional().nullable(),
+  license: licenseResponseSchema.optional().nullable(),
+  podcastImages: z
+    .array(
+      z.object({
+        href: z.string(),
+        alt: z.string().optional().nullable(),
+        aspectRatio: z.string().optional().nullable(),
+        width: z.number().optional().nullable(),
+        height: z.number().optional().nullable(),
+        type: z.string().optional().nullable(),
+        purpose: z.string().optional().nullable(),
+      }),
+    )
+    .optional()
+    .nullable(),
+  fundingLinks: z.array(fundingLinkResponseSchema).optional().nullable(),
+  chat: chatResponseSchema.optional().nullable(),
+  valueBlocks: z.array(valueBlockResponseSchema).optional().nullable(),
   /** Path to generated video (relative to data dir). Present when video has been generated. */
   videoFinalPath: z.string().nullable().optional(),
 });

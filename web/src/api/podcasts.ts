@@ -42,14 +42,65 @@ export interface Podcast {
   copyright: string | null;
   podcastGuid: string | null;
   locked: number;
-  license: string | null;
+  license: { identifier: string; url?: string | null } | null;
   itunesType: 'episodic' | 'serial';
   medium: 'podcast' | 'music' | 'video' | 'film' | 'audiobook' | 'newsletter' | 'blog';
-  fundingUrl: string | null;
-  fundingLabel: string | null;
+  fundingLinks: Array<{ url: string; text?: string | null }> | null;
   persons: string | null;
-  updateFrequencyRrule: string | null;
-  updateFrequencyLabel: string | null;
+  updateFrequency: {
+    rrule?: string | null;
+    label?: string | null;
+    complete?: boolean | null;
+    dtstart?: string | null;
+  } | null;
+  podcastTxts: Array<{ purpose?: string | null; value: string }> | null;
+  socialInteracts: Array<{
+    protocol: string;
+    uri?: string | null;
+    accountId?: string | null;
+    accountUrl?: string | null;
+    priority?: number | null;
+  }> | null;
+  locations: Array<{
+    name: string;
+    rel?: 'subject' | 'creator' | null;
+    geo?: string | null;
+    osm?: string | null;
+    country?: string | null;
+  }> | null;
+  chat: {
+    server: string;
+    protocol: string;
+    accountId?: string | null;
+    space?: string | null;
+  } | null;
+  valueBlocks: Array<{
+    type: string;
+    method: string;
+    suggested?: string | null;
+    recipients: Array<{
+      type: string;
+      address: string;
+      split: number;
+      name?: string | null;
+      customKey?: string | null;
+      customValue?: string | null;
+      fee?: boolean | null;
+    }>;
+  }> | null;
+  blocks: Array<{ id?: string | null; value: 'yes' | 'no' }> | null;
+  publisher: {
+    feedGuid: string;
+    feedUrl?: string | null;
+    medium?: string | null;
+  } | null;
+  podroll: Array<{
+    feedGuid: string;
+    feedUrl?: string | null;
+    title?: string | null;
+    coverArtUrl?: string | null;
+    homeUrl?: string | null;
+  }> | null;
   spotifyRecentCount: number | null;
   spotifyCountryOfOrigin: string | null;
   applePodcastsVerify: string | null;
@@ -79,6 +130,16 @@ export interface Podcast {
   subscriberOnlyMessages?: number | boolean;
   /** When true, future-dated scheduled/published episodes appear on the public feed with a placeholder. */
   showScheduledEpisodes?: number | boolean;
+  /** Named accent for public feed page theming. */
+  feedAccent?: string;
+  feedShowPodcastDescription?: number | boolean;
+  feedShowEpisodeDescription?: number | boolean;
+  feedShowFunding?: number | boolean;
+  feedShowReviewsPodcast?: number | boolean;
+  feedShowReviewsEpisode?: number | boolean;
+  feedShowAuthor?: number | boolean;
+  feedShowPodroll?: number | boolean;
+  feedShowCast?: number | boolean;
   /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
   ownerCanTranscribe?: number;
   /** DNS: link domain (hostname). */
@@ -303,6 +364,17 @@ export interface ImportStatus {
 /** Start importing a podcast from an RSS/Atom feed URL. Returns 202 with podcastId; poll getImportStatus for progress. */
 export function startImportPodcast(feedUrl: string) {
   return apiPost<{ podcastId: string }>('/podcasts/import', { feedUrl });
+}
+
+/** Preview a remote feed for podroll autofill (feedGuid, feedUrl, title, coverArtUrl, homeUrl). */
+export function previewFeedChannel(feedUrl: string) {
+  return apiPost<{
+    feedGuid: string | null;
+    feedUrl: string;
+    title: string;
+    coverArtUrl: string | null;
+    homeUrl: string | null;
+  }>('/podcasts/feed-preview', { feedUrl });
 }
 
 export function getImportStatus(podcastId: string) {

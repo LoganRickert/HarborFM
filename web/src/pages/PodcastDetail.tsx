@@ -7,6 +7,7 @@ import { me, isReadOnly } from '../api/auth';
 import { FullPageLoading } from '../components/Loading';
 import { EditShowDetailsDialog } from './EditShowDetailsDialog';
 import { EditSocialLinksDialog } from './EditSocialLinksDialog';
+import { EditPageCustomizationsDialog } from './EditPageCustomizationsDialog';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { PodcastHero } from '../components/PodcastDetail/PodcastHero';
 import { RssFeedCard } from '../components/PodcastDetail/RssFeedCard';
@@ -40,6 +41,7 @@ export function PodcastDetail() {
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [linksDialogOpen, setLinksDialogOpen] = useState(false);
+  const [pageCustomizationsDialogOpen, setPageCustomizationsDialogOpen] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   if (!id) return null;
@@ -62,6 +64,7 @@ export function PodcastDetail() {
           canManageShow={canManageShow}
           onEditClick={() => setDetailsDialogOpen(true)}
           onLinksClick={() => setLinksDialogOpen(true)}
+          onPageCustomizationsClick={() => setPageCustomizationsDialogOpen(true)}
           publicFeedsEnabled={publicFeedsEnabled}
           detailsExpanded={detailsExpanded}
           onDetailsToggle={() => setDetailsExpanded((e) => !e)}
@@ -81,6 +84,14 @@ export function PodcastDetail() {
           open
           podcastId={id}
           onClose={() => setLinksDialogOpen(false)}
+        />
+      )}
+
+      {pageCustomizationsDialogOpen && (
+        <EditPageCustomizationsDialog
+          open
+          podcastId={id}
+          onClose={() => setPageCustomizationsDialogOpen(false)}
         />
       )}
 

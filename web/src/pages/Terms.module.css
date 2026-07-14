@@ -27,7 +27,9 @@
 }
 
 .back {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.875rem;
   color: var(--accent);
   text-decoration: none;

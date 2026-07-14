@@ -306,7 +306,8 @@ export function EpisodeEditorContent({
       queryClient.invalidateQueries({ queryKey: ['episodes', podcastId] });
       const vars = variables as Record<string, unknown> | undefined;
       const isFinalMarkersOnly = vars && Object.keys(vars).length === 1 && 'finalMarkers' in vars;
-      if (!isFinalMarkersOnly && !isPublishOnlyUpdate(vars)) {
+      const isFinalSoundbitesOnly = vars && Object.keys(vars).length === 1 && 'finalSoundbites' in vars;
+      if (!isFinalMarkersOnly && !isFinalSoundbitesOnly && !isPublishOnlyUpdate(vars)) {
         setDetailsDialogOpen(false);
         setPendingArtworkFile(null);
         setCoverUploadKey((k) => k + 1);
@@ -644,6 +645,12 @@ export function EpisodeEditorContent({
             ? (markers) => updateMutation.mutate({ finalMarkers: markers } as EpisodeUpdate)
             : undefined
         }
+        finalSoundbites={episode.finalSoundbites ?? []}
+        onSoundbitesChange={
+          !segmentReadOnly && canEditSegments
+            ? (soundbites) => updateMutation.mutate({ finalSoundbites: soundbites } as EpisodeUpdate)
+            : undefined
+        }
         readOnly={segmentReadOnly}
         metadataReadOnly={metadataReadOnly}
         publishValues={{
@@ -849,6 +856,7 @@ export function EpisodeEditorContent({
                   debouncedArtworkUrl,
                   uploadArtworkPending: uploadArtworkMutation.isPending,
                 }}
+                hasFinalAudio={Boolean(episode.audioFinalPath)}
               />
             </div>
             <div className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}>

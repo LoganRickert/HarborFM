@@ -76,6 +76,25 @@ export function getPodcastBySlug(slug: string) {
       tiktokUrl: podcasts.tiktokUrl,
       youtubeUrl: podcasts.youtubeUrl,
       discordUrl: podcasts.discordUrl,
+      podroll: podcasts.podroll,
+      fundingLinks: podcasts.fundingLinks,
+      feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
+      feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
+        "feedShowPodcastDescription",
+      ),
+      feedShowEpisodeDescription: sql<number>`COALESCE(${podcasts.feedShowEpisodeDescription}, 1)`.as(
+        "feedShowEpisodeDescription",
+      ),
+      feedShowFunding: sql<number>`COALESCE(${podcasts.feedShowFunding}, 1)`.as("feedShowFunding"),
+      feedShowReviewsPodcast: sql<number>`COALESCE(${podcasts.feedShowReviewsPodcast}, 1)`.as(
+        "feedShowReviewsPodcast",
+      ),
+      feedShowReviewsEpisode: sql<number>`COALESCE(${podcasts.feedShowReviewsEpisode}, 1)`.as(
+        "feedShowReviewsEpisode",
+      ),
+      feedShowAuthor: sql<number>`COALESCE(${podcasts.feedShowAuthor}, 1)`.as("feedShowAuthor"),
+      feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
+      feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
     })
     .from(podcasts)
     .where(eq(podcasts.slug, slug))
@@ -349,6 +368,8 @@ export type ListPublishedEpisodesOptions = {
   includeSubscriberOnly: boolean;
   /** When true, include scheduled/published episodes with future publishAt (shown as placeholder). */
   includeScheduledEpisodes: boolean;
+  /** When set, only return episodes with this episode_type (full | trailer | bonus). */
+  episodeType?: string | null;
 };
 
 const publishedEpisodeWhereBase = and(
@@ -361,7 +382,7 @@ export function listPublishedEpisodes(
   podcastId: string,
   options: ListPublishedEpisodesOptions,
 ) {
-  const { limit, offset, sort, searchPattern: likePattern, includeSubscriberOnly, includeScheduledEpisodes } = options;
+  const { limit, offset, sort, searchPattern: likePattern, includeSubscriberOnly, includeScheduledEpisodes, episodeType } = options;
   const scheduledOrPublishedBase = and(
     eq(episodes.podcastId, podcastId),
     inArray(episodes.status, ["scheduled", "published"]),
@@ -372,15 +393,19 @@ export function listPublishedEpisodes(
   const episodeWhereSubscriber = includeSubscriberOnly
     ? baseWhere
     : and(baseWhere, eq(episodes.subscriberOnly, false));
+  const episodeWhereType =
+    episodeType != null && episodeType !== ""
+      ? and(episodeWhereSubscriber, eq(episodes.episodeType, episodeType))
+      : episodeWhereSubscriber;
   const episodeWhereSearch = likePattern
     ? and(
-        episodeWhereSubscriber,
+        episodeWhereType,
         or(
           sql`${episodes.title} LIKE ${likePattern} ESCAPE '\\'`,
           sql`COALESCE(${episodes.description}, '') LIKE ${likePattern} ESCAPE '\\'`,
         )!,
       )
-    : episodeWhereSubscriber;
+    : episodeWhereType;
 
   const totalRow = drizzleDb
     .select({ count: sql<number>`count(*)`.as("count") })
@@ -410,6 +435,7 @@ export function listPublishedEpisodes(
       audioDurationSec: episodes.audioDurationSec,
       audioFinalPath: episodes.audioFinalPath,
       finalMarkers: episodes.finalMarkers,
+      finalSoundbites: episodes.finalSoundbites,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
       createdAt: episodes.createdAt,
       updatedAt: episodes.updatedAt,
@@ -451,6 +477,7 @@ export function getPublishedEpisodeBySlug(podcastId: string, episodeSlug: string
       audioFinalPath: episodes.audioFinalPath,
       videoFinalPath: episodes.videoFinalPath,
       finalMarkers: episodes.finalMarkers,
+      finalSoundbites: episodes.finalSoundbites,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
       createdAt: episodes.createdAt,
       updatedAt: episodes.updatedAt,
@@ -507,9 +534,11 @@ export function getPublicEpisodeBySlug(
       audioFinalPath: episodes.audioFinalPath,
       videoFinalPath: episodes.videoFinalPath,
       finalMarkers: episodes.finalMarkers,
+      finalSoundbites: episodes.finalSoundbites,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
       createdAt: episodes.createdAt,
       updatedAt: episodes.updatedAt,
+      fundingLinks: episodes.fundingLinks,
     })
     .from(episodes)
     .where(includeScheduled ? relaxedWhere : strictWhere)

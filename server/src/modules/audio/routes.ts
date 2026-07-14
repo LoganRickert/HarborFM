@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { statSync, unlinkSync, readFileSync } from "fs";
-import { extname, dirname, basename } from "path";
+import { statSync, unlinkSync, readFileSync, createReadStream } from "fs";
+import { extname, dirname, basename, join } from "path";
+import { nanoid } from "nanoid";
 import send from "@fastify/send";
 import { existsSync } from "fs";
 import { drizzleDb } from "../../db/index.js";
@@ -12,6 +13,7 @@ import {
   updateEpisodeAfterProcess,
   getEpisodeById,
   getEpisodeAudioFinalPath,
+  getPodcastTitle,
   getPublicPodcastForStream,
   getPublishedEpisodeForStream,
 } from "./repo.js";
@@ -424,6 +426,145 @@ export async function audioRoutes(app: FastifyInstance) {
         .header("Content-Type", mime)
         .header("Content-Disposition", `attachment; filename="${filename}"`);
       return reply.send(result.stream);
+    },
+  );
+
+  app.get(
+    "/episodes/:id/soundbite",
+    {
+      preHandler: [
+        requireAuth,
+        userRateLimitPreHandler({ bucket: "ffmpeg", windowMs: 1000 }),
+      ],
+      schema: {
+        tags: ["Audio"],
+        summary: "Download a soundbite clip from final episode audio",
+        description:
+          "Cuts start/duration from the final episode file (same container as the final export) and returns it as an attachment.",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            start: { type: "number" },
+            duration: { type: "number" },
+            title: { type: "string" },
+          },
+          required: ["start", "duration"],
+        },
+        response: {
+          200: { description: "Soundbite audio file" },
+          400: { description: "Invalid params" },
+          404: { description: "Not found" },
+          500: { description: "Extract failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id: episodeId } = request.params as { id: string };
+      try {
+        assertSafeId(episodeId, "id");
+      } catch (err) {
+        return reply.status(400).send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const q = request.query as { start?: number | string; duration?: number | string; title?: string };
+      const startSec = typeof q.start === "number" ? q.start : Number(q.start);
+      const durationSec = typeof q.duration === "number" ? q.duration : Number(q.duration);
+      if (!Number.isFinite(startSec) || startSec < 0) {
+        return reply.status(400).send({ error: "start must be a number >= 0" });
+      }
+      if (!Number.isFinite(durationSec) || durationSec < 15 || durationSec > 120) {
+        return reply.status(400).send({ error: "duration must be between 15 and 120 seconds" });
+      }
+
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      const episode = getEpisodeById(episodeId);
+      const pathRaw = episode?.audioFinalPath ?? null;
+      const p = pathRaw ? resolveDataPath(pathRaw) : "";
+      if (!p || !existsSync(p)) {
+        return reply.status(404).send({ error: "No processed audio. Build the final episode first." });
+      }
+      const allowedBase = processedDir(access.podcastId, episodeId);
+      const safePath = assertPathUnder(p, allowedBase);
+      const settings = readSettings();
+      const format = settings.final_format;
+      const ext = format === "m4a" ? ".m4a" : ".mp3";
+      const mime = format === "m4a" ? "audio/mp4" : (episode?.audioMime as string) || "audio/mpeg";
+
+      const titleRaw = typeof q.title === "string" ? q.title.trim() : "";
+      const soundbiteName = titleRaw || "Soundbite";
+      const episodeName = String(episode?.title ?? "Episode").trim() || "Episode";
+      const podcastName =
+        (getPodcastTitle(access.podcastId) ?? "Podcast").trim() || "Podcast";
+      const rawBase = `${soundbiteName} - ${episodeName} - ${podcastName}`;
+      // Safe Content-Disposition filename: strip path/control chars and quotes.
+      const safeBase =
+        rawBase
+          .split("")
+          .filter((ch) => {
+            const code = ch.charCodeAt(0);
+            return code >= 32 && code !== 127;
+          })
+          .join("")
+          .replace(/[\\/:*?"<>|]/g, "-")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 180) || "soundbite";
+      const filename = `${safeBase}${ext}`;
+      const outPath = join(allowedBase, `soundbite_${nanoid()}${ext}`);
+
+      try {
+        await audioService.extractClipFromFinal(
+          safePath,
+          allowedBase,
+          startSec,
+          durationSec,
+          outPath,
+          format,
+          {
+            bitrateKbps: settings.final_bitrate_kbps,
+            channels: settings.final_channels,
+          },
+        );
+      } catch (err) {
+        request.log.error({ err, episodeId }, "Soundbite extract failed");
+        return reply.status(500).send({ error: "Failed to generate soundbite clip" });
+      }
+
+      try {
+        const stream = createReadStream(outPath);
+        stream.on("close", () => {
+          try {
+            unlinkSync(outPath);
+          } catch {
+            /* ignore */
+          }
+        });
+        stream.on("error", () => {
+          try {
+            unlinkSync(outPath);
+          } catch {
+            /* ignore */
+          }
+        });
+        reply
+          .header("Content-Type", mime)
+          .header("Content-Disposition", `attachment; filename="${filename}"`)
+          .header("Cache-Control", "no-store");
+        return reply.send(stream);
+      } catch (err) {
+        try {
+          unlinkSync(outPath);
+        } catch {
+          /* ignore */
+        }
+        request.log.error({ err, episodeId }, "Soundbite send failed");
+        return reply.status(500).send({ error: "Failed to download soundbite clip" });
+      }
     },
   );
 

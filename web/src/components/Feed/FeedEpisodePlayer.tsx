@@ -5,6 +5,7 @@ import { publicEpisodeWaveformUrl, PublicEpisodeWithAuth } from '../../api/publi
 import { WaveformCanvas } from '../../pages/EpisodeEditor/WaveformCanvas';
 import { FeedPlaybackControls } from './FeedPlaybackControls';
 import { FeedEpisodeChapters } from './FeedEpisode/FeedEpisodeChapters';
+import { FeedEpisodeSoundbites } from './FeedEpisode/FeedEpisodeSoundbites';
 import { FadeSlide } from './FadeSlide';
 import { FeedEpisodePlayerProps } from '../../types/feed';
 import styles from './FeedEpisodePlayer.module.css';
@@ -22,6 +23,7 @@ export function FeedEpisodePlayer({
   const audioUrl = episodeWithAuth.privateAudioUrl || episode.audioUrl || null;
   const durationSec = episode.audioDurationSec ?? 0;
   const markers = episode.markers ?? [];
+  const soundbites = episode.soundbites ?? [];
 
   useEffect(() => setAudioLoadFailed(false), [audioUrl]);
 
@@ -101,7 +103,21 @@ export function FeedEpisodePlayer({
           markers={markers}
           currentTime={currentTime}
           durationSec={durationSec}
+          isPlaying={audioPlaying}
           onPlayChapter={seekAndPlay}
+          onPause={togglePlay}
+          onResume={togglePlay}
+          className={styles.chapters}
+        />
+      ) : null}
+      {soundbites.length > 0 ? (
+        <FeedEpisodeSoundbites
+          soundbites={soundbites}
+          currentTime={currentTime}
+          isPlaying={audioPlaying}
+          seekAndPlay={seekAndPlay}
+          onPause={togglePlay}
+          onResume={togglePlay}
           className={styles.chapters}
         />
       ) : null}

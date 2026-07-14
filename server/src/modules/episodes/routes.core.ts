@@ -342,6 +342,16 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
 
       const finalMarkersPayload = data.finalMarkers;
+      const finalSoundbitesPayload = data.finalSoundbites;
+      const contentLinksPayload = data.contentLinks;
+      const podcastTxtsPayload = data.podcastTxts;
+      const socialInteractsPayload = data.socialInteracts;
+      const locationsPayload = data.locations;
+      const licensePayload = data.license;
+      const podcastImagesPayload = data.podcastImages;
+      const fundingLinksPayload = data.fundingLinks;
+      const chatPayload = data.chat;
+      const valueBlocksPayload = data.valueBlocks;
       const set: Record<string, unknown> = {
         title: data.title,
         description: data.description,
@@ -374,11 +384,52 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (guidPayload !== undefined && String(guidPayload).trim()) {
         set.guid = String(guidPayload).trim();
       }
+      const jsonArrayOrNull = (payload: unknown[] | null | undefined) => {
+        if (payload === undefined) return undefined;
+        if (payload == null || payload.length === 0) return null;
+        return JSON.stringify(payload);
+      };
       if (finalMarkersPayload !== undefined) {
-        set.finalMarkers =
-          finalMarkersPayload == null || finalMarkersPayload.length === 0
+        set.finalMarkers = jsonArrayOrNull(finalMarkersPayload);
+      }
+      if (finalSoundbitesPayload !== undefined) {
+        set.finalSoundbites = jsonArrayOrNull(finalSoundbitesPayload);
+      }
+      if (contentLinksPayload !== undefined) {
+        set.contentLinks = jsonArrayOrNull(contentLinksPayload);
+      }
+      if (podcastTxtsPayload !== undefined) {
+        set.podcastTxts = jsonArrayOrNull(podcastTxtsPayload);
+      }
+      if (socialInteractsPayload !== undefined) {
+        set.socialInteracts = jsonArrayOrNull(socialInteractsPayload);
+      }
+      if (locationsPayload !== undefined) {
+        set.locations = jsonArrayOrNull(locationsPayload);
+      }
+      if (licensePayload !== undefined) {
+        set.license =
+          licensePayload == null ||
+          !String((licensePayload as { identifier?: string }).identifier ?? "").trim()
             ? null
-            : JSON.stringify(finalMarkersPayload);
+            : JSON.stringify(licensePayload);
+      }
+      if (podcastImagesPayload !== undefined) {
+        set.podcastImages = jsonArrayOrNull(podcastImagesPayload);
+      }
+      if (fundingLinksPayload !== undefined) {
+        set.fundingLinks = jsonArrayOrNull(fundingLinksPayload);
+      }
+      if (chatPayload !== undefined) {
+        set.chat =
+          chatPayload == null ||
+          !String((chatPayload as { server?: string }).server ?? "").trim() ||
+          !String((chatPayload as { protocol?: string }).protocol ?? "").trim()
+            ? null
+            : JSON.stringify(chatPayload);
+      }
+      if (valueBlocksPayload !== undefined) {
+        set.valueBlocks = jsonArrayOrNull(valueBlocksPayload);
       }
       const cleanSet: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(set)) {

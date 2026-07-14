@@ -10,6 +10,8 @@ export interface EpisodePublishControlsProps {
   readOnly?: boolean;
   /** 'form' for Episode Details dialog; 'compact' for collapsible publish panel. */
   variant?: 'form' | 'compact';
+  /** When false, Published and Scheduled cannot be selected in the UI. */
+  hasFinalAudio: boolean;
 }
 
 const STATUSES = ['draft', 'scheduled', 'published'] as const;
@@ -29,8 +31,10 @@ export function EpisodePublishControls({
   onChange,
   readOnly = false,
   variant = 'form',
+  hasFinalAudio,
 }: EpisodePublishControlsProps) {
   const isCompact = variant === 'compact';
+  const publicStatusBlocked = !hasFinalAudio;
 
   if (readOnly) {
     const metaParts: string[] = [];
@@ -58,20 +62,38 @@ export function EpisodePublishControls({
     );
   }
 
-  const statusToggle = (
-    <div className={styles.publishStatusToggle} role="group" aria-label="Episode status">
-      {STATUSES.map((s) => (
+  function renderStatusButtons(activeClass: string, idleClass: string) {
+    return STATUSES.map((s) => {
+      const blocked = publicStatusBlocked && (s === 'published' || s === 'scheduled');
+      return (
         <button
           key={s}
           type="button"
-          className={values.status === s ? styles.publishStatusActive : styles.publishStatusBtn}
-          onClick={() => onChange({ status: s })}
+          className={values.status === s ? activeClass : idleClass}
+          onClick={() => {
+            if (blocked) return;
+            onChange({ status: s });
+          }}
+          disabled={blocked}
           aria-pressed={values.status === s}
           aria-label={`Status: ${statusLabel(s)}`}
+          title={blocked ? 'Build the final episode before publishing or scheduling' : undefined}
         >
           {statusLabel(s)}
         </button>
-      ))}
+      );
+    });
+  }
+
+  const statusHint = publicStatusBlocked ? (
+    <p className={styles.publishStatusFinalHint} role="note">
+      Build the final episode before publishing or scheduling.
+    </p>
+  ) : null;
+
+  const statusToggle = (
+    <div className={styles.publishStatusToggle} role="group" aria-label="Episode status">
+      {renderStatusButtons(styles.publishStatusActive, styles.publishStatusBtn)}
     </div>
   );
 
@@ -80,7 +102,10 @@ export function EpisodePublishControls({
       <div className={styles.publishControlsCompact}>
         <div className={styles.publishControlsRow}>
           <span className={styles.publishControlsFieldLabel}>Status</span>
-          {statusToggle}
+          <div className={styles.publishStatusField}>
+            {statusToggle}
+            {statusHint}
+          </div>
         </div>
         <div className={styles.publishControlsRow}>
           <span className={styles.publishControlsFieldLabel}>Season & Episode</span>
@@ -131,19 +156,9 @@ export function EpisodePublishControls({
       <label className={styles.label}>
         Status
         <div className={styles.statusToggle} role="group" aria-label="Episode status">
-          {STATUSES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={values.status === s ? styles.statusToggleActive : styles.statusToggleBtn}
-              onClick={() => onChange({ status: s })}
-              aria-pressed={values.status === s}
-              aria-label={`Status: ${statusLabel(s)}`}
-            >
-              {statusLabel(s)}
-            </button>
-          ))}
+          {renderStatusButtons(styles.statusToggleActive, styles.statusToggleBtn)}
         </div>
+        {statusHint}
       </label>
       <label className={styles.label}>
         Publish at (optional)

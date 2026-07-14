@@ -236,6 +236,22 @@ export function applyNoiseSuppressionToSegment(episodeId: string, segmentId: str
   });
 }
 
+/** Destructively split segment audio at minutes+seconds; inserts the second half below the current segment. */
+export function splitSegment(
+  episodeId: string,
+  segmentId: string,
+  body: { minutes: number; seconds: number },
+): Promise<void> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/split`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify(body),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+  });
+}
+
 /** Start building the final episode. Returns immediately; poll getRenderStatus until done or failed. */
 export function startRenderEpisode(episodeId: string): Promise<{ status: 'building' | 'already_building'; message?: string }> {
   return fetch(`${BASE}/episodes/${episodeId}/render`, { method: 'POST', credentials: 'include', headers: csrfHeaders() }).then(async (r) => {

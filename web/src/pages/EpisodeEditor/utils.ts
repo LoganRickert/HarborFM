@@ -1,5 +1,7 @@
 import type { Episode } from '../../api/episodes';
 import { parseUtc } from '../../utils/format';
+import type { ValueBlockForm } from '../../components/EpisodeEditor/valueBlocksForm';
+import { emptyValueRecipient } from '../../components/EpisodeEditor/valueBlocksForm';
 
 /** Form-friendly episode fields (strings for inputs, booleans for checkboxes). */
 export interface EpisodeForm {
@@ -20,9 +22,131 @@ export interface EpisodeForm {
   episodeLink: string;
   guidIsPermalink: boolean;
   subscriberOnly: boolean;
+  contentLinks: Array<{ href: string; text: string }>;
+  podcastTxts: Array<{ purpose: string; value: string }>;
+  socialInteracts: Array<{
+    protocol: string;
+    uri: string;
+    accountId: string;
+    accountUrl: string;
+    priority: string;
+  }>;
+  locations: Array<{
+    name: string;
+    rel: string;
+    geo: string;
+    osm: string;
+    country: string;
+  }>;
+  license: { identifier: string; url: string };
+  podcastImages: Array<{
+    href: string;
+    alt: string;
+    aspectRatio: string;
+    width: string;
+    height: string;
+    type: string;
+    purpose: string;
+  }>;
+  fundingLinks: Array<{ href: string; text: string }>;
+  chat: { server: string; protocol: string; accountId: string; space: string };
+  valueBlocks: ValueBlockForm[];
+}
+
+function asString(v: unknown): string {
+  return typeof v === 'string' ? v : v != null ? String(v) : '';
 }
 
 export function episodeToForm(episode: Episode): EpisodeForm {
+  const rawLinks = episode.contentLinks;
+  const contentLinks: Array<{ href: string; text: string }> = Array.isArray(rawLinks)
+    ? rawLinks
+        .filter((l): l is { href: string; text?: string | null } =>
+          typeof l === 'object' && l != null && typeof (l as { href?: unknown }).href === 'string',
+        )
+        .map((l) => ({ href: l.href, text: l.text?.trim() ? String(l.text) : '' }))
+    : [];
+
+  const podcastTxts = Array.isArray(episode.podcastTxts)
+    ? episode.podcastTxts.map((t) => ({
+        purpose: asString(t?.purpose),
+        value: asString(t?.value),
+      }))
+    : [];
+
+  const socialInteracts = Array.isArray(episode.socialInteracts)
+    ? episode.socialInteracts.map((s) => ({
+        protocol: asString(s?.protocol),
+        uri: asString(s?.uri),
+        accountId: asString(s?.accountId),
+        accountUrl: asString(s?.accountUrl),
+        priority: s?.priority != null ? String(s.priority) : '',
+      }))
+    : [];
+
+  const locations = Array.isArray(episode.locations)
+    ? episode.locations.map((l) => ({
+        name: asString(l?.name),
+        rel: asString(l?.rel) || 'subject',
+        geo: asString(l?.geo),
+        osm: asString(l?.osm),
+        country: asString(l?.country),
+      }))
+    : [];
+
+  const lic = episode.license;
+  const license = {
+    identifier: asString(lic?.identifier),
+    url: asString(lic?.url),
+  };
+
+  const podcastImages = Array.isArray(episode.podcastImages)
+    ? episode.podcastImages.map((img) => ({
+        href: asString(img?.href),
+        alt: asString(img?.alt),
+        aspectRatio: asString(img?.aspectRatio),
+        width: img?.width != null ? String(img.width) : '',
+        height: img?.height != null ? String(img.height) : '',
+        type: asString(img?.type),
+        purpose: asString(img?.purpose),
+      }))
+    : [];
+
+  const fundingLinks = Array.isArray(episode.fundingLinks)
+    ? episode.fundingLinks.map((f) => ({
+        href: asString(f?.url),
+        text: asString(f?.text),
+      }))
+    : [];
+
+  const ch = episode.chat;
+  const chat = {
+    server: asString(ch?.server),
+    protocol: asString(ch?.protocol),
+    accountId: asString(ch?.accountId),
+    space: asString(ch?.space),
+  };
+
+  const valueBlocks: ValueBlockForm[] = Array.isArray(episode.valueBlocks)
+    ? episode.valueBlocks.map((b) => ({
+        type: asString(b?.type),
+        method: asString(b?.method),
+        suggested: asString(b?.suggested),
+        recipients:
+          Array.isArray(b?.recipients) && b.recipients.length > 0
+            ? b.recipients.map((r) => ({
+                type: asString(r?.type),
+                address: asString(r?.address),
+                split: r?.split != null ? String(r.split) : '0',
+                name: asString(r?.name),
+                customKey: asString(r?.customKey),
+                customValue: asString(r?.customValue),
+                fee: r?.fee === true,
+              }))
+            : [emptyValueRecipient()],
+      }))
+    : [];
+
   return {
     title: episode.title,
     slug: episode.slug || slugify(episode.title),
@@ -41,6 +165,15 @@ export function episodeToForm(episode: Episode): EpisodeForm {
     episodeLink: episode.episodeLink ?? '',
     guidIsPermalink: episode.guidIsPermalink === 1,
     subscriberOnly: !!(episode.subscriberOnly),
+    contentLinks,
+    podcastTxts,
+    socialInteracts,
+    locations,
+    license,
+    podcastImages,
+    fundingLinks,
+    chat,
+    valueBlocks,
   };
 }
 
@@ -56,8 +189,123 @@ export function publishFieldsToApiPayload(fields: PublishFormFields) {
   };
 }
 
+function nullIfEmpty(s: string): string | null {
+  const t = s.trim();
+  return t ? t : null;
+}
+
 /** Build API update payload from form. */
 export function formToApiPayload(form: EpisodeForm) {
+  const contentLinks = form.contentLinks
+    .map((l) => ({
+      href: l.href.trim(),
+      text: l.text.trim() || null,
+    }))
+    .filter((l) => l.href.length > 0);
+
+  const podcastTxts = form.podcastTxts
+    .map((t) => ({
+      purpose: nullIfEmpty(t.purpose),
+      value: t.value.trim(),
+    }))
+    .filter((t) => t.value.length > 0);
+
+  const socialInteracts = form.socialInteracts
+    .map((s) => {
+      const protocol = s.protocol.trim();
+      const priorityRaw = s.priority.trim();
+      const priority =
+        priorityRaw === '' ? null : Number.isFinite(Number(priorityRaw)) ? Math.floor(Number(priorityRaw)) : null;
+      return {
+        protocol,
+        uri: nullIfEmpty(s.uri),
+        accountId: nullIfEmpty(s.accountId),
+        accountUrl: nullIfEmpty(s.accountUrl),
+        priority,
+      };
+    })
+    .filter((s) => {
+      if (!s.protocol) return false;
+      if (s.protocol.toLowerCase() === 'disabled') return true;
+      return !!s.uri;
+    });
+
+  const locations = form.locations
+    .map((l) => ({
+      name: l.name.trim(),
+      rel: l.rel === 'creator' || l.rel === 'subject' ? l.rel : null,
+      geo: nullIfEmpty(l.geo),
+      osm: nullIfEmpty(l.osm),
+      country: nullIfEmpty(l.country)?.toUpperCase() ?? null,
+    }))
+    .filter((l) => l.name.length > 0);
+
+  const licenseId = form.license.identifier.trim();
+  const license = licenseId
+    ? { identifier: licenseId, url: nullIfEmpty(form.license.url) }
+    : null;
+
+  const podcastImages = form.podcastImages
+    .map((img) => {
+      const widthRaw = img.width.trim();
+      const heightRaw = img.height.trim();
+      return {
+        href: img.href.trim(),
+        alt: nullIfEmpty(img.alt),
+        aspectRatio: nullIfEmpty(img.aspectRatio),
+        width: widthRaw && Number.isFinite(Number(widthRaw)) ? Math.floor(Number(widthRaw)) : null,
+        height: heightRaw && Number.isFinite(Number(heightRaw)) ? Math.floor(Number(heightRaw)) : null,
+        type: nullIfEmpty(img.type),
+        purpose: nullIfEmpty(img.purpose),
+      };
+    })
+    .filter((img) => img.href.length > 0);
+
+  const fundingLinks = form.fundingLinks
+    .map((l) => ({
+      url: l.href.trim(),
+      text: l.text.trim() || null,
+    }))
+    .filter((l) => l.url.length > 0);
+
+  const chatServer = form.chat.server.trim();
+  const chatProtocol = form.chat.protocol.trim();
+  const chat =
+    chatServer && chatProtocol
+      ? {
+          server: chatServer,
+          protocol: chatProtocol,
+          accountId: nullIfEmpty(form.chat.accountId),
+          space: nullIfEmpty(form.chat.space),
+        }
+      : null;
+
+  const valueBlocks = form.valueBlocks
+    .map((b) => {
+      const recipients = b.recipients
+        .map((r) => {
+          const splitRaw = r.split.trim();
+          const split = splitRaw === '' ? NaN : Number(splitRaw);
+          return {
+            type: r.type.trim(),
+            address: r.address.trim(),
+            split: Number.isFinite(split) ? Math.floor(split) : NaN,
+            name: nullIfEmpty(r.name),
+            customKey: nullIfEmpty(r.customKey),
+            customValue: nullIfEmpty(r.customValue),
+            fee: r.fee ? true : null,
+          };
+        })
+        .filter((r) => r.type && r.address && Number.isFinite(r.split) && r.split >= 0);
+      return {
+        type: b.type.trim(),
+        method: b.method.trim(),
+        suggested: nullIfEmpty(b.suggested),
+        recipients,
+      };
+    })
+    .filter((b) => b.type && b.method && b.recipients.length > 0);
+
   return {
     title: form.title,
     slug: form.slug || slugify(form.title),
@@ -76,6 +324,15 @@ export function formToApiPayload(form: EpisodeForm) {
     episodeLink: form.episodeLink || null,
     guidIsPermalink: form.guidIsPermalink ? 1 : 0,
     subscriberOnly: form.subscriberOnly ? 1 : 0,
+    contentLinks: contentLinks.length > 0 ? contentLinks : null,
+    podcastTxts: podcastTxts.length > 0 ? podcastTxts : null,
+    socialInteracts: socialInteracts.length > 0 ? socialInteracts : null,
+    locations: locations.length > 0 ? locations : null,
+    license,
+    podcastImages: podcastImages.length > 0 ? podcastImages : null,
+    fundingLinks: fundingLinks.length > 0 ? fundingLinks : null,
+    chat,
+    valueBlocks: valueBlocks.length > 0 ? valueBlocks : null,
   };
 }
 

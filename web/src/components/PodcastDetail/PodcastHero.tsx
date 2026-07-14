@@ -10,6 +10,7 @@ import {
   Rss,
   Settings,
   Share2,
+  Palette,
 } from 'lucide-react';
 import { getPublicRssUrl } from '../../api/rss';
 import { PodcastGroupDetailRow, PodcastGroupRow } from './PodcastGroupList';
@@ -52,6 +53,7 @@ interface PodcastHeroProps {
   canManageShow: boolean;
   onEditClick: () => void;
   onLinksClick?: () => void;
+  onPageCustomizationsClick?: () => void;
   publicFeedsEnabled?: boolean;
   detailsExpanded: boolean;
   onDetailsToggle: () => void;
@@ -63,6 +65,7 @@ export function PodcastHero({
   canManageShow,
   onEditClick,
   onLinksClick,
+  onPageCustomizationsClick,
   publicFeedsEnabled,
   detailsExpanded,
   onDetailsToggle,
@@ -134,7 +137,7 @@ export function PodcastHero({
           </div>
         </div>
 
-        <div className={`${styles.podcastShowList} ${detailsExpanded ? styles.podcastShowListExpanded : ''}`}>
+        <div className={styles.podcastShowList}>
         {publicFeedsEnabled && (
           <PodcastGroupRow
             label="Public Page"
@@ -178,6 +181,14 @@ export function PodcastHero({
             icon={Share2}
             iconTone="blue"
             onClick={onLinksClick}
+          />
+        )}
+        {canEdit && onPageCustomizationsClick && (
+          <PodcastGroupRow
+            label="Page Customizations"
+            icon={Palette}
+            iconTone="purple"
+            onClick={onPageCustomizationsClick}
           />
         )}
 

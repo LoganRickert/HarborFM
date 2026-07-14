@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { marked } from 'marked';
 import { getPublicLegal } from '../api/settings';
 import { FullPageLoading } from '../components/Loading';
@@ -64,7 +65,8 @@ export function Terms() {
         <div className={styles.card}>
           <div className={styles.header}>
             <Link to="/login" className={styles.back}>
-              ← Back to sign in
+              <ChevronLeft size={16} strokeWidth={2} aria-hidden />
+              Back to sign in
             </Link>
             <h1 className={styles.title}>Terms of Service</h1>
             {!customTerms && <p className={styles.updated}>Last updated: February 2026</p>}

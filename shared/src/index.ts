@@ -6,6 +6,7 @@ export * from './schemas/contact.js';
 export * from './schemas/review.js';
 export * from './schemas/user.js';
 export * from './schemas/podcast.js';
+export * from './schemas/podcastNamespace.js';
 export * from './schemas/episode.js';
 export * from './schemas/export.js';
 export * from './schemas/library.js';

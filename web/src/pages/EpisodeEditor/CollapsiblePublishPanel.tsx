@@ -19,6 +19,7 @@ export interface CollapsiblePublishPanelProps {
   onSave: (values: PublishFormFields) => void | Promise<void>;
   isSaving?: boolean;
   saveError?: string | null;
+  hasFinalAudio: boolean;
 }
 
 export function CollapsiblePublishPanel({
@@ -27,6 +28,7 @@ export function CollapsiblePublishPanel({
   onSave,
   isSaving = false,
   saveError,
+  hasFinalAudio,
 }: CollapsiblePublishPanelProps) {
   const panelId = useId();
   const [expanded, setExpanded] = useState(false);
@@ -113,6 +115,7 @@ export function CollapsiblePublishPanel({
               values={draft}
               onChange={handleChange}
               variant="compact"
+              hasFinalAudio={hasFinalAudio}
             />
             {dirty && (
               <p className={styles.publishPanelUnsavedNote}>You have unsaved changes</p>

@@ -31,6 +31,8 @@ export interface FeedEpisodeCardProps {
   onPause: (episodeId: string) => void;
   /** When true (e.g. custom domain), link to /{episode.slug} instead of /feed/{podcastSlug}/{episode.slug} */
   useShortEpisodeUrls?: boolean;
+  /** When false, hide the episode description blurb on the card. Default true. */
+  showDescription?: boolean;
 }
 
 export interface FeedPaginationProps {
@@ -90,6 +92,12 @@ export interface FeedEpisodeHeaderProps {
   shareUrl?: string;
   shareTitle?: string;
   embedCode?: string;
+  /** When set, a Transcript button is shown that opens the readable transcript dialog. */
+  transcriptUrl?: string | null;
+  /** Seek episode audio from a transcript timestamp (seconds) and start playback. */
+  onTranscriptSeek?: (timeSec: number) => void;
+  /** Current playback position; highlights the active transcript cue. */
+  currentTime?: number;
 }
 
 export interface FeedSubscriberOnlyMessageProps {

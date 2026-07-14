@@ -5,6 +5,7 @@ import { registerCastRoutes } from "./routes.cast.js";
 import { registerCollaboratorRoutes } from "./routes.collaborators.js";
 import { registerTokenRoutes } from "./routes.tokens.js";
 import { registerDeleteRoutes } from "./routes.delete.js";
+import { registerFeedPreviewRoutes } from "./routes.feedPreview.js";
 
 export async function podcastRoutes(app: FastifyInstance) {
   await app.register(registerCoreRoutes);
@@ -13,4 +14,5 @@ export async function podcastRoutes(app: FastifyInstance) {
   await app.register(registerCollaboratorRoutes);
   await app.register(registerTokenRoutes);
   await app.register(registerDeleteRoutes);
+  await app.register(registerFeedPreviewRoutes);
 }

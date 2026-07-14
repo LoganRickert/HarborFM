@@ -15,6 +15,7 @@ secrets/
 harborfm-data/
 openapi.json
 docs-dist/
+docs/.astro/
 server/public/
 ci-data/
 ci-secrets/

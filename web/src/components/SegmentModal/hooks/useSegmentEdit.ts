@@ -28,7 +28,13 @@ export function useSegmentEdit(
   const [timelineMode, setTimelineMode] = useState<TimelineMode>(initialMode);
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState<number | null>(null);
   /** Draft edits for selected marker; applied when user clicks Done. */
-  const [markerDraft, setMarkerDraft] = useState<{ title: string; color: string; markerType: '' | 'chapter' } | null>(null);
+  const [markerDraft, setMarkerDraft] = useState<{
+    title: string;
+    color: string;
+    markerType: '' | 'chapter' | 'soundbite';
+    /** Raw input while editing; validated/clamped on Done. */
+    duration: string;
+  } | null>(null);
   const [viewStartSec, setViewStartSec] = useState(0);
   const [viewEndSec, setViewEndSec] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -136,7 +142,12 @@ export function useSegmentEdit(
     setMarkerDraft({
       title: m.title ?? '',
       color: m.color ?? MARKER_COLORS[0],
-      markerType: (m.markerType ?? '') as '' | 'chapter',
+      markerType: (m.markerType ?? '') as '' | 'chapter' | 'soundbite',
+      duration: String(
+        typeof m.duration === 'number' && Number.isFinite(m.duration)
+          ? Math.min(120, Math.max(15, m.duration))
+          : 30,
+      ),
     });
     // Only re-init when selection changes, not when markers change (preserve user's draft until Done)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,7 +160,8 @@ export function useSegmentEdit(
       m.time === b[i]!.time &&
       (m.title ?? '') === (b[i]!.title ?? '') &&
       (m.color ?? '') === (b[i]!.color ?? '') &&
-      (m.markerType ?? '') === (b[i]!.markerType ?? ''));
+      (m.markerType ?? '') === (b[i]!.markerType ?? '') &&
+      (m.duration ?? null) === (b[i]!.duration ?? null));
   const audioEqEqual = (
     a: { lowDb: number; midDb: number; highDb: number },
     b: AudioEq | null | undefined
@@ -305,8 +317,23 @@ export function useSegmentEdit(
     setMarkerDraft((d) => (d ? { ...d, color } : null));
   }
 
-  function handleMarkerTypeChange(_index: number, markerType: '' | 'chapter') {
-    setMarkerDraft((d) => (d ? { ...d, markerType: markerType } : null));
+  function handleMarkerTypeChange(_index: number, markerType: '' | 'chapter' | 'soundbite') {
+    setMarkerDraft((d) => {
+      if (!d) return null;
+      if (markerType === 'soundbite') {
+        const n = Number(d.duration);
+        return {
+          ...d,
+          markerType,
+          duration: Number.isFinite(n) && n >= 15 && n <= 120 ? String(n) : '30',
+        };
+      }
+      return { ...d, markerType };
+    });
+  }
+
+  function handleMarkerDurationChange(_index: number, duration: string) {
+    setMarkerDraft((d) => (d ? { ...d, duration } : null));
   }
 
   function handleMarkerDone() {
@@ -317,11 +344,22 @@ export function useSegmentEdit(
     }
     const next = [...markers];
     const m = next[selectedMarkerIndex]!;
+    const markerType = markerDraft.markerType || undefined;
+    let duration: number | undefined;
+    if (markerType === 'soundbite') {
+      let d = Number(markerDraft.duration);
+      if (!Number.isFinite(d)) d = 30;
+      if (d < 15) d = 15;
+      if (d > 120) d = 120;
+      d = Math.round(d);
+      duration = d;
+    }
     next[selectedMarkerIndex] = {
       ...m,
       title: markerDraft.title || undefined,
       color: markerDraft.color || undefined,
-      markerType: markerDraft.markerType || undefined,
+      markerType,
+      duration,
     };
     setMarkers(next);
     setSelectedMarkerIndex(null);
@@ -415,6 +453,7 @@ export function useSegmentEdit(
     handleMarkerTitleChange,
     handleMarkerColorChange,
     handleMarkerTypeChange,
+    handleMarkerDurationChange,
     handleMarkerDone,
     handleRemoveMarker,
     markerDraft,

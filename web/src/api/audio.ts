@@ -35,6 +35,18 @@ export function downloadEpisodeUrl(episodeId: string, type: 'source' | 'final' =
   return `${BASE}/episodes/${episodeId}/download?type=${type}`;
 }
 
+export function downloadSoundbiteUrl(
+  episodeId: string,
+  opts: { start: number; duration: number; title?: string },
+): string {
+  const params = new URLSearchParams({
+    start: String(opts.start),
+    duration: String(opts.duration),
+  });
+  if (opts.title?.trim()) params.set('title', opts.title.trim());
+  return `${BASE}/episodes/${episodeId}/soundbite?${params.toString()}`;
+}
+
 export function finalEpisodeWaveformUrl(episodeId: string): string {
   return `${BASE}/episodes/${episodeId}/final-waveform`;
 }

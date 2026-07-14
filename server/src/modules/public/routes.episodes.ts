@@ -40,6 +40,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
             offset: { type: "string" },
             sort: { type: "string", enum: ["newest", "oldest"] },
             q: { type: "string" },
+            episodeType: { type: "string", enum: ["full", "trailer", "bonus"] },
           },
         },
         response: {
@@ -53,11 +54,22 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
     async (request, reply) => {
       if (!ensurePublicFeedsEnabled(reply)) return;
       const { podcastSlug } = request.params as { podcastSlug: string };
-      const query = request.query as { limit?: string; offset?: string; sort?: string; q?: string };
+      const query = request.query as {
+        limit?: string;
+        offset?: string;
+        sort?: string;
+        q?: string;
+        episodeType?: string;
+      };
       const limit = Math.min(parseInt(query.limit || "50", 10) || 50, 100);
       const offset = Math.max(parseInt(query.offset || "0", 10) || 0, 0);
       const sort = query.sort === "oldest" ? "oldest" : "newest";
       const searchQ = (query.q ?? "").trim();
+      const episodeTypeRaw = (query.episodeType ?? "").trim().toLowerCase();
+      const episodeType =
+        episodeTypeRaw === "full" || episodeTypeRaw === "trailer" || episodeTypeRaw === "bonus"
+          ? episodeTypeRaw
+          : null;
 
       const podcast = repo.getPodcastMetaForFeed(podcastSlug);
       if (!podcast)
@@ -80,6 +92,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         searchPattern,
         includeSubscriberOnly: includeSubscriberOnlyEpisodes,
         includeScheduledEpisodes,
+        episodeType,
       });
 
       let episodesList = rows.map((r) =>
@@ -114,13 +127,17 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         }
       }
 
-      // Don't send chapter markers for subscriber-only episodes when user has no access
+      // Don't send chapter/soundbite markers for subscriber-only episodes when user has no access
       episodesList = episodesList.map((ep) => ({
         ...ep,
         markers:
           ep.subscriber_only === 1 && !(ep as Record<string, unknown>).private_audio_url
             ? []
             : ep.markers,
+        soundbites:
+          ep.subscriber_only === 1 && !(ep as Record<string, unknown>).private_audio_url
+            ? []
+            : ep.soundbites,
       }));
 
       return {
@@ -208,12 +225,13 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         }
       }
 
-      // Don't send chapter markers for subscriber-only episodes when user has no access
+      // Don't send chapter/soundbite markers for subscriber-only episodes when user has no access
       if (
         episode.subscriber_only === 1 &&
         !(episode as Record<string, unknown>).private_audio_url
       ) {
         episode.markers = [];
+        episode.soundbites = [];
       }
 
       return episode;

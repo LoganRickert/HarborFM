@@ -9,8 +9,10 @@ export interface SegmentFunctionsTabProps {
   addSilenceTrimsDisabled?: boolean;
   onRemoveSilence: () => void;
   onNoiseSuppression: () => void;
+  onSegmentSplit: () => void;
   removingSilence: boolean;
   applyingNoiseSuppression: boolean;
+  splittingSegment: boolean;
   trimError: string | null;
 }
 
@@ -22,17 +24,20 @@ export function SegmentFunctionsTab({
   addSilenceTrimsDisabled = false,
   onRemoveSilence,
   onNoiseSuppression,
+  onSegmentSplit,
   removingSilence,
   applyingNoiseSuppression,
+  splittingSegment,
   trimError,
 }: SegmentFunctionsTabProps) {
+  const serverBusy = removingSilence || applyingNoiseSuppression || splittingSegment;
   return (
     <div>
       <button
         type="button"
         className={styles.transcriptEditBtn}
         onClick={onAddSilenceTrimsClick}
-        disabled={addSilenceTrimsDisabled || removingSilence || applyingNoiseSuppression}
+        disabled={addSilenceTrimsDisabled || serverBusy}
         style={{ width: '100%', marginBottom: '1rem' }}
         aria-label="Add silence trims"
       >
@@ -45,7 +50,7 @@ export function SegmentFunctionsTab({
         type="button"
         className={styles.transcriptEditBtn}
         onClick={onRemoveSilence}
-        disabled={removingSilence || applyingNoiseSuppression}
+        disabled={serverBusy}
         style={{ width: '100%', marginBottom: '0.5rem' }}
         aria-label="Server remove silence from segment"
       >
@@ -55,11 +60,21 @@ export function SegmentFunctionsTab({
         type="button"
         className={styles.transcriptEditBtn}
         onClick={onNoiseSuppression}
-        disabled={removingSilence || applyingNoiseSuppression}
-        style={{ width: '100%' }}
+        disabled={serverBusy}
+        style={{ width: '100%', marginBottom: '0.5rem' }}
         aria-label="Apply noise suppression to segment"
       >
         {applyingNoiseSuppression ? 'Applying...' : 'Noise Suppression'}
+      </button>
+      <button
+        type="button"
+        className={styles.transcriptEditBtn}
+        onClick={onSegmentSplit}
+        disabled={serverBusy}
+        style={{ width: '100%' }}
+        aria-label="Split segment into two"
+      >
+        {splittingSegment ? 'Splitting...' : 'Segment Split'}
       </button>
       {trimError && (
         <p className={`${styles.error} ${styles.rateLimitError}`} role="alert">

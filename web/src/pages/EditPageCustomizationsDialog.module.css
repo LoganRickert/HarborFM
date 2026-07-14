@@ -1,0 +1,107 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sectionTitle {
+  margin: 0;
+  padding-bottom: 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionTitleSpaced {
+  margin: 0.25rem 0 0;
+  padding-bottom: 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.accentField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.accentLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.accentGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.accentOption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.4rem 0.2rem;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface, transparent);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.accentOption:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--surface-elevated, var(--bg)) 80%, transparent);
+}
+
+.accentOption:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.accentOptionSelected {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.accentSwatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.accentName {
+  font-size: 0.7rem;
+  line-height: 1.1;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.accentOptionSelected .accentName {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.toggleRow {
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .accentGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

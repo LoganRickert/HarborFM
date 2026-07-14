@@ -40,6 +40,11 @@ export function useFeedAudioPlayer({
   const restoredPositionRef = useRef(false);
   const pendingSeekRef = useRef<number | null>(null);
   const wasActiveRef = useRef(isActive);
+  const soundbiteSessionRef = useRef<{
+    endSec: number;
+    onClipEnd?: () => void;
+  } | null>(null);
+  const soundbiteAdvancingRef = useRef(false);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -140,11 +145,17 @@ export function useFeedAudioPlayer({
     };
   }, [podcastSlug, episodeSlug, durationSec, audioUrl, waveformUrlFn, privateWaveformUrl]);
 
+  const clearSoundbiteSession = useCallback(() => {
+    if (!soundbiteAdvancingRef.current) {
+      soundbiteSessionRef.current = null;
+    }
+  }, []);
+
   // Set up audio event listeners
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !audioUrl) return;
-    
+
     const onPlayEvt = () => {
       setIsPlaying(true);
       onPlay?.();
@@ -153,16 +164,35 @@ export function useFeedAudioPlayer({
       setIsPlaying(false);
       savePlaybackPosition();
       onPause?.();
+      clearSoundbiteSession();
     };
     const onEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
+      soundbiteSessionRef.current = null;
       if (persistPlaybackPosition && podcastSlug && episodeSlug) {
         clearEpisodePlaybackPosition(podcastSlug, episodeSlug);
       }
       onPause?.();
     };
-    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onTimeUpdate = () => {
+      setCurrentTime(el.currentTime);
+      const session = soundbiteSessionRef.current;
+      if (session && el.currentTime >= session.endSec - 0.05) {
+        const onClipEnd = session.onClipEnd;
+        soundbiteSessionRef.current = null;
+        if (onClipEnd) {
+          soundbiteAdvancingRef.current = true;
+          try {
+            onClipEnd();
+          } finally {
+            soundbiteAdvancingRef.current = false;
+          }
+        } else {
+          el.pause();
+        }
+      }
+    };
     const onLoadedMetadata = () => {
       applyPlaybackSettings(el);
       restorePlaybackPosition(el);
@@ -172,7 +202,7 @@ export function useFeedAudioPlayer({
       applyPlaybackSettings(el);
       restorePlaybackPosition(el);
     };
-    
+
     el.addEventListener('play', onPlayEvt);
     el.addEventListener('pause', onPauseEvt);
     el.addEventListener('ended', onEnded);
@@ -181,7 +211,7 @@ export function useFeedAudioPlayer({
     el.addEventListener('canplay', onCanPlay);
     applyPlaybackSettings(el);
     restorePlaybackPosition(el);
-    
+
     return () => {
       el.removeEventListener('play', onPlayEvt);
       el.removeEventListener('pause', onPauseEvt);
@@ -200,6 +230,7 @@ export function useFeedAudioPlayer({
     persistPlaybackPosition,
     podcastSlug,
     episodeSlug,
+    clearSoundbiteSession,
   ]);
 
   useEffect(() => {
@@ -233,6 +264,7 @@ export function useFeedAudioPlayer({
       setIsPlaying(false);
       onPause?.();
     } else {
+      soundbiteSessionRef.current = null;
       onPlay?.();
       const needsLoad = !el.src || el.ended;
       if (needsLoad) {
@@ -250,6 +282,7 @@ export function useFeedAudioPlayer({
   const seek = useCallback((time: number) => {
     const el = audioRef.current;
     if (el) {
+      soundbiteSessionRef.current = null;
       el.currentTime = time;
       setCurrentTime(time);
       savePlaybackPosition();
@@ -259,13 +292,25 @@ export function useFeedAudioPlayer({
   /**
    * Jump to `time` and play. Waits for the seek to finish before play() so Chromium does not
    * abort playback (AbortError) while the UI still looks active. Pending-seek wins over restore.
+   * Pass `soundbiteDurationSec` to auto-pause (or call `onSoundbiteEnd`) when the clip ends.
    */
   const seekAndPlay = useCallback(
-    (time: number) => {
+    (
+      time: number,
+      opts?: { soundbiteDurationSec?: number; onSoundbiteEnd?: () => void },
+    ) => {
       const el = audioRef.current;
       if (!el || !audioUrl) return;
 
       const target = Math.max(0, time);
+      if (opts?.soundbiteDurationSec != null && opts.soundbiteDurationSec > 0) {
+        soundbiteSessionRef.current = {
+          endSec: target + opts.soundbiteDurationSec,
+          onClipEnd: opts.onSoundbiteEnd,
+        };
+      } else if (!soundbiteAdvancingRef.current) {
+        soundbiteSessionRef.current = null;
+      }
       pendingSeekRef.current = target;
       restoredPositionRef.current = true;
       setCurrentTime(target);

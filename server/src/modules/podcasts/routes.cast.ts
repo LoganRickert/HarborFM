@@ -29,6 +29,7 @@ import {
 import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { ARTWORK_FILENAME_REGEX } from "./utils.js";
+import { afterUpdatePodcast } from "./service.js";
 
 /** Cast row from DB (camelCase). isPublic is 0/1 for API. */
 type CastRow = {
@@ -345,6 +346,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         .limit(1)
         .get() as CastRow;
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
+      afterUpdatePodcast(podcastId);
       return reply.status(201).send(castRowToResponse(row));
     },
   );
@@ -457,6 +459,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         .run();
 
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
+      afterUpdatePodcast(podcastId);
       const row = drizzleDb
         .select({
           id: podcastCast.id,
@@ -544,8 +547,10 @@ export async function registerCastRoutes(app: FastifyInstance) {
             eq(podcastCast.id, castId),
             eq(podcastCast.podcastId, podcastId),
           ),
-        );
+        )
+        .run();
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
+      afterUpdatePodcast(podcastId);
       return reply.status(204).send();
     },
   );
@@ -625,6 +630,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         )
         .run();
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
+      afterUpdatePodcast(podcastId);
       const oldPath = existing.photoPath
         ? resolveDataPath(existing.photoPath)
         : "";
