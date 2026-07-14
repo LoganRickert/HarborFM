@@ -17,9 +17,12 @@ import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { getPodcastOwnerId } from "../../services/access.js";
 import {
   fetchAndParseFeed,
+  fetchImportTextUrl,
+  parsePodcastChaptersJson,
   type ImportChannelMeta,
   type ImportEpisodeItem,
 } from "../../services/importFeed.js";
+import { writeEpisodeChaptersJson } from "../../services/episodeChapters.js";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import {
@@ -191,6 +194,26 @@ export async function registerImportRoutes(app: FastifyInstance) {
         maxEpisodes: null,
       });
 
+      for (const person of channel.person_records ?? []) {
+        const name = person.name?.trim();
+        if (!name) continue;
+        const roleRaw = (person.role ?? "host").toLowerCase();
+        const role: "host" | "guest" = roleRaw === "guest" ? "guest" : "host";
+        try {
+          repo.insertCastMember({
+            id: nanoid(),
+            podcastId,
+            name: name.slice(0, 128),
+            role,
+            photoUrl: person.img?.trim() || null,
+            socialLinkText: person.href?.trim() || null,
+            isPublic: true,
+          });
+        } catch (err) {
+          request.log.warn({ err, podcastId, name }, "Import cast member failed");
+        }
+      }
+
       if (channel.artwork_url) {
         try {
           const ext = extFromUrl(channel.artwork_url);
@@ -330,8 +353,18 @@ export async function registerImportRoutes(app: FastifyInstance) {
                 publishAt,
                 status: "published",
                 artworkUrl: ep.artwork_url ?? null,
-                episodeLink: null,
+                episodeLink: ep.episode_link ?? null,
                 guidIsPermalink: Boolean(ep.guidIsPermalink ?? 0),
+                contentLinks: ep.content_links ?? null,
+                podcastTxts: ep.podcast_txts ?? null,
+                socialInteracts: ep.social_interacts ?? null,
+                locations: ep.locations ?? null,
+                license: ep.license ?? null,
+                podcastImages: ep.podcast_images ?? null,
+                fundingLinks: ep.funding_links ?? null,
+                chat: ep.chat ?? null,
+                valueBlocks: ep.value_blocks ?? null,
+                finalSoundbites: ep.final_soundbites ?? null,
               });
 
               if (ep.artwork_url) {
@@ -470,8 +503,48 @@ export async function registerImportRoutes(app: FastifyInstance) {
               }
 
               const procDir = processedDir(podcastId, episodeId);
+
+              // Restore chapters from feed <podcast:chapters url="…">
+              if (ep.chapters_url) {
+                try {
+                  const chaptersBody = await fetchImportTextUrl(ep.chapters_url);
+                  const markers = parsePodcastChaptersJson(chaptersBody);
+                  if (markers && markers.length > 0) {
+                    episodesRepo.updateEpisode(episodeId, {
+                      finalMarkers: JSON.stringify(markers),
+                      updatedAt: sqlNow(),
+                    });
+                    writeEpisodeChaptersJson(podcastId, episodeId, markers);
+                  }
+                } catch (err) {
+                  log.warn(
+                    { err, episodeId, url: ep.chapters_url },
+                    "Import chapters fetch failed",
+                  );
+                }
+              }
+
+              // Restore transcript from feed <podcast:transcript url="…"> before ASR
+              const transcriptPath = join(procDir, "transcript.srt");
+              let importedTranscript = false;
+              if (ep.transcript_url) {
+                try {
+                  const srtText = await fetchImportTextUrl(ep.transcript_url);
+                  if (srtText.trim()) {
+                    writeFileSync(transcriptPath, srtText, "utf-8");
+                    importedTranscript = true;
+                  }
+                } catch (err) {
+                  log.warn(
+                    { err, episodeId, url: ep.transcript_url },
+                    "Import transcript fetch failed",
+                  );
+                }
+              }
+
               const ownerCanTranscribe = repo.getUserCanTranscribe(ownerId);
               if (
+                !importedTranscript &&
                 ownerCanTranscribe &&
                 isTranscriptionProviderConfigured(settings)
               ) {
@@ -502,11 +575,7 @@ export async function registerImportRoutes(app: FastifyInstance) {
                     });
                   }
                   if (srtText) {
-                    writeFileSync(
-                      join(procDir, "transcript.srt"),
-                      srtText,
-                      "utf-8",
-                    );
+                    writeFileSync(transcriptPath, srtText, "utf-8");
                   }
                 } catch (err) {
                   log.warn({ err, episodeId }, "Transcription SRT failed");

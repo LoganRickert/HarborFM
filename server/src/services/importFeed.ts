@@ -10,6 +10,13 @@ import { assertUrlNotPrivate } from "../utils/ssrf.js";
 const MAX_RETRIES = 3;
 const CONSECUTIVE_EMPTY_PAGES_STOP = 2;
 
+export interface ImportPersonRecord {
+  name: string;
+  role: string | null;
+  href: string | null;
+  img: string | null;
+}
+
 export interface ImportChannelMeta {
   title: string;
   description: string;
@@ -36,6 +43,8 @@ export interface ImportChannelMeta {
   locked: number;
   funding_links: string | null; // JSON array
   persons: string | null;
+  /** Structured channel <podcast:person> for cast creation. */
+  person_records: ImportPersonRecord[];
   update_frequency: string | null; // JSON object
   podcast_txts: string | null;
   social_interacts: string | null;
@@ -67,6 +76,18 @@ export interface ImportEpisodeItem {
   explicit: number | null;
   artwork_url: string | null;
   episode_link: string | null;
+  content_links: string | null;
+  podcast_txts: string | null;
+  social_interacts: string | null;
+  locations: string | null;
+  license: string | null;
+  podcast_images: string | null;
+  funding_links: string | null;
+  chat: string | null;
+  value_blocks: string | null;
+  final_soundbites: string | null;
+  chapters_url: string | null;
+  transcript_url: string | null;
 }
 
 export interface ImportFeedResult {
@@ -80,18 +101,6 @@ function normalizeUrl(base: string, relative: string): string {
   } catch {
     return relative;
   }
-}
-
-function _resolveRedirect(
-  url: string,
-  controller: AbortController,
-): Promise<string> {
-  return fetch(url, {
-    method: "GET",
-    redirect: "follow",
-    signal: controller.signal,
-    headers: { "User-Agent": IMPORT_USER_AGENT },
-  }).then((res) => res.url);
 }
 
 async function fetchWithRetry(
@@ -146,19 +155,34 @@ async function fetchWithRetry(
   throw lastError ?? new Error("Fetch failed");
 }
 
+const ARRAY_TAG_NAMES = new Set([
+  "item",
+  "entry",
+  "link",
+  "category",
+  "person",
+  "funding",
+  "txt",
+  "block",
+  "location",
+  "socialInteract",
+  "contentLink",
+  "soundbite",
+  "value",
+  "valueRecipient",
+  "image",
+  "remoteItem",
+  "transcript",
+  "chapters",
+]);
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   removeNSPrefix: true,
   trimValues: true,
   alwaysCreateTextNode: true, // so elements with attributes (e.g. podcast:locked owner="...") still have text in #text
-  isArray: (name) =>
-    name === "item" ||
-    name === "entry" ||
-    name === "link" ||
-    name === "category" ||
-    name === "person" ||
-    name === "funding",
+  isArray: (name) => ARRAY_TAG_NAMES.has(name),
 });
 
 function textOf(obj: unknown): string {
@@ -217,6 +241,371 @@ function first<T>(arr: T[] | T | undefined): T | undefined {
 function ensureArray<T>(arr: T[] | T | undefined): T[] {
   if (arr == null) return [];
   return Array.isArray(arr) ? arr : [arr];
+}
+
+function attrString(rec: Record<string, unknown>, key: string): string {
+  const v = rec[key];
+  return typeof v === "string" && v.trim() ? v.trim() : "";
+}
+
+function jsonOrNull(arr: unknown[]): string | null {
+  return arr.length > 0 ? JSON.stringify(arr) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Shared Podcast 2.0 parsers (channel + item)
+// ---------------------------------------------------------------------------
+
+function parseFundingLinks(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(parent["podcast:funding"] ?? parent["funding"]);
+  const out: Array<{ url: string; text: string | null }> = [];
+  for (const fundingEl of list) {
+    if (!fundingEl || typeof fundingEl !== "object") continue;
+    const rec = fundingEl as Record<string, unknown>;
+    const href = attrString(rec, "@_url");
+    if (!href) continue;
+    out.push({
+      url: href,
+      text: textOfAny(rec["#text"] ?? rec)?.trim() || null,
+    });
+  }
+  return jsonOrNull(out);
+}
+
+function parseTxts(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(parent["podcast:txt"] ?? parent["txt"]);
+  const out: Array<{ purpose: string | null; value: string }> = [];
+  for (const el of list) {
+    if (el == null) continue;
+    if (typeof el === "object") {
+      const rec = el as Record<string, unknown>;
+      const value = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+      if (!value) continue;
+      const purpose = attrString(rec, "@_purpose") || null;
+      out.push({ purpose, value });
+    } else {
+      const value = String(el).trim();
+      if (value) out.push({ purpose: null, value });
+    }
+  }
+  return jsonOrNull(out);
+}
+
+function parseSocialInteracts(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(
+    parent["podcast:socialInteract"] ?? parent["socialInteract"],
+  );
+  const out: Array<Record<string, unknown>> = [];
+  for (const el of list) {
+    if (!el || typeof el !== "object") continue;
+    const rec = el as Record<string, unknown>;
+    const protocol = attrString(rec, "@_protocol");
+    if (!protocol) continue;
+    const item: Record<string, unknown> = { protocol };
+    if (attrString(rec, "@_uri")) item.uri = attrString(rec, "@_uri");
+    if (attrString(rec, "@_accountId"))
+      item.accountId = attrString(rec, "@_accountId");
+    if (attrString(rec, "@_accountUrl"))
+      item.accountUrl = attrString(rec, "@_accountUrl");
+    if (rec["@_priority"] != null) {
+      const n = parseInt(String(rec["@_priority"]), 10);
+      if (Number.isFinite(n)) item.priority = n;
+    }
+    out.push(item);
+  }
+  return jsonOrNull(out);
+}
+
+function parseLocations(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(parent["podcast:location"] ?? parent["location"]);
+  const out: Array<Record<string, unknown>> = [];
+  for (const el of list) {
+    if (!el || typeof el !== "object") continue;
+    const rec = el as Record<string, unknown>;
+    const name = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+    if (!name) continue;
+    const item: Record<string, unknown> = { name: name.slice(0, 128) };
+    const rel = attrString(rec, "@_rel");
+    if (rel === "subject" || rel === "creator") item.rel = rel;
+    if (attrString(rec, "@_geo")) item.geo = attrString(rec, "@_geo");
+    if (attrString(rec, "@_osm")) item.osm = attrString(rec, "@_osm");
+    const country = attrString(rec, "@_country");
+    if (/^[A-Za-z]{2}$/.test(country)) item.country = country.toUpperCase();
+    out.push(item);
+  }
+  return jsonOrNull(out);
+}
+
+function parseBlocks(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(parent["podcast:block"] ?? parent["block"]);
+  const out: Array<{ id: string | null; value: "yes" | "no" }> = [];
+  for (const el of list) {
+    let valueRaw = "";
+    let id: string | null = null;
+    if (typeof el === "object" && el !== null) {
+      const rec = el as Record<string, unknown>;
+      valueRaw = textOfAny(rec["#text"] ?? rec)?.trim().toLowerCase() || "";
+      if (attrString(rec, "@_id")) id = attrString(rec, "@_id");
+    } else {
+      valueRaw = String(el).trim().toLowerCase();
+    }
+    if (valueRaw !== "yes" && valueRaw !== "no") continue;
+    out.push({ id, value: valueRaw });
+  }
+  return jsonOrNull(out);
+}
+
+function parseChat(parent: Record<string, unknown>): string | null {
+  const chatEl = parent["podcast:chat"] ?? parent["chat"];
+  const firstChat = first(ensureArray(chatEl));
+  if (!firstChat || typeof firstChat !== "object") return null;
+  const rec = firstChat as Record<string, unknown>;
+  const server = attrString(rec, "@_server");
+  const protocol = attrString(rec, "@_protocol");
+  if (!server || !protocol) return null;
+  return JSON.stringify({
+    server,
+    protocol,
+    accountId: attrString(rec, "@_accountId") || null,
+    space: attrString(rec, "@_space") || null,
+  });
+}
+
+function parseLicense(parent: Record<string, unknown>): string | null {
+  const licenseEl = parent["podcast:license"] ?? parent["license"];
+  if (licenseEl == null) return null;
+  let identifier = "";
+  let url: string | null = null;
+  if (typeof licenseEl === "object" && licenseEl !== null) {
+    const rec = licenseEl as Record<string, unknown>;
+    identifier = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+    url = attrString(rec, "@_url") || null;
+  } else {
+    identifier = textOfAny(licenseEl)?.trim() || "";
+  }
+  if (!identifier) return null;
+  return JSON.stringify({ identifier: identifier.slice(0, 128), url });
+}
+
+function parseValueBlocks(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(parent["podcast:value"] ?? parent["value"]);
+  const out: Array<{
+    type: string;
+    method: string;
+    suggested: string | null;
+    recipients: Array<{
+      type: string;
+      address: string;
+      split: number;
+      name: string | null;
+      customKey: string | null;
+      customValue: string | null;
+      fee: boolean | null;
+    }>;
+  }> = [];
+  for (const el of list) {
+    if (!el || typeof el !== "object") continue;
+    const rec = el as Record<string, unknown>;
+    const type = attrString(rec, "@_type");
+    const method = attrString(rec, "@_method");
+    if (!type || !method) continue;
+    const recipientsRaw = ensureArray(
+      rec["podcast:valueRecipient"] ?? rec["valueRecipient"],
+    );
+    const recipients: Array<{
+      type: string;
+      address: string;
+      split: number;
+      name: string | null;
+      customKey: string | null;
+      customValue: string | null;
+      fee: boolean | null;
+    }> = [];
+    for (const rEl of recipientsRaw) {
+      if (!rEl || typeof rEl !== "object") continue;
+      const r = rEl as Record<string, unknown>;
+      const rType = attrString(r, "@_type");
+      const address = attrString(r, "@_address");
+      const splitN = parseInt(String(r["@_split"] ?? ""), 10);
+      if (!rType || !address || !Number.isFinite(splitN) || splitN < 0) continue;
+      const feeRaw = String(r["@_fee"] ?? "").toLowerCase();
+      recipients.push({
+        type: rType,
+        address,
+        split: Math.floor(splitN),
+        name: attrString(r, "@_name") || null,
+        customKey: attrString(r, "@_customKey") || null,
+        customValue: attrString(r, "@_customValue") || null,
+        fee: feeRaw === "true" || feeRaw === "1" || feeRaw === "yes" ? true : null,
+      });
+    }
+    if (recipients.length === 0) continue;
+    out.push({
+      type,
+      method,
+      suggested: attrString(rec, "@_suggested") || null,
+      recipients,
+    });
+  }
+  return jsonOrNull(out);
+}
+
+function parseContentLinks(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(
+    parent["podcast:contentLink"] ?? parent["contentLink"],
+  );
+  const out: Array<{ href: string; text: string | null }> = [];
+  for (const el of list) {
+    if (!el || typeof el !== "object") continue;
+    const rec = el as Record<string, unknown>;
+    const href = attrString(rec, "@_href");
+    if (!href) continue;
+    const text = textOfAny(rec["#text"] ?? rec)?.trim() || null;
+    out.push({ href, text });
+  }
+  return jsonOrNull(out);
+}
+
+function parsePodcastImages(
+  parent: Record<string, unknown>,
+  baseUrl?: string,
+): string | null {
+  const list = ensureArray(parent["podcast:image"] ?? parent["image"]);
+  const out: Array<{
+    href: string;
+    alt: string | null;
+    aspectRatio: string | null;
+    width: number | null;
+    height: number | null;
+    type: string | null;
+    purpose: string | null;
+  }> = [];
+  for (const el of list) {
+    if (!el || typeof el !== "object") continue;
+    const rec = el as Record<string, unknown>;
+    // Skip RSS <image><url>… blocks (no @_href)
+    const rawHref = attrString(rec, "@_href");
+    if (!rawHref) continue;
+    const alt = attrString(rec, "@_alt");
+    const aspectRatio =
+      attrString(rec, "@_aspect-ratio") || attrString(rec, "@_aspectRatio");
+    const type = attrString(rec, "@_type");
+    const purpose = attrString(rec, "@_purpose");
+    const widthRaw = rec["@_width"];
+    const heightRaw = rec["@_height"];
+    const width =
+      widthRaw != null ? parseInt(String(widthRaw), 10) : Number.NaN;
+    const height =
+      heightRaw != null ? parseInt(String(heightRaw), 10) : Number.NaN;
+    // itunes:image is typically href-only; keep those for artwork, not podcast_images
+    const hasPodcastAttrs =
+      !!alt ||
+      !!aspectRatio ||
+      !!type ||
+      !!purpose ||
+      (Number.isFinite(width) && width > 0) ||
+      (Number.isFinite(height) && height > 0);
+    if (!hasPodcastAttrs) continue;
+    const href = baseUrl ? normalizeUrl(baseUrl, rawHref) : rawHref;
+    out.push({
+      href,
+      alt: alt || null,
+      aspectRatio: aspectRatio || null,
+      width: Number.isFinite(width) && width > 0 ? width : null,
+      height: Number.isFinite(height) && height > 0 ? height : null,
+      type: type || null,
+      purpose: purpose || null,
+    });
+  }
+  return jsonOrNull(out);
+}
+
+function parseSoundbites(parent: Record<string, unknown>): string | null {
+  const list = ensureArray(parent["podcast:soundbite"] ?? parent["soundbite"]);
+  const out: Array<{ time: number; duration: number; title?: string }> = [];
+  for (const el of list) {
+    if (!el || typeof el !== "object") continue;
+    const rec = el as Record<string, unknown>;
+    const start = parseFloat(String(rec["@_startTime"] ?? ""));
+    if (!Number.isFinite(start) || start < 0) continue;
+    let duration = parseFloat(String(rec["@_duration"] ?? "30"));
+    if (!Number.isFinite(duration)) duration = 30;
+    if (duration < 15) duration = 15;
+    if (duration > 120) duration = 120;
+    const title = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+    const item: { time: number; duration: number; title?: string } = {
+      time: start,
+      duration,
+    };
+    if (title) item.title = title.slice(0, 127);
+    out.push(item);
+  }
+  return jsonOrNull(out);
+}
+
+function parsePersonRecords(
+  parent: Record<string, unknown>,
+): ImportPersonRecord[] {
+  const list = ensureArray(parent["podcast:person"] ?? parent["person"]);
+  const out: ImportPersonRecord[] = [];
+  for (const el of list) {
+    if (el == null) continue;
+    const name =
+      typeof el === "object"
+        ? textOfAny((el as Record<string, unknown>)["#text"] ?? el)
+        : String(el).trim();
+    if (!name) continue;
+    if (typeof el === "object" && el !== null) {
+      const rec = el as Record<string, unknown>;
+      out.push({
+        name: name.slice(0, 128),
+        role: attrString(rec, "@_role") || null,
+        href: attrString(rec, "@_href") || null,
+        img: attrString(rec, "@_img") || null,
+      });
+    } else {
+      out.push({ name: name.slice(0, 128), role: null, href: null, img: null });
+    }
+  }
+  return out;
+}
+
+function parseChaptersUrl(
+  parent: Record<string, unknown>,
+  baseUrl: string,
+): string | null {
+  const el = first(
+    ensureArray(parent["podcast:chapters"] ?? parent["chapters"]),
+  );
+  if (!el || typeof el !== "object") return null;
+  const url = attrString(el as Record<string, unknown>, "@_url");
+  return url ? normalizeUrl(baseUrl, url) : null;
+}
+
+function parseTranscriptUrl(
+  parent: Record<string, unknown>,
+  baseUrl: string,
+): string | null {
+  const list = ensureArray(
+    parent["podcast:transcript"] ?? parent["transcript"],
+  );
+  for (const el of list) {
+    if (!el || typeof el !== "object") continue;
+    const rec = el as Record<string, unknown>;
+    const url = attrString(rec, "@_url");
+    if (!url) continue;
+    const type = attrString(rec, "@_type").toLowerCase();
+    // Prefer SRT (Harbor emit); accept any if only one
+    if (!type || type.includes("srt") || type.includes("text/plain")) {
+      return normalizeUrl(baseUrl, url);
+    }
+  }
+  const firstEl = first(list);
+  if (firstEl && typeof firstEl === "object") {
+    const url = attrString(firstEl as Record<string, unknown>, "@_url");
+    if (url) return normalizeUrl(baseUrl, url);
+  }
+  return null;
 }
 
 /** Get link with rel="next" from channel or feed. Ignore rel="hub" and rel="self" for paging. */
@@ -304,6 +693,49 @@ function parseExplicit(val: unknown): number {
   return 0;
 }
 
+function emptyChannelMeta(): ImportChannelMeta {
+  return {
+    title: "Imported Podcast",
+    description: "",
+    subtitle: null,
+    summary: null,
+    language: "en",
+    author_name: "",
+    owner_name: "",
+    email: "",
+    category_primary: "",
+    category_secondary: null,
+    category_primary_two: null,
+    category_secondary_two: null,
+    category_primary_three: null,
+    category_secondary_three: null,
+    explicit: 0,
+    site_url: null,
+    artwork_url: null,
+    copyright: null,
+    license: null,
+    itunes_type: "episodic",
+    medium: "podcast",
+    podcast_guid: null,
+    locked: 0,
+    funding_links: null,
+    persons: null,
+    person_records: [],
+    update_frequency: null,
+    podcast_txts: null,
+    social_interacts: null,
+    locations: null,
+    chat: null,
+    value_blocks: null,
+    blocks: null,
+    publisher: null,
+    podroll: null,
+    spotify_recent_count: null,
+    spotify_country_of_origin: null,
+    apple_podcasts_verify: null,
+  };
+}
+
 function parseChannelMeta(
   channelOrFeed: Record<string, unknown>,
   baseUrl?: string,
@@ -377,18 +809,22 @@ function parseChannelMeta(
     rawCategoryListLength: rawCategoryList.length,
     flattened: categories,
   });
-  // With removeNSPrefix, itunes:image becomes "image". So we only have channel['image'] (may be itunes:image with @_href or <image> block with url child). Try both.
+  // With removeNSPrefix, itunes:image becomes "image". Prefer @_href (itunes), else <url> child (RSS image).
   const rawImage = channelOrFeed["itunes:image"] ?? channelOrFeed["image"];
-  const image = first(ensureArray(rawImage));
+  const imageList = ensureArray(rawImage);
   let artwork_url: string | null = null;
-  if (image && typeof image === "object" && image !== null) {
+  for (const image of imageList) {
+    if (!image || typeof image !== "object") continue;
     const rec = image as Record<string, unknown>;
     let raw =
       typeof rec["@_href"] === "string" && rec["@_href"].trim()
         ? rec["@_href"].trim()
         : null;
     if (!raw) raw = textOfAny(rec["url"])?.trim() || null;
-    artwork_url = raw && baseUrl ? normalizeUrl(baseUrl, raw) : raw;
+    if (raw) {
+      artwork_url = baseUrl ? normalizeUrl(baseUrl, raw) : raw;
+      break;
+    }
   }
 
   const podcastGuidRaw =
@@ -406,30 +842,9 @@ function parseChannelMeta(
   const locked =
     lockedRaw === "yes" || lockedRaw === "true" || lockedRaw === "1" ? 1 : 0;
 
-  const fundingList = ensureArray(
-    channelOrFeed["podcast:funding"] ?? channelOrFeed["funding"],
-  );
-  const fundingLinksArr: Array<{ url: string; text: string | null }> = [];
-  for (const fundingEl of fundingList) {
-    if (!fundingEl || typeof fundingEl !== "object") continue;
-    const rec = fundingEl as Record<string, unknown>;
-    const url = rec["@_url"];
-    const href = typeof url === "string" && url.trim() ? url.trim() : "";
-    if (!href) continue;
-    fundingLinksArr.push({
-      url: href,
-      text: textOfAny(rec["#text"] ?? rec)?.trim() || null,
-    });
-  }
-  const funding_links =
-    fundingLinksArr.length > 0 ? JSON.stringify(fundingLinksArr) : null;
-
-  const personList = ensureArray(
-    channelOrFeed["podcast:person"] ?? channelOrFeed["person"],
-  );
-  const personsArr = personList
-    .map((p) => textOfAny(p))
-    .filter((s) => s.length > 0);
+  const funding_links = parseFundingLinks(channelOrFeed);
+  const person_records = parsePersonRecords(channelOrFeed);
+  const personsArr = person_records.map((p) => p.name);
   const persons = personsArr.length > 0 ? JSON.stringify(personsArr) : null;
 
   const updateFreq =
@@ -437,162 +852,27 @@ function parseChannelMeta(
     channelOrFeed["updateFrequency"];
   let update_frequency: string | null = null;
   if (updateFreq && typeof updateFreq === "object" && updateFreq !== null) {
-    const rec = updateFreq as Record<string, unknown>;
-    const rrule = typeof rec["@_rrule"] === "string" ? rec["@_rrule"].trim() : "";
-    const dtstart =
-      typeof rec["@_dtstart"] === "string" ? rec["@_dtstart"].trim() : "";
-    const completeRaw = String(rec["@_complete"] ?? "").toLowerCase();
-    const complete = completeRaw === "true" || completeRaw === "1" || completeRaw === "yes";
-    const label = textOfAny(rec["#text"] ?? rec)?.trim() || "";
-    if (rrule || dtstart || complete || label) {
-      update_frequency = JSON.stringify({
-        rrule: rrule || null,
-        label: label ? label.slice(0, 128) : null,
-        complete: complete || null,
-        dtstart: dtstart || null,
-      });
-    }
-  }
-
-  const licenseEl =
-    channelOrFeed["podcast:license"] ?? channelOrFeed["license"];
-  let license: string | null = null;
-  if (licenseEl != null) {
-    let identifier = "";
-    let url: string | null = null;
-    if (typeof licenseEl === "object" && licenseEl !== null) {
-      const rec = licenseEl as Record<string, unknown>;
-      identifier = textOfAny(rec["#text"] ?? rec)?.trim() || "";
-      const u = rec["@_url"];
-      url = typeof u === "string" && u.trim() ? u.trim() : null;
-    } else {
-      identifier = textOfAny(licenseEl)?.trim() || "";
-    }
-    if (identifier) {
-      license = JSON.stringify({ identifier: identifier.slice(0, 128), url });
-    }
-  }
-
-  // Optional channel Podcast 2.0 arrays/objects (best-effort)
-  const parseTxts = () => {
-    const list = ensureArray(channelOrFeed["podcast:txt"] ?? channelOrFeed["txt"]);
-    const out: Array<{ purpose: string | null; value: string }> = [];
-    for (const el of list) {
-      if (el == null) continue;
-      if (typeof el === "object") {
-        const rec = el as Record<string, unknown>;
-        const value = textOfAny(rec["#text"] ?? rec)?.trim() || "";
-        if (!value) continue;
-        const purpose =
-          typeof rec["@_purpose"] === "string" && rec["@_purpose"].trim()
-            ? rec["@_purpose"].trim()
-            : null;
-        out.push({ purpose, value });
-      } else {
-        const value = String(el).trim();
-        if (value) out.push({ purpose: null, value });
-      }
-    }
-    return out.length > 0 ? JSON.stringify(out) : null;
-  };
-
-  const parseSocial = () => {
-    const list = ensureArray(
-      channelOrFeed["podcast:socialInteract"] ?? channelOrFeed["socialInteract"],
-    );
-    const out: Array<Record<string, unknown>> = [];
-    for (const el of list) {
-      if (!el || typeof el !== "object") continue;
-      const rec = el as Record<string, unknown>;
-      const protocol =
-        typeof rec["@_protocol"] === "string" ? rec["@_protocol"].trim() : "";
-      if (!protocol) continue;
-      const item: Record<string, unknown> = { protocol };
-      if (typeof rec["@_uri"] === "string" && rec["@_uri"].trim()) {
-        item.uri = rec["@_uri"].trim();
-      }
-      if (typeof rec["@_accountId"] === "string" && rec["@_accountId"].trim()) {
-        item.accountId = rec["@_accountId"].trim();
-      }
-      if (typeof rec["@_accountUrl"] === "string" && rec["@_accountUrl"].trim()) {
-        item.accountUrl = rec["@_accountUrl"].trim();
-      }
-      if (rec["@_priority"] != null) {
-        const n = parseInt(String(rec["@_priority"]), 10);
-        if (Number.isFinite(n)) item.priority = n;
-      }
-      out.push(item);
-    }
-    return out.length > 0 ? JSON.stringify(out) : null;
-  };
-
-  const parseLocations = () => {
-    const list = ensureArray(
-      channelOrFeed["podcast:location"] ?? channelOrFeed["location"],
-    );
-    const out: Array<Record<string, unknown>> = [];
-    for (const el of list) {
-      if (!el || typeof el !== "object") continue;
-      const rec = el as Record<string, unknown>;
-      const name = textOfAny(rec["#text"] ?? rec)?.trim() || "";
-      if (!name) continue;
-      const item: Record<string, unknown> = { name: name.slice(0, 128) };
-      const rel = typeof rec["@_rel"] === "string" ? rec["@_rel"] : "";
-      if (rel === "subject" || rel === "creator") item.rel = rel;
-      if (typeof rec["@_geo"] === "string" && rec["@_geo"].trim()) item.geo = rec["@_geo"].trim();
-      if (typeof rec["@_osm"] === "string" && rec["@_osm"].trim()) item.osm = rec["@_osm"].trim();
-      if (typeof rec["@_country"] === "string" && /^[A-Za-z]{2}$/.test(rec["@_country"].trim())) {
-        item.country = rec["@_country"].trim().toUpperCase();
-      }
-      out.push(item);
-    }
-    return out.length > 0 ? JSON.stringify(out) : null;
-  };
-
-  const parseBlocks = () => {
-    const list = ensureArray(channelOrFeed["podcast:block"] ?? channelOrFeed["block"]);
-    const out: Array<{ id: string | null; value: "yes" | "no" }> = [];
-    for (const el of list) {
-      let valueRaw = "";
-      let id: string | null = null;
-      if (typeof el === "object" && el !== null) {
-        const rec = el as Record<string, unknown>;
-        valueRaw = textOfAny(rec["#text"] ?? rec)?.trim().toLowerCase() || "";
-        if (typeof rec["@_id"] === "string" && rec["@_id"].trim()) id = rec["@_id"].trim();
-      } else {
-        valueRaw = String(el).trim().toLowerCase();
-      }
-      if (valueRaw !== "yes" && valueRaw !== "no") continue;
-      out.push({ id, value: valueRaw });
-    }
-    return out.length > 0 ? JSON.stringify(out) : null;
-  };
-
-  let chat: string | null = null;
-  {
-    const chatEl = channelOrFeed["podcast:chat"] ?? channelOrFeed["chat"];
-    const firstChat = first(ensureArray(chatEl));
-    if (firstChat && typeof firstChat === "object") {
-      const rec = firstChat as Record<string, unknown>;
-      const server = typeof rec["@_server"] === "string" ? rec["@_server"].trim() : "";
-      const protocol =
-        typeof rec["@_protocol"] === "string" ? rec["@_protocol"].trim() : "";
-      if (server && protocol) {
-        chat = JSON.stringify({
-          server,
-          protocol,
-          accountId:
-            typeof rec["@_accountId"] === "string" && rec["@_accountId"].trim()
-              ? rec["@_accountId"].trim()
-              : null,
-          space:
-            typeof rec["@_space"] === "string" && rec["@_space"].trim()
-              ? rec["@_space"].trim()
-              : null,
+    const firstUf = first(ensureArray(updateFreq));
+    if (firstUf && typeof firstUf === "object") {
+      const rec = firstUf as Record<string, unknown>;
+      const rrule = attrString(rec, "@_rrule");
+      const dtstart = attrString(rec, "@_dtstart");
+      const completeRaw = String(rec["@_complete"] ?? "").toLowerCase();
+      const complete =
+        completeRaw === "true" || completeRaw === "1" || completeRaw === "yes";
+      const label = textOfAny(rec["#text"] ?? rec)?.trim() || "";
+      if (rrule || dtstart || complete || label) {
+        update_frequency = JSON.stringify({
+          rrule: rrule || null,
+          label: label ? label.slice(0, 128) : null,
+          complete: complete || null,
+          dtstart: dtstart || null,
         });
       }
     }
   }
+
+  const license = parseLicense(channelOrFeed);
 
   let publisher: string | null = null;
   {
@@ -605,19 +885,12 @@ function parseChannelMeta(
         first(ensureArray(rec["remoteItem"]));
       if (remote && typeof remote === "object") {
         const r = remote as Record<string, unknown>;
-        const feedGuid =
-          typeof r["@_feedGuid"] === "string" ? r["@_feedGuid"].trim() : "";
+        const feedGuid = attrString(r, "@_feedGuid");
         if (feedGuid) {
           publisher = JSON.stringify({
             feedGuid,
-            feedUrl:
-              typeof r["@_feedUrl"] === "string" && r["@_feedUrl"].trim()
-                ? r["@_feedUrl"].trim()
-                : null,
-            medium:
-              typeof r["@_medium"] === "string" && r["@_medium"].trim()
-                ? r["@_medium"].trim()
-                : "publisher",
+            feedUrl: attrString(r, "@_feedUrl") || null,
+            medium: attrString(r, "@_medium") || "publisher",
           });
         }
       }
@@ -645,19 +918,12 @@ function parseChannelMeta(
     for (const remote of remotes) {
       if (!remote || typeof remote !== "object") continue;
       const r = remote as Record<string, unknown>;
-      const feedGuid =
-        typeof r["@_feedGuid"] === "string" ? r["@_feedGuid"].trim() : "";
+      const feedGuid = attrString(r, "@_feedGuid");
       if (!feedGuid) continue;
       items.push({
         feedGuid,
-        feedUrl:
-          typeof r["@_feedUrl"] === "string" && r["@_feedUrl"].trim()
-            ? r["@_feedUrl"].trim()
-            : null,
-        title:
-          typeof r["@_title"] === "string" && r["@_title"].trim()
-            ? r["@_title"].trim()
-            : null,
+        feedUrl: attrString(r, "@_feedUrl") || null,
+        title: attrString(r, "@_title") || null,
         coverArtUrl: null,
         homeUrl: null,
       });
@@ -665,19 +931,23 @@ function parseChannelMeta(
     if (items.length > 0) podroll = JSON.stringify(items);
   }
 
-  const podcast_txts = parseTxts();
-  const social_interacts = parseSocial();
-  const locations = parseLocations();
-  const blocks = parseBlocks();
-  const value_blocks: string | null = null; // complex nested; skip full import for now
+  const podcast_txts = parseTxts(channelOrFeed);
+  const social_interacts = parseSocialInteracts(channelOrFeed);
+  const locations = parseLocations(channelOrFeed);
+  const blocks = parseBlocks(channelOrFeed);
+  const chat = parseChat(channelOrFeed);
+  const value_blocks = parseValueBlocks(channelOrFeed);
 
   const limitEl = channelOrFeed["spotify:limit"] ?? channelOrFeed["limit"];
   let spotify_recent_count: number | null = null;
   if (limitEl && typeof limitEl === "object" && limitEl !== null) {
-    const rc = (limitEl as Record<string, unknown>)["@_recentCount"];
-    if (rc != null) {
-      const n = parseInt(String(rc), 10);
-      if (Number.isInteger(n) && n >= 0) spotify_recent_count = n;
+    const firstLimit = first(ensureArray(limitEl));
+    if (firstLimit && typeof firstLimit === "object") {
+      const rc = (firstLimit as Record<string, unknown>)["@_recentCount"];
+      if (rc != null) {
+        const n = parseInt(String(rc), 10);
+        if (Number.isInteger(n) && n >= 0) spotify_recent_count = n;
+      }
     }
   }
   const spotify_country_of_origin =
@@ -736,6 +1006,7 @@ function parseChannelMeta(
     locked,
     funding_links,
     persons,
+    person_records,
     update_frequency,
     podcast_txts,
     social_interacts,
@@ -825,8 +1096,15 @@ function itemToEpisode(
     textOfAny(item["updated"]) ||
     null;
   const pubDate = normalizeDateString(pubDateRaw);
-  const seasonRaw = textOfAny(item["itunes:season"] ?? item["season"]) || "";
-  const episodeRaw = textOfAny(item["itunes:episode"] ?? item["episode"]) || "";
+  // Prefer podcast:season / podcast:episode when present (Harbor emits both).
+  const seasonRaw =
+    textOfAny(item["podcast:season"] ?? item["season"]) ||
+    textOfAny(item["itunes:season"]) ||
+    "";
+  const episodeRaw =
+    textOfAny(item["podcast:episode"] ?? item["episode"]) ||
+    textOfAny(item["itunes:episode"]) ||
+    "";
   const season_number = seasonRaw !== "" ? parseInt(seasonRaw, 10) : null;
   const episode_number = episodeRaw !== "" ? parseInt(episodeRaw, 10) : null;
   const episodeTypeRaw =
@@ -835,23 +1113,47 @@ function itemToEpisode(
     null;
   const episodeType = episodeTypeRaw ? episodeTypeRaw.toLowerCase() : null;
   const explicit = parseExplicit(item["itunes:explicit"] ?? item["explicit"]);
-  const image = item["itunes:image"] ?? item["image"];
+
+  // Artwork: first href-only image (itunes-style); podcast:image with attrs go to podcast_images
+  const imageList = ensureArray(item["itunes:image"] ?? item["image"]);
   let artwork_url: string | null = null;
-  if (image && typeof image === "object" && image !== null) {
+  for (const image of imageList) {
+    if (!image || typeof image !== "object") continue;
+    const rec = image as Record<string, unknown>;
     const href =
-      (image as Record<string, unknown>)["@_href"] ??
-      (image as Record<string, unknown>)["url"];
-    if (typeof href === "string") {
-      const trimmed = href.trim();
-      artwork_url = trimmed ? normalizeUrl(baseUrl, trimmed) : null;
+      (typeof rec["@_href"] === "string" && rec["@_href"].trim()) ||
+      (typeof rec["url"] === "string" && rec["url"].trim()) ||
+      "";
+    if (!href) continue;
+    const hasPodcastAttrs =
+      !!attrString(rec, "@_alt") ||
+      !!attrString(rec, "@_aspect-ratio") ||
+      !!attrString(rec, "@_aspectRatio") ||
+      !!attrString(rec, "@_type") ||
+      !!attrString(rec, "@_purpose") ||
+      rec["@_width"] != null ||
+      rec["@_height"] != null;
+    if (hasPodcastAttrs) continue;
+    artwork_url = normalizeUrl(baseUrl, href);
+    break;
+  }
+
+  const links = ensureArray(item["link"]);
+  let link = "";
+  for (const l of links) {
+    const text = textOf(l);
+    if (text.startsWith("http")) {
+      link = text;
+      break;
+    }
+    if (l && typeof l === "object") {
+      const href = attrString(l as Record<string, unknown>, "@_href");
+      if (href.startsWith("http")) {
+        link = href;
+        break;
+      }
     }
   }
-  const link =
-    textOfAny(item["link"]) ||
-    (item["link"] && typeof item["link"] === "object"
-      ? textOfAny((item["link"] as Record<string, unknown>)["@_href"])
-      : "") ||
-    null;
 
   return {
     title,
@@ -870,6 +1172,18 @@ function itemToEpisode(
     explicit: explicit === 0 ? 0 : 1,
     artwork_url,
     episode_link: link && link.startsWith("http") ? link : null,
+    content_links: parseContentLinks(item),
+    podcast_txts: parseTxts(item),
+    social_interacts: parseSocialInteracts(item),
+    locations: parseLocations(item),
+    license: parseLicense(item),
+    podcast_images: parsePodcastImages(item, baseUrl),
+    funding_links: parseFundingLinks(item),
+    chat: parseChat(item),
+    value_blocks: parseValueBlocks(item),
+    final_soundbites: parseSoundbites(item),
+    chapters_url: parseChaptersUrl(item, baseUrl),
+    transcript_url: parseTranscriptUrl(item, baseUrl),
   };
 }
 
@@ -903,6 +1217,33 @@ function dedupeKey(ep: ImportEpisodeItem): string {
 }
 
 /**
+ * Parse a single RSS/Atom XML document (no network). Used by import and unit tests.
+ */
+export function parseFeedXml(xml: string, baseUrl = "https://example.com/"): ImportFeedResult {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parser.parse(xml) as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(
+      "Invalid XML: " + (err instanceof Error ? err.message : String(err)),
+    );
+  }
+  const { channel, items } = extractItemsFromPage(parsed, baseUrl);
+  const channelMeta =
+    channel && Object.keys(channel).length > 0
+      ? parseChannelMeta(channel, baseUrl)
+      : emptyChannelMeta();
+  const sorted = [...items].sort((a, b) => {
+    const da = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+    const db = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+    const ta = Number.isFinite(da) ? da : 0;
+    const tb = Number.isFinite(db) ? db : 0;
+    return ta - tb;
+  });
+  return { channel: channelMeta, episodes: sorted };
+}
+
+/**
  * Fetch feed at url, follow atom:link rel="next" until no next or duplicate/empty.
  * Returns channel metadata and episodes sorted by pubDate ascending (oldest first), deduped.
  */
@@ -927,16 +1268,16 @@ export async function fetchAndParseFeed(
     const { body, finalUrl } = await fetchWithRetry(currentUrl, controller);
     visitedPageUrls.add(finalUrl);
 
-    let parsed: Record<string, unknown>;
+    let channel: Record<string, unknown>;
+    let items: ImportEpisodeItem[];
     try {
-      parsed = parser.parse(body) as Record<string, unknown>;
+      const parsed = parser.parse(body) as Record<string, unknown>;
+      ({ channel, items } = extractItemsFromPage(parsed, finalUrl));
     } catch (err) {
       throw new Error(
         "Invalid XML: " + (err instanceof Error ? err.message : String(err)),
       );
     }
-
-    const { channel, items } = extractItemsFromPage(parsed, finalUrl);
 
     if (!channelMeta && channel && Object.keys(channel).length > 0) {
       channelMeta = parseChannelMeta(channel, finalUrl);
@@ -965,45 +1306,7 @@ export async function fetchAndParseFeed(
   }
 
   if (!channelMeta) {
-    channelMeta = {
-      title: "Imported Podcast",
-      description: "",
-      subtitle: null,
-      summary: null,
-      language: "en",
-      author_name: "",
-      owner_name: "",
-      email: "",
-      category_primary: "",
-      category_secondary: null,
-      category_primary_two: null,
-      category_secondary_two: null,
-      category_primary_three: null,
-      category_secondary_three: null,
-      explicit: 0,
-      site_url: null,
-      artwork_url: null,
-      copyright: null,
-      license: null,
-      itunes_type: "episodic",
-      medium: "podcast",
-      podcast_guid: null,
-      locked: 0,
-      funding_links: null,
-      persons: null,
-      update_frequency: null,
-      podcast_txts: null,
-      social_interacts: null,
-      locations: null,
-      chat: null,
-      value_blocks: null,
-      blocks: null,
-      publisher: null,
-      podroll: null,
-      spotify_recent_count: null,
-      spotify_country_of_origin: null,
-      apple_podcasts_verify: null,
-    };
+    channelMeta = emptyChannelMeta();
   }
 
   const sorted = [...allEpisodes].sort((a, b) => {
@@ -1015,6 +1318,52 @@ export async function fetchAndParseFeed(
   });
 
   return { channel: channelMeta, episodes: sorted };
+}
+
+/**
+ * SSRF-safe fetch of a text URL (chapters.json, transcript.srt).
+ */
+export async function fetchImportTextUrl(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const controller = new AbortController();
+  if (signal) {
+    signal.addEventListener("abort", () => controller.abort());
+  }
+  await assertUrlNotPrivate(url);
+  const { body } = await fetchWithRetry(url, controller);
+  return body;
+}
+
+/**
+ * Parse Podcast 2.0 chapters JSON into Harbor final_markers shape.
+ */
+export function parsePodcastChaptersJson(
+  body: string,
+): Array<{ time: number; title?: string }> | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      chapters?: Array<{ startTime?: unknown; title?: unknown }>;
+    };
+    if (!parsed || !Array.isArray(parsed.chapters)) return null;
+    const markers: Array<{ time: number; title?: string }> = [];
+    for (const ch of parsed.chapters) {
+      const t =
+        typeof ch.startTime === "number"
+          ? ch.startTime
+          : parseFloat(String(ch.startTime ?? ""));
+      if (!Number.isFinite(t) || t < 0) continue;
+      const title =
+        typeof ch.title === "string" && ch.title.trim()
+          ? ch.title.trim()
+          : undefined;
+      markers.push(title ? { time: t, title } : { time: t });
+    }
+    return markers.length > 0 ? markers : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface FeedChannelPreview {

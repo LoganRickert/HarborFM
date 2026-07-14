@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.9.1 - 2026-07-13
+
+- **Import:** Podcast import updated for Podcast 2.0 show and episode metadata from RSS (funding, license, update frequency, block, chat, location, publisher, podroll, social interact, txt, value, content links, images, soundbites). Channel `<podcast:person>` creates public cast hosts; chapters.json and transcript.srt are fetched when linked; ASR is skipped when a transcript is imported.
+
 ## v1.9.0 - 2026-07-13
 
 - **Public feed:** Featured Trailer (playable trailer above Listen on / Follow; hidden when not listenable; omitted from the Episodes list while featured). Trailer and Bonus type pills on cards. Recommended Podcasts (podroll) above Reviews. Support The Show when funding links are set (podcast page, and episode page with episode links falling back to show links). Per-show accent color and visibility toggles for author, descriptions, funding, podroll, cast, and reviews.

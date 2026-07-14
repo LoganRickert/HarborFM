@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { drizzleDb } from "../../db/index.js";
 import {
   episodeSegments,
+  podcastCast,
   podcasts,
   users,
 } from "../../db/schema.js";
@@ -109,4 +110,17 @@ export function getUserCanTranscribe(userId: string): boolean {
     .limit(1)
     .get();
   return row?.canTranscribe === 1;
+}
+
+/** Insert a public cast member from imported <podcast:person>. */
+export function insertCastMember(row: {
+  id: string;
+  podcastId: string;
+  name: string;
+  role: "host" | "guest";
+  photoUrl: string | null;
+  socialLinkText: string | null;
+  isPublic: boolean;
+}): void {
+  drizzleDb.insert(podcastCast).values(row).run();
 }
