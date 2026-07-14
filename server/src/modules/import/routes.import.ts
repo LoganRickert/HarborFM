@@ -29,7 +29,6 @@ import {
   uploadsDir,
   segmentPath,
   processedDir,
-  artworkDir,
   pathRelativeToData,
 } from "../../services/paths.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
@@ -38,15 +37,15 @@ import * as audioService from "../../services/audio.js";
 import { extensionFromAudioMimetype } from "../../services/uploads.js";
 import {
   APP_NAME,
-  SEGMENT_UPLOAD_MAX_BYTES,
+  EPISODE_AUDIO_UPLOAD_MAX_BYTES,
+  IMPORT_AUDIO_FETCH_TIMEOUT_MS,
   OPENAI_TRANSCRIPTION_DEFAULT_URL,
 } from "../../config.js";
 import { generateSrtFromWhisper, generateSrtFromOpenAI } from "../segments/index.js";
 import {
   slugify,
   downloadToFile,
-  downloadArtworkToPath,
-  extFromUrl,
+  downloadArtworkForPodcast,
   importStatusByPodcastId,
   activeImportByUserId,
 } from "./utils.js";
@@ -170,7 +169,7 @@ export async function registerImportRoutes(app: FastifyInstance) {
         categorySecondaryThree: channel.category_secondary_three ?? null,
         explicit: Boolean(channel.explicit ?? 0),
         siteUrl: channel.site_url ?? null,
-        artworkUrl: channel.artwork_url ?? null,
+        artworkUrl: null,
         copyright: channel.copyright ?? null,
         podcastGuid,
         locked: Boolean(channel.locked ?? 0),
@@ -216,11 +215,18 @@ export async function registerImportRoutes(app: FastifyInstance) {
 
       if (channel.artwork_url) {
         try {
-          const ext = extFromUrl(channel.artwork_url);
-          const dir = artworkDir(podcastId);
-          const artworkPath = join(dir, `${nanoid()}.${ext}`);
-          await downloadArtworkToPath(channel.artwork_url, artworkPath);
-          repo.updatePodcastArtwork(podcastId, pathRelativeToData(artworkPath));
+          const relativePath = await downloadArtworkForPodcast(
+            podcastId,
+            channel.artwork_url,
+          );
+          if (relativePath) {
+            repo.updatePodcastArtwork(podcastId, relativePath);
+          } else {
+            request.log.warn(
+              { podcastId, url: channel.artwork_url },
+              "Podcast artwork download failed",
+            );
+          }
         } catch (err) {
           request.log.warn(
             { err, podcastId },
@@ -290,7 +296,9 @@ export async function registerImportRoutes(app: FastifyInstance) {
               await downloadToFile(
                 ep.enclosureUrl,
                 tempPath,
-                SEGMENT_UPLOAD_MAX_BYTES,
+                EPISODE_AUDIO_UPLOAD_MAX_BYTES,
+                undefined,
+                IMPORT_AUDIO_FETCH_TIMEOUT_MS,
               );
               const bytesWritten = statSync(tempPath).size;
 
@@ -352,7 +360,7 @@ export async function registerImportRoutes(app: FastifyInstance) {
                   ep.explicit != null ? Boolean(ep.explicit) : null,
                 publishAt,
                 status: "published",
-                artworkUrl: ep.artwork_url ?? null,
+                artworkUrl: null,
                 episodeLink: ep.episode_link ?? null,
                 guidIsPermalink: Boolean(ep.guidIsPermalink ?? 0),
                 contentLinks: ep.content_links ?? null,
@@ -369,17 +377,21 @@ export async function registerImportRoutes(app: FastifyInstance) {
 
               if (ep.artwork_url) {
                 try {
-                  const ext = extFromUrl(ep.artwork_url);
-                  const dir = artworkDir(podcastId);
-                  const episodeArtworkPath = join(dir, `${nanoid()}.${ext}`);
-                  await downloadArtworkToPath(
+                  const relativePath = await downloadArtworkForPodcast(
+                    podcastId,
                     ep.artwork_url,
-                    episodeArtworkPath,
                   );
-                  episodesRepo.updateEpisode(episodeId, {
-                    artworkPath: pathRelativeToData(episodeArtworkPath),
-                    artworkUrl: null,
-                  });
+                  if (relativePath) {
+                    episodesRepo.updateEpisode(episodeId, {
+                      artworkPath: relativePath,
+                      artworkUrl: null,
+                    });
+                  } else {
+                    log.warn(
+                      { episodeId, url: ep.artwork_url },
+                      "Episode artwork download failed",
+                    );
+                  }
                 } catch (err) {
                   log.warn(
                     { err, episodeId },

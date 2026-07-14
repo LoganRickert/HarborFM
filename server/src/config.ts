@@ -92,6 +92,13 @@ export const MULTIPART_MAX_BYTES = MULTIPART_MAX_MB * 1024 * 1024;
 export const ARTWORK_MAX_MB = Number(process.env.ARTWORK_MAX_MB) || 5;
 export const ARTWORK_MAX_BYTES = ARTWORK_MAX_MB * 1024 * 1024;
 
+/**
+ * Timeout for importing episode enclosure audio (large files).
+ * Env: IMPORT_AUDIO_FETCH_TIMEOUT_MS. Default 1800000 (30 minutes).
+ */
+export const IMPORT_AUDIO_FETCH_TIMEOUT_MS =
+  Number(process.env.IMPORT_AUDIO_FETCH_TIMEOUT_MS) || 1_800_000;
+
 /** Path to ffmpeg binary. Env: FFMPEG_PATH. Default "ffmpeg". */
 export const FFMPEG_PATH = process.env.FFMPEG_PATH ?? "ffmpeg";
 

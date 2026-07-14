@@ -289,7 +289,7 @@ export function generateRss(
   const categorySecondaryThree = podcast.categorySecondaryThree
     ? escapeXml(String(podcast.categorySecondaryThree))
     : "";
-  const explicit = podcast.explicit ? "yes" : "no";
+  const explicit = podcast.explicit === true ? "true" : "false";
   const siteUrl = sanitizeHttpUrl(podcast.siteUrl);
   const slugRaw = stripControlChars(String(podcast.slug ?? "")).trim();
   const copyright = podcast.copyright
@@ -904,11 +904,9 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       ? new Date(String(ep.publishAt)).toUTCString()
       : new Date(String(ep.updatedAt)).toUTCString();
     const epExplicit =
-      ep.explicit === true
-        ? "yes"
-        : podcast.explicit
-          ? "yes"
-          : "no";
+      ep.explicit === true || (ep.explicit == null && podcast.explicit === true)
+        ? "true"
+        : "false";
     const duration =
       ep.audioDurationSec != null ? Number(ep.audioDurationSec) : 0;
     const season = ep.seasonNumber != null ? Number(ep.seasonNumber) : null;

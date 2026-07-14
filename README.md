@@ -468,7 +468,8 @@ All environment variables supported by the server work the same in Docker. Set t
 | `FTP_CLIENT_TIMEOUT_MS` | `60000` | FTP client timeout (ms) |
 | **Import** | | |
 | `IMPORT_USER_AGENT` | `${APP_NAME}-Import/1.0` | User-Agent for podcast import HTTP requests |
-| `IMPORT_FETCH_TIMEOUT_MS` | `60000` | Import HTTP timeout (ms) |
+| `IMPORT_FETCH_TIMEOUT_MS` | `60000` | Import HTTP timeout for feed/artwork (ms) |
+| `IMPORT_AUDIO_FETCH_TIMEOUT_MS` | `1800000` | Import timeout for episode enclosure audio (ms); default 30 minutes |
 | `IMPORT_ALLOW_PRIVATE_URLS` | (false) | Set to `true` or `1` to allow podcast import from private/internal URLs (localhost, 10.x, 192.168.x, etc). Dev/testing only; disables SSRF protection. |
 | **Subscriber tokens** | | |
 | `SUBSCRIBER_TOKEN_PREFIX` | `hfm_sub_` | Prefix for subscriber RSS tokens in URL path |

@@ -2,7 +2,9 @@
 
 ## v1.9.1 - 2026-07-13
 
-- **Import:** Podcast import updated for Podcast 2.0 show and episode metadata from RSS (funding, license, update frequency, block, chat, location, publisher, podroll, social interact, txt, value, content links, images, soundbites). Channel `<podcast:person>` creates public cast hosts; chapters.json and transcript.srt are fetched when linked; ASR is skipped when a transcript is imported.
+- **Import:** Podcast import round-trips Harbor Podcast 2.0 show and episode metadata from RSS (funding, license, update frequency, block, chat, location, publisher, podroll, social interact, txt, value, content links, images, soundbites). Channel `<podcast:person>` creates public cast hosts; chapters.json and transcript.srt are fetched when linked; ASR is skipped when a transcript is imported.
+- **Import:** Show and episode cover images are saved locally like an artwork upload (not left as remote URLs). Episode enclosure downloads use the episode audio size limit (default 500MB) and a longer timeout (default 30 minutes) so multi-hour episodes can import.
+- **RSS:** Channel and item `<itunes:explicit>` always emit `true` or `false` (was `yes`/`no`).
 
 ## v1.9.0 - 2026-07-13
 

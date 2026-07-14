@@ -1,7 +1,9 @@
-import { createWriteStream, writeFileSync } from "fs";
+import { createWriteStream, writeFileSync, renameSync, unlinkSync, existsSync } from "fs";
+import { join } from "path";
 import { pipeline } from "stream/promises";
 import { Readable } from "stream";
 import { Transform } from "stream";
+import { nanoid } from "nanoid";
 import { assertUrlNotPrivate } from "../../utils/ssrf.js";
 import { FileTooLargeError } from "../../services/uploads.js";
 import {
@@ -9,6 +11,15 @@ import {
   IMPORT_FETCH_TIMEOUT_MS,
   ARTWORK_MAX_BYTES,
 } from "../../config.js";
+import {
+  imageExtFromMagic,
+  MIMETYPE_TO_EXT,
+} from "../../utils/artwork.js";
+import {
+  assertResolvedPathUnder,
+  artworkDir,
+  pathRelativeToData,
+} from "../../services/paths.js";
 
 export interface ImportStatusState {
   status: "pending" | "importing" | "done" | "failed";
@@ -33,18 +44,17 @@ export function slugify(s: string): string {
 
 /**
  * Download URL to file with size limit. Throws FileTooLargeError if exceeded.
+ * @param timeoutMs - Abort after this many ms (default IMPORT_FETCH_TIMEOUT_MS).
  */
 export async function downloadToFile(
   url: string,
   destPath: string,
   maxBytes: number,
   signal?: AbortSignal,
+  timeoutMs: number = IMPORT_FETCH_TIMEOUT_MS,
 ): Promise<number> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    IMPORT_FETCH_TIMEOUT_MS,
-  );
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   if (signal) {
     signal.addEventListener("abort", () => controller.abort());
   }
@@ -97,13 +107,15 @@ export function extFromUrl(url: string): string {
 }
 
 /**
- * Download image from URL to destPath. Validates image type and size. Uses import User-Agent and timeout.
+ * Download image from URL to destPath. Validates image type and size.
+ * Accepts Content-Type image/* or sniffs magic bytes when type is missing/wrong.
+ * Returns the extension used (png|webp|jpg).
  */
 export async function downloadArtworkToPath(
   url: string,
   destPath: string,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<"png" | "webp" | "jpg"> {
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -122,14 +134,56 @@ export async function downloadArtworkToPath(
     });
     clearTimeout(timeoutId);
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-    const contentType = res.headers.get("Content-Type");
-    const buf = await res.arrayBuffer();
+    const contentType = (res.headers.get("Content-Type") ?? "")
+      .toLowerCase()
+      .split(";")[0]
+      .trim();
+    const buf = new Uint8Array(await res.arrayBuffer());
     if (buf.byteLength > ARTWORK_MAX_BYTES)
       throw new Error(`Artwork too large (max ${ARTWORK_MAX_BYTES} bytes)`);
-    const type = (contentType ?? "").toLowerCase();
-    if (!type.startsWith("image/")) throw new Error("Not an image");
-    writeFileSync(destPath, new Uint8Array(buf));
+
+    const fromMime = MIMETYPE_TO_EXT[contentType] as
+      | "png"
+      | "webp"
+      | "jpg"
+      | undefined;
+    const fromMagic = imageExtFromMagic(buf);
+    if (!fromMime && !fromMagic) {
+      throw new Error("Not an image");
+    }
+    const ext = fromMagic ?? fromMime ?? "jpg";
+    writeFileSync(destPath, buf);
+    return ext;
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Download cover art into the podcast artwork directory (same as the image uploader).
+ * Returns the data-relative path, or null if download/validation fails.
+ */
+export async function downloadArtworkForPodcast(
+  podcastId: string,
+  url: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const dir = artworkDir(podcastId);
+  const tmpPath = join(dir, `.${nanoid()}.import-art`);
+  try {
+    const ext = await downloadArtworkToPath(url, tmpPath, signal);
+    const finalPath = join(dir, `${nanoid()}.${ext}`);
+    assertResolvedPathUnder(finalPath, dir);
+    renameSync(tmpPath, finalPath);
+    return pathRelativeToData(finalPath);
+  } catch {
+    if (existsSync(tmpPath)) {
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
+    }
+    return null;
   }
 }
