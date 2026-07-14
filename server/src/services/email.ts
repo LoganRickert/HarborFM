@@ -289,6 +289,59 @@ export function buildReviewVerificationEmail(
   return { subject, text, html };
 }
 
+/**
+ * Build episode poll email verification (confirm vote email).
+ */
+export function buildPollVerificationEmail(
+  verifyUrl: string,
+): { subject: string; text: string; html: string } {
+  const subject = `Verify your poll response on ${APP_NAME}`;
+  const text = [
+    `You submitted a poll response on ${APP_NAME}.`,
+    "",
+    "Verify your email so your vote is counted as verified:",
+    verifyUrl,
+    "",
+    "This link expires in 24 hours.",
+    "",
+    APP_NAME,
+  ].join("\n");
+
+  const origin = new URL(verifyUrl).origin;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>${subject}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      ${emailHeaderWithFavicon(verifyUrl)}
+      <p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">
+        You submitted a poll response. Verify your email so your vote is counted as verified.
+      </p>
+      <p style="margin: 0 0 24px; text-align: center;">
+        <a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Verify Email</a>
+      </p>
+      <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+        This link expires in 24 hours.
+      </p>
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      <a href="${origin}" style="color: inherit; text-decoration: none;">${APP_NAME}</a>
+    </p>
+  </div>
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
 function expiryCopy(hours: number): string {
   return hours === 1 ? "1 hour" : `${hours} hours`;
 }

@@ -816,3 +816,76 @@ export const passwordResetTotpAttempts = sqliteTable(
     index("idx_password_reset_totp_attempts_token_hash").on(table.tokenHash),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Episode polls (072)
+// ---------------------------------------------------------------------------
+export const episodePolls = sqliteTable(
+  "episode_polls",
+  {
+    id: text("id").primaryKey(),
+    episodeId: text("episode_id")
+      .notNull()
+      .unique()
+      .references(() => episodes.id, { onDelete: "cascade" }),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    startAt: text("start_at"),
+    endAt: text("end_at"),
+    requireEmail: integer("require_email", { mode: "boolean" }).notNull().default(false),
+    publicResults: integer("public_results", { mode: "boolean" }).notNull().default(false),
+    limitOneVotePerIp: integer("limit_one_vote_per_ip", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    questionsJson: text("questions_json").notNull().default("[]"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [index("idx_episode_polls_episode_id").on(table.episodeId)],
+);
+
+export const episodePollSubmissions = sqliteTable(
+  "episode_poll_submissions",
+  {
+    id: text("id").primaryKey(),
+    pollId: text("poll_id")
+      .notNull()
+      .references(() => episodePolls.id, { onDelete: "cascade" }),
+    episodeId: text("episode_id")
+      .notNull()
+      .references(() => episodes.id, { onDelete: "cascade" }),
+    email: text("email"),
+    emailNormalized: text("email_normalized"),
+    verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+    emailVerificationTokenHash: text("email_verification_token_hash"),
+    emailVerificationExpiresAt: text("email_verification_expires_at"),
+    ipHash: text("ip_hash"),
+    clientKey: text("client_key"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_episode_poll_submissions_poll_id").on(table.pollId),
+    index("idx_episode_poll_submissions_episode_id").on(table.episodeId),
+    index("idx_episode_poll_submissions_verify_token").on(
+      table.emailVerificationTokenHash,
+    ),
+    index("idx_episode_poll_submissions_poll_ip").on(table.pollId, table.ipHash),
+    index("idx_episode_poll_submissions_client_key").on(table.pollId, table.clientKey),
+  ],
+);
+
+export const episodePollAnswers = sqliteTable(
+  "episode_poll_answers",
+  {
+    id: text("id").primaryKey(),
+    submissionId: text("submission_id")
+      .notNull()
+      .references(() => episodePollSubmissions.id, { onDelete: "cascade" }),
+    questionId: text("question_id").notNull(),
+    optionId: text("option_id"),
+    textValue: text("text_value"),
+  },
+  (table) => [
+    index("idx_episode_poll_answers_submission_id").on(table.submissionId),
+    index("idx_episode_poll_answers_question_id").on(table.questionId),
+  ],
+);

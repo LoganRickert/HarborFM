@@ -221,6 +221,7 @@ async function main() {
     join(E2E_DIR, 'tests', 'scenarios', 'linking-domain.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'managed-domain.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'custom-domain-seo.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'episode-polls.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'dns-domain-switch.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'dns-use-cname-a-record.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'show-cast-permissions.js'),

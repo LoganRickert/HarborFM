@@ -345,6 +345,26 @@ export const REVIEW_SUBMIT_RATE_LIMIT_MAX =
 export const REVIEW_SUBMIT_RATE_LIMIT_TIME_WINDOW =
   process.env.REVIEW_SUBMIT_RATE_LIMIT_TIME_WINDOW?.trim() || "1 minute";
 
+/** Poll vote rate limit: max POST poll/vote per time window per IP. Env: POLL_SUBMIT_RATE_LIMIT_MAX. Default 1. */
+export const POLL_SUBMIT_RATE_LIMIT_MAX =
+  process.env.POLL_SUBMIT_RATE_LIMIT_MAX !== undefined
+    ? Number(process.env.POLL_SUBMIT_RATE_LIMIT_MAX)
+    : 1;
+
+/** Poll vote rate limit time window. Env: POLL_SUBMIT_RATE_LIMIT_TIME_WINDOW. Default "1 minute". */
+export const POLL_SUBMIT_RATE_LIMIT_TIME_WINDOW =
+  process.env.POLL_SUBMIT_RATE_LIMIT_TIME_WINDOW?.trim() || "1 minute";
+
+/** Poll results rate limit: max GET poll/results per time window per IP. Env: POLL_RESULTS_RATE_LIMIT_MAX. Default 30. */
+export const POLL_RESULTS_RATE_LIMIT_MAX =
+  process.env.POLL_RESULTS_RATE_LIMIT_MAX !== undefined
+    ? Number(process.env.POLL_RESULTS_RATE_LIMIT_MAX)
+    : 30;
+
+/** Poll results rate limit time window. Env: POLL_RESULTS_RATE_LIMIT_TIME_WINDOW. Default "1 minute". */
+export const POLL_RESULTS_RATE_LIMIT_TIME_WINDOW =
+  process.env.POLL_RESULTS_RATE_LIMIT_TIME_WINDOW?.trim() || "1 minute";
+
 /** Global rate limit: time window (e.g. "1 minute"). Env: RATE_LIMIT_TIME_WINDOW. Default "1 minute". */
 export const RATE_LIMIT_TIME_WINDOW =
   process.env.RATE_LIMIT_TIME_WINDOW?.trim() || "1 minute";

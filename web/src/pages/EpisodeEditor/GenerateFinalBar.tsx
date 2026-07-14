@@ -10,6 +10,7 @@ import {
   Download,
   List,
   AudioLines,
+  BarChart3,
 } from 'lucide-react';
 import { downloadEpisodeUrl, finalEpisodeWaveformUrl } from '../../api/audio';
 import { FeedVideoPlayer } from '../../components/Feed/FeedVideoPlayer';
@@ -17,6 +18,7 @@ import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import { formatDuration } from './utils';
 import { ChaptersCard } from './ChaptersCard';
 import { SoundbitesCard } from './SoundbitesCard';
+import { PollsDialog } from './PollsDialog';
 import { CollapsiblePublishPanel } from './CollapsiblePublishPanel';
 import { ActionTile } from './ActionTile';
 import type { PublishFormFields } from './EpisodePublishControls';
@@ -100,6 +102,7 @@ export function GenerateFinalBar({
   const [isGeneratingTranscript, setIsGeneratingTranscript] = useState(false);
   const [chaptersExpanded, setChaptersExpanded] = useState(false);
   const [soundbitesExpanded, setSoundbitesExpanded] = useState(false);
+  const [pollsOpen, setPollsOpen] = useState(false);
 
   const waveformCacheKey = finalUpdatedAt ?? episodeId ?? '';
   const waveformUrl =
@@ -464,6 +467,15 @@ export function GenerateFinalBar({
           disabled={!hasFinalAudio}
           infoText="Highlight short clips (15–120s) for podcast apps that support Podcast 2.0 soundbites."
         />
+        <ActionTile
+          icon={<BarChart3 size={22} strokeWidth={1.75} aria-hidden />}
+          label="Polls"
+          color="slate"
+          onClick={() => setPollsOpen(true)}
+          active={pollsOpen}
+          disabled={metadataReadOnly && !pollsOpen}
+          infoText="Create a listener poll for this episode. Poll data is kept when you rebuild."
+        />
         {showDownloadMp3 && (
           <ActionTile
             icon={<Download size={22} strokeWidth={1.75} aria-hidden />}
@@ -510,6 +522,12 @@ export function GenerateFinalBar({
         expanded={soundbitesExpanded}
         onExpandedChange={setSoundbitesExpanded}
         hideHeader
+      />
+      <PollsDialog
+        episodeId={episodeId}
+        open={pollsOpen}
+        onOpenChange={setPollsOpen}
+        readOnly={metadataReadOnly || readOnly}
       />
     </div>
   );

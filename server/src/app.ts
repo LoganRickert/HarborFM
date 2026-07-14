@@ -57,6 +57,7 @@ import { setupRoutes } from "./modules/setup/index.js";
 import { contactRoutes } from "./modules/contact/index.js";
 import { messagesRoutes } from "./modules/messages/index.js";
 import { reviewsRoutes } from "./modules/reviews/index.js";
+import { pollsRoutes } from "./modules/polls/index.js";
 import { sitemapRoutes } from "./modules/sitemap/index.js";
 import { registerRobotsRoute } from "./modules/sitemap/routes.robots.js";
 import { bansRoutes } from "./modules/bans/index.js";
@@ -289,6 +290,7 @@ async function main() {
   await app.register(contactRoutes, { prefix: apiPrefix });
   await app.register(messagesRoutes, { prefix: apiPrefix });
   await app.register(reviewsRoutes, { prefix: apiPrefix });
+  await app.register(pollsRoutes, { prefix: apiPrefix });
   await app.register(publicRoutes, { prefix: apiPrefix });
   await app.register(sitemapRoutes, { prefix: apiPrefix });
   await app.register(bansRoutes, { prefix: apiPrefix });

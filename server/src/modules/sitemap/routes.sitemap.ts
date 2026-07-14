@@ -10,7 +10,7 @@ import {
   writeSitemapToFile,
   writeSitemapIndexToFile,
 } from "../../services/sitemap.js";
-import { RSS_CACHE_MAX_AGE_MS } from "../../config.js";
+import { API_PREFIX, RSS_CACHE_MAX_AGE_MS } from "../../config.js";
 import { getPodcastByHost } from "../../services/dns/custom-domain-resolver.js";
 import {
   getBaseUrl,
@@ -25,6 +25,15 @@ function sendXml(reply: { header: (k: string, v: string) => unknown; send: (b: s
   reply.header("Content-Type", "application/xml; charset=utf-8");
   reply.header("Cache-Control", "public, max-age=3600");
   return reply.send(xml);
+}
+
+function sitemapApiBase(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/${API_PREFIX}`;
+}
+
+/** Stale caches may omit /api from child sitemap locs. */
+function isUsableSitemapIndexCache(xml: string): boolean {
+  return xml.includes(`/${API_PREFIX}/sitemap/`);
 }
 
 export async function registerSitemapRoutes(app: FastifyInstance) {
@@ -72,20 +81,20 @@ export async function registerSitemapRoutes(app: FastifyInstance) {
       }
 
       const cached = getCachedSitemapIndexIfFresh(RSS_CACHE_MAX_AGE_MS);
-      if (cached) {
+      if (cached && isUsableSitemapIndexCache(cached)) {
         return sendXml(reply, cached);
       }
-      const baseUrl = getBaseUrl(request);
+      const apiBase = sitemapApiBase(getBaseUrl(request));
       const lastmod = new Date().toISOString().slice(0, 10);
       const entries: { loc: string; lastmod: string }[] = [
-        { loc: `${baseUrl}/sitemap/static.xml`, lastmod },
+        { loc: `${apiBase}/sitemap/static.xml`, lastmod },
       ];
       if (settings.public_feeds_enabled) {
         const rows = repo.listPublicPodcastSlugs();
         for (const row of rows) {
           if (SAFE_SLUG.test(row.slug)) {
             entries.push({
-              loc: `${baseUrl}/sitemap/podcast/${encodeURIComponent(row.slug)}.xml`,
+              loc: `${apiBase}/sitemap/podcast/${encodeURIComponent(row.slug)}.xml`,
               lastmod,
             });
           }

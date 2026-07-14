@@ -21,7 +21,7 @@ if (changelogPath) {
   try {
     let raw = readFileSync(changelogPath, 'utf-8');
     // CHANGELOG uses repo-root-relative paths (e.g. screenshots/foo.jpg). On /updates/
-    // those would resolve to /updates/screenshots/... — rewrite to site-root absolute.
+    // those would resolve to /updates/screenshots/... - rewrite to site-root absolute.
     raw = raw.replace(
       /!\[([^\]]*)\]\((?!https?:\/\/|\/|data:|#)([^)\s]+)\)/g,
       (_match, alt, src) => {

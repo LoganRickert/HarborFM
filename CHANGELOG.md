@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.9.3 - 2026-07-14
+
+- **Episode polls:** Create a listener poll per episode (multiple choice, yes/no, short answer) from the episode editor. Settings include enable, start/end, require email, public results, and one-vote-per-IP. Votes persist across rebuilds.
+- **Public feed:** Collapsible poll card in the episode header. Choice options are full-width selectable items; public results show percentages only (rounded to the nearest 2%; short answers omitted). Requires captcha/email when configured before submit.
+- **Creator results:** Counts for choice questions, paginated short answers and submitted emails (when email is required).
+- **Sitemap:** App-host sitemap index child `<loc>` URLs include `/api` (e.g. `/api/sitemap/podcast/…xml`) so they resolve instead of 404.
+
 ## v1.9.2 - 2026-07-13
 
 - **Custom domains:** Linked/managed domain `robots.txt` and `/api/sitemap.xml` now resolve to that show’s host only (homepage `/` and `/{episodeSlug}`), instead of pointing crawlers at the app hostname and the full `/feed/…` sitemap index.

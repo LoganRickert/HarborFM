@@ -127,16 +127,24 @@ export async function run({ runOne }) {
   );
 
   results.push(
-    await runOne('App-host /api/sitemap.xml remains global index with /feed podcast entry', async () => {
+    await runOne('App-host /api/sitemap.xml remains global index with /api child locs', async () => {
       deleteSitemapCache();
       const res = await fetch(`${rootOrigin()}/api/sitemap.xml`);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const text = await res.text();
-      if (!text.includes('<sitemapindex') && !text.includes('sitemap/podcast/')) {
+      if (!text.includes('<sitemapindex')) {
         throw new Error(`Expected global sitemap index, got:\n${text.slice(0, 400)}`);
       }
-      if (!text.includes(`sitemap/podcast/${slug}.xml`)) {
-        throw new Error(`Expected app-host sitemap to list podcast ${slug}`);
+      const podcastLoc = `/api/sitemap/podcast/${slug}.xml`;
+      if (!text.includes(podcastLoc)) {
+        throw new Error(`Expected app-host sitemap loc to include ${podcastLoc}`);
+      }
+      if (/https?:\/\/[^/\s<]+\/sitemap\//.test(text)) {
+        throw new Error('App-host sitemap index must not omit /api from child sitemap locs');
+      }
+      const childRes = await fetch(`${rootOrigin()}${podcastLoc}`);
+      if (childRes.status !== 200) {
+        throw new Error(`Expected 200 for child sitemap ${podcastLoc}, got ${childRes.status}`);
       }
     })
   );

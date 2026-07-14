@@ -17,4 +17,5 @@ export * from './schemas/settings.js';
 export * from './schemas/setup.js';
 export * from './schemas/call.js';
 export * from './schemas/showNotes.js';
+export * from './schemas/poll.js';
 export * from './spaMeta.js';

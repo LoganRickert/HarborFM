@@ -12,10 +12,26 @@ declare global {
       ready: (cb: () => void) => void;
       execute: (siteKey: string, options: { action: string }) => Promise<string>;
       getResponse: (widgetId?: number) => string;
-      render: (container: string | HTMLElement, options: { sitekey: string }) => number;
+      render: (
+        container: string | HTMLElement,
+        options: {
+          sitekey: string;
+          callback?: (token: string) => void;
+          'expired-callback'?: () => void;
+          'error-callback'?: () => void;
+        },
+      ) => number;
     };
     hcaptcha?: {
-      render: (container: string | HTMLElement, params: { sitekey: string }) => number;
+      render: (
+        container: string | HTMLElement,
+        params: {
+          sitekey: string;
+          callback?: (token: string) => void;
+          'expired-callback'?: () => void;
+          'error-callback'?: () => void;
+        },
+      ) => number;
       getResponse: (widgetId?: number) => string;
     };
     onRecaptchaLoad?: () => void;
@@ -31,6 +47,8 @@ interface CaptchaProps {
   siteKey: string;
   /** reCAPTCHA v3 action name (e.g. 'login', 'contact'). Default 'login'. */
   action?: string;
+  /** Called when a visible captcha (v2 / hCaptcha) is completed, expired, or cleared. */
+  onSolvedChange?: (solved: boolean) => void;
 }
 
 function loadScript(src: string, onload?: () => void): void {
@@ -47,11 +65,13 @@ function loadScript(src: string, onload?: () => void): void {
 }
 
 export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
-  { provider, siteKey, action: actionProp = 'login' },
+  { provider, siteKey, action: actionProp = 'login', onSolvedChange },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
+  const onSolvedChangeRef = useRef(onSolvedChange);
+  onSolvedChangeRef.current = onSolvedChange;
 
   useImperativeHandle(
     ref,
@@ -82,6 +102,7 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
 
   useEffect(() => {
     if (!siteKey) return;
+    onSolvedChangeRef.current?.(provider === 'recaptcha_v3');
 
     if (provider === 'recaptcha_v3') {
       loadScript(`${RECAPTCHA_SCRIPT}?render=${encodeURIComponent(siteKey)}`);
@@ -92,7 +113,12 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
       const doRender = () => {
         if (!containerRef.current || !window.grecaptcha) return;
         try {
-          widgetIdRef.current = window.grecaptcha.render(containerRef.current, { sitekey: siteKey });
+          widgetIdRef.current = window.grecaptcha.render(containerRef.current, {
+            sitekey: siteKey,
+            callback: () => onSolvedChangeRef.current?.(true),
+            'expired-callback': () => onSolvedChangeRef.current?.(false),
+            'error-callback': () => onSolvedChangeRef.current?.(false),
+          });
         } catch {
           // already rendered or invalid
         }
@@ -105,6 +131,7 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
       });
       return () => {
         window.onRecaptchaLoad = undefined;
+        onSolvedChangeRef.current?.(false);
       };
     }
 
@@ -112,7 +139,12 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
       const doRender = () => {
         if (widgetIdRef.current != null || !containerRef.current || !window.hcaptcha) return;
         try {
-          widgetIdRef.current = window.hcaptcha.render(containerRef.current, { sitekey: siteKey });
+          widgetIdRef.current = window.hcaptcha.render(containerRef.current, {
+            sitekey: siteKey,
+            callback: () => onSolvedChangeRef.current?.(true),
+            'expired-callback': () => onSolvedChangeRef.current?.(false),
+            'error-callback': () => onSolvedChangeRef.current?.(false),
+          });
         } catch {
           // already rendered or invalid
         }
@@ -129,6 +161,7 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
       }
       return () => {
         window.onHcaptchaLoad = undefined;
+        onSolvedChangeRef.current?.(false);
       };
     }
   }, [provider, siteKey]);

@@ -34,6 +34,7 @@ import {
   ReviewsCard,
   FeedEpisodeChapters,
   FeedEpisodeSoundbites,
+  FeedEpisodePoll,
   FeedFundingSupport,
 } from '../components/Feed';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
@@ -201,7 +202,9 @@ export function FeedEpisode({
               }
               onTranscriptSeek={seekAndPlay}
               currentTime={currentTime}
-            />
+            >
+              <FeedEpisodePoll podcastSlug={podcastSlug} episodeSlug={episodeSlug} />
+            </FeedEpisodeHeader>
 
             {videoUrl && (
               <div className={styles.videoWrap}>

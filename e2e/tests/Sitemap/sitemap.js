@@ -13,9 +13,13 @@ export async function run({ runOne }) {
       const res = await fetch(`${apiBase}/sitemap.xml`);
       if (res.status !== 200) throw new Error(`Expected 200 for sitemap.xml, got ${res.status}`);
       const text = await res.text();
-      const podcastSitemapEntry = `sitemap/podcast/${listedSlug}.xml`;
+      const podcastSitemapEntry = `/api/sitemap/podcast/${listedSlug}.xml`;
       if (!text.includes(podcastSitemapEntry)) {
         throw new Error(`Listed podcast slug "${listedSlug}" must appear in sitemap.xml (expected: ${podcastSitemapEntry})`);
+      }
+      const childRes = await fetch(`${apiBase}/sitemap/podcast/${listedSlug}.xml`);
+      if (childRes.status !== 200) {
+        throw new Error(`Expected 200 for child podcast sitemap, got ${childRes.status}`);
       }
       deleteSitemapCache();
     })

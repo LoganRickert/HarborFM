@@ -70,6 +70,7 @@ import * as m068 from "./migrations/068_podcasts_podcast_meta.js";
 import * as m069 from "./migrations/069_podcasts_podroll.js";
 import * as m070 from "./migrations/070_podcasts_feed_customizations.js";
 import * as m071 from "./migrations/071_podcasts_feed_visibility_more.js";
+import * as m072 from "./migrations/072_episode_polls.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -143,6 +144,7 @@ const migrations = [
   { name: "069_podcasts_podroll", ...m069 },
   { name: "070_podcasts_feed_customizations", ...m070 },
   { name: "071_podcasts_feed_visibility_more", ...m071 },
+  { name: "072_episode_polls", ...m072 },
 ];
 
 const MIGRATIONS_TABLE = `
