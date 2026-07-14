@@ -11,8 +11,21 @@ import {
   writeSitemapIndexToFile,
 } from "../../services/sitemap.js";
 import { RSS_CACHE_MAX_AGE_MS } from "../../config.js";
-import { getBaseUrl, assertSafeSlug, SAFE_SLUG } from "./utils.js";
+import { getPodcastByHost } from "../../services/dns/custom-domain-resolver.js";
+import {
+  getBaseUrl,
+  getRequestOrigin,
+  requestHost,
+  assertSafeSlug,
+  SAFE_SLUG,
+} from "./utils.js";
 import * as repo from "./repo.js";
+
+function sendXml(reply: { header: (k: string, v: string) => unknown; send: (b: string) => unknown }, xml: string) {
+  reply.header("Content-Type", "application/xml; charset=utf-8");
+  reply.header("Cache-Control", "public, max-age=3600");
+  return reply.send(xml);
+}
 
 export async function registerSitemapRoutes(app: FastifyInstance) {
   app.get(
@@ -21,21 +34,48 @@ export async function registerSitemapRoutes(app: FastifyInstance) {
       schema: {
         tags: ["Sitemap"],
         summary: "Sitemap index",
-        description: "Returns sitemap index XML. Public, no auth.",
+        description:
+          "Returns sitemap index XML on the app host. On linked/managed custom domains, returns a single-podcast sitemap for that host. Public, no auth.",
         security: [],
-        response: { 200: { description: "Sitemap index XML" } },
+        response: {
+          200: { description: "Sitemap XML" },
+          404: { description: "Not found" },
+          500: { description: "Failed to generate sitemap" },
+        },
       },
     },
     async (request, reply) => {
+      const settings = readSettings();
+      const host = requestHost(request);
+      const customMatch = getPodcastByHost(host);
+
+      // Linked/managed domain: only that podcast's public pages (/, /episode-slug).
+      // Do not use the shared per-podcast cache (those files use /feed/... URLs).
+      if (customMatch) {
+        if (!settings.public_feeds_enabled) {
+          return reply.status(404).send({ error: "Not found" });
+        }
+        try {
+          assertSafeId(customMatch.id, "podcastId");
+        } catch {
+          return reply.status(404).send({ error: "Not found" });
+        }
+        try {
+          const baseUrl = getRequestOrigin(request);
+          const xml = generatePodcastSitemapXml(customMatch.id, baseUrl, {
+            customDomain: true,
+          });
+          return sendXml(reply, xml);
+        } catch {
+          return reply.status(500).send({ error: "Failed to generate sitemap" });
+        }
+      }
+
       const cached = getCachedSitemapIndexIfFresh(RSS_CACHE_MAX_AGE_MS);
       if (cached) {
-        return reply
-          .header("Content-Type", "application/xml; charset=utf-8")
-          .header("Cache-Control", "public, max-age=3600")
-          .send(cached);
+        return sendXml(reply, cached);
       }
       const baseUrl = getBaseUrl(request);
-      const settings = readSettings();
       const lastmod = new Date().toISOString().slice(0, 10);
       const entries: { loc: string; lastmod: string }[] = [
         { loc: `${baseUrl}/sitemap/static.xml`, lastmod },
@@ -53,10 +93,7 @@ export async function registerSitemapRoutes(app: FastifyInstance) {
       }
       const xml = generateSitemapIndex(entries);
       writeSitemapIndexToFile(xml);
-      return reply
-        .header("Content-Type", "application/xml; charset=utf-8")
-        .header("Cache-Control", "public, max-age=3600")
-        .send(xml);
+      return sendXml(reply, xml);
     },
   );
 
@@ -74,10 +111,7 @@ export async function registerSitemapRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const baseUrl = getBaseUrl(request);
       const xml = generateStaticSitemapXml(baseUrl);
-      return reply
-        .header("Content-Type", "application/xml; charset=utf-8")
-        .header("Cache-Control", "public, max-age=3600")
-        .send(xml);
+      return sendXml(reply, xml);
     },
   );
 
@@ -127,17 +161,11 @@ export async function registerSitemapRoutes(app: FastifyInstance) {
           RSS_CACHE_MAX_AGE_MS,
         );
         if (cached) {
-          return reply
-            .header("Content-Type", "application/xml; charset=utf-8")
-            .header("Cache-Control", "public, max-age=3600")
-            .send(cached);
+          return sendXml(reply, cached);
         }
         const xml = generatePodcastSitemapXml(podcastId, baseUrl);
         writeSitemapToFile(podcastId, xml);
-        return reply
-          .header("Content-Type", "application/xml; charset=utf-8")
-          .header("Cache-Control", "public, max-age=3600")
-          .send(xml);
+        return sendXml(reply, xml);
       } catch (_err) {
         return reply.status(500).send({ error: "Failed to generate sitemap" });
       }

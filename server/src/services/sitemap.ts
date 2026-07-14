@@ -158,13 +158,23 @@ export function generateStaticSitemapXml(baseUrl: string): string {
   return out;
 }
 
+export type GeneratePodcastSitemapOptions = {
+  /**
+   * When true, emit custom-domain public URLs: podcast at `/` and episodes at `/{episodeSlug}`.
+   * When false/omitted, emit app-host feed URLs under `/feed/{podcastSlug}/...`.
+   */
+  customDomain?: boolean;
+};
+
 /**
  * Per-podcast sitemap: feed page + each published episode page.
  */
 export function generatePodcastSitemapXml(
   podcastId: string,
   baseUrl: string,
+  options?: GeneratePodcastSitemapOptions,
 ): string {
+  const customDomain = Boolean(options?.customDomain);
   const podcast = drizzleDb
     .select({
       id: podcasts.id,
@@ -184,7 +194,7 @@ export function generatePodcastSitemapXml(
     : toLastmod(new Date());
   const entries: SitemapUrlEntry[] = [
     {
-      loc: loc(baseUrl, `/feed/${slugEnc}`),
+      loc: loc(baseUrl, customDomain ? "/" : `/feed/${slugEnc}`),
       lastmod: feedLastmod,
       changefreq: "weekly",
       priority: 0.8,
@@ -219,8 +229,11 @@ export function generatePodcastSitemapXml(
       : ep.updatedAt
         ? toLastmod(new Date(ep.updatedAt))
         : toLastmod(new Date());
+    const epPath = customDomain
+      ? `/${encodeURIComponent(epSlug)}`
+      : `/feed/${slugEnc}/${encodeURIComponent(epSlug)}`;
     entries.push({
-      loc: loc(baseUrl, `/feed/${slugEnc}/${encodeURIComponent(epSlug)}`),
+      loc: loc(baseUrl, epPath),
       lastmod,
       changefreq: "monthly",
       priority: 0.6,

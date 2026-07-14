@@ -58,6 +58,7 @@ import { contactRoutes } from "./modules/contact/index.js";
 import { messagesRoutes } from "./modules/messages/index.js";
 import { reviewsRoutes } from "./modules/reviews/index.js";
 import { sitemapRoutes } from "./modules/sitemap/index.js";
+import { registerRobotsRoute } from "./modules/sitemap/routes.robots.js";
 import { bansRoutes } from "./modules/bans/index.js";
 import { callRoutes } from "./modules/call/index.js";
 import { episodeCollaborationRoutes } from "./modules/episodeCollaboration/index.js";
@@ -300,6 +301,10 @@ async function main() {
     stopFlushInterval();
     flush();
   });
+
+  // Host-aware robots.txt (linked/managed domains get their own Sitemap URL).
+  // Register before static so it overrides web/public/robots.txt.
+  await registerRobotsRoute(app);
 
   // In production, serve the web app from PUBLIC_DIR (e.g. Docker copies web dist here)
   const publicDir = resolve(CONFIG_PUBLIC_DIR);

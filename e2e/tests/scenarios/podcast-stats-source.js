@@ -15,8 +15,13 @@ import {
 const FLUSH_WAIT_MS = 4500;
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-function todayUTC() {
-  return new Date().toISOString().slice(0, 10);
+/** Match server podcastStats / analytics: YYYY-MM-DD in the process local timezone. */
+function todayLocal() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /**
@@ -155,7 +160,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      const today = todayUTC();
+      const today = todayLocal();
       const episodeRows = (data.episode_daily || []).filter((r) => r.episode_id === episode.id && r.stat_date === today);
       if (episodeRows.length === 0) throw new Error(`Expected episode_daily row for episode today, got ${JSON.stringify(data.episode_daily)}`);
       const row = episodeRows[0];
@@ -173,7 +178,7 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      const today = todayUTC();
+      const today = todayLocal();
       const listenRows = (data.episode_listens_daily || []).filter((r) => r.episode_id === episode.id && r.stat_date === today);
       if (listenRows.length === 0) throw new Error(`Expected episode_listens_daily row for episode today`);
       const totalListens = listenRows.reduce((sum, r) => sum + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
@@ -185,7 +190,7 @@ export async function run({ runOne }) {
     await runOne('Same client GET episode twice in same day counts as one listen (dedup)', async () => {
       const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       const beforeData = await beforeRes.json();
-      const today = todayUTC();
+      const today = todayLocal();
       const sumListens = (rows) => (rows || []).filter((r) => r.episode_id === episode.id && r.stat_date === today).reduce((s, r) => s + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
       const beforeListens = sumListens(beforeData.episode_listens_daily);
 
@@ -221,7 +226,7 @@ export async function run({ runOne }) {
     await runOne('Tiny Range GET public episode audio does not count as request or listen', async () => {
       const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       const beforeData = await beforeRes.json();
-      const today = todayUTC();
+      const today = todayLocal();
       const sumRows = (rows, eid) =>
         (rows || [])
           .filter((r) => r.episode_id === eid && r.stat_date === today)
@@ -256,7 +261,7 @@ export async function run({ runOne }) {
     await runOne('Spotify/1.0 RSS counts as crawler (bot_count); Overcast RSS as listener', async () => {
       const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       const beforeData = await beforeRes.json();
-      const today = todayUTC();
+      const today = todayLocal();
       const sumSource = (rows, source, field) =>
         (rows || [])
           .filter((r) => r.stat_date === today && r.source === source)
