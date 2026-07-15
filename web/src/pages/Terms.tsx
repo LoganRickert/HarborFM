@@ -32,6 +32,21 @@ const DEFAULT_TERMS = (
       the rights necessary to host, serve, and deliver your content (e.g. podcasts and RSS). HarborFM software
       is licensed under its project license; see the repository for details.
     </p>
+    <h2 id="subscriptions">Paid show subscriptions</h2>
+    <p>
+      Some shows offer paid access to subscriber-only episodes or feeds. Payment is processed by Stripe on
+      behalf of the show. Plans may be recurring (monthly or yearly) or one-time.
+    </p>
+    <p>
+      Recurring plans renew automatically at the listed price until you cancel. You can turn off auto-renew
+      or manage billing from the show page. If you cancel a recurring plan, you keep access through the end of
+      the current billing period; canceling does not issue a prorated refund for unused time in that period.
+    </p>
+    <p>
+      Except where required by applicable law, subscription and one-time purchase fees are non-refundable.
+      The show or operator may issue a refund at their sole discretion. A full refund typically ends subscriber
+      access.
+    </p>
     <h2>Disclaimer</h2>
     <p>
       The service is provided "as is." The operator is not liable for any damages arising from your use of

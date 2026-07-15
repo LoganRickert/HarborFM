@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.10.0 - 2026-07-14
+
+- **Stripe payments (BYOK):** Show owners connect their own Stripe credential packs (separate test and live accounts), attach a pack to a show, and accept paid access. Restricted-key setup lists the Write permissions Harbor needs; webhook URL and verify step are included.
+- **Plans:** Monthly, yearly, and one-time prices with at most one active plan per kind. Deactivate to change price (create a new plan; existing subscribers stay on their Stripe price). Billing cycle: Anniversary or Month Start. Active-subscriber stats show per-kind revenue.
+- **Checkout and access:** Listeners pay via Stripe Checkout and receive a private RSS token (one-time reveal on the success page). Coupons and promotion codes are supported. Manage Subscription covers Customer Portal, cancel-at-period-end, renew, regenerate/recover token, and refund requests.
+- **Webhooks:** Fulfillment and lifecycle sync for checkout, subscriptions, invoices, refunds, and price updates. Local helper: `pnpm stripe:listen`.
+- **Permissions:** `defaultCanStripe` / `canStripe` gate who can configure Stripe. Docs and e2e scenarios cover the full flow (`stripe-permissions`, `stripe-credentials`, `stripe-plans`, `stripe-checkout`, `stripe-manage`, `stripe-coupons`).
+
 ## v1.9.3 - 2026-07-14
 
 - **Episode polls:** Create a listener poll per episode (multiple choice, yes/no, short answer) from the episode editor. Settings include enable, start/end, require email, public results, and one-vote-per-IP. Votes persist across rebuilds.

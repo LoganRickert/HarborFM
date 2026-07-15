@@ -5,6 +5,7 @@ import { SubscriptionInfoDialog } from '../SubscriptionInfoDialog';
 import { ShareDialog } from '../../ShareDialog';
 import { FeedFundingSupport } from '../FeedFundingSupport';
 import { useSubscriberAuth } from '../../../hooks/useSubscriberAuth';
+import { useManageSubscriptionDialog } from '../../../hooks/useManageSubscriptionDialog';
 import styles from './FeedPodcastHeader.module.css';
 
 export function FeedPodcastHeader({
@@ -14,7 +15,7 @@ export function FeedPodcastHeader({
   shareUrl,
   shareTitle,
 }: FeedPodcastHeaderProps) {
-  const [showLockInfo, setShowLockInfo] = useState(false);
+  const [showLockInfo, setShowLockInfo] = useManageSubscriptionDialog();
   const [shareOpen, setShareOpen] = useState(false);
   const { getTokenIdForPodcast } = useSubscriberAuth();
   const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
@@ -49,12 +50,46 @@ export function FeedPodcastHeader({
               )}
             </div>
             <div className={styles.actions}>
+              <div className={styles.actionButtons}>
+                {onMessageClick && (
+                  <button
+                    type="button"
+                    className={styles.messageBtn}
+                    onClick={onMessageClick}
+                    aria-label="Send message"
+                  >
+                    <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
+                    Message
+                  </button>
+                )}
+                {showRssButton && (
+                  <a
+                    href={rssUrl}
+                    className={styles.rssButton}
+                    title={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
+                    aria-label={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
+                  >
+                    <Rss size={18} strokeWidth={2.5} aria-hidden />
+                  </a>
+                )}
+                {shareUrl != null && (
+                  <button
+                    type="button"
+                    className={styles.shareBtn}
+                    onClick={() => setShareOpen(true)}
+                    aria-label="Share"
+                    title="Share"
+                  >
+                    <Share2 size={18} strokeWidth={2.5} aria-hidden />
+                  </button>
+                )}
+              </div>
               {hasSubscriberFeatures && (
                 <button
                   type="button"
                   className={styles.lockButton}
                   onClick={() => setShowLockInfo(true)}
-                  aria-label="Subscription information"
+                  aria-label={isAuthenticated ? 'Manage Subscription' : 'Subscribe'}
                 >
                   <Lock
                     size={18}
@@ -66,38 +101,7 @@ export function FeedPodcastHeader({
                     }
                     aria-hidden
                   />
-                </button>
-              )}
-              {onMessageClick && (
-                <button
-                  type="button"
-                  className={styles.messageBtn}
-                  onClick={onMessageClick}
-                  aria-label="Send message"
-                >
-                  <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
-                  Message
-                </button>
-              )}
-              {showRssButton && (
-                <a
-                  href={rssUrl}
-                  className={styles.rssButton}
-                  title={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
-                  aria-label={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
-                >
-                  <Rss size={18} strokeWidth={2.5} aria-hidden />
-                </a>
-              )}
-              {shareUrl != null && (
-                <button
-                  type="button"
-                  className={styles.shareBtn}
-                  onClick={() => setShareOpen(true)}
-                  aria-label="Share"
-                  title="Share"
-                >
-                  <Share2 size={18} strokeWidth={2.5} aria-hidden />
+                  {isAuthenticated ? 'Manage Subscription' : 'Subscribe'}
                 </button>
               )}
             </div>

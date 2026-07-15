@@ -39,10 +39,12 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 - [Environment variables](#environment-variables)
 - [Running without Docker](#running-without-docker)
 - [Features](#features)
+- [Stripe payments](#stripe-payments)
 - [Embed](#embed)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
 - [Scripts](#scripts)
+- [Permissions](#permissions)
 - [Export](#export)
 - [Local Testing](#local-testing)
 - [Troubleshooting](#troubleshooting)
@@ -473,6 +475,8 @@ All environment variables supported by the server work the same in Docker. Set t
 | `IMPORT_ALLOW_PRIVATE_URLS` | (false) | Set to `true` or `1` to allow podcast import from private/internal URLs (localhost, 10.x, 192.168.x, etc). Dev/testing only; disables SSRF protection. |
 | **Subscriber tokens** | | |
 | `SUBSCRIBER_TOKEN_PREFIX` | `hfm_sub_` | Prefix for subscriber RSS tokens in URL path |
+| **Stripe** | | |
+| `STRIPE_SECRETS_AAD` | `${APP_NAME}-stripe` | AAD for encrypting Stripe credential packs (secret keys, webhook secrets) |
 | **DNS secrets** | | |
 | `DNS_SECRETS_AAD` | `${APP_NAME}-dns` | AAD for encrypted DNS-related secrets (e.g. Cloudflare) |
 | **Roles** | | |
@@ -527,6 +531,120 @@ pm2 start ecosystem.config.cjs --only harborfm
 - **Export to S3.** Configure an S3-compatible export per podcast (e.g. AWS S3, Cloudflare R2). Deploy feed and episode audio to a bucket; only changed files are uploaded (ETag comparison). Optional public base URL so the feed and enclosures use your CDN URL.
 
 - **Auth and users.** First-user setup, registration, login, password reset. Optional admin role and user management. Public podcast and episode pages for listeners when public feeds are enabled.
+
+- **Stripe payments (BYOK).** Show owners connect their own Stripe account, publish monthly/yearly/one-time plans, and sell access. Listeners pay via Checkout and receive a private RSS token. Coupons, Customer Portal, refund requests, and webhooks are supported. See [Stripe payments](#stripe-payments).
+
+## Stripe payments
+
+HarborFM does not process payments with a platform Stripe account. Each eligible user brings their own Stripe keys (**bring your own key**). Secrets are encrypted with the same secrets key used for exports (`HARBORFM_SECRETS_KEY` / `SECRETS_DIR`), using AAD from `STRIPE_SECRETS_AAD`.
+
+### Who can use it
+
+- **`defaultCanStripe`** (Settings → Default Limits): whether newly registered users get Stripe access. Default is on.
+- **`canStripe`** (Users admin): per-user flag. When off, that user cannot open Stripe Payments or call Stripe API routes (403).
+- On a show, **managers** can attach an existing owner credential pack and toggle payments. Only the **owner** can create, edit, or delete credential packs.
+
+### Credential packs (test and live)
+
+Under the show’s **Payments** UI, create a Stripe account pack:
+
+1. Display name
+2. Mode: **test** or **live** (fixed for that pack; create a second pack to use the other mode)
+3. Restricted secret key (`rk_test_…` / `rk_live_…` preferred), publishable key, and webhook signing secret (`whsec_…`)
+4. Optional verify step that probes Write permissions
+
+Attach one pack to the show and enable **Accept Stripe payments**. The same pack can be reused on multiple shows owned by that user. Test and live plans/coupons are separate.
+
+**Webhook URL** (copy from Payments):
+
+```text
+https://<your-host>/api/public/stripe/webhook/<credentialsId>
+```
+
+Locally, use [Stripe CLI](#stripe-cli) (`pnpm stripe:listen`) and paste the printed `whsec_…` into the pack.
+
+#### Restricted key permissions
+
+In Stripe, create a restricted key with **Write** on these resources (leave others as None):
+
+1. Customers  
+2. Charges and Refunds  
+3. Payment Intents  
+4. Products  
+5. Coupons  
+6. Customer Portal  
+7. Invoices  
+8. Prices  
+9. Promotion Codes  
+10. Subscriptions  
+11. Checkout Sessions  
+
+### Plans and billing cycle
+
+Plan kinds: **Monthly**, **Yearly**, and **One-time**. At most one **active** plan per kind per show mode. To change a price, deactivate the current plan and add a new one for that kind (existing subscribers stay on their Stripe price). You can reactivate a deactivated plan only when no other active plan of that kind exists.
+
+Recurring plans support **auto-renew by default**. Deleting a recurring plan cancels its active subscriptions in that mode and revokes access. Deleting a one-time plan archives the Stripe product but does not revoke past one-time purchases.
+
+**Billing cycle** (per show):
+
+- **Anniversary** (default): renews on the signup anniversary (Stripe default).
+- **Month Start**: Checkout anchors recurring billing to the 1st of the month (Stripe may prorate the first stub period).
+
+### Checkout and access tokens
+
+Listeners subscribe from the public feed. Checkout creates a Stripe session; after payment, Harbor fulfills via webhook (`checkout.session.completed`) and/or the success page claim.
+
+- Success URL reveals the **access token** and **private RSS** URL once (`/feed/{slug}/subscribe/success?session_id=…`).
+- Private feed: `/api/public/podcasts/{slug}/private/{token}/rss` (token prefix from `SUBSCRIBER_TOKEN_PREFIX`, default `hfm_sub_`).
+- Refreshing or reclaiming the same session does not show the full token again; listeners can use **Manage Subscription → Recover token** (email) if needed.
+- Active coupons enable promotion codes on Checkout.
+
+### Manage subscription (listeners)
+
+From the feed **Manage Subscription** dialog (cookie or pasted token / private RSS URL):
+
+| Action | Notes |
+|--------|--------|
+| Manage billing | Stripe Customer Portal (recurring) |
+| Turn off auto-renew | Cancel at period end; access continues until period end |
+| Renew / keep auto-renewing | Undo cancel-at-period-end, or pay a past-due invoice |
+| Regenerate access token | Issues a new token (cooldown applies); old token stops working |
+| Request refund | Owner reviews under Payments → Refund requests |
+| Recover token | Emails access details when email delivery is configured (cooldown applies) |
+
+Owners approve or deny refund requests in the show Payments UI. Approving refunds in Stripe and revokes the subscriber token.
+
+### Coupons
+
+Per show and mode: create percent or fixed-amount coupons with duration once, repeating, or forever. Optional start/end times and max redemptions. Activate or deactivate without deleting. Discount shape is fixed after create. Synced to Stripe Coupons and Promotion Codes.
+
+### Webhooks
+
+Harbor handles these event types (among others used for sync):
+
+| Event | Effect |
+|-------|--------|
+| `checkout.session.completed` | Create/fulfill subscription and subscriber token |
+| `customer.subscription.updated` | Sync status (including cancel-at-period-end) |
+| `customer.subscription.deleted` | Revoke access |
+| `customer.subscription.paused` / `resumed` | Disable or restore access |
+| `invoice.paid` | Extend access; renewal receipts when email is configured |
+| `invoice.payment_failed` | Mark past due and disable token |
+| `charge.refunded` | Revoke access after full refund |
+| `price.created` / `price.updated` | Sync plan amount/currency/active from Stripe |
+
+Configure the endpoint on the credential pack webhook secret. Without valid webhooks, Checkout success may still claim once, but renewals and cancellations will not stay in sync.
+
+### E2E coverage
+
+Stripe scenarios live under `e2e/tests/scenarios/`:
+
+- `stripe-permissions.js`
+- `stripe-credentials.js`
+- `stripe-plans.js`
+- `stripe-checkout.js`
+- `stripe-manage.js`
+- `stripe-coupons.js`
 
 ## Embed
 
@@ -599,6 +717,7 @@ From the repo root:
 | `pnpm run test` | Run tests in all packages |
 | `pnpm run docker:build` | Build the Docker image (`docker build -t harborfm .`) |
 | `pnpm run build:docs` | Build the GitHub pages |
+| `pnpm stripe:listen` | Forward Stripe CLI webhooks to a HarborFM pack URL (see [Stripe CLI](#stripe-cli)) |
 
 ## Permissions
 
@@ -614,6 +733,7 @@ Each podcast has an **owner** (the user who created it) and optional **collabora
 - **Collaborators** are managed per show in **Settings to Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on Harbor yet, the UI can send them an “invite to the platform” email (rate-limited).
 - **Storage** for a show (recorded segments, episode source audio) counts against the **podcast owner’s** storage limit, not the collaborator’s. If the owner is at or near their limit, “Record new section” is disabled for everyone on that show.
 - **New episode** is only available to **managers** and the **owner**; view and editor roles see it disabled.
+- **Stripe (`canStripe` / `defaultCanStripe`)** is an account flag, not a show role. It gates whether the user can use Stripe Payments at all. See [Stripe payments](#stripe-payments).
 
 ## Export
 
@@ -751,7 +871,7 @@ Optional: `api_key`, `username`, and `password` for authenticated nodes (e.g. be
 
 ## Local Testing
 
-Use the setup below to try HarborFM’s email and deployment features locally without real servers.
+Use the setup below to try HarborFM’s email, deployment, and Stripe features locally without production services.
 
 ### SMTP (email)
 
@@ -766,6 +886,20 @@ docker run --rm -it -p 5000:80 -p 2525:25 -p 110:110 rnwood/smtp4dev
 - **POP3:** `localhost:110`  
 
 Configure HarborFM Settings to Email with host `localhost`, port `2525`, and any from address. Accepts any username/password.
+
+### Stripe CLI
+
+Install the [Stripe CLI](https://stripe.com/docs/stripe-cli), then create a **test** credential pack in Show → Payments and copy its webhook URL.
+
+Forward events to the API (default port `3001`; override with `STRIPE_FORWARD_PORT`):
+
+```bash
+pnpm stripe:listen -- 'http://localhost:5173/api/public/stripe/webhook/<credentialsId>'
+```
+
+Or set `STRIPE_WEBHOOK_URL` to that same URL and run `pnpm stripe:listen` with no args.
+
+Paste the printed `whsec_…` into the pack’s test webhook secret. Keep the listen process running while you exercise Checkout and subscription changes.
 
 ### Deployment targets (FTP, SFTP, WebDAV, IPFS, SMB)
 

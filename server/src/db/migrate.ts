@@ -71,6 +71,14 @@ import * as m069 from "./migrations/069_podcasts_podroll.js";
 import * as m070 from "./migrations/070_podcasts_feed_customizations.js";
 import * as m071 from "./migrations/071_podcasts_feed_visibility_more.js";
 import * as m072 from "./migrations/072_episode_polls.js";
+import * as m073 from "./migrations/073_user_can_stripe.js";
+import * as m074 from "./migrations/074_stripe_credentials.js";
+import * as m075 from "./migrations/075_stripe_plans.js";
+import * as m076 from "./migrations/076_stripe_subscriptions.js";
+import * as m077 from "./migrations/077_stripe_refund_requests.js";
+import * as m078 from "./migrations/078_stripe_coupons.js";
+import * as m079 from "./migrations/079_stripe_access_token_revealed.js";
+import * as m080 from "./migrations/080_stripe_plans_active_kind_unique.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -145,6 +153,14 @@ const migrations = [
   { name: "070_podcasts_feed_customizations", ...m070 },
   { name: "071_podcasts_feed_visibility_more", ...m071 },
   { name: "072_episode_polls", ...m072 },
+  { name: "073_user_can_stripe", ...m073 },
+  { name: "074_stripe_credentials", ...m074 },
+  { name: "075_stripe_plans", ...m075 },
+  { name: "076_stripe_subscriptions", ...m076 },
+  { name: "077_stripe_refund_requests", ...m077 },
+  { name: "078_stripe_coupons", ...m078 },
+  { name: "079_stripe_access_token_revealed", ...m079 },
+  { name: "080_stripe_plans_active_kind_unique", ...m080 },
 ];
 
 const MIGRATIONS_TABLE = `

@@ -7,6 +7,7 @@ import { registerEpisodesRoutes } from "./routes.episodes.js";
 import { registerRssRoutes } from "./routes.rss.js";
 import { registerPrivateRoutes } from "./routes.private.js";
 import { registerSubscriberAuthRoutes } from "./routes.subscriber-auth.js";
+import { registerStripePublicRoutes } from "./routes.stripe.js";
 
 export async function publicRoutes(app: FastifyInstance) {
   await app.register(registerLegalRoutes);
@@ -17,4 +18,5 @@ export async function publicRoutes(app: FastifyInstance) {
   await app.register(registerRssRoutes);
   await app.register(registerPrivateRoutes);
   await app.register(registerSubscriberAuthRoutes);
+  await app.register(registerStripePublicRoutes);
 }

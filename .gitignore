@@ -19,6 +19,7 @@ docs/.astro/
 server/public/
 ci-data/
 ci-secrets/
+.*/
 
 # e2e runtime
 e2e/data/
@@ -28,6 +29,6 @@ e2e/webrtc-recordings/
 e2e/server.log.pnpm-store
 .pnpm-store/
 docker-compose.override.yml
-web/tsconfig.tsbuildinfo
+*.tsbuildinfo
 wiki/
 HarborFM.wiki/

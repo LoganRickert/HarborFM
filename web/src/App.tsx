@@ -32,6 +32,7 @@ import { Messages } from './pages/Messages';
 import { FeedHome } from './pages/FeedHome';
 import { FeedPodcast } from './pages/FeedPodcast';
 import { FeedEpisode } from './pages/FeedEpisode';
+import { SubscribeSuccess } from './pages/SubscribeSuccess';
 import { EmbedEpisode } from './pages/EmbedEpisode';
 import { CallJoin } from './pages/CallJoin';
 import { CallJoinIndex } from './pages/CallJoinIndex';
@@ -316,6 +317,7 @@ export default function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="/contact" element={<SetupGuard><Contact /></SetupGuard>} />
           <Route path="/feed" element={<PublicFeedsGuard><FeedHome /></PublicFeedsGuard>} />
+          <Route path="/feed/:podcastSlug/subscribe/success" element={<PublicFeedsGuard><SubscribeSuccess /></PublicFeedsGuard>} />
           <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><FeedPodcast /></PublicFeedsGuard>} />
           <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><FeedEpisode /></PublicFeedsGuard>} />
           <Route path="/embed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />

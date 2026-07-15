@@ -1,0 +1,54 @@
+---
+---
+<header class="header">
+  <div class="header-inner">
+    <h1>
+      <a href="/"
+        ><img src="/favicon.svg" alt="" class="logo-icon" width="24" height="24" /><span
+          class="header-brand-text">HarborFM</span
+        ></a
+      >
+    </h1>
+    <button
+      type="button"
+      class="nav-toggle"
+      aria-expanded="false"
+      aria-controls="site-nav"
+      aria-label="Open menu"
+    >
+      <span class="nav-toggle-bars" aria-hidden="true"></span>
+    </button>
+    <nav class="nav" id="site-nav">
+      <a href="/features/">Features</a>
+      <a href="/updates/">Updates</a>
+      <a href="/server/">API (Swagger)</a>
+      <a href="https://github.com/LoganRickert/harborfm">GitHub</a>
+      <a href="https://app.harborfm.com/">Demo</a>
+    </nav>
+  </div>
+</header>
+<script>
+  (function () {
+    const btn = document.querySelector('.nav-toggle');
+    const nav = document.getElementById('site-nav');
+    if (!btn || !nav) return;
+
+    function setOpen(open) {
+      btn.setAttribute('aria-expanded', String(open));
+      btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      document.body.classList.toggle('nav-open', open);
+    }
+
+    btn.addEventListener('click', () => {
+      setOpen(btn.getAttribute('aria-expanded') !== 'true');
+    });
+
+    nav.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', () => setOpen(false));
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    });
+  })();
+</script>

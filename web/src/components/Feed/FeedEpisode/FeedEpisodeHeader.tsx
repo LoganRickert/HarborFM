@@ -4,11 +4,13 @@ import { FeedEpisodeHeaderProps } from '../../../types/feed';
 import { formatDate, formatDuration, formatSeasonEpisode } from '../../../utils/format';
 import { ShareDialog } from '../../ShareDialog';
 import { FeedEpisodeTranscriptDialog } from './FeedEpisodeTranscriptDialog';
+import { useSubscriberAuth } from '../../../hooks/useSubscriberAuth';
 import styles from './FeedEpisodeHeader.module.css';
 
 export function FeedEpisodeHeader({
   episode,
   podcast,
+  podcastSlug,
   onMessageClick,
   onLockClick,
   shareUrl,
@@ -21,10 +23,16 @@ export function FeedEpisodeHeader({
 }: FeedEpisodeHeaderProps & { children?: ReactNode }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const { getTokenIdForPodcast } = useSubscriberAuth();
   const hasSubscriberFeatures = Boolean(podcast.subscriberOnlyFeedEnabled);
-  const isPodcastSubscriberOnly = Boolean(podcast.publicFeedDisabled);
+  const isPodcastSubscriberOnly = Boolean(
+    podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled,
+  );
   const isEpisodeSubscriberOnly = Boolean(episode.subscriberOnly);
   const shouldShowGoldLock = isPodcastSubscriberOnly || isEpisodeSubscriberOnly;
+  const isAuthenticated = Boolean(
+    podcastSlug && getTokenIdForPodcast(podcastSlug),
+  );
   const hasTranscript = Boolean(transcriptUrl?.trim());
   const episodeType = String(episode.episodeType ?? '').toLowerCase();
 
@@ -76,13 +84,50 @@ export function FeedEpisodeHeader({
             </div>
           ) : null}
           <h1 className={styles.title}>{episode.title}</h1>
-          <div className={styles.subRow}>
+          <div className={styles.actions}>
+            <div className={styles.subRow}>
+              {onMessageClick && (
+                <button
+                  type="button"
+                  className={styles.messageBtn}
+                  onClick={onMessageClick}
+                  aria-label="Send message"
+                >
+                  <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
+                  Message
+                </button>
+              )}
+              {shareUrl != null && (
+                <button
+                  type="button"
+                  className={styles.shareBtn}
+                  onClick={() => setShareOpen(true)}
+                  aria-label="Share"
+                  title="Share"
+                >
+                  <Share2 size={18} strokeWidth={2.5} aria-hidden />
+                  Share
+                </button>
+              )}
+              {hasTranscript && (
+                <button
+                  type="button"
+                  className={styles.transcriptBtn}
+                  onClick={() => setTranscriptOpen(true)}
+                  aria-label="Transcript"
+                  title="Transcript"
+                >
+                  <FileText size={18} strokeWidth={2.5} aria-hidden />
+                  Transcript
+                </button>
+              )}
+            </div>
             {hasSubscriberFeatures && onLockClick && (
               <button
                 type="button"
                 className={styles.lockButton}
                 onClick={onLockClick}
-                aria-label="Subscription information"
+                aria-label={isAuthenticated ? 'Manage Subscription' : 'Subscribe'}
               >
                 <Lock
                   size={18}
@@ -94,41 +139,7 @@ export function FeedEpisodeHeader({
                   }
                   aria-hidden
                 />
-              </button>
-            )}
-            {onMessageClick && (
-              <button
-                type="button"
-                className={styles.messageBtn}
-                onClick={onMessageClick}
-                aria-label="Send message"
-              >
-                <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
-                Message
-              </button>
-            )}
-            {shareUrl != null && (
-              <button
-                type="button"
-                className={styles.shareBtn}
-                onClick={() => setShareOpen(true)}
-                aria-label="Share"
-                title="Share"
-              >
-                <Share2 size={18} strokeWidth={2.5} aria-hidden />
-                Share
-              </button>
-            )}
-            {hasTranscript && (
-              <button
-                type="button"
-                className={styles.transcriptBtn}
-                onClick={() => setTranscriptOpen(true)}
-                aria-label="Transcript"
-                title="Transcript"
-              >
-                <FileText size={18} strokeWidth={2.5} aria-hidden />
-                Transcript
+                {isAuthenticated ? 'Manage Subscription' : 'Subscribe'}
               </button>
             )}
           </div>

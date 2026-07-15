@@ -41,6 +41,7 @@ export const userUpdateBodySchema = z.object({
   maxSubscriberTokens: optionalLimitField,
   canTranscribe: z.boolean().optional(),
   canGenerateVideo: z.boolean().optional(),
+  canStripe: z.boolean().optional(),
 });
 
 export type UserCreateBody = z.infer<typeof userCreateBodySchema>;

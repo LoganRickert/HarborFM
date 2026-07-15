@@ -235,6 +235,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.defaultCanGenerateVideo !== undefined
           ? Boolean(body.defaultCanGenerateVideo)
           : current.default_can_generate_video;
+      const default_can_stripe =
+        body.defaultCanStripe !== undefined
+          ? Boolean(body.defaultCanStripe)
+          : current.default_can_stripe;
       const llm_provider =
         body.llmProvider === "openai"
           ? "openai"
@@ -591,6 +595,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         transcription_model,
         default_can_transcribe,
         default_can_generate_video,
+        default_can_stripe,
         llm_provider,
         ollama_url,
         openai_api_key,

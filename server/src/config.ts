@@ -472,6 +472,10 @@ export const DNS_SECRETS_AAD =
 export const SSO_SECRETS_AAD =
   process.env.SSO_SECRETS_AAD?.trim() || `${APP_NAME}-sso`;
 
+/** AAD for Stripe credential packs (secret keys, webhook secrets). Env: STRIPE_SECRETS_AAD. */
+export const STRIPE_SECRETS_AAD =
+  process.env.STRIPE_SECRETS_AAD?.trim() || `${APP_NAME}-stripe`;
+
 /** When true, email/password sign-in is disabled (SSO only). Terraform can set SSO_EMAIL_SIGNIN_DISABLED=1. Env: SSO_EMAIL_SIGNIN_DISABLED. Default false. Applied at read time (does not write to DB). */
 export const SSO_EMAIL_SIGNIN_DISABLED =
   process.env.SSO_EMAIL_SIGNIN_DISABLED?.trim() === "1" ||

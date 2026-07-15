@@ -107,6 +107,18 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
       <p className={styles.toggleHelp}>
         When enabled, new users get video generation permission by default. When disabled, new users cannot generate episode videos until an admin enables it.
       </p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={form.defaultCanStripe}
+          onChange={(e) => onFormChange({ defaultCanStripe: e.target.checked })}
+        />
+        <span className="toggle__track" aria-hidden="true" />
+        <span>Default Can Stripe</span>
+      </label>
+      <p className={styles.toggleHelp}>
+        When enabled, new users can configure Stripe paid subscriptions on their shows by default. When disabled, new users cannot use Stripe until an admin enables it.
+      </p>
     </SectionCard>
   );
 }

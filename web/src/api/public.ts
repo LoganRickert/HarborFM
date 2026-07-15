@@ -394,3 +394,137 @@ export function logoutSubscriber(podcastSlug?: string) {
   const query = podcastSlug ? `?podcastSlug=${encodeURIComponent(podcastSlug)}` : '';
   return apiDelete<{ success: boolean }>(`/public/subscriber-auth${query}`);
 }
+
+export type PublicStripePlan = {
+  id: string;
+  kind: 'month' | 'year' | 'one_time';
+  amountCents: number;
+  currency: string;
+  autoRenewDefault: boolean;
+};
+
+export function getPublicStripePlans(podcastSlug: string) {
+  return apiGet<{
+    enabled: boolean;
+    mode: 'test' | 'live' | null;
+    hasActiveCoupons?: boolean;
+    plans: PublicStripePlan[];
+  }>(`/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/plans`);
+}
+
+export function createPublicStripeCheckout(podcastSlug: string, planId: string) {
+  return apiPost<{ url: string; sessionId: string }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/checkout`,
+    { planId },
+  );
+}
+
+export function recoverPublicStripeToken(podcastSlug: string, email: string) {
+  return apiPost<{ ok: boolean; message: string }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/recover-token`,
+    { email },
+  );
+}
+
+export type PublicStripeSubscriptionStatus = {
+  hasSubscription: true;
+  status: string;
+  plan: {
+    id: string;
+    kind: string;
+    amountCents: number;
+    currency: string;
+    autoRenewDefault: boolean;
+  } | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  stripeMode: 'test' | 'live';
+  customerEmail: string | null;
+  canManageBilling: boolean;
+  canCancelAtPeriodEnd: boolean;
+  canRenew: boolean;
+  canRegenerateAccessToken: boolean;
+  canRequestRefund: boolean;
+  refundRequest: {
+    status: 'pending' | 'approved' | 'rejected';
+    amountCents: number;
+    currency: string;
+    createdAt: string;
+  } | null;
+  isOneTime: boolean;
+};
+
+export function getPublicStripeSubscriptionStatus(podcastSlug: string) {
+  return apiGet<PublicStripeSubscriptionStatus>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/subscription/status`,
+  );
+}
+
+export function createPublicStripeBillingPortal(
+  podcastSlug: string,
+  opts?: { returnUrl?: string },
+) {
+  return apiPost<{ url: string }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/subscription/portal`,
+    opts ?? {},
+  );
+}
+
+export function setPublicStripeCancelAtPeriodEnd(
+  podcastSlug: string,
+  cancel: boolean,
+) {
+  return apiPost<{
+    cancelAtPeriodEnd: boolean;
+    currentPeriodEnd: string | null;
+    status: string;
+  }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/subscription/cancel-at-period-end`,
+    { cancel },
+  );
+}
+
+export function renewPublicStripeSubscription(podcastSlug: string) {
+  return apiPost<{
+    ok: true;
+    cancelAtPeriodEnd?: boolean;
+    url?: string;
+    status?: string;
+  }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/subscription/renew`,
+    {},
+  );
+}
+
+export function regeneratePublicStripeToken(podcastSlug: string) {
+  return apiPost<{ token: string }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/subscription/regenerate-token`,
+    {},
+  );
+}
+
+export function requestPublicStripeRefund(podcastSlug: string) {
+  return apiPost<{
+    refundRequest: {
+      id: string;
+      status: string;
+      amountCents: number;
+      currency: string;
+      createdAt: string;
+    };
+  }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/subscription/request-refund`,
+    {},
+  );
+}
+
+export function completePublicStripeCheckout(podcastSlug: string, sessionId: string) {
+  return apiGet<{
+    success: boolean;
+    podcastSlug: string;
+    token: string | null;
+    alreadyClaimed?: boolean;
+  }>(
+    `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/checkout/success?session_id=${encodeURIComponent(sessionId)}`,
+  );
+}

@@ -1,0 +1,411 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+
+type FeatureRow = { name: string; detail: string };
+type FeatureSection = { id: string; title: string; intro?: string; rows: FeatureRow[] };
+
+const sections: FeatureSection[] = [
+  {
+    id: 'create',
+    title: 'Create & produce',
+    intro: 'Build shows and episodes the way production teams work: segments first, then a final render.',
+    rows: [
+      {
+        name: 'Podcasts & episodes',
+        detail:
+          'Create shows with artwork, categories, explicit flags, and full metadata. Episodes support draft, scheduled, and published states with season and episode numbers.',
+      },
+      {
+        name: 'Segment-based editor',
+        detail:
+          'Assemble each episode from recorded clips and library assets. Reorder, trim, split, and remove silence; ffmpeg builds the final audio.',
+      },
+      {
+        name: 'Waveform editing',
+        detail:
+          'Visual waveforms for trim and markers. Pan/trim modes, chapter and soundbite markers on segments and the final episode.',
+      },
+      {
+        name: 'Chapters',
+        detail:
+          'Add timed chapters with colors. Play from a chapter; emit Podcast 2.0 chapters.json and podcast:chapters in RSS and exports.',
+      },
+      {
+        name: 'Soundbites',
+        detail:
+          'Mark 15–120s clips for social and in-player highlights. Edit start, duration, and name; download clips; emit podcast:soundbite.',
+      },
+      {
+        name: 'Library assets',
+        detail:
+          'Upload reusable intros, outros, bumpers, and ads. Tag them and drop into any episode as segments.',
+      },
+      {
+        name: 'Transcripts',
+        detail:
+          'Generate with Whisper ASR or upload SRT. Edit cues with trim awareness; optional LLM (Ollama or OpenAI) for summaries and copy.',
+      },
+      {
+        name: 'Import from RSS',
+        detail:
+          'Bring an existing show over: episodes, artwork, Podcast 2.0 metadata, chapters, and transcripts when linked in the feed.',
+      },
+    ],
+  },
+  {
+    id: 'calls',
+    title: 'Remote recording & collaboration',
+    rows: [
+      {
+        name: 'Group calls (WebRTC)',
+        detail:
+          'Host starts a call; guests join by link or 4-digit code. In-call chat, soundboard, and settings. Recordings land as episode segments.',
+      },
+      {
+        name: 'Live collaboration',
+        detail:
+          'Episode editor WebSocket so collaborators see segment, call, and render updates in real time.',
+      },
+      {
+        name: 'Collaborator roles',
+        detail:
+          'Share a show as view, editor, or manager. Invite by email; optional platform invites for people not on Harbor yet.',
+      },
+    ],
+  },
+  {
+    id: 'publish',
+    title: 'Publishing, RSS & Podcast 2.0',
+    rows: [
+      {
+        name: 'RSS feeds',
+        detail:
+          'Per-show RSS with iTunes and Podcast 2.0 tags. Serve from Harbor or push elsewhere via export.',
+      },
+      {
+        name: 'Podcast 2.0 metadata',
+        detail:
+          'Funding, license, update frequency, block, chat, location, publisher, podroll, social interact, txt, value, trailers, persons, content links, and more.',
+      },
+      {
+        name: 'Featured trailer',
+        detail:
+          'Highlight a playable trailer on the public podcast page above Listen on / Follow.',
+      },
+      {
+        name: 'Scheduled publishing',
+        detail:
+          'Schedule episodes for a future publish time. Public feeds respect publish_at.',
+      },
+      {
+        name: 'Subscriber-only episodes',
+        detail:
+          'Mark episodes private to token holders. Excluded from the public RSS; available on private feeds.',
+      },
+      {
+        name: 'Unlisted shows',
+        detail:
+          'Keep a show off public discovery and sitemaps while still serving feeds and custom domains as configured.',
+      },
+    ],
+  },
+  {
+    id: 'feed',
+    title: 'Public feed & player',
+    rows: [
+      {
+        name: 'Public show & episode pages',
+        detail:
+          'Listener-facing pages with artwork, descriptions, episode lists, and playback when public feeds are enabled.',
+      },
+      {
+        name: 'In-browser player',
+        detail:
+          'Playback speed, volume, resume position, chapters list with progress, soundbites, and seekable transcript cues.',
+      },
+      {
+        name: 'Embeddable episode player',
+        detail:
+          'Iframe embeds for your site (`/embed/...`), including custom-domain embed URLs. Optional parent resize via postMessage.',
+      },
+      {
+        name: 'Page customizations',
+        detail:
+          'Per-show accent color and toggles for author, descriptions, funding, podroll, cast, and reviews.',
+      },
+      {
+        name: 'Listen on & social links',
+        detail:
+          'Directory links (Apple, Spotify, Amazon Music, and more) plus social profiles and share/embed helpers.',
+      },
+      {
+        name: 'Cast',
+        detail:
+          'Hosts and guests on shows and episodes, with public feed display and Podcast 2.0 person tags.',
+      },
+      {
+        name: 'PWA',
+        detail:
+          'Install HarborFM on a phone or desktop home screen and connect to your self-hosted instance.',
+      },
+    ],
+  },
+  {
+    id: 'monetize',
+    title: 'Monetization & private access',
+    intro: 'Sell access with your own Stripe account, or hand out private RSS tokens without payments.',
+    rows: [
+      {
+        name: 'Stripe payments (BYOK)',
+        detail:
+          'Connect your Stripe keys (test and live packs). No platform Stripe account; you keep the merchant relationship.',
+      },
+      {
+        name: 'Subscription plans',
+        detail:
+          'Monthly, yearly, and one-time prices. Change price by deactivating and adding a new plan; existing subscribers stay on their Stripe price.',
+      },
+      {
+        name: 'Billing cycle',
+        detail:
+          'Anniversary renewals or Month Start anchoring (1st of the month) for recurring Checkout.',
+      },
+      {
+        name: 'Checkout & private RSS',
+        detail:
+          'Listeners pay via Stripe Checkout and receive an access token plus private RSS URL (revealed once on success).',
+      },
+      {
+        name: 'Manage subscription',
+        detail:
+          'Customer Portal, cancel at period end, renew, regenerate or recover token, and request refunds.',
+      },
+      {
+        name: 'Coupons',
+        detail:
+          'Percent or fixed discounts with once / repeating / forever durations. Promotion codes at Checkout when active.',
+      },
+      {
+        name: 'Refund requests',
+        detail:
+          'Listeners request refunds; owners approve or deny from the show Payments UI.',
+      },
+      {
+        name: 'Manual subscriber tokens',
+        detail:
+          'Create tokenized private RSS without Stripe. Optional validity windows, disable, and rotate.',
+      },
+      {
+        name: 'Support The Show',
+        detail:
+          'Multiple Podcast 2.0 funding links on public podcast and episode pages.',
+      },
+    ],
+  },
+  {
+    id: 'engage',
+    title: 'Audience engagement',
+    rows: [
+      {
+        name: 'Episode polls',
+        detail:
+          'Multiple choice, yes/no, or short answer. Optional email, public results, start/end windows, and one-vote-per-IP.',
+      },
+      {
+        name: 'Reviews',
+        detail:
+          'Listener reviews on podcast and episode feeds with optional approval, subscriber-only writing, and moderation.',
+      },
+      {
+        name: 'Subscriber messages',
+        detail:
+          'Message channels for subscriber-only communication when configured on the show.',
+      },
+      {
+        name: 'Recommended podcasts',
+        detail:
+          'Podroll on the public feed. Fetch from an RSS URL to autofill GUID, title, cover, and home link.',
+      },
+      {
+        name: 'Contact form',
+        detail:
+          'Built-in contact page; messages stored and optionally emailed to admins.',
+      },
+    ],
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics',
+    rows: [
+      {
+        name: 'Podcast stats',
+        detail:
+          'RSS hits, enclosure requests, and listens over time with per-episode breakdowns.',
+      },
+      {
+        name: 'Listener vs crawler',
+        detail:
+          'Classify known podcast apps as listeners and directory bots as crawlers for clearer charts.',
+      },
+      {
+        name: 'GeoIP',
+        detail:
+          'Optional GeoLite2-backed country and city views for where listens come from.',
+      },
+    ],
+  },
+  {
+    id: 'team',
+    title: 'Accounts, security & team',
+    rows: [
+      {
+        name: 'Auth',
+        detail:
+          'Setup wizard, registration, login, password reset. Optional 2FA (TOTP or email codes).',
+      },
+      {
+        name: 'SSO',
+        detail:
+          'OIDC and SAML providers (e.g. Keycloak) for organizational sign-in.',
+      },
+      {
+        name: 'API keys',
+        detail:
+          'Programmatic access with hashed keys, optional name and expiry. Raw key shown once on create.',
+      },
+      {
+        name: 'User limits',
+        detail:
+          'Per-user caps for podcasts, episodes, storage, and Stripe access (`canStripe` / `defaultCanStripe`). Read-only accounts supported.',
+      },
+      {
+        name: 'Captcha & email',
+        detail:
+          'reCAPTCHA or hCaptcha for registration and sensitive flows. SMTP, SendGrid, or webhook email providers.',
+      },
+      {
+        name: 'IP bans',
+        detail:
+          'Automatic bans after repeated bad API key or subscriber token attempts; admin tools to clear bans.',
+      },
+    ],
+  },
+  {
+    id: 'delivery',
+    title: 'Delivery & custom domains',
+    rows: [
+      {
+        name: 'Podcast delivery exports',
+        detail:
+          'Push feed and audio to S3, Cloudflare R2, Backblaze B2, FTP, SFTP, WebDAV, IPFS, or SMB. Skip unchanged files.',
+      },
+      {
+        name: 'Custom / managed domains',
+        detail:
+          'Link your hostname or use Cloudflare-managed DNS so listeners use your brand URL for feed, OG, robots, and sitemap.',
+      },
+      {
+        name: 'Sitemaps',
+        detail:
+          'App and per-show sitemaps for discovery; custom domains serve host-scoped sitemaps and robots.txt.',
+      },
+    ],
+  },
+  {
+    id: 'platform',
+    title: 'Platform & self-hosting',
+    rows: [
+      {
+        name: 'Open source (MIT)',
+        detail:
+          'Full source on GitHub. Run your own instance; your data and keys stay under your control.',
+      },
+      {
+        name: 'Docker & install script',
+        detail:
+          'One-line install with Caddy or nginx, or run the published container image.',
+      },
+      {
+        name: 'Terraform',
+        detail:
+          'AWS EC2 or Vultr user-data deploys with PM2, TLS, optional WebRTC, and Cloudflare DNS.',
+      },
+      {
+        name: 'Swagger API',
+        detail:
+          'Documented HTTP API for automation, integrations, and API-key workflows.',
+      },
+      {
+        name: 'Instance manager (beta)',
+        detail:
+          'Optional multi-instance management for operators running several HarborFM deployments.',
+      },
+    ],
+  },
+];
+---
+
+<Layout
+  title="Features - HarborFM"
+  description="Full feature list for HarborFM: segment editor, WebRTC calls, Podcast 2.0 RSS, Stripe BYOK subscriptions, analytics, exports, and self-hosting."
+>
+  <Header />
+
+  <main class="features-page">
+    <div class="features-page-inner">
+      <header class="features-page-hero">
+        <h1>Features</h1>
+        <p class="features-page-lead">
+          Everything HarborFM includes for producing, publishing, monetizing, and self-hosting your
+          podcast. Open source, bring-your-own Stripe, and built around a real segment editor rather
+          than upload-only hosting.
+        </p>
+      </header>
+
+      <nav class="features-toc" aria-label="Feature sections">
+        {
+          sections.map((s) => (
+            <a href={`#${s.id}`}>{s.title}</a>
+          ))
+        }
+      </nav>
+
+      {
+        sections.map((section) => (
+          <section class="features-catalog" id={section.id}>
+            <div class="features-catalog-head">
+              <h2>{section.title}</h2>
+              {section.intro ? <p class="features-catalog-intro">{section.intro}</p> : null}
+            </div>
+            <div class="features-table" role="table" aria-label={section.title}>
+              <div class="features-table-header" role="row">
+                <span role="columnheader">Feature</span>
+                <span role="columnheader">What you get</span>
+              </div>
+              {section.rows.map((row) => (
+                <div class="features-table-row" role="row">
+                  <strong class="features-table-name" role="cell">
+                    {row.name}
+                  </strong>
+                  <span class="features-table-detail" role="cell">
+                    {row.detail}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))
+      }
+
+      <p class="features-page-footnote">
+        Looking for release notes? See <a href="/updates/">Updates</a>. Try the live demo at{' '}
+        <a href="https://app.harborfm.com/">app.harborfm.com</a>.
+      </p>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p><a href="/">← Home</a></p>
+  </footer>
+</Layout>

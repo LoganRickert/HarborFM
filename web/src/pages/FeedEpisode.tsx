@@ -38,6 +38,7 @@ import {
   FeedFundingSupport,
 } from '../components/Feed';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
+import { useManageSubscriptionDialog } from '../hooks/useManageSubscriptionDialog';
 import { feedAccentCssVars } from '../utils/feedAccent';
 import sharedStyles from '../styles/shared.module.css';
 import styles from './FeedEpisode.module.css';
@@ -55,7 +56,7 @@ export function FeedEpisode({
   const episodeSlug = episodeSlugOverride ?? params.episodeSlug ?? '';
   const isCustomFeed = !!(podcastSlugOverride && episodeSlugOverride);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [showLockInfo, setShowLockInfo] = useState(false);
+  const [showLockInfo, setShowLockInfo] = useManageSubscriptionDialog();
   const [audioLoadFailed, setAudioLoadFailed] = useState(false);
 
   // Cancel any active import polling when on feed pages
@@ -192,6 +193,7 @@ export function FeedEpisode({
             <FeedEpisodeHeader
               episode={episode}
               podcast={podcast}
+              podcastSlug={podcastSlug}
               onMessageClick={canShowMessage ? () => setFeedbackOpen(true) : undefined}
               onLockClick={() => setShowLockInfo(true)}
               shareUrl={shareUrl}

@@ -25,8 +25,8 @@ export function FeedFundingSupport({ fundingLinks }: FeedFundingSupportProps) {
     <div className={styles.block}>
       <p className={styles.heading}>Support The Show!</p>
       <ul className={styles.list}>
-        {links.map((link) => (
-          <li key={link.url}>
+        {links.map((link, i) => (
+          <li key={`${link.url}-${link.text ?? ''}-${i}`}>
             <a
               href={link.url.trim()}
               className={styles.btn}

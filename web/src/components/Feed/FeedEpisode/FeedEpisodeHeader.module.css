@@ -115,20 +115,33 @@
   gap: 0.5rem;
 }
 
-.lockButton {
-  all: unset;
-  box-sizing: border-box;
-  cursor: pointer;
+.actions {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.lockButton {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem;
-  border-radius: 6px;
-  transition: background-color 0.15s ease;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .lockButton:hover {
-  background-color: var(--bg-muted);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .lockButton:focus-visible {
@@ -138,10 +151,19 @@
 
 .lockIcon {
   color: #b8b8b8;
+  transition: color 0.15s ease;
+}
+
+.lockButton:hover .lockIcon {
+  color: #d0d0d0;
 }
 
 .lockIconGold {
   color: #d4a84b;
+}
+
+.lockButton:hover .lockIconGold {
+  color: #e6b84c;
 }
 
 .messageBtn,

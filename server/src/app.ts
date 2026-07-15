@@ -62,6 +62,7 @@ import { sitemapRoutes } from "./modules/sitemap/index.js";
 import { registerRobotsRoute } from "./modules/sitemap/routes.robots.js";
 import { bansRoutes } from "./modules/bans/index.js";
 import { callRoutes } from "./modules/call/index.js";
+import { stripeRoutes } from "./modules/stripe/index.js";
 import { episodeCollaborationRoutes } from "./modules/episodeCollaboration/index.js";
 import fastifyWebsocket from "@fastify/websocket";
 import {
@@ -125,7 +126,6 @@ async function main() {
   // (Otherwise we'd only touch it when creating/testing/deploying exports.)
   getSecretsKey();
 
-  // One-time setup phase (bootstrap from env when ADMIN_EMAIL + ADMIN_PASSWORD_HASH set)
   const setupComplete = isSetupComplete();
   const adminEmail = ADMIN_EMAIL;
   const adminHash = ADMIN_PASSWORD_HASH;
@@ -295,6 +295,7 @@ async function main() {
   await app.register(sitemapRoutes, { prefix: apiPrefix });
   await app.register(bansRoutes, { prefix: apiPrefix });
   await app.register(callRoutes, { prefix: apiPrefix });
+  await app.register(stripeRoutes, { prefix: apiPrefix });
   await app.register(episodeCollaborationRoutes, { prefix: apiPrefix });
 
   pruneListenDedup();

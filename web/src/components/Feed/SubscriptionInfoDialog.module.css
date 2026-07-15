@@ -24,8 +24,10 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.5rem;
-  max-width: 400px;
+  max-width: 440px;
   width: 100%;
+  max-height: min(90vh, 720px);
+  overflow-y: auto;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
   animation: fadeIn 0.15s ease;
 }
@@ -83,10 +85,15 @@
   line-height: 1.5;
 }
 
-.form {
+.form,
+.recoverForm {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.recoverForm {
+  margin-top: 0.25rem;
 }
 
 .label {
@@ -134,8 +141,20 @@
   line-height: 1.4;
 }
 
+.successCard {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
 .unlockButton,
-.logoutButton {
+.logoutButton,
+.recoverButton {
   all: unset;
   box-sizing: border-box;
   display: flex;
@@ -153,21 +172,34 @@
 
 .unlockButton {
   background-color: var(--accent);
-  color: white;
+  color: #000;
 }
 
 .unlockButton:hover:not(:disabled) {
   opacity: 0.9;
 }
 
-.unlockButton:disabled {
+.unlockButton:disabled,
+.recoverButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.unlockButton:focus-visible {
+.unlockButton:focus-visible,
+.recoverButton:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.recoverButton {
+  background-color: var(--bg-muted);
+  color: var(--text);
+  width: 100%;
+  border: 1px solid var(--border);
+}
+
+.recoverButton:hover:not(:disabled) {
+  background-color: var(--border);
 }
 
 .logoutButton {
@@ -188,4 +220,310 @@
 .logoutButton:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.stripePlans {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.stripePlansHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.stripePlansLabel {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.testPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: #fff;
+  background: #c45c26;
+}
+
+.testPillBelow {
+  display: inline-flex;
+  margin: 0 0 1rem;
+}
+
+.stripePlanList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.stripePlanCard {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.95rem 1.05rem;
+  border-radius: 10px;
+  cursor: pointer;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.stripePlanCard:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.stripePlanCard:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.stripePlanCard:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.stripePlanCardMain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  text-align: left;
+}
+
+.stripePlanKind {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stripePlanPrice {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.stripePlanHint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.stripePlanCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: #000;
+}
+
+.orDivider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.35rem 0 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.termsNotice {
+  margin: 0.75rem 0 0.25rem;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.termsLink {
+  color: var(--accent, #2d6a4f);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.termsLink:hover {
+  opacity: 0.9;
+}
+
+.orDivider::before,
+.orDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.manageSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.statusCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.statusRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.statusLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.statusValue {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  text-transform: capitalize;
+}
+
+.manageActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.refundStatus {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-muted, var(--bg)) 80%, transparent);
+}
+
+.managePrimary,
+.manageSecondary {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.managePrimary {
+  background-color: var(--accent);
+  color: #000;
+}
+
+.managePrimary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.manageSecondary {
+  background-color: var(--bg-muted);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.manageSecondary:hover:not(:disabled) {
+  background-color: var(--border);
+}
+
+.managePrimary:disabled,
+.manageSecondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.managePrimary:focus-visible,
+.manageSecondary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.newTokenBox {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+.newTokenTitle {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.newTokenLabel {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.newToken {
+  display: block;
+  word-break: break-all;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text);
+  padding: 0.65rem 0.75rem;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
 }

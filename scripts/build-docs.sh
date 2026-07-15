@@ -61,6 +61,11 @@ cat > docs-dist/sitemap.xml <<EOF
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>${DOCS_BASE_URL}/features/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>${DOCS_BASE_URL}/updates/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

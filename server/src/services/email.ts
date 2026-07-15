@@ -940,3 +940,228 @@ export function buildContactNotificationEmail(
 
   return { subject, text, html };
 }
+
+/**
+ * Email a subscriber their private access token (Stripe recover-token flow).
+ */
+export function buildSubscriberAccessTokenEmail(options: {
+  baseUrl: string;
+  podcastTitle: string;
+  rawToken: string;
+  privateRssUrl: string;
+}): { subject: string; text: string; html: string } {
+  const { baseUrl, podcastTitle, rawToken, privateRssUrl } = options;
+  const safeTitle = escapeHtml(podcastTitle);
+  const safeToken = escapeHtml(rawToken);
+  const safeRss = escapeHtml(privateRssUrl);
+  const subject = `Your ${podcastTitle} subscriber access token`;
+  const text = [
+    `Here is your subscriber access token for ${podcastTitle}.`,
+    "",
+    `Token: ${rawToken}`,
+    "",
+    `Private RSS feed:`,
+    privateRssUrl,
+    "",
+    "Paste the token (or the RSS URL) into the subscribe dialog on the show page to unlock content in your browser.",
+    "",
+    `If you did not request this, you can ignore this email.`,
+    "",
+    `${APP_NAME}`,
+  ].join("\n");
+
+  const origin = new URL(baseUrl).origin;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      ${emailHeaderWithFavicon(baseUrl)}
+      <p style="margin: 0 0 24px; font-size: 0.875rem; color: ${STYLE.textMuted};">Subscriber access for ${safeTitle}</p>
+      <p style="margin: 0 0 16px; font-size: 1rem; color: ${STYLE.text};">
+        Use this token to unlock subscriber content, or add the private RSS feed to your podcast app.
+      </p>
+      <div style="margin: 0 0 20px; padding: 14px 16px; background: ${STYLE.bg}; border: 1px solid ${STYLE.border}; border-radius: 8px;">
+        <p style="margin: 0 0 6px; font-size: 0.75rem; color: ${STYLE.textMuted}; text-transform: uppercase; letter-spacing: 0.04em;">Access token</p>
+        <p style="margin: 0; font-size: 0.875rem; color: ${STYLE.text}; word-break: break-all; font-family: ui-monospace, monospace;">${safeToken}</p>
+      </div>
+      <p style="margin: 0 0 8px; font-size: 0.8125rem; color: ${STYLE.textMuted};">Private RSS feed</p>
+      <p style="margin: 0 0 24px; font-size: 0.8125rem; word-break: break-all;">
+        <a href="${safeRss}" style="color: ${STYLE.accent}; text-decoration: none;">${safeRss}</a>
+      </p>
+      <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted};">
+        If you did not request this, you can ignore this email.
+      </p>
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      <a href="${origin}" style="color: inherit; text-decoration: none;">${APP_NAME}</a>
+    </p>
+  </div>
+  </div>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
+function wrapSubscriberEmail(opts: {
+  baseUrl: string;
+  subject: string;
+  eyebrow: string;
+  bodyHtml: string;
+}): string {
+  const origin = new URL(opts.baseUrl).origin;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>${escapeHtml(opts.subject)}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      ${emailHeaderWithFavicon(opts.baseUrl)}
+      <p style="margin: 0 0 24px; font-size: 0.875rem; color: ${STYLE.textMuted};">${escapeHtml(opts.eyebrow)}</p>
+      ${opts.bodyHtml}
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      <a href="${origin}" style="color: inherit; text-decoration: none;">${APP_NAME}</a>
+    </p>
+  </div>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * Welcome email after a successful Stripe checkout (includes access token + private RSS).
+ */
+export function buildStripeWelcomeEmail(options: {
+  baseUrl: string;
+  podcastTitle: string;
+  rawToken: string;
+  privateRssUrl: string;
+  manageUrl: string;
+}): { subject: string; text: string; html: string } {
+  const { baseUrl, podcastTitle, rawToken, privateRssUrl, manageUrl } = options;
+  const safeTitle = escapeHtml(podcastTitle);
+  const safeToken = escapeHtml(rawToken);
+  const safeRss = escapeHtml(privateRssUrl);
+  const subject = `Welcome to ${podcastTitle}`;
+  const text = [
+    `Thanks for subscribing to ${podcastTitle}!`,
+    "",
+    "Here is your private access:",
+    "",
+    `Private RSS feed:`,
+    privateRssUrl,
+    "",
+    `Access token: ${rawToken}`,
+    "",
+    `Open the show page (unlocks in your browser): ${manageUrl}`,
+    "",
+    "Save these somewhere safe. You will need them to unlock subscriber content.",
+    "",
+    `${APP_NAME}`,
+  ].join("\n");
+
+  const bodyHtml = `
+      <p style="margin: 0 0 16px; font-size: 1rem; color: ${STYLE.text};">
+        Thanks for subscribing to <strong>${safeTitle}</strong>. Here is your private access.
+      </p>
+      <div style="margin: 0 0 16px; padding: 14px 16px; background: ${STYLE.bg}; border: 1px solid ${STYLE.border}; border-radius: 8px;">
+        <p style="margin: 0 0 6px; font-size: 0.75rem; color: ${STYLE.textMuted}; text-transform: uppercase; letter-spacing: 0.04em;">Private RSS feed</p>
+        <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.text}; word-break: break-all;">
+          <a href="${safeRss}" style="color: ${STYLE.accent}; text-decoration: none;">${safeRss}</a>
+        </p>
+      </div>
+      <div style="margin: 0 0 24px; padding: 14px 16px; background: ${STYLE.bg}; border: 1px solid ${STYLE.border}; border-radius: 8px;">
+        <p style="margin: 0 0 6px; font-size: 0.75rem; color: ${STYLE.textMuted}; text-transform: uppercase; letter-spacing: 0.04em;">Access token</p>
+        <p style="margin: 0; font-size: 0.875rem; color: ${STYLE.text}; word-break: break-all; font-family: ui-monospace, monospace;">${safeToken}</p>
+      </div>
+      <p style="margin: 0 0 24px; text-align: center;">
+        <a href="${escapeHtml(manageUrl)}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Open Show Page</a>
+      </p>
+      <p style="margin: 0; font-size: 0.8125rem; color: ${STYLE.textMuted};">
+        Open Show Page unlocks subscriber content in your browser. Save the RSS feed and token for your podcast apps.
+      </p>`;
+
+  return {
+    subject,
+    text,
+    html: wrapSubscriberEmail({
+      baseUrl,
+      subject,
+      eyebrow: `Subscriber access for ${podcastTitle}`,
+      bodyHtml,
+    }),
+  };
+}
+
+/**
+ * Lifecycle notice for Stripe subscribers (pause, cancel, payment, etc.).
+ */
+export function buildStripeSubscriberNoticeEmail(options: {
+  baseUrl: string;
+  podcastTitle: string;
+  eyebrow: string;
+  subject: string;
+  paragraphs: string[];
+  manageUrl: string;
+  /** Defaults to "Manage subscription". */
+  ctaLabel?: string;
+  invoiceUrl?: string | null;
+}): { subject: string; text: string; html: string } {
+  const {
+    baseUrl,
+    podcastTitle,
+    eyebrow,
+    subject,
+    paragraphs,
+    manageUrl,
+    ctaLabel = "Manage subscription",
+    invoiceUrl,
+  } = options;
+
+  const textParts = [...paragraphs, "", `${ctaLabel}: ${manageUrl}`];
+  if (invoiceUrl) textParts.push(`Invoice: ${invoiceUrl}`);
+  textParts.push("", APP_NAME);
+
+  const bodyHtml = [
+    ...paragraphs.map(
+      (p) =>
+        `<p style="margin: 0 0 16px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(p)}</p>`,
+    ),
+    `<p style="margin: 8px 0 0; text-align: center;">
+        <a href="${escapeHtml(manageUrl)}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">${escapeHtml(ctaLabel)}</a>
+      </p>`,
+    invoiceUrl
+      ? `<p style="margin: 16px 0 0; text-align: center; font-size: 0.8125rem;">
+        <a href="${escapeHtml(invoiceUrl)}" style="color: ${STYLE.accent}; text-decoration: none;">View invoice</a>
+      </p>`
+      : "",
+  ].join("\n");
+
+  return {
+    subject,
+    text: textParts.join("\n"),
+    html: wrapSubscriberEmail({
+      baseUrl,
+      subject,
+      eyebrow: `${eyebrow} - ${podcastTitle}`,
+      bodyHtml,
+    }),
+  };
+}

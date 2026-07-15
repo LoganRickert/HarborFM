@@ -27,6 +27,8 @@ export interface User {
   maxCollaborators?: number | null;
   maxSubscriberTokens?: number | null;
   canTranscribe?: number; // 0 = false, 1 = true
+  canGenerateVideo?: number; // 0 = false, 1 = true
+  canStripe?: number; // 0 = false, 1 = true
   federatedIdentities?: FederatedIdentity[];
 }
 

@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
 import {
   Podcast,
   Layers,
@@ -32,17 +33,7 @@ import {
 ---
 
 <Layout title="HarborFM - Open source podcast creation" description="HarborFM is a free, open-source platform built as a modern alternative to Anchor.fm. Produce shows, publish episodes from segments, record remote guests via WebRTC, export audio and RSS. PWA support. Install via Docker, Terraform (AWS/Vultr), or run locally.">
-  <header class="header">
-    <div class="header-inner">
-      <h1><a href="/"><img src="/favicon.svg" alt="" class="logo-icon" width="24" height="24" /><div class="header-brand-text">HarborFM</div></a></h1>
-      <nav class="nav">
-        <a href="/updates/">Updates</a>
-        <a href="/server/">API (Swagger)</a>
-        <a href="https://github.com/LoganRickert/harborfm">GitHub</a>
-        <a href="https://app.harborfm.com/">Demo</a>
-      </nav>
-    </div>
-  </header>
+  <Header />
 
   <main>
     <section class="hero">
@@ -51,6 +42,9 @@ import {
         <img src="/favicon.svg" alt="" class="hero-logo" width="80" height="80" />
         <h1>HarborFM</h1>
         <p class="tagline">A free, open-source platform built as a modern alternative to Anchor.fm. Produce shows, publish episodes, assemble each from flexible segments-record or upload audio, record remote guests via WebRTC, insert intros and bumpers, edit with ease, export audio and RSS.</p>
+        <p class="hero-actions">
+          <a class="hero-features-link" href="/features/">Explore features</a>
+        </p>
       </div>
 
       <div class="install-bar" role="region" aria-label="Install options">
@@ -236,6 +230,10 @@ pnpm run dev</code></pre>
 
     <section class="section" id="features">
       <h2>Features</h2>
+      <p class="features-section-lead">
+        A quick tour of what HarborFM can do. For the full catalog by category, see the
+        <a href="/features/">Features</a> page.
+      </p>
       <div class="features">
         <div class="feature-card">
           <span class="feature-icon" aria-hidden="true"><Podcast size={22} stroke-width={2} /></span>

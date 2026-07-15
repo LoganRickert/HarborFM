@@ -12,6 +12,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   transcriptionModel: 'whisper-1',
   defaultCanTranscribe: true,
   defaultCanGenerateVideo: true,
+  defaultCanStripe: true,
   llmProvider: 'none',
   ollamaUrl: 'http://localhost:11434',
   openaiApiKey: '',

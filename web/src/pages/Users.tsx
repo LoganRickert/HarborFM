@@ -43,6 +43,7 @@ export function Users() {
   const [editMaxSubscriberTokens, setEditMaxSubscriberTokens] = useState<number | null>(null);
   const [editCanTranscribe, setEditCanTranscribe] = useState(false);
   const [editCanGenerateVideo, setEditCanGenerateVideo] = useState(false);
+  const [editCanStripe, setEditCanStripe] = useState(false);
   const [editFormBaseline, setEditFormBaseline] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState('');
@@ -86,6 +87,7 @@ export function Users() {
         max_subscriber_tokens?: number | null;
         can_transcribe?: boolean;
         can_generate_video?: boolean;
+        can_stripe?: boolean;
       };
     }) => updateUser(userId, data as Parameters<typeof updateUser>[1]),
     onSuccess: () => {
@@ -123,6 +125,7 @@ export function Users() {
       maxSubscriberTokens: user.maxSubscriberTokens ?? null,
       canTranscribe: (user as { canTranscribe?: number }).canTranscribe === 1,
       canGenerateVideo: (user as { canGenerateVideo?: number }).canGenerateVideo === 1,
+      canStripe: (user as { canStripe?: number }).canStripe === 1,
     };
     setEditEmail(next.email);
     setEditUsername(next.username);
@@ -137,6 +140,7 @@ export function Users() {
     setEditMaxSubscriberTokens(next.maxSubscriberTokens);
     setEditCanTranscribe(next.canTranscribe);
     setEditCanGenerateVideo(next.canGenerateVideo);
+    setEditCanStripe(next.canStripe);
     setEditFormBaseline(snapshotForDirty(next));
   }
 
@@ -210,6 +214,10 @@ export function Users() {
     if (editCanGenerateVideo !== currentCanGenerateVideo) {
       updates.canGenerateVideo = editCanGenerateVideo;
     }
+    const currentCanStripe = (userToEdit as { canStripe?: number }).canStripe === 1;
+    if (editCanStripe !== currentCanStripe) {
+      updates.canStripe = editCanStripe;
+    }
 
     if (Object.keys(updates).length > 0) {
       updateUserMutation.mutate({ userId: userToEdit.id, data: updates });
@@ -246,6 +254,7 @@ export function Users() {
       maxSubscriberTokens: editMaxSubscriberTokens,
       canTranscribe: editCanTranscribe,
       canGenerateVideo: editCanGenerateVideo,
+      canStripe: editCanStripe,
     }),
     [
       editEmail,
@@ -261,6 +270,7 @@ export function Users() {
       editMaxSubscriberTokens,
       editCanTranscribe,
       editCanGenerateVideo,
+      editCanStripe,
     ],
   );
   const editIsDirty = useBaselineDirty(editFormBaseline, editFormCurrent);
@@ -545,6 +555,20 @@ export function Users() {
                 </label>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
                   When enabled, the user can generate episode videos (when video generation is enabled on the server).
+                </p>
+              </div>
+              <div className={styles.formGroup}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={editCanStripe}
+                    onChange={(e) => setEditCanStripe(e.target.checked)}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Can Stripe</span>
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
+                  When enabled, the user can configure Stripe paid subscriptions on their shows.
                 </p>
               </div>
               <div className={styles.formGroup}>

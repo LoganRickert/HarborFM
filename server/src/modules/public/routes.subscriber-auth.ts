@@ -8,6 +8,7 @@ import {
 import {
   validateSubscriberTokenByValue,
   validateSubscriberTokenByValueWithExistence,
+  lookupSubscriberTokenByValue,
   touchSubscriberToken,
 } from "../../services/subscriberTokens.js";
 import {
@@ -18,6 +19,9 @@ import {
   getSubscriberCookieSecure,
 } from "./utils.js";
 import * as repo from "./repo.js";
+import { getBaseUrl } from "../auth/shared.js";
+import { verifySubscriberClaim } from "./subscriberClaim.js";
+import { getBySubscriberTokenId } from "../stripe/subscriptions.js";
 
 export async function registerSubscriberAuthRoutes(app: FastifyInstance) {
   app.post(
@@ -122,6 +126,92 @@ export async function registerSubscriberAuthRoutes(app: FastifyInstance) {
   );
 
   app.get(
+    "/public/podcasts/:podcastSlug/subscriber-auth/claim",
+    {
+      schema: {
+        tags: ["Public"],
+        summary: "Claim subscriber access from a signed email link",
+        description:
+          "Verifies a signed claim token, sets the httpOnly subscriber cookie, and redirects to the show page.",
+        security: [],
+        querystring: {
+          type: "object",
+          properties: { c: { type: "string" } },
+          required: ["c"],
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!ensurePublicFeedsEnabled(reply)) return;
+      const { podcastSlug } = request.params as { podcastSlug: string };
+      const { c } = request.query as { c?: string };
+      const slug = podcastSlug.trim();
+      const feedUrl = `${getBaseUrl()}/feed/${encodeURIComponent(slug)}?manage=true`;
+
+      if (!c?.trim()) {
+        return reply.redirect(feedUrl);
+      }
+
+      const verified = verifySubscriberClaim(c, slug);
+      if (!verified) {
+        return reply.redirect(feedUrl);
+      }
+
+      const podcastId = repo.getPodcastIdBySlug(slug);
+      if (!podcastId) {
+        return reply.redirect(feedUrl);
+      }
+
+      const tokenResult = validateSubscriberTokenByValueWithExistence(
+        verified.rawToken,
+      );
+      if (!tokenResult.tokenExists) {
+        const ip = getClientIp(request);
+        const userAgent = getUserAgent(request);
+        recordFailureAndMaybeBan(ip, AUTH_SUBSCRIBER_TOKEN_CONTEXT, {
+          userAgent,
+        });
+        const ban = getIpBan(ip, AUTH_SUBSCRIBER_TOKEN_CONTEXT);
+        if (ban.banned) {
+          return reply
+            .status(429)
+            .header("Retry-After", String(ban.retryAfterSec))
+            .send({ error: "Too many failed attempts. Try again later." });
+        }
+        return reply.redirect(feedUrl);
+      }
+      // Allow claim for disabled tokens (pause / payment failed) so manage still works.
+      const tokenRow = lookupSubscriberTokenByValue(verified.rawToken);
+      if (!tokenRow || tokenRow.podcastId !== podcastId) {
+        return reply.redirect(feedUrl);
+      }
+
+      const existingCookie = request.cookies[SUBSCRIBER_TOKENS_COOKIE];
+      let tokenMap: Record<string, string> = {};
+      if (existingCookie) {
+        try {
+          tokenMap = JSON.parse(existingCookie);
+          if (typeof tokenMap !== "object" || Array.isArray(tokenMap)) {
+            tokenMap = {};
+          }
+        } catch {
+          tokenMap = {};
+        }
+      }
+      tokenMap[slug] = verified.rawToken;
+      reply.setCookie(SUBSCRIBER_TOKENS_COOKIE, JSON.stringify(tokenMap), {
+        httpOnly: true,
+        secure: getSubscriberCookieSecure(),
+        sameSite: "lax",
+        path: "/",
+        maxAge: COOKIE_MAX_AGE,
+      });
+      touchSubscriberToken(tokenRow.id);
+      return reply.redirect(feedUrl);
+    },
+  );
+
+  app.get(
     "/public/subscriber-auth/status",
     {
       schema: {
@@ -167,13 +257,26 @@ export async function registerSubscriberAuthRoutes(app: FastifyInstance) {
       const cleanedTokenMap: Record<string, string> = {};
 
       for (const [slug, token] of Object.entries(tokenMap)) {
+        if (typeof token !== "string" || !token.trim()) continue;
         const podcastId = repo.getPodcastIdBySlug(slug);
-        if (podcastId) {
-          const tokenRow = validateSubscriberTokenByValue(token);
-          if (tokenRow && tokenRow.podcastId === podcastId) {
-            validPodcastSlugs.push(slug);
-            cleanedTokenMap[slug] = token;
-          }
+        if (!podcastId) continue;
+
+        const accessRow = validateSubscriberTokenByValue(token);
+        if (accessRow && accessRow.podcastId === podcastId) {
+          validPodcastSlugs.push(slug);
+          cleanedTokenMap[slug] = token;
+          continue;
+        }
+
+        // Keep manage session for Stripe subscribers whose access token is temporarily disabled
+        // (paused / payment failed) so email claim links still open Manage Subscription.
+        const anyRow = lookupSubscriberTokenByValue(token);
+        if (
+          anyRow &&
+          anyRow.podcastId === podcastId &&
+          getBySubscriberTokenId(anyRow.id)
+        ) {
+          cleanedTokenMap[slug] = token;
         }
       }
 
@@ -194,7 +297,7 @@ export async function registerSubscriberAuthRoutes(app: FastifyInstance) {
       }
 
       return {
-        authenticated: validPodcastSlugs.length > 0,
+        authenticated: Object.keys(cleanedTokenMap).length > 0,
         podcastSlugs: validPodcastSlugs,
         tokens: cleanedTokenMap,
       };

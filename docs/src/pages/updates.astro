@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -38,17 +39,7 @@ if (changelogPath) {
 ---
 
 <Layout title="Updates - HarborFM" description="Changelog and updates for HarborFM.">
-  <header class="header">
-    <div class="header-inner">
-      <h1><a href="/"><img src="/favicon.svg" alt="" class="logo-icon" width="24" height="24" /><div class="header-brand-text">HarborFM</div></a></h1>
-      <nav class="nav">
-        <a href="/updates/">Updates</a>
-        <a href="/server/">API (Swagger)</a>
-        <a href="https://github.com/LoganRickert/harborfm">GitHub</a>
-        <a href="https://app.harborfm.com/">Demo</a>
-      </nav>
-    </div>
-  </header>
+  <Header />
 
   <main class="updates-main">
     <div class="updates-content">

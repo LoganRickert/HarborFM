@@ -164,6 +164,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           : settingsData.default_max_subscriber_tokens;
       const canTranscribe = settingsData.default_can_transcribe ? 1 : 0;
       const canGenerateVideo = settingsData.default_can_generate_video ? 1 : 0;
+      const canStripe = settingsData.default_can_stripe ? 1 : 0;
 
       repo.insertUser({
         id,
@@ -177,6 +178,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         maxSubscriberTokens,
         canTranscribe,
         canGenerateVideo,
+        canStripe,
         emailVerified: true,
       });
 
@@ -246,6 +248,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             readOnly: { type: "boolean" },
             canTranscribe: { type: "boolean" },
             canGenerateVideo: { type: "boolean" },
+            canStripe: { type: "boolean" },
             password: { type: "string" },
             maxPodcasts: {},
             maxEpisodes: {},
@@ -306,6 +309,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         set.readOnly = body.readOnly === true ? 1 : 0;
       if (body.canTranscribe !== undefined) set.canTranscribe = body.canTranscribe ? 1 : 0;
       if (body.canGenerateVideo !== undefined) set.canGenerateVideo = body.canGenerateVideo ? 1 : 0;
+      if (body.canStripe !== undefined) set.canStripe = body.canStripe ? 1 : 0;
       if (body.password !== undefined) {
         set.passwordHash = await argon2.hash(body.password);
       }

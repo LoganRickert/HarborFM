@@ -157,7 +157,7 @@ async function main(): Promise<void> {
 
   const id = nanoid();
   db.prepare(
-    "INSERT INTO users (id, email, password_hash, role, can_transcribe, can_generate_video) VALUES (?, ?, ?, ?, 1, 1)",
+    "INSERT INTO users (id, email, password_hash, role, can_transcribe, can_generate_video, can_stripe) VALUES (?, ?, ?, ?, 1, 1, 1)",
   ).run(id, email.toLowerCase(), passwordHash, "admin");
 
   const hostnameRaw = getAdminHostnameFromEnv();

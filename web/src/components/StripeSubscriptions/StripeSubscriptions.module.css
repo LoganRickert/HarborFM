@@ -1,0 +1,65 @@
+.subMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.subMetaTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.6rem;
+}
+
+.subEmail {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.subMetaLine {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.subActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.subActionsDelete {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .subMetaTop {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .subActions {
+    width: 100%;
+  }
+
+  .subActionsStripe {
+    flex: 1 0 100%;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .subActionsRenew {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .subActionsDelete {
+    flex: 0 0 auto;
+  }
+}

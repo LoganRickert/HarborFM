@@ -15,6 +15,8 @@ import { ShowCastCard } from '../components/ShowCast';
 import { ExportsSection } from '../components/Exports/ExportsSection';
 import { CollaboratorsSection } from '../components/Collaborators/CollaboratorsSection';
 import { SubscriberTokensSection } from '../components/SubscriberTokens/SubscriberTokensSection';
+import { StripePaymentsSection } from '../components/StripePayments/StripePaymentsSection';
+import { StripeSubscriptionsSection } from '../components/StripeSubscriptions/StripeSubscriptionsSection';
 import sharedStyles from '../components/PodcastDetail/shared.module.css';
 import localStyles from './PodcastDetail.module.css';
 
@@ -116,6 +118,14 @@ export function PodcastDetail() {
           subscriberOnlyFeedEnabled={Boolean(podcast?.subscriberOnlyFeedEnabled)}
           effectiveMaxSubscriberTokens={podcast?.effectiveMaxSubscriberTokens ?? undefined}
         />
+      )}
+
+      {canManageShow && Boolean(podcast?.subscriberOnlyFeedEnabled) && (
+        <StripePaymentsSection podcastId={id} readOnly={readOnly} />
+      )}
+
+      {canManageShow && Boolean(podcast?.subscriberOnlyFeedEnabled) && (
+        <StripeSubscriptionsSection podcastId={id} readOnly={readOnly} />
       )}
     </div>
   );

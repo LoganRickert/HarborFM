@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
   integer,
+  real,
   primaryKey,
   unique,
   index,
@@ -40,6 +41,7 @@ export const users = sqliteTable(
     maxSubscriberTokens: integer("max_subscriber_tokens"),
     canTranscribe: integer("can_transcribe"),
     canGenerateVideo: integer("can_generate_video"),
+    canStripe: integer("can_stripe"),
     totpSecretEnc: text("totp_secret_enc"),
     twoFactorMethod: text("two_factor_method"),
     totpLockedUntil: text("totp_locked_until"),
@@ -129,6 +131,11 @@ export const podcasts = sqliteTable(
     subscriberOnlyReviews: integer("subscriber_only_reviews", { mode: "boolean" }).default(false),
     subscriberOnlyMessages: integer("subscriber_only_messages", { mode: "boolean" }).default(false),
     showScheduledEpisodes: integer("show_scheduled_episodes", { mode: "boolean" }).default(false),
+    stripeCredentialsId: text("stripe_credentials_id"),
+    stripePaymentsEnabled: integer("stripe_payments_enabled", {
+      mode: "boolean",
+    }).default(false),
+    billingAnchor: text("billing_anchor").notNull().default("anniversary"),
     feedAccent: text("feed_accent").default("green"),
     feedShowPodcastDescription: integer("feed_show_podcast_description", {
       mode: "boolean",
@@ -887,5 +894,194 @@ export const episodePollAnswers = sqliteTable(
   (table) => [
     index("idx_episode_poll_answers_submission_id").on(table.submissionId),
     index("idx_episode_poll_answers_question_id").on(table.questionId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Stripe credentials (074) - per-user shareable packs
+// ---------------------------------------------------------------------------
+export const stripeCredentials = sqliteTable(
+  "stripe_credentials",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull().default(""),
+    mode: text("mode").notNull().default("test"),
+    testSecretKeyEnc: text("test_secret_key_enc"),
+    testPublishableKeyEnc: text("test_publishable_key_enc"),
+    testWebhookSecretEnc: text("test_webhook_secret_enc"),
+    liveSecretKeyEnc: text("live_secret_key_enc"),
+    livePublishableKeyEnc: text("live_publishable_key_enc"),
+    liveWebhookSecretEnc: text("live_webhook_secret_enc"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_stripe_credentials_owner_user_id").on(table.ownerUserId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Stripe plans (075) - per-show Products / Prices
+// ---------------------------------------------------------------------------
+export const stripePlans = sqliteTable(
+  "stripe_plans",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    mode: text("mode").notNull().default("test"),
+    kind: text("kind").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("usd"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    stripeProductId: text("stripe_product_id").notNull().default(""),
+    stripePriceId: text("stripe_price_id").notNull().default(""),
+    autoRenewDefault: integer("auto_renew_default", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    syncError: text("sync_error"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_stripe_plans_podcast_id").on(table.podcastId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Stripe subscriptions (076) - checkout → subscriber tokens
+// ---------------------------------------------------------------------------
+export const stripeSubscriptions = sqliteTable(
+  "stripe_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    stripeCredentialsId: text("stripe_credentials_id").notNull(),
+    mode: text("mode").notNull().default("test"),
+    planId: text("plan_id"),
+    subscriberTokenId: text("subscriber_token_id").references(
+      () => subscriberTokens.id,
+      { onDelete: "set null" },
+    ),
+    stripeCustomerId: text("stripe_customer_id").notNull().default(""),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    status: text("status").notNull().default("incomplete"),
+    currentPeriodEnd: text("current_period_end"),
+    cancelAtPeriodEnd: integer("cancel_at_period_end", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
+    customerEmail: text("customer_email"),
+    accessTokenEnc: text("access_token_enc"),
+    /** Set when checkout success has returned the raw token once (blocks re-reveal via session_id). */
+    accessTokenRevealedAt: text("access_token_revealed_at"),
+    /** Actual amount charged at checkout (after discounts), for refunds. */
+    amountPaidCents: integer("amount_paid_cents"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_stripe_subscriptions_podcast_id").on(table.podcastId),
+    index("idx_stripe_subscriptions_stripe_sub_id").on(
+      table.stripeSubscriptionId,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Stripe coupons (078) - per-show Coupon + Promotion Code
+// ---------------------------------------------------------------------------
+export const stripeCoupons = sqliteTable(
+  "stripe_coupons",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    mode: text("mode").notNull().default("test"),
+    code: text("code").notNull(),
+    name: text("name"),
+    discountType: text("discount_type").notNull(),
+    percentOff: real("percent_off"),
+    amountOffCents: integer("amount_off_cents"),
+    currency: text("currency").notNull().default("usd"),
+    duration: text("duration").notNull(),
+    durationInMonths: integer("duration_in_months"),
+    startsAt: text("starts_at"),
+    endsAt: text("ends_at"),
+    maxRedemptions: integer("max_redemptions"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    stripeCouponId: text("stripe_coupon_id").notNull().default(""),
+    stripePromotionCodeId: text("stripe_promotion_code_id").notNull().default(""),
+    syncError: text("sync_error"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [index("idx_stripe_coupons_podcast_id").on(table.podcastId)],
+);
+
+export const stripeCouponRedemptions = sqliteTable(
+  "stripe_coupon_redemptions",
+  {
+    id: text("id").primaryKey(),
+    couponId: text("coupon_id")
+      .notNull()
+      .references(() => stripeCoupons.id, { onDelete: "cascade" }),
+    subscriptionId: text("subscription_id")
+      .notNull()
+      .references(() => stripeSubscriptions.id, { onDelete: "cascade" }),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    customerEmail: text("customer_email"),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePromotionCodeId: text("stripe_promotion_code_id"),
+    stripeCouponId: text("stripe_coupon_id"),
+    amountOffCents: integer("amount_off_cents"),
+    percentOff: real("percent_off"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_stripe_coupon_redemptions_coupon_id").on(table.couponId),
+    index("idx_stripe_coupon_redemptions_podcast_id").on(table.podcastId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Stripe refund requests (077) - listener asks, owner approves/rejects
+// ---------------------------------------------------------------------------
+export const stripeRefundRequests = sqliteTable(
+  "stripe_refund_requests",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    subscriptionId: text("subscription_id")
+      .notNull()
+      .references(() => stripeSubscriptions.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("usd"),
+    stripeRefundId: text("stripe_refund_id"),
+    resolvedByUserId: text("resolved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+    resolvedAt: text("resolved_at"),
+  },
+  (table) => [
+    index("idx_stripe_refund_requests_podcast_id").on(table.podcastId),
+    index("idx_stripe_refund_requests_subscription_id").on(table.subscriptionId),
   ],
 );

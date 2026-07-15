@@ -86,6 +86,7 @@ export interface FeedBreadcrumbsProps {
 export interface FeedEpisodeHeaderProps {
   episode: PublicEpisode;
   podcast: PublicPodcast;
+  podcastSlug: string;
   onMessageClick?: () => void;
   onLockClick?: () => void;
   /** When set, a Share button is shown that opens ShareDialog with this URL and optional title/embedCode. */

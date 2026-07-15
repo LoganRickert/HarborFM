@@ -91,6 +91,7 @@ export function createFederatedUser(): string {
     maxSubscriberTokens: limits.max_subscriber_tokens,
     canTranscribe: limits.can_transcribe,
     canGenerateVideo: limits.can_generate_video,
+    canStripe: limits.can_stripe,
     emailVerified: true,
   }).run();
   return id;
@@ -118,6 +119,7 @@ export function createFederatedUserWithEmail(
     maxSubscriberTokens: limits.max_subscriber_tokens,
     canTranscribe: limits.can_transcribe,
     canGenerateVideo: limits.can_generate_video,
+    canStripe: limits.can_stripe,
     emailVerified,
   }).run();
   return id;
@@ -198,6 +200,7 @@ function getDefaultUserLimits(): {
   max_subscriber_tokens: number | null;
   can_transcribe: number;
   can_generate_video: number;
+  can_stripe: number;
 } {
   try {
     const s = readSettings();
@@ -225,6 +228,7 @@ function getDefaultUserLimits(): {
           : s.default_max_subscriber_tokens,
       can_transcribe: s.default_can_transcribe ? 1 : 0,
       can_generate_video: s.default_can_generate_video ? 1 : 0,
+      can_stripe: s.default_can_stripe ? 1 : 0,
     };
   } catch (_err) {
     return {
@@ -235,6 +239,7 @@ function getDefaultUserLimits(): {
       max_subscriber_tokens: null,
       can_transcribe: 0,
       can_generate_video: 0,
+      can_stripe: 0,
     };
   }
 }

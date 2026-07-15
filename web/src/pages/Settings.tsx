@@ -141,6 +141,7 @@ export function Settings() {
         transcriptionModel: form.transcriptionModel?.trim() || undefined,
         defaultCanTranscribe: form.defaultCanTranscribe,
         defaultCanGenerateVideo: form.defaultCanGenerateVideo,
+        defaultCanStripe: form.defaultCanStripe,
         llmProvider: form.llmProvider,
         ollamaUrl: form.ollamaUrl,
         openaiApiKey: form.openaiApiKey === '(set)' ? undefined : form.openaiApiKey,

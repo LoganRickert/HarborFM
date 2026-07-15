@@ -21,8 +21,11 @@ export function FeedPodrollCard({ podroll }: FeedPodrollCardProps) {
         Recommended Podcasts
       </h2>
       <ul className={styles.list}>
-        {items.map((item) => (
-          <PodrollItem key={item.feedGuid} item={item} />
+        {items.map((item, i) => (
+          <PodrollItem
+            key={item.feedGuid?.trim() || `${item.homeUrl ?? ''}-${item.feedUrl ?? ''}-${i}`}
+            item={item}
+          />
         ))}
       </ul>
     </section>
