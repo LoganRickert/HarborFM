@@ -79,6 +79,21 @@ if [ -f "$INSTALL_DIR/.env" ]; then
 fi
 REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
 
+# Compose profile flags. Profiled services (caddy/nginx, webrtc) are ignored by
+# down/pull/up unless the profile is active — that left webrtc on stale images.
+compose_profile_args() {
+  local args=(--profile "$REVERSE_PROXY")
+  if [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
+    args+=(--profile webrtc)
+  fi
+  printf '%s\n' "${args[@]}"
+}
+# Always include webrtc on down so a previously enabled webrtc container is removed
+# even if WEBRTC_ENABLED was turned off since the last start.
+compose_down_profile_args() {
+  printf '%s\n' --profile "$REVERSE_PROXY" --profile webrtc
+}
+
 if [ ! -f "$INSTALL_DIR/.env" ]; then
   touch "$INSTALL_DIR/.env"
 fi
@@ -94,13 +109,11 @@ if [ "$NON_INTERACTIVE" = true ]; then
   prune_harborfm="n"
 else
   read -r -p "Overwrite docker-compose.yml with version from GitHub? [y/N] " overwrite_compose </dev/tty || true
-  read -r -p "Prune old harborfm images after pull (keep :latest)? [y/N] " prune_harborfm </dev/tty || true
+  read -r -p "Prune old harborfm images after recreate (keep :latest)? [y/N] " prune_harborfm </dev/tty || true
   echo ""
 fi
 
-echo "Stopping containers..."
-docker compose down
-
+# Keep the stack up while fetching configs/images so downtime is only the recreate step.
 echo "Downloading latest configs from GitHub (main)..."
 if [[ "$overwrite_compose" =~ ^[yY] ]]; then
   download "$BASE_URL/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
@@ -148,10 +161,21 @@ if [ "$REVERSE_PROXY" = "caddy" ] && [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
   cp "$INSTALL_DIR/caddy/Caddyfile.webrtc" "$INSTALL_DIR/caddy/Caddyfile"
 fi
 
-echo "Pulling images..."
-docker compose pull
+COMPOSE_PROFILES="$REVERSE_PROXY"
+[ "${WEBRTC_ENABLED:-0}" = "1" ] && COMPOSE_PROFILES="$COMPOSE_PROFILES webrtc"
 
-# Remove old HarborFM / HarborFM-webrtc images (keeps only :latest for each repo to free disk)
+echo "Pulling images (profiles: $COMPOSE_PROFILES)..."
+# shellcheck disable=SC2046
+docker compose $(compose_profile_args) pull
+
+echo "Recreating containers (profiles: $COMPOSE_PROFILES)..."
+# down drops obsolete profiled services (e.g. webrtc after WEBRTC_ENABLED=0); pull already finished.
+# shellcheck disable=SC2046
+docker compose $(compose_down_profile_args) down
+# shellcheck disable=SC2046
+docker compose $(compose_profile_args) up -d --force-recreate
+
+# Remove old HarborFM / HarborFM-webrtc images after recreate (in-use images can't be deleted earlier)
 clean_old_harborfm_images() {
   for repo in ghcr.io/loganrickert/harborfm ghcr.io/loganrickert/harborfm-webrtc; do
     latest_id=$(docker images "$repo:latest" --format '{{.ID}}' 2>/dev/null | head -n1) || true
@@ -170,11 +194,6 @@ else
   echo "Skipping HarborFM image prune."
 fi
 
-COMPOSE_PROFILES="$REVERSE_PROXY"
-[ "${WEBRTC_ENABLED:-0}" = "1" ] && COMPOSE_PROFILES="$COMPOSE_PROFILES webrtc"
-echo "Starting containers (profile: $COMPOSE_PROFILES)..."
-docker compose --profile "$REVERSE_PROXY" $([ "${WEBRTC_ENABLED:-0}" = "1" ] && echo "--profile webrtc") up -d
-
 if [ "$REVERSE_PROXY" = "nginx" ] && [ -n "${CERTBOT_EMAIL:-}" ] && [ "${DOMAIN:-localhost}" != "localhost" ]; then
   echo ""
   echo "Attempting Let's Encrypt certificate renewal..."
@@ -188,4 +207,8 @@ fi
 echo ""
 echo "=== Update complete ==="
 echo "  Logs:  docker compose logs -f"
-echo "  Stop:  docker compose down"
+if [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
+  echo "  Stop:  docker compose --profile $REVERSE_PROXY --profile webrtc down"
+else
+  echo "  Stop:  docker compose --profile $REVERSE_PROXY down"
+fi

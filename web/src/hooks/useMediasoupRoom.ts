@@ -180,10 +180,14 @@ export function useMediasoupRoom(
           try {
             const msg = JSON.parse(event.data as string) as { type: string; [k: string]: unknown };
             if (msg.type === 'error') {
-              rejectPending(
-                'produced',
-                new Error(typeof msg.error === 'string' ? msg.error : 'WebRTC error'),
-              );
+              const err = new Error(typeof msg.error === 'string' ? msg.error : 'WebRTC error');
+              // Server errors are not typed to a waiter; fail any in-flight protocol step.
+              rejectPending('produced', err);
+              rejectPending('webRtcTransportCreated', err);
+              rejectPending('webRtcTransportConnected', err);
+              rejectPending('consumed', err);
+              rejectPending('producers', err);
+              rejectPending('routerRtpCapabilities', err);
               return;
             }
             if (msg.type === 'newProducer' && typeof msg.producerId === 'string') {

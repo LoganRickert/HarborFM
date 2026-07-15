@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.10.1 - 2026-07-14
+
+- **Group calls:** Fixed WebRTC send transports leaking on disconnect/reconnect. Each client creates send + recv transports, but the server only closed the last one, so rooms could hit `Too many transports in room` and drop audio (often after remounts during a long call / soundboard use).
+- **Docker update:** `update.sh` now passes compose profiles to `down` / `pull` / `up`, so the webrtc image is actually pulled and the container is recreated (previously `pull`/`down` skipped the `webrtc` profile). Configs and images are fetched while the stack stays up; downtime is only the brief recreate step.
+
 ## v1.10.0 - 2026-07-14
 
 - **Stripe payments (BYOK):** Show owners connect their own Stripe credential packs (separate test and live accounts), attach a pack to a show, and accept paid access. Restricted-key setup lists the Write permissions Harbor needs; webhook URL and verify step are included.

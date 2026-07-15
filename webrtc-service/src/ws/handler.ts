@@ -52,10 +52,31 @@ const WS_MAX_MESSAGE_BYTES = 256 * 1024;
 type WebRtcTransport = mediasoup.types.WebRtcTransport;
 
 const socketRooms = new Map<unknown, string>();
-const socketTransports = new Map<unknown, WebRtcTransport>();
+/** Each socket owns send + recv transports; must track all or send leaks on disconnect. */
+const socketTransports = new Map<unknown, Map<string, WebRtcTransport>>();
 const socketToIsHost = new Map<unknown, boolean>();
 /** Producer ID -> socket that created it (for producerVolume auth) */
 const producerToSocket = new Map<string, unknown>();
+
+function getSocketTransport(socket: unknown, transportId: string): WebRtcTransport | undefined {
+  return socketTransports.get(socket)?.get(transportId);
+}
+
+function addSocketTransport(socket: unknown, transport: WebRtcTransport): void {
+  let owned = socketTransports.get(socket);
+  if (!owned) {
+    owned = new Map();
+    socketTransports.set(socket, owned);
+  }
+  owned.set(transport.id, transport);
+}
+
+function removeSocketTransport(socket: unknown, transportId: string): void {
+  const owned = socketTransports.get(socket);
+  if (!owned) return;
+  owned.delete(transportId);
+  if (owned.size === 0) socketTransports.delete(socket);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const wsHandler = async (socket: any, req: any) => {
@@ -139,10 +160,10 @@ export const wsHandler = async (socket: any, req: any) => {
           enableTcp: true,
         });
         roomState.transports.set(transport.id, transport);
-        socketTransports.set(socket, transport);
+        addSocketTransport(socket, transport);
         transport.on("@close", () => {
           roomState.transports.delete(transport.id);
-          socketTransports.delete(socket);
+          removeSocketTransport(socket, transport.id);
         });
         socket.send(
           JSON.stringify({
@@ -161,9 +182,8 @@ export const wsHandler = async (socket: any, req: any) => {
           transportId: string;
           dtlsParameters: mediasoup.types.DtlsParameters;
         };
-        const ownTransport = socketTransports.get(socket);
-        const transport = roomState.transports.get(transportId);
-        if (!ownTransport || ownTransport.id !== transportId || !transport) {
+        const transport = getSocketTransport(socket, transportId);
+        if (!transport || !roomState.transports.has(transportId)) {
           socket.send(JSON.stringify({ type: "error", error: "Transport not found or access denied" }));
           return;
         }
@@ -183,9 +203,8 @@ export const wsHandler = async (socket: any, req: any) => {
           rtpParameters: mediasoup.types.RtpParameters;
           source?: string;
         };
-        const ownTransport = socketTransports.get(socket);
-        const transport = roomState.transports.get(transportId);
-        if (!ownTransport || ownTransport.id !== transportId || !transport) {
+        const transport = getSocketTransport(socket, transportId);
+        if (!transport || !roomState.transports.has(transportId)) {
           socket.send(JSON.stringify({ type: "error", error: "Transport not found or access denied" }));
           return;
         }
@@ -215,10 +234,9 @@ export const wsHandler = async (socket: any, req: any) => {
           producerId: string;
           rtpCapabilities: mediasoup.types.RtpCapabilities;
         };
-        const ownTransport = socketTransports.get(socket);
-        const transport = roomState.transports.get(transportId);
+        const transport = getSocketTransport(socket, transportId);
         const producer = roomState.producers.get(producerId);
-        if (!ownTransport || ownTransport.id !== transportId || !transport || !producer) {
+        if (!transport || !roomState.transports.has(transportId) || !producer) {
           socket.send(JSON.stringify({ type: "error", error: "Transport or producer not found" }));
           return;
         }
@@ -528,14 +546,17 @@ export const wsHandler = async (socket: any, req: any) => {
 
   socket.on("close", () => {
     const roomState = getRoom(roomId);
-    const transport = socketTransports.get(socket);
-    if (transport) {
-      try {
-        transport.close();
-      } catch (e) {
-        console.warn("[webrtc] socket close: transport.close() failed", e);
+    const owned = socketTransports.get(socket);
+    if (owned) {
+      // Copy before close: @close removes from the map while we iterate.
+      for (const transport of [...owned.values()]) {
+        try {
+          transport.close();
+        } catch (e) {
+          console.warn("[webrtc] socket close: transport.close() failed", e);
+        }
+        if (roomState) roomState.transports.delete(transport.id);
       }
-      if (roomState) roomState.transports.delete(transport.id);
     }
     socketTransports.delete(socket);
     socketRooms.delete(socket);

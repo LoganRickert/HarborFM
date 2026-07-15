@@ -173,7 +173,7 @@ To auto-renew Let's Encrypt certificates, add a cron job (run `crontab -e` and a
 0 3 * * * cd /path/to/harborfm-docker && docker compose run --rm --entrypoint certbot certbot renew
 ```
 
-If you use the `install.sh` script, an `update.sh` script will also be added to the install directory. Run this script to pull the latest docker-compose files and renew the nginx certificate. Always run `docker compose` (and `docker compose restart`) from the install directory so volume paths such as nginx `sites-enabled` use the correct path from `.env`.
+If you use the `install.sh` script, an `update.sh` script will also be added to the install directory. Run this script to pull the latest images and configs (including the webrtc service when `WEBRTC_ENABLED=1`) and renew the nginx certificate. Always run `docker compose` (and `docker compose restart`) from the install directory so volume paths such as nginx `sites-enabled` use the correct path from `.env`.
 
 #### Adding additional domains (nginx)
 
