@@ -1,8 +1,9 @@
-import { Link, useParams } from 'react-router-dom';
+import { useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Lock, Plus } from 'lucide-react';
+import { ChevronRight, CircleAlert, FolderUp, Lock, Plus } from 'lucide-react';
 import { getPodcast } from '../api/podcasts';
-import { listEpisodes } from '../api/episodes';
+import { importEpisodeProject, listEpisodes } from '../api/episodes';
 import { formatDateShort } from '../utils/format';
 import { me, isReadOnly } from '../api/auth';
 import { FullPageLoading, InlineLoading } from '../components/Loading';
@@ -11,6 +12,11 @@ import styles from './EpisodesList.module.css';
 
 export function EpisodesList() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
   const { data: podcast, isLoading: podcastLoading } = useQuery({
     queryKey: ['podcast', id],
     queryFn: () => getPodcast(id!),
@@ -33,6 +39,21 @@ export function EpisodesList() {
   const scheduledCount = episodes.filter((e) => e.status === 'scheduled').length;
   const draftCount = episodes.filter((e) => e.status === 'draft').length;
 
+  async function handleImportFile(file: File | undefined) {
+    if (!id || !file || importing) return;
+    setImportError(null);
+    setImporting(true);
+    try {
+      const result = await importEpisodeProject(id, file);
+      navigate(`/episodes/${result.episodeId}`);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
   if (!id) return null;
   if (podcastLoading) return <FullPageLoading />;
 
@@ -42,40 +63,91 @@ export function EpisodesList() {
     { label: 'Episodes' },
   ];
 
+  const canImport = canCreateEpisode && !readOnly && !atEpisodeLimit;
+
   return (
     <div className={styles.wrap}>
       <Breadcrumb items={breadcrumbItems} />
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <h1 className={styles.cardTitle}>Episodes</h1>
-          {readOnly ? (
-            <span className={`${styles.newBtn} ${styles.newBtnDisabled}`} title="Read-only account">
-              <Plus size={18} strokeWidth={2.5} aria-hidden />
-              New Episode
-            </span>
-          ) : !canCreateEpisode ? (
-            <span
-              className={`${styles.newBtn} ${styles.newBtnDisabled}`}
-              title="Only managers and the owner can create episodes"
-            >
-              <Plus size={18} strokeWidth={2.5} aria-hidden />
-              New Episode
-            </span>
-          ) : atEpisodeLimit ? (
-            <span
-              className={`${styles.newBtn} ${styles.newBtnDisabled}`}
-              title="You're at max episodes for this show"
-            >
-              <Plus size={18} strokeWidth={2.5} aria-hidden />
-              New Episode
-            </span>
-          ) : (
-            <Link to={`/podcasts/${id}/episodes/new`} className={styles.newBtn}>
-              <Plus size={18} strokeWidth={2.5} aria-hidden />
-              New Episode
-            </Link>
+          <div className={styles.headerActions}>
+            {readOnly ? (
+              <span className={`${styles.secondaryBtn} ${styles.newBtnDisabled}`} title="Read-only account">
+                <FolderUp size={18} strokeWidth={2.5} aria-hidden />
+                Import Project
+              </span>
+            ) : !canCreateEpisode ? (
+              <span
+                className={`${styles.secondaryBtn} ${styles.newBtnDisabled}`}
+                title="Only managers and the owner can import projects"
+              >
+                <FolderUp size={18} strokeWidth={2.5} aria-hidden />
+                Import Project
+              </span>
+            ) : atEpisodeLimit ? (
+              <span
+                className={`${styles.secondaryBtn} ${styles.newBtnDisabled}`}
+                title="You're at max episodes for this show"
+              >
+                <FolderUp size={18} strokeWidth={2.5} aria-hidden />
+                Import Project
+              </span>
+            ) : (
+              <button
+                type="button"
+                className={styles.secondaryBtn}
+                disabled={importing}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <FolderUp size={18} strokeWidth={2.5} aria-hidden />
+                {importing ? 'Importing…' : 'Import Project'}
+              </button>
+            )}
+            {readOnly ? (
+              <span className={`${styles.newBtn} ${styles.newBtnDisabled}`} title="Read-only account">
+                <Plus size={18} strokeWidth={2.5} aria-hidden />
+                New Episode
+              </span>
+            ) : !canCreateEpisode ? (
+              <span
+                className={`${styles.newBtn} ${styles.newBtnDisabled}`}
+                title="Only managers and the owner can create episodes"
+              >
+                <Plus size={18} strokeWidth={2.5} aria-hidden />
+                New Episode
+              </span>
+            ) : atEpisodeLimit ? (
+              <span
+                className={`${styles.newBtn} ${styles.newBtnDisabled}`}
+                title="You're at max episodes for this show"
+              >
+                <Plus size={18} strokeWidth={2.5} aria-hidden />
+                New Episode
+              </span>
+            ) : (
+              <Link to={`/podcasts/${id}/episodes/new`} className={styles.newBtn}>
+                <Plus size={18} strokeWidth={2.5} aria-hidden />
+                New Episode
+              </Link>
+            )}
+          </div>
+          {canImport && (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className={styles.hiddenFileInput}
+              onChange={(e) => void handleImportFile(e.target.files?.[0])}
+            />
           )}
         </div>
+        {importError && (
+          <div className={styles.importError} role="alert">
+            <CircleAlert size={18} className={styles.importErrorIcon} aria-hidden />
+            <p className={styles.importErrorMessage}>{importError}</p>
+          </div>
+        )}
         <div className={styles.summary}>
           <span className={styles.summaryItem}>
             <span className={styles.summaryCount}>{publishedCount}</span>

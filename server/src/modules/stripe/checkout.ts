@@ -21,6 +21,12 @@ function assertCheckoutReady(podcastId: string, planId: string) {
       statusCode: 400,
     });
   }
+  if (podcast.stripeCheckoutPaused) {
+    throw Object.assign(
+      new Error("New subscriptions are paused for this show"),
+      { statusCode: 400 },
+    );
+  }
   const pack = creds.getById(podcast.stripeCredentialsId);
   if (!pack || pack.ownerUserId !== podcast.ownerUserId) {
     throw Object.assign(new Error("Stripe account is not available for this show"), {
@@ -55,6 +61,7 @@ export async function createCheckoutSession(opts: {
   podcastId: string;
   podcastSlug: string;
   planId: string;
+  episodeAlerts?: boolean;
 }): Promise<CheckoutResult> {
   const { podcast, pack, secretKey, mode, plan } = assertCheckoutReady(
     opts.podcastId,
@@ -66,12 +73,15 @@ export async function createCheckoutSession(opts: {
   const successUrl = `${base}/feed/${encodeURIComponent(opts.podcastSlug)}/subscribe/success?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = `${base}/feed/${encodeURIComponent(opts.podcastSlug)}`;
 
-  const metadata = {
+  const metadata: Record<string, string> = {
     harborfm_podcast_id: opts.podcastId,
     harborfm_plan_id: plan.id,
     harborfm_credentials_id: pack.id,
     harborfm_mode: mode,
   };
+  if (opts.episodeAlerts) {
+    metadata.harborfm_episode_alerts = "1";
+  }
 
   const allowPromotionCodes = coupons.hasActiveCouponsForPodcast(
     opts.podcastId,

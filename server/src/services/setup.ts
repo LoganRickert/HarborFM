@@ -100,6 +100,7 @@ export function bootstrapIfNeeded(): boolean {
     canTranscribe: 1,
     canGenerateVideo: 1,
     canStripe: 1,
+    canEpisodeAlert: 1,
   }).run();
 
   const hostnameRaw = getAdminHostnameFromEnv();

@@ -181,6 +181,10 @@ export function StripeCouponsSection({
       setFormError('Enter a coupon code.');
       return;
     }
+    if (coupons.some((c) => c.code.toUpperCase() === trimmedCode)) {
+      setFormError(`A coupon with code ${trimmedCode} already exists.`);
+      return;
+    }
     let percent: number | null = null;
     let amountCents: number | null = null;
     if (discountType === 'percent') {
@@ -500,7 +504,7 @@ export function StripeCouponsSection({
                   {(c.startsAt || c.endsAt) && (
                     <p className={styles.muted}>
                       {c.startsAt ? formatDate(c.startsAt) : 'No start'}
-                      {' → '}
+                      {' > '}
                       {c.endsAt ? formatDate(c.endsAt) : 'No end'}
                     </p>
                   )}
@@ -509,27 +513,6 @@ export function StripeCouponsSection({
                       {c.syncError}
                     </p>
                   ) : null}
-                  {expanded && (
-                    <div className={styles.couponUses}>
-                      {c.redemptions.length === 0 ? (
-                        <p className={styles.muted}>No successful uses yet.</p>
-                      ) : (
-                        <ul className={styles.couponUsesList}>
-                          {c.redemptions.map((r) => (
-                            <li key={r.id}>
-                              <span>{r.customerEmail || 'Unknown email'}</span>
-                              <span className={styles.muted}>
-                                {formatDate(r.createdAt)}
-                              </span>
-                              <span className={styles.muted}>
-                                {r.subscriptionId.slice(0, 10)}…
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
                 </div>
                 <div className={styles.planActions}>
                   <button
@@ -569,16 +552,37 @@ export function StripeCouponsSection({
                       </button>
                       <button
                         type="button"
-                        className={`${styles.secondaryBtn} ${styles.dangerBtn}`}
+                        className={styles.deleteIconBtn}
                         disabled={busy}
                         onClick={() => setPendingDelete(c)}
+                        aria-label={`Delete coupon ${c.code}`}
                       >
-                        <Trash2 size={14} aria-hidden />
-                        Delete
+                        <Trash2 size={16} aria-hidden />
                       </button>
                     </div>
                   )}
                 </div>
+                {expanded && (
+                  <div className={styles.couponUses}>
+                    {c.redemptions.length === 0 ? (
+                      <p className={styles.muted}>No successful uses yet.</p>
+                    ) : (
+                      <ul className={styles.couponUsesList}>
+                        {c.redemptions.map((r) => (
+                          <li key={r.id}>
+                            <span>{r.customerEmail || 'Unknown email'}</span>
+                            <span className={styles.muted}>
+                              {formatDate(r.createdAt)}
+                            </span>
+                            <span className={styles.muted}>
+                              {r.subscriptionId.slice(0, 10)}…
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}

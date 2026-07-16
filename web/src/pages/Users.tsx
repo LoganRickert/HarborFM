@@ -44,6 +44,7 @@ export function Users() {
   const [editCanTranscribe, setEditCanTranscribe] = useState(false);
   const [editCanGenerateVideo, setEditCanGenerateVideo] = useState(false);
   const [editCanStripe, setEditCanStripe] = useState(false);
+  const [editCanEpisodeAlert, setEditCanEpisodeAlert] = useState(false);
   const [editFormBaseline, setEditFormBaseline] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState('');
@@ -126,6 +127,7 @@ export function Users() {
       canTranscribe: (user as { canTranscribe?: number }).canTranscribe === 1,
       canGenerateVideo: (user as { canGenerateVideo?: number }).canGenerateVideo === 1,
       canStripe: (user as { canStripe?: number }).canStripe === 1,
+      canEpisodeAlert: (user as { canEpisodeAlert?: number }).canEpisodeAlert === 1,
     };
     setEditEmail(next.email);
     setEditUsername(next.username);
@@ -141,6 +143,7 @@ export function Users() {
     setEditCanTranscribe(next.canTranscribe);
     setEditCanGenerateVideo(next.canGenerateVideo);
     setEditCanStripe(next.canStripe);
+    setEditCanEpisodeAlert(next.canEpisodeAlert);
     setEditFormBaseline(snapshotForDirty(next));
   }
 
@@ -218,6 +221,11 @@ export function Users() {
     if (editCanStripe !== currentCanStripe) {
       updates.canStripe = editCanStripe;
     }
+    const currentCanEpisodeAlert =
+      (userToEdit as { canEpisodeAlert?: number }).canEpisodeAlert === 1;
+    if (editCanEpisodeAlert !== currentCanEpisodeAlert) {
+      updates.canEpisodeAlert = editCanEpisodeAlert;
+    }
 
     if (Object.keys(updates).length > 0) {
       updateUserMutation.mutate({ userId: userToEdit.id, data: updates });
@@ -255,6 +263,7 @@ export function Users() {
       canTranscribe: editCanTranscribe,
       canGenerateVideo: editCanGenerateVideo,
       canStripe: editCanStripe,
+      canEpisodeAlert: editCanEpisodeAlert,
     }),
     [
       editEmail,
@@ -271,6 +280,7 @@ export function Users() {
       editCanTranscribe,
       editCanGenerateVideo,
       editCanStripe,
+      editCanEpisodeAlert,
     ],
   );
   const editIsDirty = useBaselineDirty(editFormBaseline, editFormCurrent);
@@ -569,6 +579,20 @@ export function Users() {
                 </label>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
                   When enabled, the user can configure Stripe paid subscriptions on their shows.
+                </p>
+              </div>
+              <div className={styles.formGroup}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={editCanEpisodeAlert}
+                    onChange={(e) => setEditCanEpisodeAlert(e.target.checked)}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Can Episode Alert</span>
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
+                  When enabled, the user can configure Episode Alerts on their shows.
                 </p>
               </div>
               <div className={styles.formGroup}>

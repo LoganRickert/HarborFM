@@ -107,7 +107,7 @@ export async function run({ runOne }) {
       if (!qRes.options.some((o) => typeof o.percent === 'number')) {
         throw new Error('Expected percent on options');
       }
-      // Until verified, require_email polls use verified-only aggregation → 0% ok
+      // Until verified, require_email polls use verified-only aggregation to 0% ok
     })
   );
 

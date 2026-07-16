@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Play, Pause, Mic, Library, Info, Trash2, Loader2, Scissors, Eye, EyeOff } from 'lucide-react';
+import { Play, Pause, Mic, Library, Info, EllipsisVertical, Loader2, Scissors, Eye, EyeOff } from 'lucide-react';
 import { segmentStreamUrl } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { formatDuration } from './utils';
@@ -14,7 +14,7 @@ export interface SegmentRowProps {
   total: number;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  onDeleteRequest: () => void;
+  onManageRequest: () => void;
   onRecoverRequest?: () => void;
   onUpdateName: (segmentId: string, name: string | null) => void;
   isDeleting: boolean;
@@ -39,7 +39,7 @@ export function SegmentRow({
   total,
   onMoveUp,
   onMoveDown,
-  onDeleteRequest,
+  onManageRequest,
   onRecoverRequest,
   onUpdateName,
   isDeleting,
@@ -317,8 +317,8 @@ export function SegmentRow({
           <button type="button" className={styles.segmentBtn} onClick={onMoveDown} disabled={index === total - 1} title="Move down" aria-label="Move segment down">
             ↓
           </button>
-          <button type="button" className={`${styles.segmentBtn} ${styles.segmentBtnDanger}`} onClick={onDeleteRequest} disabled={isDeleting} title="Remove" aria-label="Remove segment">
-            <Trash2 size={18} aria-hidden />
+          <button type="button" className={styles.segmentBtn} onClick={onManageRequest} disabled={isDeleting} title="Manage segment" aria-label="Manage segment">
+            <EllipsisVertical size={18} aria-hidden />
           </button>
         </div>
         )}

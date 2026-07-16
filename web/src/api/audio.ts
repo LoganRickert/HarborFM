@@ -35,6 +35,11 @@ export function downloadEpisodeUrl(episodeId: string, type: 'source' | 'final' =
   return `${BASE}/episodes/${episodeId}/download?type=${type}`;
 }
 
+/** Authenticated download of episode project zip (editors and above). Cookie session works with <a href>. */
+export function downloadProjectUrl(episodeId: string): string {
+  return `${BASE}/episodes/${episodeId}/project-export`;
+}
+
 export function downloadSoundbiteUrl(
   episodeId: string,
   opts: { start: number; duration: number; title?: string },

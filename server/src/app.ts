@@ -63,6 +63,11 @@ import { registerRobotsRoute } from "./modules/sitemap/routes.robots.js";
 import { bansRoutes } from "./modules/bans/index.js";
 import { callRoutes } from "./modules/call/index.js";
 import { stripeRoutes } from "./modules/stripe/index.js";
+import {
+  episodeAlertRoutes,
+  registerEpisodeAlertPublicRoutes,
+  startEpisodeAlertsPoller,
+} from "./modules/episodeAlerts/index.js";
 import { episodeCollaborationRoutes } from "./modules/episodeCollaboration/index.js";
 import fastifyWebsocket from "@fastify/websocket";
 import {
@@ -296,10 +301,13 @@ async function main() {
   await app.register(bansRoutes, { prefix: apiPrefix });
   await app.register(callRoutes, { prefix: apiPrefix });
   await app.register(stripeRoutes, { prefix: apiPrefix });
+  await app.register(episodeAlertRoutes, { prefix: apiPrefix });
+  await app.register(registerEpisodeAlertPublicRoutes, { prefix: apiPrefix });
   await app.register(episodeCollaborationRoutes, { prefix: apiPrefix });
 
   pruneListenDedup();
   startFlushInterval();
+  startEpisodeAlertsPoller();
   app.addHook("onClose", async () => {
     stopFlushInterval();
     flush();

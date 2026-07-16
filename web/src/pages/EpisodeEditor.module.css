@@ -3667,6 +3667,73 @@
 .episodeTranscriptDialogActions {
   justify-content: space-between;
 }
+.manageSegmentActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.manageSegmentAction {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.75rem;
+  row-gap: 0.1rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-decoration: none;
+}
+a.manageSegmentAction,
+a.manageSegmentAction:hover,
+a.manageSegmentAction:focus,
+a.manageSegmentAction:visited,
+a.manageSegmentAction:active {
+  text-decoration: none;
+  color: var(--text);
+  opacity: 1;
+}
+a.manageSegmentAction .manageSegmentActionHint {
+  color: var(--text-muted);
+}
+.manageSegmentAction > svg {
+  grid-row: 1 / span 2;
+}
+.manageSegmentAction > span:first-of-type {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.manageSegmentActionHint {
+  grid-column: 2;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+.manageSegmentAction:hover:not(:disabled) {
+  border-color: var(--accent, var(--border));
+  background: var(--bg-elevated);
+  text-decoration: none;
+  opacity: 1;
+  color: var(--text);
+}
+.manageSegmentAction:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.manageSegmentActionDanger {
+  color: var(--error);
+}
+.manageSegmentError {
+  margin: 0.75rem 0 0;
+  color: var(--error);
+  font-size: 0.875rem;
+}
 .dialogConfirmRemove {
   padding: 0.5rem 1rem;
   font-size: 0.9375rem;

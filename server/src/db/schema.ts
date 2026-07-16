@@ -42,6 +42,7 @@ export const users = sqliteTable(
     canTranscribe: integer("can_transcribe"),
     canGenerateVideo: integer("can_generate_video"),
     canStripe: integer("can_stripe"),
+    canEpisodeAlert: integer("can_episode_alert"),
     totpSecretEnc: text("totp_secret_enc"),
     twoFactorMethod: text("two_factor_method"),
     totpLockedUntil: text("totp_locked_until"),
@@ -135,6 +136,9 @@ export const podcasts = sqliteTable(
     stripePaymentsEnabled: integer("stripe_payments_enabled", {
       mode: "boolean",
     }).default(false),
+    stripeCheckoutPaused: integer("stripe_checkout_paused", {
+      mode: "boolean",
+    }).default(false),
     billingAnchor: text("billing_anchor").notNull().default("anniversary"),
     feedAccent: text("feed_accent").default("green"),
     feedShowPodcastDescription: integer("feed_show_podcast_description", {
@@ -153,6 +157,13 @@ export const podcasts = sqliteTable(
     feedShowAuthor: integer("feed_show_author", { mode: "boolean" }).default(true),
     feedShowPodroll: integer("feed_show_podroll", { mode: "boolean" }).default(true),
     feedShowCast: integer("feed_show_cast", { mode: "boolean" }).default(true),
+    episodeAlertsEnabled: integer("episode_alerts_enabled", {
+      mode: "boolean",
+    }).default(false),
+    episodeAlertsCheckoutList: text("episode_alerts_checkout_list")
+      .notNull()
+      .default("subscribers"),
+    episodeAlertsMailingAddress: text("episode_alerts_mailing_address"),
   },
   (table) => [
     unique("users_podcasts_owner_slug").on(table.ownerUserId, table.slug),
@@ -212,6 +223,7 @@ export const episodes = sqliteTable(
     showNotesGuestVisible: integer("show_notes_guest_visible", { mode: "boolean" })
       .notNull()
       .default(false),
+    episodeAlertsSentAt: text("episode_alerts_sent_at"),
   },
   (table) => [
     unique("episodes_podcast_guid").on(table.podcastId, table.guid),
@@ -220,6 +232,60 @@ export const episodes = sqliteTable(
     index("idx_episodes_publish_at").on(table.publishAt),
     index("idx_episodes_slug").on(table.slug),
     index("idx_episodes_podcast_slug").on(table.podcastId, table.slug),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Episode alert destinations (084)
+// ---------------------------------------------------------------------------
+export const episodeAlertDestinations = sqliteTable(
+  "episode_alert_destinations",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default(""),
+    type: text("type").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** all = every released episode; premium = subscriber-only episodes only */
+    episodeScope: text("episode_scope").notNull().default("all"),
+    config: text("config").notNull().default("{}"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [index("idx_episode_alert_destinations_podcast").on(table.podcastId)],
+);
+
+// ---------------------------------------------------------------------------
+// Episode alert subscribers (084)
+// ---------------------------------------------------------------------------
+export const episodeAlertSubscribers = sqliteTable(
+  "episode_alert_subscribers",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    list: text("list").notNull().default("general"),
+    verified: integer("verified", { mode: "boolean" }).notNull().default(false),
+    emailVerificationTokenHash: text("email_verification_token_hash"),
+    emailVerificationExpiresAt: text("email_verification_expires_at"),
+    unsubscribeTokenHash: text("unsubscribe_token_hash"),
+    source: text("source").notNull().default("feed"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    verifiedAt: text("verified_at"),
+  },
+  (table) => [
+    unique("idx_episode_alert_subscribers_unique").on(
+      table.podcastId,
+      table.email,
+      table.list,
+    ),
+    index("idx_episode_alert_subscribers_podcast").on(table.podcastId),
+    index("idx_episode_alert_subscribers_verify").on(table.emailVerificationTokenHash),
+    index("idx_episode_alert_subscribers_unsub").on(table.unsubscribeTokenHash),
   ],
 );
 
@@ -915,6 +981,7 @@ export const stripeCredentials = sqliteTable(
     liveSecretKeyEnc: text("live_secret_key_enc"),
     livePublishableKeyEnc: text("live_publishable_key_enc"),
     liveWebhookSecretEnc: text("live_webhook_secret_enc"),
+    verified: integer("verified", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull().default(sqlNow()),
     updatedAt: text("updated_at").notNull().default(sqlNow()),
   },
@@ -953,7 +1020,7 @@ export const stripePlans = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
-// Stripe subscriptions (076) - checkout → subscriber tokens
+// Stripe subscriptions (076) - checkout to subscriber tokens
 // ---------------------------------------------------------------------------
 export const stripeSubscriptions = sqliteTable(
   "stripe_subscriptions",

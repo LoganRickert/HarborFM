@@ -25,7 +25,7 @@ export interface TimelineWaveformProps {
   mode?: TimelineMode;
   readOnly?: boolean;
   className?: string;
-  /** Right-click on the timeline (no context menu). Used to cycle pan → trim → edit. */
+  /** Right-click on the timeline (no context menu). Used to cycle pan > trim > edit. */
   onContextMenuCycle?: () => void;
 }
 

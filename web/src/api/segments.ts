@@ -75,6 +75,39 @@ export function recoverRecordedSegment(episodeId: string, segmentId: string): Pr
   });
 }
 
+/** Cookie-session download URL for trimmed segment MP3 (editors and above). */
+export function downloadSegmentMp3Url(episodeId: string, segmentId: string): string {
+  return `${BASE}/episodes/${episodeId}/segments/${segmentId}/download-mp3`;
+}
+
+/** Cookie-session download URL for segment project zip (editors and above). */
+export function downloadSegmentProjectUrl(episodeId: string, segmentId: string): string {
+  return `${BASE}/episodes/${episodeId}/segments/${segmentId}/project-export`;
+}
+
+/** Import a segment project zip, overwriting the segment in place. */
+export function importSegmentProject(
+  episodeId: string,
+  segmentId: string,
+  file: File,
+): Promise<SegmentResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/import-project`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
 /** Include audioPath to bust cache when the segment file changes (e.g. after trim to new .wav). */
 export function segmentStreamUrl(episodeId: string, segmentId: string, audioPath?: string | null): string {
   const url = `${BASE}/episodes/${episodeId}/segments/${segmentId}/stream`;

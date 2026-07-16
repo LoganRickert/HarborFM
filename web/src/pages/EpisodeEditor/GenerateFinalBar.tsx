@@ -11,8 +11,9 @@ import {
   List,
   AudioLines,
   BarChart3,
+  FolderArchive,
 } from 'lucide-react';
-import { downloadEpisodeUrl, finalEpisodeWaveformUrl } from '../../api/audio';
+import { downloadEpisodeUrl, downloadProjectUrl, finalEpisodeWaveformUrl } from '../../api/audio';
 import { FeedVideoPlayer } from '../../components/Feed/FeedVideoPlayer';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import { formatDuration } from './utils';
@@ -494,6 +495,16 @@ export function GenerateFinalBar({
             href={downloadVideoUrl}
             download
             infoText="Download the generated video file."
+          />
+        )}
+        {episodeId && !readOnly && (
+          <ActionTile
+            icon={<FolderArchive size={22} strokeWidth={1.75} aria-hidden />}
+            label="Download Project"
+            color="slate"
+            href={downloadProjectUrl(episodeId)}
+            download
+            infoText="Download a zip of this episode (segments, finals, multitrack recordings) to archive or import later."
           />
         )}
       </div>

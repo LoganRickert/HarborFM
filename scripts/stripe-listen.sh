@@ -4,7 +4,7 @@
 # Usage:
 #   pnpm stripe:listen -- 'http://localhost:5173/api/public/stripe/webhook/<id>'
 #
-# Copy the webhook URL from Show → Payments. After listen starts, paste the
+# Copy the webhook URL from Show > Payments. After listen starts, paste the
 # printed whsec_… into that account's Test webhook secret in HarborFM.
 
 set -euo pipefail
@@ -30,7 +30,7 @@ if [[ -z "$WEBHOOK_URL" ]]; then
   echo ""
   echo "  pnpm stripe:listen -- 'http://localhost:5173/api/public/stripe/webhook/<id>'"
   echo ""
-  echo "Copy the full webhook URL from Show → Payments."
+  echo "Copy the full webhook URL from Show > Payments."
   exit 1
 fi
 

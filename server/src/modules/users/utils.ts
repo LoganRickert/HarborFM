@@ -18,6 +18,7 @@ export type RawUserRow = {
   canTranscribe: number;
   canGenerateVideo: number;
   canStripe: number;
+  canEpisodeAlert: number;
 };
 
 export interface User {
@@ -40,6 +41,7 @@ export interface User {
   canTranscribe: number;
   canGenerateVideo: number;
   canStripe: number;
+  canEpisodeAlert: number;
   federatedIdentities?: Array<{
     providerType: string;
     issuer: string;
@@ -71,6 +73,7 @@ export function toUser(
     canTranscribe: r.canTranscribe,
     canGenerateVideo: r.canGenerateVideo,
     canStripe: r.canStripe,
+    canEpisodeAlert: r.canEpisodeAlert,
     federatedIdentities: federatedIdentities ?? [],
   };
 }

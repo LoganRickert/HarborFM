@@ -16,6 +16,8 @@ import { FullPageLoading } from '../components/Loading';
 import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedbackModal } from '../components/FeedbackModal';
+import { GetAlertsModal } from '../components/GetAlertsModal';
+import { getPublicEpisodeAlerts } from '../api/episodeAlerts';
 import { useMeta } from '../hooks/useMeta';
 import { getSiteDisplayName } from '../utils/siteBranding';
 import { useFeedAudioPlayer } from '../hooks/useFeedAudioPlayer';
@@ -56,6 +58,7 @@ export function FeedEpisode({
   const episodeSlug = episodeSlugOverride ?? params.episodeSlug ?? '';
   const isCustomFeed = !!(podcastSlugOverride && episodeSlugOverride);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [showLockInfo, setShowLockInfo] = useManageSubscriptionDialog();
   const [audioLoadFailed, setAudioLoadFailed] = useState(false);
 
@@ -78,6 +81,13 @@ export function FeedEpisode({
     queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
     queryFn: getPublicConfig,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: alertsInfo } = useQuery({
+    queryKey: ['public-episode-alerts', podcastSlug],
+    queryFn: () => getPublicEpisodeAlerts(podcastSlug!),
+    enabled: !!podcastSlug,
+    staleTime: 60_000,
   });
 
   const { data: episodeCast } = useQuery({
@@ -195,6 +205,9 @@ export function FeedEpisode({
               podcast={podcast}
               podcastSlug={podcastSlug}
               onMessageClick={canShowMessage ? () => setFeedbackOpen(true) : undefined}
+              onAlertsClick={
+                alertsInfo?.emailSignupAvailable ? () => setAlertsOpen(true) : undefined
+              }
               onLockClick={() => setShowLockInfo(true)}
               shareUrl={shareUrl}
               shareTitle={shareTitle}
@@ -368,6 +381,13 @@ export function FeedEpisode({
           podcastTitle: podcast.title,
           episodeTitle: episode.title,
         }}
+      />
+
+      <GetAlertsModal
+        open={alertsOpen}
+        onOpenChange={setAlertsOpen}
+        podcastSlug={podcastSlug}
+        podcastTitle={podcast.title}
       />
 
       {showLockInfo && (

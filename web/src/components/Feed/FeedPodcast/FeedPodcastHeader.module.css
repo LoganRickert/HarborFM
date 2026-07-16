@@ -67,6 +67,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
+  max-width: 100%;
 }
 
 .messageBtn {
@@ -83,6 +84,8 @@
   border-radius: var(--radius);
   cursor: pointer;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .messageBtn:hover {
@@ -106,6 +109,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .lockButton:hover {
@@ -219,10 +223,7 @@
   .actionButtons {
     width: 100%;
     justify-content: center;
-  }
-
-  .messageBtn {
-    flex: 1;
+    gap: 0.5rem;
   }
 
   .artwork {

@@ -19,7 +19,17 @@ const sections: FeatureSection[] = [
       {
         name: 'Segment-based editor',
         detail:
-          'Assemble each episode from recorded clips and library assets. Reorder, trim, split, and remove silence; ffmpeg builds the final audio.',
+          'Assemble each episode from recorded clips and library assets. Reorder, trim, split, and remove silence; ffmpeg builds the final audio. Manage segment offers Download MP3 (trimmed mix), Download Segment / Import Segment, and delete.',
+      },
+      {
+        name: 'Episode project import & export',
+        detail:
+          'Download Project (editors and above) zips episode metadata, segment audio, multitrack recordings, and library assets for backup or offline edit. Import Project (managers and the owner) on the Episodes page recreates a new draft with new ids. Hand-added audio.mp3 / audio.wav segments work without full metadata.',
+      },
+      {
+        name: 'Segment project import & export',
+        detail:
+          'Download Segment packs one section (source audio, tracks, metadata). Import Segment overwrites that section in place. Missing multitrack files are treated as deleted and dropped from the remade mix. Segment zips are rejected by episode Import Project.',
       },
       {
         name: 'Waveform editing',
@@ -348,7 +358,7 @@ const sections: FeatureSection[] = [
 
 <Layout
   title="Features - HarborFM"
-  description="Full feature list for HarborFM: segment editor, WebRTC calls, Podcast 2.0 RSS, Stripe BYOK subscriptions, analytics, exports, and self-hosting."
+  description="Full feature list for HarborFM: segment editor, episode and segment project import/export, WebRTC calls, Podcast 2.0 RSS, Stripe BYOK subscriptions, analytics, exports, and self-hosting."
 >
   <Header />
 

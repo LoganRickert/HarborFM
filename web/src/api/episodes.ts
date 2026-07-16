@@ -42,6 +42,32 @@ export async function uploadEpisodeArtwork(podcastId: string, episodeId: string,
   return res.json();
 }
 
+export type ImportProjectResult = {
+  episodeId: string;
+  slug: string;
+  episode?: Episode;
+};
+
+/** Upload a HarborFM project zip; recreates a draft episode on the show (managers and the owner). */
+export async function importEpisodeProject(
+  podcastId: string,
+  file: File,
+): Promise<ImportProjectResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${BASE}/podcasts/${podcastId}/episodes/import-project`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? res.statusText);
+  }
+  return res.json();
+}
+
 // Episode cast (assign hosts/guests to episode)
 export interface EpisodeCastMember {
   id: string;

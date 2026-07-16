@@ -9,6 +9,7 @@ import {
   isEncryptedSecret,
 } from "../../services/secrets.js";
 import { getBaseUrl } from "../auth/shared.js";
+import { isE2eStripeSecret } from "./stripeClient.js";
 
 export type StripeMode = "test" | "live";
 
@@ -88,6 +89,7 @@ export function toCredentialsApi(
     liveWebhookSecretSet: encIsSet(row.liveWebhookSecretEnc),
     webhookUrl: webhookUrlForCredentials(row.id),
     activeSecretKeySet: encIsSet(secretEnc),
+    verified: Boolean(row.verified),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -142,17 +144,22 @@ export function createCredentials(
 ): StripeCredentialsRow {
   const id = nanoid();
   const now = new Date().toISOString();
+  const mode = body.mode === "live" ? "live" : "test";
+  const activeSecret =
+    mode === "live" ? body.liveSecretKey : body.testSecretKey;
   const values: typeof stripeCredentials.$inferInsert = {
     id,
     ownerUserId,
     displayName: body.displayName || "Stripe",
-    mode: body.mode === "live" ? "live" : "test",
+    mode,
     testSecretKeyEnc: applySecretInput(null, body.testSecretKey),
     testPublishableKeyEnc: applySecretInput(null, body.testPublishableKey),
     testWebhookSecretEnc: applySecretInput(null, body.testWebhookSecret),
     liveSecretKeyEnc: applySecretInput(null, body.liveSecretKey),
     livePublishableKeyEnc: applySecretInput(null, body.livePublishableKey),
     liveWebhookSecretEnc: applySecretInput(null, body.liveWebhookSecret),
+    // E2E fixtures skip the wizard verify step; real packs start unverified.
+    verified: Boolean(activeSecret && isE2eStripeSecret(activeSecret)),
     createdAt: now,
     updatedAt: now,
   };
@@ -178,18 +185,47 @@ export function updateCredentials(
     updatedAt: new Date().toISOString(),
   };
   if (body.displayName !== undefined) set.displayName = body.displayName;
+  let secretsChanged = false;
   for (const [inputKey, encKey] of Object.entries(INPUT_TO_ENC)) {
     const incoming = body[inputKey as keyof typeof body] as string | undefined;
     if (incoming !== undefined) {
-      (set as Record<string, unknown>)[encKey] = applySecretInput(
-        current[encKey],
-        incoming,
-      );
+      const nextEnc = applySecretInput(current[encKey], incoming);
+      (set as Record<string, unknown>)[encKey] = nextEnc;
+      const prev = current[encKey] ?? null;
+      if (nextEnc !== prev) secretsChanged = true;
     }
+  }
+  if (secretsChanged) {
+    const mode = current.mode === "live" ? "live" : "test";
+    const nextSecretEnc =
+      mode === "live"
+        ? ((set.liveSecretKeyEnc as string | null | undefined) ??
+          current.liveSecretKeyEnc)
+        : ((set.testSecretKeyEnc as string | null | undefined) ??
+          current.testSecretKeyEnc);
+    const nextSecret = decryptIfPresent(nextSecretEnc);
+    set.verified = Boolean(nextSecret && isE2eStripeSecret(nextSecret));
   }
   drizzleDb
     .update(stripeCredentials)
     .set(set)
+    .where(eq(stripeCredentials.id, id))
+    .run();
+  return getById(id)!;
+}
+
+export function setCredentialsVerified(
+  id: string,
+  verified: boolean,
+): StripeCredentialsRow | null {
+  const current = getById(id);
+  if (!current) return null;
+  drizzleDb
+    .update(stripeCredentials)
+    .set({
+      verified,
+      updatedAt: new Date().toISOString(),
+    })
     .where(eq(stripeCredentials.id, id))
     .run();
   return getById(id)!;
@@ -219,6 +255,7 @@ export function attachToPodcast(
   stripeCredentialsId: string | null | undefined,
   stripePaymentsEnabled?: boolean,
   billingAnchor?: "anniversary" | "month_start",
+  stripeCheckoutPaused?: boolean,
 ): void {
   const set: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
@@ -229,6 +266,9 @@ export function attachToPodcast(
   if (stripePaymentsEnabled !== undefined) {
     set.stripePaymentsEnabled = stripePaymentsEnabled ? 1 : 0;
   }
+  if (stripeCheckoutPaused !== undefined) {
+    set.stripeCheckoutPaused = stripeCheckoutPaused ? 1 : 0;
+  }
   if (billingAnchor !== undefined) {
     set.billingAnchor = billingAnchor;
   }
@@ -238,6 +278,7 @@ export function attachToPodcast(
 export function getPodcastStripeFields(podcastId: string): {
   stripeCredentialsId: string | null;
   stripePaymentsEnabled: boolean;
+  stripeCheckoutPaused: boolean;
   billingAnchor: "anniversary" | "month_start";
   ownerUserId: string;
 } | null {
@@ -245,6 +286,7 @@ export function getPodcastStripeFields(podcastId: string): {
     .select({
       stripeCredentialsId: podcasts.stripeCredentialsId,
       stripePaymentsEnabled: podcasts.stripePaymentsEnabled,
+      stripeCheckoutPaused: podcasts.stripeCheckoutPaused,
       billingAnchor: podcasts.billingAnchor,
       ownerUserId: podcasts.ownerUserId,
     })
@@ -256,13 +298,14 @@ export function getPodcastStripeFields(podcastId: string): {
   return {
     stripeCredentialsId: row.stripeCredentialsId ?? null,
     stripePaymentsEnabled: Boolean(row.stripePaymentsEnabled),
+    stripeCheckoutPaused: Boolean(row.stripeCheckoutPaused),
     billingAnchor:
       row.billingAnchor === "month_start" ? "month_start" : "anniversary",
     ownerUserId: row.ownerUserId,
   };
 }
 
-/** Decrypt secret key for a specific mode (not necessarily the pack’s active mode). */
+/** Decrypt secret key for a specific mode (not necessarily the packs active mode). */
 export function getSecretKeyForMode(
   row: StripeCredentialsRow,
   mode: "test" | "live",

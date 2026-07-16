@@ -79,6 +79,10 @@ import * as m077 from "./migrations/077_stripe_refund_requests.js";
 import * as m078 from "./migrations/078_stripe_coupons.js";
 import * as m079 from "./migrations/079_stripe_access_token_revealed.js";
 import * as m080 from "./migrations/080_stripe_plans_active_kind_unique.js";
+import * as m081 from "./migrations/081_stripe_checkout_paused.js";
+import * as m082 from "./migrations/082_stripe_credentials_verified.js";
+import * as m083 from "./migrations/083_user_can_episode_alert.js";
+import * as m084 from "./migrations/084_episode_alerts.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -161,6 +165,10 @@ const migrations = [
   { name: "078_stripe_coupons", ...m078 },
   { name: "079_stripe_access_token_revealed", ...m079 },
   { name: "080_stripe_plans_active_kind_unique", ...m080 },
+  { name: "081_stripe_checkout_paused", ...m081 },
+  { name: "082_stripe_credentials_verified", ...m082 },
+  { name: "083_user_can_episode_alert", ...m083 },
+  { name: "084_episode_alerts", ...m084 },
 ];
 
 const MIGRATIONS_TABLE = `

@@ -28,6 +28,7 @@ export interface AppSettings {
   default_can_transcribe: boolean;
   default_can_generate_video: boolean;
   default_can_stripe: boolean;
+  default_can_episode_alert: boolean;
   llm_provider: "none" | "ollama" | "openai";
   ollama_url: string;
   openai_api_key: string;
@@ -167,6 +168,7 @@ export const DEFAULTS: AppSettings = {
   default_can_transcribe: true,
   default_can_generate_video: true,
   default_can_stripe: true,
+  default_can_episode_alert: true,
   llm_provider: "none",
   ollama_url: "http://localhost:11434",
   openai_api_key: "",
@@ -291,6 +293,8 @@ export function buildAppSettingsFromRows(
       settings.default_can_generate_video = parseBool(row.value);
     else if (row.key === "default_can_stripe")
       settings.default_can_stripe = parseBool(row.value);
+    else if (row.key === "default_can_episode_alert")
+      settings.default_can_episode_alert = parseBool(row.value);
     else if (row.key === "llm_provider")
       settings.llm_provider = row.value as AppSettings["llm_provider"];
     else if (row.key === "ollama_url") settings.ollama_url = row.value;
@@ -472,6 +476,8 @@ export function buildAppSettingsFromRows(
       settings.default_can_generate_video ?? DEFAULTS.default_can_generate_video,
     default_can_stripe:
       settings.default_can_stripe ?? DEFAULTS.default_can_stripe,
+    default_can_episode_alert:
+      settings.default_can_episode_alert ?? DEFAULTS.default_can_episode_alert,
     model:
       settings.model ??
       (settings.llm_provider === "openai"
@@ -643,6 +649,7 @@ export function settingsToApiResponse(
     defaultCanTranscribe: settings.default_can_transcribe,
     defaultCanGenerateVideo: settings.default_can_generate_video,
     defaultCanStripe: settings.default_can_stripe,
+    defaultCanEpisodeAlert: settings.default_can_episode_alert,
     llmProvider: settings.llm_provider,
     ollamaUrl: settings.ollama_url,
     openaiApiKey: settings.openai_api_key ? "(set)" : "",

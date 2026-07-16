@@ -10,6 +10,7 @@ import {
   deleteStripeCredentials,
   updatePodcastStripe,
   verifyStripeCredentials,
+  type BillingAnchor,
   type StripeCredentials,
   type StripeCredentialsInput,
   type StripeMode,
@@ -97,6 +98,60 @@ const RESTRICTED_KEY_PERMISSIONS = [
     id: 'checkout-sessions',
     resource: 'Checkout Sessions',
     why: 'Starts Stripe Checkout when a listener subscribes, and retrieves the session after they pay.',
+  },
+] as const;
+
+/** Exact Stripe webhook events Harbor handles (select only these, not Select all). */
+const WEBHOOK_EVENTS = [
+  {
+    id: 'checkout-session-completed',
+    event: 'checkout.session.completed',
+    why: 'Creates the local subscription and private RSS access token after a successful Checkout.',
+  },
+  {
+    id: 'customer-subscription-updated',
+    event: 'customer.subscription.updated',
+    why: 'Keeps subscription status in sync, including cancel-at-period-end from the Customer Portal.',
+  },
+  {
+    id: 'customer-subscription-deleted',
+    event: 'customer.subscription.deleted',
+    why: 'Revokes access when a subscription is fully canceled in Stripe.',
+  },
+  {
+    id: 'customer-subscription-paused',
+    event: 'customer.subscription.paused',
+    why: 'Disables the access token when Stripe pauses the subscription.',
+  },
+  {
+    id: 'customer-subscription-resumed',
+    event: 'customer.subscription.resumed',
+    why: 'Restores access when a paused subscription is resumed.',
+  },
+  {
+    id: 'invoice-paid',
+    event: 'invoice.paid',
+    why: 'Extends access on renewals and can send a renewal receipt when email is configured.',
+  },
+  {
+    id: 'invoice-payment-failed',
+    event: 'invoice.payment_failed',
+    why: 'Marks the subscription past due and disables the access token after a failed payment.',
+  },
+  {
+    id: 'charge-refunded',
+    event: 'charge.refunded',
+    why: 'Revokes access after a full refund on the charge.',
+  },
+  {
+    id: 'price-created',
+    event: 'price.created',
+    why: 'Syncs a new Stripe price amount/currency/active state into Harbor plans when needed.',
+  },
+  {
+    id: 'price-updated',
+    event: 'price.updated',
+    why: 'Syncs price amount/currency/active changes from Stripe into Harbor plans.',
   },
 ] as const;
 
@@ -214,7 +269,9 @@ export function StripePaymentsSection({
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [copiedField, setCopiedField] = useState<'name' | 'url' | null>(null);
   const [openPermissionInfo, setOpenPermissionInfo] = useState<string | null>(null);
+  const [openWebhookInfo, setOpenWebhookInfo] = useState<string | null>(null);
   const permissionsListRef = useRef<HTMLDivElement | null>(null);
+  const webhookEventsListRef = useRef<HTMLDivElement | null>(null);
   const [verifyResult, setVerifyResult] = useState<StripeVerifyResult | null>(null);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -233,6 +290,18 @@ export function StripePaymentsSection({
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [openPermissionInfo]);
+
+  useEffect(() => {
+    if (!openWebhookInfo) return;
+    function onPointerDown(e: PointerEvent) {
+      const el = webhookEventsListRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setOpenWebhookInfo(null);
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [openWebhookInfo]);
 
   async function runVerify(credentialsId: string) {
     setVerifyLoading(true);
@@ -259,6 +328,9 @@ export function StripePaymentsSection({
   const credentials = data?.credentials ?? [];
   const selectedId = data?.stripeCredentialsId ?? null;
   const paymentsEnabled = Boolean(data?.stripePaymentsEnabled);
+  const checkoutPaused = Boolean(data?.stripeCheckoutPaused);
+  const billingAnchor: BillingAnchor =
+    data?.billingAnchor === 'month_start' ? 'month_start' : 'anniversary';
   const canEditPacks = Boolean(data?.canEditPacks);
   const hasAccounts = credentials.length > 0;
 
@@ -294,6 +366,8 @@ export function StripePaymentsSection({
     mutationFn: (body: {
       stripeCredentialsId?: string | null;
       stripePaymentsEnabled?: boolean;
+      stripeCheckoutPaused?: boolean;
+      billingAnchor?: BillingAnchor;
     }) => updatePodcastStripe(podcastId, body),
     onSuccess: invalidate,
   });
@@ -308,6 +382,7 @@ export function StripePaymentsSection({
     setFormError(null);
     setDraftPack(null);
     setOpenPermissionInfo(null);
+    setOpenWebhookInfo(null);
     setVerifyResult(null);
     setVerifyError(null);
     setVerifyLoading(false);
@@ -320,6 +395,7 @@ export function StripePaymentsSection({
     setFormError(null);
     setDraftPack(null);
     setOpenPermissionInfo(null);
+    setOpenWebhookInfo(null);
     setVerifyResult(null);
     setVerifyError(null);
     setWizardOpen(true);
@@ -343,6 +419,8 @@ export function StripePaymentsSection({
     });
     setStep(1);
     setFormError(null);
+    setOpenPermissionInfo(null);
+    setOpenWebhookInfo(null);
     setVerifyResult(null);
     setVerifyError(null);
     setWizardOpen(true);
@@ -424,13 +502,7 @@ export function StripePaymentsSection({
           const created = await createMutation.mutateAsync(payload);
           setDraftPack(created);
           setEditingId(created.id);
-          // Auto-select only when this is the user's first Stripe account
-          if (credentials.length === 0) {
-            await updatePodcastStripe(podcastId, {
-              stripeCredentialsId: created.id,
-              stripePaymentsEnabled: true,
-            });
-          }
+          // Do not attach until Finish Setup after verification succeeds.
           invalidate();
         }
         setStep(4);
@@ -572,14 +644,6 @@ export function StripePaymentsSection({
             </span>
           )}
         </div>
-        {!readOnly && canEditPacks && hasAccounts && !wizardOpen && (
-          <div className={styles.exportHeaderActions}>
-            <button type="button" className={styles.secondaryBtn} onClick={openCreate}>
-              <Plus size={16} strokeWidth={2} aria-hidden="true" />
-              Add Another Account
-            </button>
-          </div>
-        )}
       </div>
 
       {isLoading ? (
@@ -848,7 +912,8 @@ export function StripePaymentsSection({
               <h3 className={styles.wizardTitle}>Add a webhook in Stripe</h3>
               <p className={styles.wizardHelp}>
                 Stripe will call HarborFM when someone pays or cancels. Create an endpoint in Stripe,
-                paste the URL below, then copy the signing secret back here.
+                paste the URL below, select only the events listed here (do not use Select all), then
+                copy the signing secret back here.
               </p>
               {webhookUrl && (
                 <div className={styles.webhookBox}>
@@ -874,6 +939,39 @@ export function StripePaymentsSection({
                   </div>
                 </div>
               )}
+              <div className={styles.permissionsGuide} ref={webhookEventsListRef}>
+                <p className={styles.webhookEventsIntro}>
+                  Listen to these events only:
+                </p>
+                <ul className={styles.permissionsList}>
+                  {WEBHOOK_EVENTS.map((item) => {
+                    const infoOpen = openWebhookInfo === item.id;
+                    return (
+                      <li key={item.id} className={styles.permissionItem}>
+                        <code className={styles.permissionName}>{item.event}</code>
+                        <span className={styles.permissionInfoWrap}>
+                          <button
+                            type="button"
+                            className={styles.permissionInfoBtn}
+                            aria-label={`Why ${item.event} is needed`}
+                            aria-expanded={infoOpen}
+                            onClick={() =>
+                              setOpenWebhookInfo(infoOpen ? null : item.id)
+                            }
+                          >
+                            <Info size={13} strokeWidth={2.25} aria-hidden />
+                          </button>
+                          {infoOpen && (
+                            <div className={styles.permissionInfoPopover} role="tooltip">
+                              {item.why}
+                            </div>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
               <label className={styles.label} style={{ marginTop: '0.75rem' }}>
                 Webhook signing secret (whsec_…)
                 <input
@@ -1050,18 +1148,134 @@ export function StripePaymentsSection({
           </p>
 
           {selectedPack && packHasActiveSecret(selectedPack) && (
-            <label className={`toggle ${styles.enableRow}`}>
-              <input
-                type="checkbox"
-                checked={paymentsEnabled}
-                disabled={readOnly || attachMutation.isPending}
-                onChange={(e) =>
-                  attachMutation.mutate({ stripePaymentsEnabled: e.target.checked })
-                }
-              />
-              <span className="toggle__track" aria-hidden="true" />
-              <span>Accept Stripe payments on this show</span>
-            </label>
+            <div className={styles.showSettingsStack}>
+              <div className={styles.plansSetting}>
+                <div className={styles.plansSettingText}>
+                  <span className={styles.plansSettingLabel}>Accept Stripe payments</span>
+                </div>
+                <div
+                  className={styles.segmented}
+                  role="group"
+                  aria-label="Accept Stripe payments"
+                >
+                  <button
+                    type="button"
+                    className={
+                      !paymentsEnabled ? styles.segmentedActive : styles.segmentedBtn
+                    }
+                    aria-pressed={!paymentsEnabled}
+                    disabled={readOnly || attachMutation.isPending}
+                    onClick={() =>
+                      attachMutation.mutate({ stripePaymentsEnabled: false })
+                    }
+                  >
+                    Disabled
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      paymentsEnabled ? styles.segmentedActive : styles.segmentedBtn
+                    }
+                    aria-pressed={paymentsEnabled}
+                    disabled={readOnly || attachMutation.isPending}
+                    onClick={() =>
+                      attachMutation.mutate({ stripePaymentsEnabled: true })
+                    }
+                  >
+                    Enabled
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.plansSetting}>
+                <div className={styles.plansSettingText}>
+                  <span className={styles.plansSettingLabel}>Pause new subscriptions</span>
+                </div>
+                <div
+                  className={styles.segmented}
+                  role="group"
+                  aria-label="Pause new subscriptions"
+                >
+                  <button
+                    type="button"
+                    className={
+                      !checkoutPaused ? styles.segmentedActive : styles.segmentedBtn
+                    }
+                    aria-pressed={!checkoutPaused}
+                    disabled={readOnly || attachMutation.isPending || !paymentsEnabled}
+                    onClick={() =>
+                      attachMutation.mutate({ stripeCheckoutPaused: false })
+                    }
+                  >
+                    Disabled
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      checkoutPaused ? styles.segmentedActive : styles.segmentedBtn
+                    }
+                    aria-pressed={checkoutPaused}
+                    disabled={readOnly || attachMutation.isPending || !paymentsEnabled}
+                    onClick={() =>
+                      attachMutation.mutate({ stripeCheckoutPaused: true })
+                    }
+                  >
+                    Enabled
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.plansSetting}>
+                <div className={styles.plansSettingText}>
+                  <span className={styles.plansSettingLabel}>Billing Cycle</span>
+                </div>
+                <div
+                  className={styles.segmented}
+                  role="group"
+                  aria-label="Billing Cycle"
+                >
+                  <button
+                    type="button"
+                    className={
+                      billingAnchor === 'anniversary'
+                        ? styles.segmentedActive
+                        : styles.segmentedBtn
+                    }
+                    aria-pressed={billingAnchor === 'anniversary'}
+                    disabled={readOnly || attachMutation.isPending}
+                    onClick={() =>
+                      attachMutation.mutate({ billingAnchor: 'anniversary' })
+                    }
+                  >
+                    Anniversary
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      billingAnchor === 'month_start'
+                        ? styles.segmentedActive
+                        : styles.segmentedBtn
+                    }
+                    aria-pressed={billingAnchor === 'month_start'}
+                    disabled={readOnly || attachMutation.isPending}
+                    onClick={() =>
+                      attachMutation.mutate({ billingAnchor: 'month_start' })
+                    }
+                  >
+                    Month Start
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!readOnly && canEditPacks && (
+            <div className={styles.addAccountRow}>
+              <button type="button" className={styles.secondaryBtn} onClick={openCreate}>
+                <Plus size={16} strokeWidth={2} aria-hidden="true" />
+                Add Another Account
+              </button>
+            </div>
           )}
 
           <ul className={styles.packList}>
@@ -1082,6 +1296,9 @@ export function StripePaymentsSection({
                       >
                         {pack.mode === 'live' ? 'Live' : 'Test'}
                       </span>
+                      {!pack.verified && (
+                        <span className={styles.packUnverified}>Unverified</span>
+                      )}
                     </div>
                   </div>
                   <div className={styles.packActions}>
@@ -1089,7 +1306,16 @@ export function StripePaymentsSection({
                       <button
                         type="button"
                         className={styles.secondaryBtn}
-                        disabled={attachMutation.isPending || active}
+                        disabled={
+                          attachMutation.isPending ||
+                          active ||
+                          !pack.verified
+                        }
+                        title={
+                          !pack.verified
+                            ? 'Finish setup and verify this account before selecting it'
+                            : undefined
+                        }
                         onClick={() =>
                           attachMutation.mutate({
                             stripeCredentialsId: pack.id,
@@ -1111,12 +1337,12 @@ export function StripePaymentsSection({
                         </button>
                         <button
                           type="button"
-                          className={`${styles.secondaryBtn} ${styles.dangerBtn}`}
+                          className={styles.deleteIconBtn}
                           disabled={deleteMutation.isPending}
                           onClick={() => setPackPendingDelete(pack)}
                           aria-label={`Delete ${pack.displayName}`}
                         >
-                          <Trash2 size={14} strokeWidth={2} aria-hidden />
+                          <Trash2 size={16} aria-hidden />
                         </button>
                       </>
                     )}

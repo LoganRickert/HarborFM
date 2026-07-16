@@ -21,7 +21,7 @@ export function urlHostname(input: string): string | null {
 
 /**
  * Build the default public WebSocket URL for group calls from the app hostname
- * (e.g. https://app.example.com → wss://app.example.com/webrtc-ws).
+ * (e.g. https://app.example.com > wss://app.example.com/webrtc-ws).
  */
 export function publicWsUrlFromHostname(hostname: string): string | null {
   const raw = normalizeHostname(hostname);

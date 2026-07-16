@@ -20,6 +20,72 @@
   flex-wrap: wrap;
 }
 
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.secondaryBtn:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
+.secondaryBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hiddenFileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.importError {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--text);
+}
+.importErrorIcon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: #f87171;
+}
+.importErrorMessage {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: #fecaca;
+}
+
 .cardTitle {
   margin: 0;
   font-size: clamp(1.25rem, 3vw, 1.5rem);
@@ -55,6 +121,10 @@
 
 .newBtnDisabled:hover {
   background: var(--accent);
+}
+
+.secondaryBtn.newBtnDisabled:hover {
+  background: transparent;
 }
 
 .summary {

@@ -13,6 +13,8 @@ import { FullPageLoading } from '../components/Loading';
 import { isFeedUnavailableError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedbackModal } from '../components/FeedbackModal';
+import { GetAlertsModal } from '../components/GetAlertsModal';
+import { getPublicEpisodeAlerts } from '../api/episodeAlerts';
 import { useMeta } from '../hooks/useMeta';
 import { getSiteDisplayName } from '../utils/siteBranding';
 import {
@@ -46,6 +48,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   const searchDebounced = useDebouncedValue(searchQuery);
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
 
   // Cancel any active import polling when on feed pages
   useEffect(() => {
@@ -101,6 +104,13 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     queryFn: () => getPublicEpisodes(podcastSlug!, 20, 0, 'newest', undefined, 'trailer'),
     enabled: !!podcastSlug,
     refetchOnMount: 'always',
+  });
+
+  const { data: alertsInfo } = useQuery({
+    queryKey: ['public-episode-alerts', podcastSlug],
+    queryFn: () => getPublicEpisodeAlerts(podcastSlug!),
+    enabled: !!podcastSlug,
+    staleTime: 60_000,
   });
 
   const featuredTrailer = useMemo(() => {
@@ -201,6 +211,9 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               podcast={podcast}
               podcastSlug={podcastSlug}
               onMessageClick={canShowMessage ? () => setFeedbackOpen(true) : undefined}
+              onAlertsClick={
+                alertsInfo?.emailSignupAvailable ? () => setAlertsOpen(true) : undefined
+              }
               shareUrl={
                 podcast?.canonicalFeedUrl ??
                 (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined)
@@ -286,6 +299,12 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
         open={feedbackOpen}
         onOpenChange={setFeedbackOpen}
         context={{ podcastSlug: podcastSlug ?? undefined, podcastTitle: podcast.title }}
+      />
+      <GetAlertsModal
+        open={alertsOpen}
+        onOpenChange={setAlertsOpen}
+        podcastSlug={podcastSlug}
+        podcastTitle={podcast.title}
       />
     </div>
   );

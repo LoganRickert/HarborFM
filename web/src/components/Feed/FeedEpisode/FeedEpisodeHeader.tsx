@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { MessageCircle, Lock, Share2, FileText } from 'lucide-react';
+import { MessageCircle, Lock, Share2, FileText, Bell } from 'lucide-react';
 import { FeedEpisodeHeaderProps } from '../../../types/feed';
 import { formatDate, formatDuration, formatSeasonEpisode } from '../../../utils/format';
 import { ShareDialog } from '../../ShareDialog';
@@ -12,6 +12,7 @@ export function FeedEpisodeHeader({
   podcast,
   podcastSlug,
   onMessageClick,
+  onAlertsClick,
   onLockClick,
   shareUrl,
   shareTitle,
@@ -95,6 +96,17 @@ export function FeedEpisodeHeader({
                 >
                   <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
                   Message
+                </button>
+              )}
+              {onAlertsClick && (
+                <button
+                  type="button"
+                  className={styles.messageBtn}
+                  onClick={onAlertsClick}
+                  aria-label="Get episode alerts"
+                >
+                  <Bell size={18} strokeWidth={2.5} aria-hidden />
+                  Get Alerts
                 </button>
               )}
               {shareUrl != null && (

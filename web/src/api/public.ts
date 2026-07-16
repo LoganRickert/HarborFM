@@ -412,10 +412,17 @@ export function getPublicStripePlans(podcastSlug: string) {
   }>(`/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/plans`);
 }
 
-export function createPublicStripeCheckout(podcastSlug: string, planId: string) {
+export function createPublicStripeCheckout(
+  podcastSlug: string,
+  planId: string,
+  opts?: { episodeAlerts?: boolean },
+) {
   return apiPost<{ url: string; sessionId: string }>(
     `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/checkout`,
-    { planId },
+    {
+      planId,
+      ...(opts?.episodeAlerts ? { episodeAlerts: true } : {}),
+    },
   );
 }
 

@@ -74,7 +74,54 @@ export async function run({ runOne }) {
       if (data.publishableKey !== 'pk_test_e2e_pub_aaaaaaaa') {
         throw new Error(`Expected publishable key returned, got ${data.publishableKey}`);
       }
+      if (data.verified !== true) {
+        throw new Error('Expected E2E pack to be verified');
+      }
       packAId = data.id;
+    }),
+  );
+
+  results.push(
+    await runOne('Unverified pack cannot be attached to a show', async () => {
+      const createRes = await apiFetch(
+        '/stripe/credentials',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            displayName: 'A Unverified Stripe',
+            mode: 'test',
+            testSecretKey: 'rk_test_notverified_aaaaaaaa',
+            testPublishableKey: 'pk_test_notverified_aaaaaaaa',
+            testWebhookSecret: 'whsec_notverified_aaaaaaaa',
+          }),
+        },
+        jarA,
+      );
+      if (createRes.status !== 201) {
+        throw new Error(`Expected 201 unverified pack, got ${createRes.status}`);
+      }
+      const unverified = await createRes.json();
+      if (unverified.verified !== false) {
+        throw new Error('Expected verified false for non-E2E pack');
+      }
+      const attach = await apiFetch(
+        `/podcasts/${showA1.id}/stripe`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stripeCredentialsId: unverified.id,
+            stripePaymentsEnabled: true,
+          }),
+        },
+        jarA,
+      );
+      if (attach.status !== 400) {
+        const body = await attach.text();
+        throw new Error(`Expected 400 attach unverified, got ${attach.status}: ${body}`);
+      }
+      await apiFetch(`/stripe/credentials/${unverified.id}`, { method: 'DELETE' }, jarA);
     }),
   );
 

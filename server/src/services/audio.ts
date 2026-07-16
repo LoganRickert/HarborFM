@@ -148,6 +148,27 @@ export async function probeAudio(
 }
 
 /**
+ * Transcode any audio under allowedBaseDir to MP3 at outputPath (libmp3lame 128k).
+ * Output path need not exist yet.
+ */
+export async function transcodeToMp3(
+  inputPath: string,
+  outputPath: string,
+  allowedBaseDir: string,
+): Promise<string> {
+  const safeIn = assertPathUnder(inputPath, allowedBaseDir);
+  assertResolvedPathUnder(outputPath, allowedBaseDir);
+  const safeOut = resolve(outputPath);
+  ensureDir(dirname(safeOut));
+  await exec(
+    FFMPEG_PATH,
+    ["-i", safeIn, "-acodec", "libmp3lame", "-b:a", "128k", "-y", safeOut],
+    { maxBuffer: 8 * 1024 * 1024 },
+  );
+  return assertPathUnder(safeOut, allowedBaseDir);
+}
+
+/**
  * Normalize an uploaded audio file: if it's not MP3 or WAV, re-encode to MP3 with ffmpeg
  * and return the path to the MP3 (original file is removed). If it's already MP3 or WAV,
  * return the path unchanged.

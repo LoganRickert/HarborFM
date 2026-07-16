@@ -178,6 +178,9 @@ export function publicPodcastDto(
       (row as { feedShowPodroll?: number | boolean | null }).feedShowPodroll ?? 1,
     feed_show_cast:
       (row as { feedShowCast?: number | boolean | null }).feedShowCast ?? 1,
+    episode_alerts_enabled:
+      (row as { episodeAlertsEnabled?: number | boolean | null })
+        .episodeAlertsEnabled ?? 0,
   };
 }
 

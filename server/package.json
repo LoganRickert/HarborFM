@@ -40,6 +40,8 @@
     "@harborfm/shared": "workspace:*",
     "@maxmind/geoip2-node": "6.3.4",
     "@node-saml/node-saml": "5.1.0",
+    "adm-zip": "^0.6.0",
+    "archiver": "^8.0.0",
     "argon2": "^0.44.0",
     "basic-ftp": "^5.1.0",
     "better-sqlite3": "^12.6.2",
@@ -65,6 +67,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9",
+    "@types/adm-zip": "^0.5.8",
+    "@types/archiver": "^8.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",
     "@types/nodemailer": "^7.0.9",

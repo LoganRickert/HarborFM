@@ -27,6 +27,7 @@ import { RecordModal } from './RecordModal';
 import { LibraryModal } from './LibraryModal';
 import { DeleteEpisodeConfirmDialog } from './DeleteEpisodeConfirmDialog';
 import { DeleteSegmentDialog } from './DeleteSegmentDialog';
+import { ManageSegmentDialog } from './ManageSegmentDialog';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { SegmentModal } from '../../components/SegmentModal';
@@ -104,6 +105,7 @@ export function EpisodeEditorContent({
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [dialogFormBaseline, setDialogFormBaseline] = useState<string | null>(null);
   const [episodeDetailsActiveTab, setEpisodeDetailsActiveTab] = useState<EpisodeDetailsTab>('overview');
+  const [segmentToManage, setSegmentToManage] = useState<string | null>(null);
   const [segmentToDelete, setSegmentToDelete] = useState<string | null>(null);
   const [segmentIdForInfo, setSegmentIdForInfo] = useState<string | null>(null);
   const [segmentModalInitialTab, setSegmentModalInitialTab] = useState<'edit' | 'transcript' | 'ask'>('transcript');
@@ -603,7 +605,7 @@ export function EpisodeEditorContent({
               readOnly={segmentReadOnly}
               onMoveUp={handleMoveUp}
               onMoveDown={handleMoveDown}
-              onDeleteRequest={setSegmentToDelete}
+              onManageRequest={setSegmentToManage}
               onRecoverRequest={segmentReadOnly ? undefined : (segmentId) => recoverSegmentMutation.mutate({ segmentId })}
               recoveringSegmentId={recoverSegmentMutation.isPending ? recoverSegmentMutation.variables?.segmentId ?? null : null}
               onUpdateSegmentName={(segmentId, name) =>
@@ -958,6 +960,29 @@ export function EpisodeEditorContent({
         />
         );
       })()}
+
+      <ManageSegmentDialog
+        open={!!segmentToManage}
+        onOpenChange={(open) => !open && setSegmentToManage(null)}
+        episodeId={id}
+        segment={
+          segmentToManage
+            ? segments.find((s) => s.id === segmentToManage) ?? null
+            : null
+        }
+        readOnly={segmentReadOnly}
+        onImported={() => {
+          queryClient.invalidateQueries({ queryKey: ['segments', id] });
+          queryClient.invalidateQueries({ queryKey: ['me'] });
+        }}
+        onDeleteRequest={() => {
+          if (segmentToManage) setSegmentToDelete(segmentToManage);
+        }}
+        isDeleting={
+          deleteSegmentMutation.isPending &&
+          deleteSegmentMutation.variables === segmentToManage
+        }
+      />
 
       <DeleteSegmentDialog
         open={!!segmentToDelete}

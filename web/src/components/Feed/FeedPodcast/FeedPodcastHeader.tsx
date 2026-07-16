@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Rss, MessageCircle, Lock, Share2 } from 'lucide-react';
+import { Rss, MessageCircle, Lock, Share2, Bell } from 'lucide-react';
 import { FeedPodcastHeaderProps } from '../../../types/feed';
 import { SubscriptionInfoDialog } from '../SubscriptionInfoDialog';
 import { ShareDialog } from '../../ShareDialog';
@@ -12,6 +12,7 @@ export function FeedPodcastHeader({
   podcast,
   podcastSlug,
   onMessageClick,
+  onAlertsClick,
   shareUrl,
   shareTitle,
 }: FeedPodcastHeaderProps) {
@@ -60,6 +61,17 @@ export function FeedPodcastHeader({
                   >
                     <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
                     Message
+                  </button>
+                )}
+                {onAlertsClick && (
+                  <button
+                    type="button"
+                    className={styles.messageBtn}
+                    onClick={onAlertsClick}
+                    aria-label="Get episode alerts"
+                  >
+                    <Bell size={18} strokeWidth={2.5} aria-hidden />
+                    Get Alerts
                   </button>
                 )}
                 {showRssButton && (

@@ -150,6 +150,7 @@ export async function registerCompleteRoutes(app: FastifyInstance) {
         canTranscribe: 1,
         canGenerateVideo: 1,
         canStripe: 1,
+        canEpisodeAlert: 1,
       }).run();
 
       repo.writeSetting("hostname", hostname);

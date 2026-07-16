@@ -17,6 +17,7 @@ import { episodeCreateSchema, episodeUpdateSchema } from "@harborfm/shared";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
 import { writeEpisodeChaptersJson } from "../../services/episodeChapters.js";
 import { notifyWebSubHub } from "../../services/websub.js";
+import { dispatchEpisodeAlerts } from "../episodeAlerts/index.js";
 import {
   assertPathUnder,
   assertResolvedPathUnder,
@@ -469,6 +470,31 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         }
       }
       broadcastToEpisode(id, { type: "episodeUpdated" });
+
+      // Fire episode alerts when an episode newly becomes released
+      try {
+        const wasReleased =
+          currentEpisode.status === "published" &&
+          (currentEpisode.publishAt == null ||
+            String(currentEpisode.publishAt).trim() === "" ||
+            new Date(String(currentEpisode.publishAt)).getTime() <= Date.now());
+        const nowReleased =
+          row.status === "published" &&
+          (row.publishAt == null ||
+            String(row.publishAt).trim() === "" ||
+            new Date(String(row.publishAt)).getTime() <= Date.now());
+        if (nowReleased && !wasReleased) {
+          void dispatchEpisodeAlerts(id).catch((err) => {
+            console.warn(
+              "[episodeAlerts] publish hook failed:",
+              err instanceof Error ? err.message : err,
+            );
+          });
+        }
+      } catch {
+        // non-fatal
+      }
+
       return episodeRowWithFilename(row);
     },
   );

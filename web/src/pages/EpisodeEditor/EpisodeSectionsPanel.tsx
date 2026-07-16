@@ -23,7 +23,7 @@ export interface EpisodeSectionsPanelProps {
   readOnly?: boolean;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
-  onDeleteRequest: (segmentId: string) => void;
+  onManageRequest: (segmentId: string) => void;
   onRecoverRequest?: (segmentId: string) => void;
   onUpdateSegmentName: (segmentId: string, name: string | null) => void;
   isDeletingSegment: boolean;
@@ -50,7 +50,7 @@ export function EpisodeSectionsPanel({
   readOnly = false,
   onMoveUp,
   onMoveDown,
-  onDeleteRequest,
+  onManageRequest,
   onRecoverRequest,
   onUpdateSegmentName,
   isDeletingSegment,
@@ -128,7 +128,7 @@ export function EpisodeSectionsPanel({
               total={segments.length}
               onMoveUp={() => onMoveUp(index)}
               onMoveDown={() => onMoveDown(index)}
-              onDeleteRequest={() => onDeleteRequest(seg.id)}
+              onManageRequest={() => onManageRequest(seg.id)}
               onRecoverRequest={onRecoverRequest && seg.recordFailed ? () => onRecoverRequest(seg.id) : undefined}
               onUpdateName={onUpdateSegmentName}
               isDeleting={isDeletingSegment && deletingSegmentId === seg.id}

@@ -35,6 +35,7 @@ export const stripeCredentialsUpdateSchema = z.object({
 export const podcastStripeAttachSchema = z.object({
   stripeCredentialsId: z.string().nullable().optional(),
   stripePaymentsEnabled: z.boolean().optional(),
+  stripeCheckoutPaused: z.boolean().optional(),
   billingAnchor: billingAnchorSchema.optional(),
 });
 
@@ -171,6 +172,7 @@ export const stripeCouponUpdateSchema = z
 /** POST /public/podcasts/:slug/stripe/checkout */
 export const stripeCheckoutCreateSchema = z.object({
   planId: z.string().trim().min(1),
+  episodeAlerts: z.boolean().optional(),
 });
 
 /** POST /public/podcasts/:slug/stripe/recover-token */

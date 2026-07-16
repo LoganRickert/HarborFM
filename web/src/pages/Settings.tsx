@@ -142,6 +142,7 @@ export function Settings() {
         defaultCanTranscribe: form.defaultCanTranscribe,
         defaultCanGenerateVideo: form.defaultCanGenerateVideo,
         defaultCanStripe: form.defaultCanStripe,
+        defaultCanEpisodeAlert: form.defaultCanEpisodeAlert,
         llmProvider: form.llmProvider,
         ollamaUrl: form.ollamaUrl,
         openaiApiKey: form.openaiApiKey === '(set)' ? undefined : form.openaiApiKey,

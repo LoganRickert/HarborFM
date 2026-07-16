@@ -26,6 +26,7 @@ import {
   requestPublicStripeRefund,
   type PublicStripePlan,
 } from '../../api/public';
+import { getPublicEpisodeAlerts } from '../../api/episodeAlerts';
 import { useSubscriberAuth } from '../../hooks/useSubscriberAuth';
 import { StripeConfirmDialog } from '../StripePayments/StripeConfirmDialog';
 import styles from './SubscriptionInfoDialog.module.css';
@@ -112,6 +113,7 @@ export function SubscriptionInfoDialog({
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
   const [copiedRss, setCopiedRss] = useState(false);
+  const [episodeAlertsOptIn, setEpisodeAlertsOptIn] = useState(false);
   const { getTokenIdForPodcast, authenticate, logout, isLoading, error, checkStatus } =
     useSubscriberAuth();
 
@@ -123,6 +125,13 @@ export function SubscriptionInfoDialog({
     queryFn: () => getPublicStripePlans(podcastSlug),
     enabled: open && Boolean(podcastSlug) && !isAuthenticated,
     staleTime: 30_000,
+  });
+
+  const { data: alertsInfo } = useQuery({
+    queryKey: ['public-episode-alerts', podcastSlug],
+    queryFn: () => getPublicEpisodeAlerts(podcastSlug),
+    enabled: open && Boolean(podcastSlug) && !isAuthenticated,
+    staleTime: 60_000,
   });
 
   const {
@@ -168,7 +177,9 @@ export function SubscriptionInfoDialog({
     setCheckoutError(null);
     setCheckoutPlanId(planId);
     try {
-      const { url } = await createPublicStripeCheckout(podcastSlug, planId);
+      const { url } = await createPublicStripeCheckout(podcastSlug, planId, {
+        episodeAlerts: episodeAlertsOptIn,
+      });
       window.location.assign(url);
     } catch (e) {
       setCheckoutError(e instanceof Error ? e.message : 'Could not start checkout');
@@ -498,6 +509,17 @@ export function SubscriptionInfoDialog({
                 </span>
               )}
             </div>
+            {alertsInfo?.emailSignupAvailable && (
+              <label className="toggle" style={{ marginBottom: '0.75rem' }}>
+                <input
+                  type="checkbox"
+                  checked={episodeAlertsOptIn}
+                  onChange={(e) => setEpisodeAlertsOptIn(e.target.checked)}
+                />
+                <span className="toggle__track" aria-hidden="true" />
+                <span>Email me new episode alerts</span>
+              </label>
+            )}
             <ul className={styles.stripePlanList}>
               {stripePlans.map((plan) => {
                 const busy = checkoutPlanId != null;

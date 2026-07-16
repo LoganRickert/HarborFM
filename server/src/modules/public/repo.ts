@@ -95,6 +95,9 @@ export function getPodcastBySlug(slug: string) {
       feedShowAuthor: sql<number>`COALESCE(${podcasts.feedShowAuthor}, 1)`.as("feedShowAuthor"),
       feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
       feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
+      episodeAlertsEnabled: sql<number>`COALESCE(${podcasts.episodeAlertsEnabled}, 0)`.as(
+        "episodeAlertsEnabled",
+      ),
     })
     .from(podcasts)
     .where(eq(podcasts.slug, slug))

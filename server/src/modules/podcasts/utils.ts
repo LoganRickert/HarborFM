@@ -41,7 +41,7 @@ function parseJsonObject(raw: string | null | undefined): Record<string, unknown
   }
 }
 
-/** Serialize JSON array/object for DB; empty → null. Undefined passthrough. */
+/** Serialize JSON array/object for DB; empty to null. Undefined passthrough. */
 export function jsonArrayOrNull(payload: unknown[] | null | undefined): string | null | undefined {
   if (payload === undefined) return undefined;
   if (payload == null || payload.length === 0) return null;
@@ -86,7 +86,7 @@ export function podcastRowWithFilename<
   podroll?: Record<string, unknown>[] | null;
 } {
   const path = row.artworkPath ?? null;
-  // Legacy flat license strings (pre-068) → present as identifier object
+  // Legacy flat license strings (pre-068) to present as identifier object
   let licenseParsed = parseJsonObject(row.license ?? null);
   if (
     licenseParsed == null &&

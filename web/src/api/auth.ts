@@ -17,6 +17,7 @@ export interface User {
   canTranscribe?: number; // 0 = false, 1 = true
   canGenerateVideo?: number; // 0 = false, 1 = true
   canStripe?: number; // 0 = false, 1 = true
+  canEpisodeAlert?: number; // 0 = false, 1 = true
   lastLoginAt?: string | null;
   lastLoginIp?: string | null;
   lastLoginLocation?: string | null;

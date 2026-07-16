@@ -120,6 +120,70 @@ export async function run({ runOne }) {
     }),
   );
 
+  results.push(
+    await runOne('Pause new subscriptions blocks public plans and checkout', async () => {
+      const pause = await apiFetch(
+        `/podcasts/${show.id}/stripe`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stripeCheckoutPaused: true }),
+        },
+        jarA,
+      );
+      if (pause.status !== 200) {
+        throw new Error(`Expected 200 pause, got ${pause.status}`);
+      }
+      const pausedStatus = await pause.json();
+      if (pausedStatus.stripeCheckoutPaused !== true) {
+        throw new Error('Expected stripeCheckoutPaused true');
+      }
+      if (pausedStatus.stripePaymentsEnabled !== true) {
+        throw new Error('Expected stripePaymentsEnabled still true while paused');
+      }
+
+      const plansRes = await apiFetch(`/public/podcasts/${show.slug}/stripe/plans`, {});
+      if (plansRes.status !== 200) {
+        throw new Error(`Expected 200 plans, got ${plansRes.status}`);
+      }
+      const plansData = await plansRes.json();
+      if (plansData.enabled !== false) {
+        throw new Error('Expected public plans enabled false while paused');
+      }
+
+      const checkoutRes = await apiFetch(
+        `/public/podcasts/${show.slug}/stripe/checkout`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId }),
+        },
+      );
+      if (checkoutRes.status !== 400) {
+        const body = await checkoutRes.text();
+        throw new Error(`Expected 400 checkout while paused, got ${checkoutRes.status}: ${body}`);
+      }
+
+      const unpause = await apiFetch(
+        `/podcasts/${show.id}/stripe`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stripeCheckoutPaused: false }),
+        },
+        jarA,
+      );
+      if (unpause.status !== 200) {
+        throw new Error(`Expected 200 unpause, got ${unpause.status}`);
+      }
+      const restored = await apiFetch(`/public/podcasts/${show.slug}/stripe/plans`, {});
+      const restoredData = await restored.json();
+      if (!restoredData.enabled) {
+        throw new Error('Expected public plans enabled after unpause');
+      }
+    }),
+  );
+
   let sessionId = null;
 
   results.push(

@@ -6,8 +6,6 @@ import {
   createPodcastStripePlan,
   updatePodcastStripePlan,
   deletePodcastStripePlan,
-  updatePodcastStripe,
-  type BillingAnchor,
   type StripePlan,
   type StripePlanKind,
 } from '../../api/stripe';
@@ -149,19 +147,8 @@ export function StripePlansSection({
     onError: (e: Error) => setFormError(e.message),
   });
 
-  const billingMutation = useMutation({
-    mutationFn: (billingAnchor: BillingAnchor) =>
-      updatePodcastStripe(podcastId, { billingAnchor }),
-    onSuccess: () => {
-      setFormError(null);
-      invalidate();
-    },
-    onError: (e: Error) => setFormError(e.message),
-  });
-
   const plans = data?.plans ?? [];
   const mode = data?.mode;
-  const billingAnchor = data?.billingAnchor ?? 'anniversary';
   const activePlans = plans.filter((p) => p.active);
   const deactivatedPlans = plans.filter((p) => !p.active);
   const availableKinds = KIND_ORDER.filter(
@@ -254,13 +241,77 @@ export function StripePlansSection({
             </div>
           )}
         </div>
-        {!readOnly && mode && availableKinds.length > 0 && !adding && (
+      </div>
+
+      {subscriberCounts && mode ? (
+        <div className={styles.subscriberStats} aria-live="polite">
+          <div className={styles.subscriberStatsIntro}>
+            <span className={styles.subscriberStatsEyebrow}>Active subscribers</span>
+            <strong className={styles.subscriberStatsTotal}>
+              {subscriberCounts.total === 0
+                ? 'Waiting for the first listener'
+                : subscriberCounts.total === 1
+                  ? '1 listener supporting this show'
+                  : `${subscriberCounts.total} listeners supporting this show`}
+            </strong>
+          </div>
+          <div className={styles.subscriberStatsGrid} role="list">
+            {(
+              [
+                {
+                  key: 'month',
+                  label: 'Monthly',
+                  value: subscriberCounts.month,
+                  revenueCents: subscriberCounts.monthRevenueCents,
+                  revenueSuffix: ' / month',
+                },
+                {
+                  key: 'year',
+                  label: 'Yearly',
+                  value: subscriberCounts.year,
+                  revenueCents: subscriberCounts.yearRevenueCents,
+                  revenueSuffix: ' / year',
+                },
+                {
+                  key: 'one_time',
+                  label: 'One-time',
+                  value: subscriberCounts.one_time,
+                  revenueCents: subscriberCounts.oneTimeRevenueCents,
+                  revenueSuffix: ' total',
+                },
+              ] as const
+            ).map((item) => (
+              <div
+                key={item.key}
+                role="listitem"
+                className={
+                  item.value > 0
+                    ? styles.subscriberStatLive
+                    : styles.subscriberStat
+                }
+              >
+                <span className={styles.subscriberStatValue}>{item.value}</span>
+                <span className={styles.subscriberStatLabel}>{item.label}</span>
+                {item.revenueCents > 0 && subscriberCounts.currency ? (
+                  <span className={styles.subscriberStatRevenue}>
+                    {formatMoney(item.revenueCents, subscriberCounts.currency)}
+                    {item.revenueSuffix}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {!readOnly && mode && availableKinds.length > 0 && !adding && (
+        <div className={styles.addPlanRow}>
           <button type="button" className={styles.secondaryBtn} onClick={openAddForm}>
             <Plus size={16} strokeWidth={2} aria-hidden />
             Add Plan
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {adding && mode && !readOnly && availableKinds.length > 0 && (
         <div className={styles.planForm}>
@@ -365,105 +416,6 @@ export function StripePlansSection({
         </div>
       )}
 
-      {subscriberCounts && mode ? (
-        <div className={styles.subscriberStats} aria-live="polite">
-          <div className={styles.subscriberStatsIntro}>
-            <span className={styles.subscriberStatsEyebrow}>Active subscribers</span>
-            <strong className={styles.subscriberStatsTotal}>
-              {subscriberCounts.total === 0
-                ? 'Waiting for the first listener'
-                : subscriberCounts.total === 1
-                  ? '1 listener supporting this show'
-                  : `${subscriberCounts.total} listeners supporting this show`}
-            </strong>
-          </div>
-          <div className={styles.subscriberStatsGrid} role="list">
-            {(
-              [
-                {
-                  key: 'month',
-                  label: 'Monthly',
-                  value: subscriberCounts.month,
-                  revenueCents: subscriberCounts.monthRevenueCents,
-                  revenueSuffix: ' / month',
-                },
-                {
-                  key: 'year',
-                  label: 'Yearly',
-                  value: subscriberCounts.year,
-                  revenueCents: subscriberCounts.yearRevenueCents,
-                  revenueSuffix: ' / year',
-                },
-                {
-                  key: 'one_time',
-                  label: 'One-time',
-                  value: subscriberCounts.one_time,
-                  revenueCents: subscriberCounts.oneTimeRevenueCents,
-                  revenueSuffix: ' total',
-                },
-              ] as const
-            ).map((item) => (
-              <div
-                key={item.key}
-                role="listitem"
-                className={
-                  item.value > 0
-                    ? styles.subscriberStatLive
-                    : styles.subscriberStat
-                }
-              >
-                <span className={styles.subscriberStatValue}>{item.value}</span>
-                <span className={styles.subscriberStatLabel}>{item.label}</span>
-                {item.revenueCents > 0 && subscriberCounts.currency ? (
-                  <span className={styles.subscriberStatRevenue}>
-                    {formatMoney(item.revenueCents, subscriberCounts.currency)}
-                    {item.revenueSuffix}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className={styles.plansSetting}>
-        <div className={styles.plansSettingText}>
-          <span className={styles.plansSettingLabel}>Billing Cycle</span>
-        </div>
-        <div
-          className={styles.segmented}
-          role="group"
-          aria-label="Billing Cycle"
-        >
-          <button
-            type="button"
-            className={
-              billingAnchor === 'anniversary'
-                ? styles.segmentedActive
-                : styles.segmentedBtn
-            }
-            aria-pressed={billingAnchor === 'anniversary'}
-            disabled={readOnly || billingMutation.isPending}
-            onClick={() => billingMutation.mutate('anniversary')}
-          >
-            Anniversary
-          </button>
-          <button
-            type="button"
-            className={
-              billingAnchor === 'month_start'
-                ? styles.segmentedActive
-                : styles.segmentedBtn
-            }
-            aria-pressed={billingAnchor === 'month_start'}
-            disabled={readOnly || billingMutation.isPending}
-            onClick={() => billingMutation.mutate('month_start')}
-          >
-            Month Start
-          </button>
-        </div>
-      </div>
-
       {isLoading ? (
         <p className={styles.pdCardEmptyState}>Loading plans…</p>
       ) : isError ? (
@@ -480,12 +432,6 @@ export function StripePlansSection({
               <p className={styles.plansEmptyBody}>
                 Add a monthly, yearly, or one-time price to start accepting payments.
               </p>
-              {!readOnly && availableKinds.length > 0 && (
-                <button type="button" className={styles.primaryBtn} onClick={openAddForm}>
-                  <Plus size={16} strokeWidth={2} aria-hidden />
-                  Add Plan
-                </button>
-              )}
             </div>
           ) : (
             <>
@@ -681,12 +627,12 @@ function PlanRow({
             </button>
             <button
               type="button"
-              className={`${styles.secondaryBtn} ${styles.dangerBtn}`}
+              className={styles.deleteIconBtn}
               disabled={busy}
               onClick={onDelete}
               aria-label="Delete plan"
             >
-              <Trash2 size={14} strokeWidth={2} aria-hidden />
+              <Trash2 size={16} aria-hidden />
             </button>
           </div>
         )}

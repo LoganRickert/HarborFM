@@ -297,6 +297,29 @@ export async function fulfillCheckoutSession(opts: {
     rawToken,
   });
 
+  if (session.metadata?.harborfm_episode_alerts === "1" && email?.trim()) {
+    try {
+      const { startSubscriberSignup } = await import("../episodeAlerts/index.js");
+      const { getPodcastAlertSettings } = await import(
+        "../episodeAlerts/repo.js"
+      );
+      const alertSettings = getPodcastAlertSettings(podcastId);
+      if (alertSettings?.episodeAlertsEnabled) {
+        await startSubscriberSignup({
+          podcastId,
+          email: email.trim(),
+          list: alertSettings.episodeAlertsCheckoutList,
+          source: "checkout",
+        });
+      }
+    } catch (err) {
+      console.warn(
+        "[episodeAlerts] checkout signup failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   return { rawToken, subscriptionId };
 }
 

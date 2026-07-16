@@ -37,6 +37,9 @@ const userSelectCols = {
     "canGenerateVideo",
   ),
   canStripe: sql<number>`COALESCE(${usersTable.canStripe}, 0)`.as("canStripe"),
+  canEpisodeAlert: sql<number>`COALESCE(${usersTable.canEpisodeAlert}, 0)`.as(
+    "canEpisodeAlert",
+  ),
 };
 
 function normIssuer(s: string): string {
@@ -177,6 +180,7 @@ export function insertUser(values: {
   canTranscribe: number;
   canGenerateVideo: number;
   canStripe: number;
+  canEpisodeAlert: number;
   emailVerified: boolean;
 }): void {
   drizzleDb.insert(usersTable).values(values).run();

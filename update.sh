@@ -33,7 +33,50 @@ HARBORFM_REPO="${HARBORFM_REPO:-loganrickert/harborfm}"
 HARBORFM_BRANCH="${HARBORFM_BRANCH:-main}"
 BASE_URL="https://raw.githubusercontent.com/${HARBORFM_REPO}/${HARBORFM_BRANCH}"
 
+download() {
+  local url="$1"
+  local dest="$2"
+  local dir
+  dir="$(dirname "$dest")"
+  mkdir -p "$dir"
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$url" -o "$dest"
+  elif command -v wget &>/dev/null; then
+    wget -q -O "$dest" "$url"
+  else
+    echo "Error: need curl or wget to download files." >&2
+    exit 1
+  fi
+}
+
+# Always sync update.sh from GitHub first. If it changed, replace this file and
+# exit so the next run uses the new install/change steps. Never overwrite a
+# running bash script mid-execution (that causes cryptic syntax errors).
+SCRIPT_PATH="$(cd -P "$(dirname "$0")" && pwd)/$(basename "$0")"
 echo "=== HarborFM update ==="
+if [ "${HARBORFM_SKIP_UPDATE_SH_SELF_UPDATE:-0}" != "1" ]; then
+  echo "Checking for update.sh updates from GitHub (${HARBORFM_BRANCH})..."
+  _update_sh_tmp="$(mktemp)"
+  if download "$BASE_URL/update.sh" "$_update_sh_tmp" 2>/dev/null; then
+    if ! cmp -s "$SCRIPT_PATH" "$_update_sh_tmp"; then
+      mv "$_update_sh_tmp" "$SCRIPT_PATH"
+      chmod +x "$SCRIPT_PATH"
+      # Keep install-dir copy in sync when this script was invoked from elsewhere.
+      if [ "$SCRIPT_PATH" != "$INSTALL_DIR/update.sh" ]; then
+        cp "$SCRIPT_PATH" "$INSTALL_DIR/update.sh"
+        chmod +x "$INSTALL_DIR/update.sh"
+      fi
+      echo "update.sh was updated from GitHub."
+      echo "Please run ./update.sh again so the new update steps can run."
+      exit 0
+    fi
+    rm -f "$_update_sh_tmp"
+    echo "update.sh is already up to date."
+  else
+    rm -f "$_update_sh_tmp"
+    echo "Could not check GitHub for update.sh; continuing with the local script."
+  fi
+fi
 echo "Install directory: $INSTALL_DIR"
 echo ""
 
@@ -52,22 +95,6 @@ if ! docker compose version &>/dev/null; then
   exit 1
 fi
 
-download() {
-  local url="$1"
-  local dest="$2"
-  local dir
-  dir="$(dirname "$dest")"
-  mkdir -p "$dir"
-  if command -v curl &>/dev/null; then
-    curl -fsSL "$url" -o "$dest"
-  elif command -v wget &>/dev/null; then
-    wget -q -O "$dest" "$url"
-  else
-    echo "Error: need curl or wget to download files." >&2
-    exit 1
-  fi
-}
-
 cd "$INSTALL_DIR"
 
 # Load .env for REVERSE_PROXY and certbot decision
@@ -80,7 +107,7 @@ fi
 REVERSE_PROXY="${REVERSE_PROXY:-caddy}"
 
 # Compose profile flags. Profiled services (caddy/nginx, webrtc) are ignored by
-# down/pull/up unless the profile is active — that left webrtc on stale images.
+# down/pull/up unless the profile is active - that left webrtc on stale images.
 compose_profile_args() {
   local args=(--profile "$REVERSE_PROXY")
   if [ "${WEBRTC_ENABLED:-0}" = "1" ]; then
@@ -129,10 +156,8 @@ download "$BASE_URL/fail2ban/filter.d/nginx-scanner.conf" "$INSTALL_DIR/fail2ban
 download "$BASE_URL/fail2ban/jail.d/nginx-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/nginx-scanner.local"
 download "$BASE_URL/fail2ban/filter.d/caddy-scanner.conf" "$INSTALL_DIR/fail2ban/filter.d/caddy-scanner.conf"
 download "$BASE_URL/fail2ban/jail.d/caddy-scanner.local" "$INSTALL_DIR/fail2ban/jail.d/caddy-scanner.local"
-download "$BASE_URL/update.sh" "$INSTALL_DIR/update.sh"
 download "$BASE_URL/nginx-add-domain.sh" "$INSTALL_DIR/nginx-add-domain.sh"
 chmod +x "$INSTALL_DIR/nginx/entrypoint.sh"
-chmod +x "$INSTALL_DIR/update.sh"
 chmod +x "$INSTALL_DIR/nginx-add-domain.sh"
 echo "Configs updated."
 echo ""

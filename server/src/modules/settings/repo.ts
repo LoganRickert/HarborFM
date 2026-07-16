@@ -116,6 +116,7 @@ export function writeSettings(settings: AppSettings): void {
   upsert("default_can_transcribe", String(settings.default_can_transcribe));
   upsert("default_can_generate_video", String(settings.default_can_generate_video));
   upsert("default_can_stripe", String(settings.default_can_stripe));
+  upsert("default_can_episode_alert", String(settings.default_can_episode_alert));
   upsert("llm_provider", settings.llm_provider);
   upsert("ollama_url", settings.ollama_url);
   upsert("openai_api_key", settings.openai_api_key);

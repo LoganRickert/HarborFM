@@ -254,7 +254,7 @@ async function resolvePaymentIntentId(
 
   const stripe = createStripeClient(secretKey);
 
-  // Recurring: latest paid invoice → invoice_payments → payment_intent
+  // Recurring: latest paid invoice > invoice_payments > payment_intent
   if (row.stripeSubscriptionId?.trim()) {
     try {
       const invoices = await stripe.invoices.list({

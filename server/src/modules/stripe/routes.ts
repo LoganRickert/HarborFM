@@ -293,8 +293,14 @@ export async function stripeRoutes(app: FastifyInstance) {
           publishableKey,
           mode,
         });
+        if (result.ok) {
+          creds.setCredentialsVerified(id, true);
+        } else {
+          creds.setCredentialsVerified(id, false);
+        }
         return reply.send(result);
       } catch (err) {
+        creds.setCredentialsVerified(id, false);
         const status = httpErrorStatus(err) as 400 | 403 | 404 | 500;
         return reply.code(status).send({
           error: err instanceof Error ? err.message : "Verification failed",
@@ -383,6 +389,7 @@ export async function stripeRoutes(app: FastifyInstance) {
         ),
         stripeCredentialsId: podcast.stripeCredentialsId,
         stripePaymentsEnabled: podcast.stripePaymentsEnabled,
+        stripeCheckoutPaused: podcast.stripeCheckoutPaused,
         billingAnchor: podcast.billingAnchor,
         canEditPacks: podcast.ownerUserId === request.userId,
       });
@@ -431,6 +438,7 @@ export async function stripeRoutes(app: FastifyInstance) {
       return reply.send({
         stripeCredentialsId: podcast.stripeCredentialsId,
         stripePaymentsEnabled: podcast.stripePaymentsEnabled,
+        stripeCheckoutPaused: podcast.stripeCheckoutPaused,
         billingAnchor: podcast.billingAnchor,
         canEditPacks: podcast.ownerUserId === request.userId,
         credentials: pack,
@@ -477,8 +485,12 @@ export async function stripeRoutes(app: FastifyInstance) {
           details: parsed.error.flatten(),
         });
       }
-      const { stripeCredentialsId, stripePaymentsEnabled, billingAnchor } =
-        parsed.data;
+      const {
+        stripeCredentialsId,
+        stripePaymentsEnabled,
+        stripeCheckoutPaused,
+        billingAnchor,
+      } = parsed.data;
       if (stripeCredentialsId !== undefined && stripeCredentialsId !== null) {
         try {
           assertSafeId(stripeCredentialsId, "stripeCredentialsId");
@@ -494,6 +506,12 @@ export async function stripeRoutes(app: FastifyInstance) {
               "Credentials must belong to the show owner",
           });
         }
+        if (!pack.verified) {
+          return reply.code(400).send({
+            error:
+              "Finish setup and verify this Stripe account before selecting it",
+          });
+        }
       }
       const nextCredentialsId =
         stripeCredentialsId !== undefined
@@ -504,6 +522,7 @@ export async function stripeRoutes(app: FastifyInstance) {
         nextCredentialsId,
         stripePaymentsEnabled,
         billingAnchor,
+        stripeCheckoutPaused,
       );
       const updated = creds.getPodcastStripeFields(podcastId)!;
       let packApi = null;
@@ -516,6 +535,7 @@ export async function stripeRoutes(app: FastifyInstance) {
       return reply.send({
         stripeCredentialsId: updated.stripeCredentialsId,
         stripePaymentsEnabled: updated.stripePaymentsEnabled,
+        stripeCheckoutPaused: updated.stripeCheckoutPaused,
         billingAnchor: updated.billingAnchor,
         credentials: packApi,
       });

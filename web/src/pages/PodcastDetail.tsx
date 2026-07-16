@@ -17,6 +17,7 @@ import { CollaboratorsSection } from '../components/Collaborators/CollaboratorsS
 import { SubscriberTokensSection } from '../components/SubscriberTokens/SubscriberTokensSection';
 import { StripePaymentsSection } from '../components/StripePayments/StripePaymentsSection';
 import { StripeSubscriptionsSection } from '../components/StripeSubscriptions/StripeSubscriptionsSection';
+import { EpisodeAlertsSection } from '../components/EpisodeAlerts/EpisodeAlertsSection';
 import sharedStyles from '../components/PodcastDetail/shared.module.css';
 import localStyles from './PodcastDetail.module.css';
 
@@ -126,6 +127,10 @@ export function PodcastDetail() {
 
       {canManageShow && Boolean(podcast?.subscriberOnlyFeedEnabled) && (
         <StripeSubscriptionsSection podcastId={id} readOnly={readOnly} />
+      )}
+
+      {canManageShow && (
+        <EpisodeAlertsSection podcastId={id} readOnly={readOnly} />
       )}
     </div>
   );

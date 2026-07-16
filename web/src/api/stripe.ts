@@ -16,6 +16,7 @@ export interface StripeCredentials {
   livePublishableKeySet: boolean;
   liveWebhookSecretSet: boolean;
   activeSecretKeySet: boolean;
+  verified: boolean;
   webhookUrl: string;
   publishableKey?: string;
   createdAt: string;
@@ -37,6 +38,7 @@ export interface PodcastStripeCredentialsResponse {
   credentials: StripeCredentials[];
   stripeCredentialsId: string | null;
   stripePaymentsEnabled: boolean;
+  stripeCheckoutPaused: boolean;
   billingAnchor: BillingAnchor;
   canEditPacks: boolean;
 }
@@ -44,6 +46,7 @@ export interface PodcastStripeCredentialsResponse {
 export interface PodcastStripeStatus {
   stripeCredentialsId: string | null;
   stripePaymentsEnabled: boolean;
+  stripeCheckoutPaused: boolean;
   billingAnchor: BillingAnchor;
   canEditPacks: boolean;
   credentials: StripeCredentials | null;
@@ -134,12 +137,14 @@ export function updatePodcastStripe(
   body: {
     stripeCredentialsId?: string | null;
     stripePaymentsEnabled?: boolean;
+    stripeCheckoutPaused?: boolean;
     billingAnchor?: BillingAnchor;
   },
 ) {
   return apiPatch<{
     stripeCredentialsId: string | null;
     stripePaymentsEnabled: boolean;
+    stripeCheckoutPaused: boolean;
     billingAnchor: BillingAnchor;
     credentials: StripeCredentials | null;
   }>(`/podcasts/${podcastId}/stripe`, body);

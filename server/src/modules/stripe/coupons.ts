@@ -319,11 +319,9 @@ export async function createCoupon(
     updatedAt: now,
   };
 
-  let stripeCouponId = "";
-  let stripePromotionCodeId = "";
-  let syncError: string | null = null;
+  let synced: { stripeCouponId: string; stripePromotionCodeId: string };
   try {
-    const synced = await createCouponAndPromotionCode({
+    synced = await createCouponAndPromotionCode({
       secretKey,
       podcastId,
       couponId: id,
@@ -340,28 +338,47 @@ export async function createCoupon(
       maxRedemptions: draft.maxRedemptions,
       promoActive: promoShouldBeActiveOnStripe(draft),
     });
-    stripeCouponId = synced.stripeCouponId;
-    stripePromotionCodeId = synced.stripePromotionCodeId;
   } catch (err) {
-    syncError = err instanceof Error ? err.message : "Stripe sync failed";
+    if (isStripeCouponCodeInUseError(err)) {
+      throw Object.assign(
+        new Error(
+          `A coupon with code ${code} is already in use on this Stripe account`,
+        ),
+        { statusCode: 400 },
+      );
+    }
+    throw Object.assign(
+      new Error(err instanceof Error ? err.message : "Stripe sync failed"),
+      { statusCode: 502 },
+    );
   }
 
   drizzleDb
     .insert(stripeCoupons)
     .values({
       ...draft,
-      stripeCouponId,
-      stripePromotionCodeId,
-      syncError,
+      stripeCouponId: synced.stripeCouponId,
+      stripePromotionCodeId: synced.stripePromotionCodeId,
+      syncError: null,
     })
     .run();
 
   const row = getCouponById(podcastId, id);
   if (!row) throw new Error("Failed to create coupon");
-  if (syncError) {
-    throw Object.assign(new Error(syncError), { statusCode: 502 });
-  }
   return row;
+}
+
+function isStripeCouponCodeInUseError(err: unknown): boolean {
+  if (err && typeof err === "object" && "code" in err) {
+    const code = String((err as { code?: string }).code ?? "");
+    if (code === "resource_already_exists") return true;
+  }
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes("already exists") ||
+    msg.includes("already in use") ||
+    (msg.includes("promotion code") && msg.includes("exist"))
+  );
 }
 
 export async function updateCoupon(

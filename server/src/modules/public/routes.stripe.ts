@@ -149,7 +149,11 @@ export async function registerStripePublicRoutes(app: FastifyInstance) {
         return reply.code(404).send({ error: "Podcast not found" });
       }
       const fields = creds.getPodcastStripeFields(podcast.id);
-      if (!fields?.stripePaymentsEnabled || !fields.stripeCredentialsId) {
+      if (
+        !fields?.stripePaymentsEnabled ||
+        !fields.stripeCredentialsId ||
+        fields.stripeCheckoutPaused
+      ) {
         return reply.send({
           enabled: false,
           mode: null,
@@ -223,6 +227,7 @@ export async function registerStripePublicRoutes(app: FastifyInstance) {
           podcastId: podcast.id,
           podcastSlug: podcast.slug,
           planId: parsed.data.planId,
+          episodeAlerts: Boolean(parsed.data.episodeAlerts),
         });
         return reply.send({
           url: result.url,

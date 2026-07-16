@@ -40,6 +40,7 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 - [Running without Docker](#running-without-docker)
 - [Features](#features)
 - [Stripe payments](#stripe-payments)
+- [Episode Alerts](#episode-alerts)
 - [Embed](#embed)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
@@ -251,6 +252,10 @@ You also have the option to trim the start and end of a segment. You can also re
 ![HarborFM](screenshots/screenshot_10.jpg)
 
 Once you're finished building your episode, at the bottom you can click "Make Final Episode" and this will generate the final audio file. You can customize the settings, such as mono or stereo, on the site settings page. Whenever you change your podcast and are ready for a new version, just click it again. Once you've generated a final episode, an option to download it will appear so you can upload it to other platforms or share it before publishing.
+
+Editors and above can also use **Download Project** next to the final episode controls. That downloads a zip of the episode (metadata, segment audio, optional multitrack recordings, and library assets used in the episode), plus a short README. Managers and the owner can use **Import Project** on the show's Episodes page to upload that zip and create a **new draft** episode with new ids (handy for backups or editing audio offline). Hand-added segment folders that only contain `audio.mp3` or `audio.wav` are supported; waveforms and hashes regenerate on import when needed.
+
+For a single section, open **Manage segment** on the segment row. **Download MP3** saves the trimmed final mix for that section. **Download Segment** downloads a segment project zip (source audio, tracks, and metadata). **Import Segment** uploads a segment zip and overwrites that segment in place (same id and position). Episode **Import Project** will reject a segment zip; use **Import Segment** from the episode editor instead. To drop a multitrack take from the mix, delete its audio file under `recordings/` in the zip and leave `tracks_manifest.json` as-is; import remakes the mix from the remaining tracks.
 
 ![HarborFM](screenshots/screenshota_5.jpg)
 
@@ -477,6 +482,8 @@ All environment variables supported by the server work the same in Docker. Set t
 | `SUBSCRIBER_TOKEN_PREFIX` | `hfm_sub_` | Prefix for subscriber RSS tokens in URL path |
 | **Stripe** | | |
 | `STRIPE_SECRETS_AAD` | `${APP_NAME}-stripe` | AAD for encrypting Stripe credential packs (secret keys, webhook secrets) |
+| **Episode Alerts** | | |
+| `EPISODE_ALERT_SECRETS_AAD` | `${APP_NAME}-episode-alerts` | AAD for encrypting episode alert destination secrets |
 | **DNS secrets** | | |
 | `DNS_SECRETS_AAD` | `${APP_NAME}-dns` | AAD for encrypted DNS-related secrets (e.g. Cloudflare) |
 | **Roles** | | |
@@ -516,7 +523,9 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Podcasts and episodes.** Create podcasts with metadata (artwork, categories, explicit, etc.). Add episodes with title, description, season/episode numbers, and status (draft, scheduled, published).
 
-- **Segments.** Each episode is a sequence of segments. A segment is either recorded (audio uploaded for that episode) or reusable (from your library). Reorder, trim, split, and remove silence. The app uses ffmpeg to concatenate segments into the final episode audio.
+- **Segments.** Each episode is a sequence of segments. A segment is either recorded (audio uploaded for that episode) or reusable (from your library). Reorder, trim, split, and remove silence. The app uses ffmpeg to concatenate segments into the final episode audio. From **Manage segment**, editors can download a trimmed MP3, download or import a segment project zip (overwrite in place), or delete the section.
+
+- **Episode and segment projects.** Download Project zips a full episode for backup or offline edit. Import Project on the Episodes page recreates a draft episode with new ids. Download Segment / Import Segment work the same way for one section (import overwrites that segment). Segment zips cannot be imported as full episodes.
 
 - **Group calls.** Record remote guests via WebRTC; host starts a call, guests join by link or 4-digit code; in-call chat, soundboard, and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
 
@@ -534,13 +543,15 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Stripe payments (BYOK).** Show owners connect their own Stripe account, publish monthly/yearly/one-time plans, and sell access. Listeners pay via Checkout and receive a private RSS token. Coupons, Customer Portal, refund requests, and webhooks are supported. See [Stripe payments](#stripe-payments).
 
+- **Episode Alerts.** When a show publishes (or a scheduled episode becomes live), Harbor can email listeners and post to communities. Destinations include built-in or BYO email, Discord, Slack, Telegram, Mastodon, Matrix, Lemmy, Bluesky, and JSON webhooks. See [Episode Alerts](#episode-alerts).
+
 ## Stripe payments
 
 HarborFM does not process payments with a platform Stripe account. Each eligible user brings their own Stripe keys (**bring your own key**). Secrets are encrypted with the same secrets key used for exports (`HARBORFM_SECRETS_KEY` / `SECRETS_DIR`), using AAD from `STRIPE_SECRETS_AAD`.
 
 ### Who can use it
 
-- **`defaultCanStripe`** (Settings → Default Limits): whether newly registered users get Stripe access. Default is on.
+- **`defaultCanStripe`** (Settings > Default Limits): whether newly registered users get Stripe access. Default is on.
 - **`canStripe`** (Users admin): per-user flag. When off, that user cannot open Stripe Payments or call Stripe API routes (403).
 - On a show, **managers** can attach an existing owner credential pack and toggle payments. Only the **owner** can create, edit, or delete credential packs.
 
@@ -553,7 +564,7 @@ Under the show’s **Payments** UI, create a Stripe account pack:
 3. Restricted secret key (`rk_test_…` / `rk_live_…` preferred), publishable key, and webhook signing secret (`whsec_…`)
 4. Optional verify step that probes Write permissions
 
-Attach one pack to the show and enable **Accept Stripe payments**. The same pack can be reused on multiple shows owned by that user. Test and live plans/coupons are separate.
+Attach one pack to the show and enable **Accept Stripe payments**. Use **Pause new subscriptions** to block Checkout while you edit plans or coupons (existing subscribers keep access). The same pack can be reused on multiple shows owned by that user. Test and live plans/coupons are separate.
 
 **Webhook URL** (copy from Payments):
 
@@ -596,7 +607,7 @@ Listeners subscribe from the public feed. Checkout creates a Stripe session; aft
 
 - Success URL reveals the **access token** and **private RSS** URL once (`/feed/{slug}/subscribe/success?session_id=…`).
 - Private feed: `/api/public/podcasts/{slug}/private/{token}/rss` (token prefix from `SUBSCRIBER_TOKEN_PREFIX`, default `hfm_sub_`).
-- Refreshing or reclaiming the same session does not show the full token again; listeners can use **Manage Subscription → Recover token** (email) if needed.
+- Refreshing or reclaiming the same session does not show the full token again; listeners can use **Manage Subscription > Recover token** (email) if needed.
 - Active coupons enable promotion codes on Checkout.
 
 ### Manage subscription (listeners)
@@ -609,7 +620,7 @@ From the feed **Manage Subscription** dialog (cookie or pasted token / private R
 | Turn off auto-renew | Cancel at period end; access continues until period end |
 | Renew / keep auto-renewing | Undo cancel-at-period-end, or pay a past-due invoice |
 | Regenerate access token | Issues a new token (cooldown applies); old token stops working |
-| Request refund | Owner reviews under Payments → Refund requests |
+| Request refund | Owner reviews under Payments > Refund requests |
 | Recover token | Emails access details when email delivery is configured (cooldown applies) |
 
 Owners approve or deny refund requests in the show Payments UI. Approving refunds in Stripe and revokes the subscriber token.
@@ -620,7 +631,9 @@ Per show and mode: create percent or fixed-amount coupons with duration once, re
 
 ### Webhooks
 
-Harbor handles these event types (among others used for sync):
+When creating the Stripe endpoint, select **only** these events (do not use Select all). The credential wizard lists the same set.
+
+Harbor handles these event types:
 
 | Event | Effect |
 |-------|--------|
@@ -645,6 +658,42 @@ Stripe scenarios live under `e2e/tests/scenarios/`:
 - `stripe-checkout.js`
 - `stripe-manage.js`
 - `stripe-coupons.js`
+
+## Episode Alerts
+
+Notify listeners and communities when an episode is released. Configure per show under **Episode Alerts** (managers and owners, when the account flag allows it). Destination secrets (SMTP passwords, bot tokens, access tokens, etc.) are encrypted with the same secrets key used for exports (`HARBORFM_SECRETS_KEY` / `SECRETS_DIR`), using AAD from `EPISODE_ALERT_SECRETS_AAD`.
+
+### Who can use it
+
+- **`defaultCanEpisodeAlert`** (Settings > Default Limits): whether newly registered users get Episode Alerts. Default is on.
+- **`canEpisodeAlert`** (Users admin): per-user flag. When off, that user cannot open Episode Alerts or call its API routes (403).
+
+### Destinations
+
+Add one or more destinations. Each has an enable toggle and **Which episodes**: All episodes, or Premium only (subscriber-only episodes).
+
+| Type | Notes |
+|------|--------|
+| Built-In Notifications | Uses the server Settings email provider |
+| Bring Your Own Email (SMTP) / SendGrid | Per-show email credentials |
+| Discord / Slack webhooks | Rich default embeds/blocks when the message field is blank |
+| Telegram, Mastodon, Matrix, Lemmy, Bluesky | Community posts; blank templates use richer defaults |
+| JSON Webhook | POST/PUT/PATCH a JSON body (default payload includes artwork and season/episode) |
+
+Leave message/status/post templates blank for the built-in rich defaults (title, description, season/episode, listen link, artwork when available). Custom templates still override.
+
+Only one email transport is used for mailing lists (priority: built-in, then BYO SendGrid, then BYO SMTP). Multiple community destinations of the same or different types can all fire.
+
+### Email lists
+
+- **General:** Public **Get Alerts** on the feed (double opt-in verify email). Receives alerts for non-premium episodes.
+- **Subscribers:** Premium-episode alerts. Listeners can opt in at Stripe Checkout when the show enables that option; the show chooses whether checkout joins General or Subscribers.
+
+Verified list counts appear on the Episode Alerts card. Alert emails include artwork (episode thumb or podcast cover), description, season/episode when set, and an unsubscribe link. Optional mailing / PO Box is shown in email footers (CAN-SPAM).
+
+### When alerts fire
+
+Alerts run when an episode becomes released (publish from the editor, or the ~15 minute poller for scheduled `publishAt`). Each episode is marked once via `episode_alerts_sent_at` so sends are not duplicated. Verify and unsubscribe links prefer the show’s custom domain when configured.
 
 ## Embed
 
@@ -726,18 +775,19 @@ Each podcast has an **owner** (the user who created it) and optional **collabora
 | Role | Allowed actions |
 |------|------------------|
 | **view** | List/read podcast and episodes, stream audio, view analytics. Read-only. |
-| **editor** | Everything in view, plus: edit segments, record new sections, render/build the final episode. |
-| **manager** | Everything in editor, plus: create/update episodes and episode artwork, edit show details, configure **Podcast Delivery** (exports), manage collaborators (invite, change role, remove). |
+| **editor** | Everything in view, plus: edit segments, record new sections, render/build the final episode, download episode/segment projects, import a segment project (overwrite in place). |
+| **manager** | Everything in editor, plus: create/update episodes and episode artwork, **Import Project** (new draft from episode zip), edit show details, configure **Podcast Delivery** (exports), manage collaborators (invite, change role, remove). |
 | **owner** | Full control. Only the owner can delete the podcast or transfer ownership. |
 
-- **Collaborators** are managed per show in **Settings to Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on Harbor yet, the UI can send them an “invite to the platform” email (rate-limited).
+- **Collaborators** are managed per show in **Settings > Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on Harbor yet, the UI can send them an “invite to the platform” email (rate-limited).
 - **Storage** for a show (recorded segments, episode source audio) counts against the **podcast owner’s** storage limit, not the collaborator’s. If the owner is at or near their limit, “Record new section” is disabled for everyone on that show.
 - **New episode** is only available to **managers** and the **owner**; view and editor roles see it disabled.
 - **Stripe (`canStripe` / `defaultCanStripe`)** is an account flag, not a show role. It gates whether the user can use Stripe Payments at all. See [Stripe payments](#stripe-payments).
+- **Episode Alerts (`canEpisodeAlert` / `defaultCanEpisodeAlert`)** is an account flag, not a show role. It gates whether the user can configure Episode Alerts. See [Episode Alerts](#episode-alerts).
 
 ## Export
 
-Podcast delivery exports push your RSS feed and episode audio to a destination. Configure one or more exports per show in **Settings to Podcast Delivery**; credentials are stored encrypted. Deploy skips files that are unchanged (using MD5 sidecar files where the service doesn’t provide hashes).
+Podcast delivery exports push your RSS feed and episode audio to a destination. Configure one or more exports per show in **Settings > Podcast Delivery**; credentials are stored encrypted. Deploy skips files that are unchanged (using MD5 sidecar files where the service doesn’t provide hashes).
 
 Supported export types and example request bodies (for create/update):
 
@@ -885,11 +935,11 @@ docker run --rm -it -p 5000:80 -p 2525:25 -p 110:110 rnwood/smtp4dev
 - **SMTP:** `localhost:2525` (no TLS)  
 - **POP3:** `localhost:110`  
 
-Configure HarborFM Settings to Email with host `localhost`, port `2525`, and any from address. Accepts any username/password.
+Configure HarborFM Settings > Email with host `localhost`, port `2525`, and any from address. Accepts any username/password.
 
 ### Stripe CLI
 
-Install the [Stripe CLI](https://stripe.com/docs/stripe-cli), then create a **test** credential pack in Show → Payments and copy its webhook URL.
+Install the [Stripe CLI](https://stripe.com/docs/stripe-cli), then create a **test** credential pack in Show > Payments and copy its webhook URL.
 
 Forward events to the API (default port `3001`; override with `STRIPE_FORWARD_PORT`):
 
@@ -1049,7 +1099,7 @@ Before upgrading, back up **DATA_DIR** (SQLite database, uploads, processed audi
 
 ## Single Sign-On (SSO)
 
-HarborFM supports Single Sign-On via **OIDC** (OpenID Connect) and **SAML**. Configured providers appear as sign-in options on the login page. Add and edit providers under **Settings to SSO (OIDC / SAML)**. Use the list to add a provider, then open it to set endpoints, client credentials, and optional attributes. Use `(set)` in password or certificate fields when editing to keep existing secrets without re-entering them.
+HarborFM supports Single Sign-On via **OIDC** (OpenID Connect) and **SAML**. Configured providers appear as sign-in options on the login page. Add and edit providers under **Settings > SSO (OIDC / SAML)**. Use the list to add a provider, then open it to set endpoints, client credentials, and optional attributes. Use `(set)` in password or certificate fields when editing to keep existing secrets without re-entering them.
 
 The examples below assume your HarborFM instance is at **https://app.harborfm.com** and you are using **Keycloak** as the identity provider.
 
@@ -1064,7 +1114,7 @@ The examples below assume your HarborFM instance is at **https://app.harborfm.co
    - Save, then open the client **Credentials** tab and copy the **Client secret**.
 
 2. **HarborFM Settings**
-   - Go to **Settings to SSO (OIDC / SAML)** and ensure **Hostname** is set to `app.harborfm.com` (or `https://app.harborfm.com`).
+   - Go to **Settings > SSO (OIDC / SAML)** and ensure **Hostname** is set to `app.harborfm.com` (or `https://app.harborfm.com`).
    - Under **OIDC providers**, click **Add Provider**.
    - **Provider ID**: `harborfm` (must match the path segment in the callback URL).
    - **Display Name**: e.g. `Keycloak` or your org name.

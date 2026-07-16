@@ -195,6 +195,46 @@ export async function run({ runOne }) {
   );
 
   results.push(
+    await runOne('Duplicate coupon code returns 400 without adding a row', async () => {
+      const before = await apiFetch(`/podcasts/${showA1.id}/stripe/coupons`, {}, jarA);
+      const beforeData = await before.json();
+      const countBefore = beforeData.coupons.length;
+
+      const res = await apiFetch(
+        `/podcasts/${showA1.id}/stripe/coupons`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: 'SAVE10',
+            discountType: 'percent',
+            percentOff: 15,
+            duration: 'once',
+            active: true,
+          }),
+        },
+        jarA,
+      );
+      if (res.status !== 400) {
+        const body = await res.text();
+        throw new Error(`Expected 400 duplicate coupon, got ${res.status}: ${body}`);
+      }
+      const err = await res.json();
+      if (!String(err.error || '').toLowerCase().includes('already')) {
+        throw new Error(`Expected already-exists error, got ${JSON.stringify(err)}`);
+      }
+
+      const after = await apiFetch(`/podcasts/${showA1.id}/stripe/coupons`, {}, jarA);
+      const afterData = await after.json();
+      if (afterData.coupons.length !== countBefore) {
+        throw new Error(
+          `Expected coupon count unchanged (${countBefore}), got ${afterData.coupons.length}`,
+        );
+      }
+    }),
+  );
+
+  results.push(
     await runOne('Public hasActiveCoupons true; checkout allows promo codes', async () => {
       const plans = await apiFetch(`/public/podcasts/${showA1.slug}/stripe/plans`);
       const plansData = await plans.json();

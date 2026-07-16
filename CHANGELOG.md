@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.11.0 - 2026-07-15
+
+- **Episode Alerts:** Notify listeners and communities when an episode is released. Per-show enable, mailing address for email footers, General vs Subscribers email lists, and verified signup counts. Destinations include built-in email, BYO SMTP/SendGrid, Discord, Slack, Telegram, Mastodon, Matrix, Lemmy, Bluesky, and JSON webhooks; each destination has its own All episodes / Premium only scope. Public Get Alerts signup with email verification and unsubscribe; optional opt-in at Stripe checkout. Rich default community posts (artwork, description, listen link) when templates are left blank. Gated by `canEpisodeAlert` / `defaultCanEpisodeAlert`.
+- **Manage segment:** Section row trash control is now a manage menu (**Download MP3**, **Download Segment**, **Import Segment**, delete). Download MP3 applies soft trims and EQ like the final render (editors and above).
+- **Segment project:** Editors and above can **Download Segment** / **Import Segment** (`kind: "segment"` zip) to overwrite that segment in place (same id/position). Episode **Import Project** rejects segment zips with a clear 400.
+- **Project / segment import:** Deleting a multitrack audio file from `recordings/` while leaving it in `tracks_manifest.json` drops that track from the remade mix (episode and segment import).
+- **Download Project:** Final Episode includes **Download Project** (editors and above) which zips episode metadata, segments, finals, multitrack recordings, and embedded library assets (plus a README). Zips are cached under `/tmp` by content fingerprint (best-effort; OS cleanup).
+- **Import Project:** Show episodes list includes **Import Project** (managers and the owner) to upload a project zip and recreate a draft episode 1:1 with new ids. Hand-added `audio.mp3` / `audio.wav` segments work without `segment.json` or waveforms (WAV is transcoded to MP3; waveforms regenerate when available).
+- **Stripe:** Show-level **Pause new subscriptions** control blocks Checkout while keeping Payments editable (existing subscribers keep access). Accept payments and pause use Disabled/Enabled segmented controls; Billing Cycle sits with them above the account list.
+- **Stripe:** Credential wizard webhook step lists the events HarborFM needs (with short why tooltips). Packs stay **Unverified** until Finish Setup after a successful verify; Select/attach is blocked until then (canceling mid-wizard no longer leaves a selectable account).
+- **Stripe coupons:** Duplicate codes are rejected before submit; failed Stripe sync no longer leaves an orphan coupon row; Stripe "already in use" returns a clear 400.
+
 ## v1.10.1 - 2026-07-14
 
 - **Group calls:** Fixed WebRTC send transports leaking on disconnect/reconnect. Each client creates send + recv transports, but the server only closed the last one, so rooms could hit `Too many transports in room` and drop audio (often after remounts during a long call / soundboard use).
@@ -7,7 +19,7 @@
 
 ## v1.10.0 - 2026-07-14
 
-- **Stripe payments (BYOK):** Show owners connect their own Stripe credential packs (separate test and live accounts), attach a pack to a show, and accept paid access. Restricted-key setup lists the Write permissions Harbor needs; webhook URL and verify step are included.
+- **Stripe payments (BYOK):** Show owners connect their own Stripe credential packs (separate test and live accounts), attach a pack to a show, and accept paid access. Restricted-key setup lists the Write permissions HarborFM needs; webhook URL and verify step are included.
 - **Plans:** Monthly, yearly, and one-time prices with at most one active plan per kind. Deactivate to change price (create a new plan; existing subscribers stay on their Stripe price). Billing cycle: Anniversary or Month Start. Active-subscriber stats show per-kind revenue.
 - **Checkout and access:** Listeners pay via Stripe Checkout and receive a private RSS token (one-time reveal on the success page). Coupons and promotion codes are supported. Manage Subscription covers Customer Portal, cancel-at-period-end, renew, regenerate/recover token, and refund requests.
 - **Webhooks:** Fulfillment and lifecycle sync for checkout, subscriptions, invoices, refunds, and price updates. Local helper: `pnpm stripe:listen`.
@@ -26,7 +38,7 @@
 
 ## v1.9.1 - 2026-07-13
 
-- **Import:** Podcast import round-trips Harbor Podcast 2.0 show and episode metadata from RSS (funding, license, update frequency, block, chat, location, publisher, podroll, social interact, txt, value, content links, images, soundbites). Channel `<podcast:person>` creates public cast hosts; chapters.json and transcript.srt are fetched when linked; ASR is skipped when a transcript is imported.
+- **Import:** Podcast import round-trips HarborFM Podcast 2.0 show and episode metadata from RSS (funding, license, update frequency, block, chat, location, publisher, podroll, social interact, txt, value, content links, images, soundbites). Channel `<podcast:person>` creates public cast hosts; chapters.json and transcript.srt are fetched when linked; ASR is skipped when a transcript is imported.
 - **Import:** Show and episode cover images are saved locally like an artwork upload (not left as remote URLs). Episode enclosure downloads use the episode audio size limit (default 500MB) and a longer timeout (default 30 minutes) so multi-hour episodes can import.
 - **RSS:** Channel and item `<itunes:explicit>` always emit `true` or `false` (was `yes`/`no`).
 
