@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.11.1 - 2026-07-16
+
+- **Episode Alerts / Stripe:** Centered the "not enabled for your account" messages in a dark card matching the Episode Alerts disabled state.
+
 ## v1.11.0 - 2026-07-15
 
 - **Episode Alerts:** Notify listeners and communities when an episode is released. Per-show enable, mailing address for email footers, General vs Subscribers email lists, and verified signup counts. Destinations include built-in email, BYO SMTP/SendGrid, Discord, Slack, Telegram, Mastodon, Matrix, Lemmy, Bluesky, and JSON webhooks; each destination has its own All episodes / Premium only scope. Public Get Alerts signup with email verification and unsubscribe; optional opt-in at Stripe checkout. Rich default community posts (artwork, description, listen link) when templates are left blank. Gated by `canEpisodeAlert` / `defaultCanEpisodeAlert`.

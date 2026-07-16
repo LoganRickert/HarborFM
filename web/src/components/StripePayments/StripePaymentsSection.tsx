@@ -609,9 +609,9 @@ export function StripePaymentsSection({
             <h2 className={styles.sectionTitle}>Stripe Payments</h2>
           </div>
         </div>
-        <p className={styles.pdCardSectionSub}>
+        <div className={styles.disabledCard}>
           Stripe is not enabled for your account. Ask an administrator to turn on Can Stripe.
-        </p>
+        </div>
       </div>
     );
   }
