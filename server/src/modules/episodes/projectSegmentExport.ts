@@ -24,7 +24,10 @@ import {
 import { getById as getLibraryAsset } from "../library/repo.js";
 import { getPodcastTitle } from "../audio/repo.js";
 import { PROJECT_FORMAT_VERSION } from "./projectExport.js";
-import { findMultitrackDir, packSegmentIntoDir } from "./projectSegmentPack.js";
+import {
+  findMultitrackDir,
+  packSegmentIntoDir,
+} from "./projectSegmentPack.js";
 import { segmentProjectZipReadmeMarkdown } from "./projectReadme.js";
 
 const CACHE_DIR = join(tmpdir(), "harborfm-segment-project-exports");
@@ -39,6 +42,7 @@ function ensureCacheDir(): void {
   if (!existsSync(CACHE_DIR)) mkdirSync(CACHE_DIR, { recursive: true });
 }
 
+/** Safe Content-Disposition filename part: strip path/control/URL-unsafe chars. */
 function safeFilenamePart(raw: string, fallback: string): string {
   const cleaned =
     raw
@@ -48,8 +52,11 @@ function safeFilenamePart(raw: string, fallback: string): string {
         return code >= 32 && code !== 127;
       })
       .join("")
-      .replace(/[\\/:*?"<>|]/g, "-")
+      // Path separators, Windows-reserved, and URL/query-unsafe (# % ? & etc.).
+      .replace(/[\\/:*?"<>|#%?&{}[\]=+;@!,`'^~]+/g, "-")
       .replace(/\s+/g, " ")
+      .replace(/-+/g, "-")
+      .replace(/^[.\s-]+|[.\s-]+$/g, "")
       .trim() || fallback;
   return cleaned.slice(0, 80);
 }
@@ -197,39 +204,108 @@ async function buildSegmentZipToPath(
   }
 }
 
+export type SegmentProjectExportStatus = "idle" | "building" | "ready" | "failed";
+
+const exportStatusBySegment = new Map<string, "building" | "ready" | "failed">();
+const exportErrorBySegment = new Map<string, string>();
+const inFlightBySegment = new Map<string, Promise<SegmentProjectExportResult>>();
+
+/**
+ * Return a cached or freshly built segment project zip.
+ * Concurrent callers for the same segment share one in-flight build.
+ */
 export async function getOrBuildSegmentProjectZip(
   episodeId: string,
   podcastId: string,
   segmentId: string,
 ): Promise<SegmentProjectExportResult> {
-  const episode = episodeRepo.getById(episodeId);
-  if (!episode) throw new Error("Episode not found");
-  const seg = listSegmentsForEpisode(episodeId).find((s) => s.id === segmentId);
-  if (!seg) throw new Error("Segment not found");
+  const existing = inFlightBySegment.get(segmentId);
+  if (existing) return existing;
 
-  const hash = fingerprintSegment(podcastId, episodeId, seg);
-  ensureCacheDir();
-  const cachedPath = join(CACHE_DIR, `${segmentId}-${hash}.zip`);
-  const podcastTitle = getPodcastTitle(podcastId) || "Podcast";
-  const filename = segmentZipFilename(
-    seg.name || "Segment",
-    episode.title || "Episode",
-    podcastTitle,
-  );
+  const promise = (async (): Promise<SegmentProjectExportResult> => {
+    const episode = episodeRepo.getById(episodeId);
+    if (!episode) throw new Error("Episode not found");
+    const seg = listSegmentsForEpisode(episodeId).find((s) => s.id === segmentId);
+    if (!seg) throw new Error("Segment not found");
 
-  if (existsSync(cachedPath) && statSync(cachedPath).size > 0) {
+    const hash = fingerprintSegment(podcastId, episodeId, seg);
+    ensureCacheDir();
+    const cachedPath = join(CACHE_DIR, `${segmentId}-${hash}.zip`);
+    const podcastTitle = getPodcastTitle(podcastId) || "Podcast";
+    const filename = segmentZipFilename(
+      seg.name || "Segment",
+      episode.title || "Episode",
+      podcastTitle,
+    );
+
+    if (existsSync(cachedPath) && statSync(cachedPath).size > 0) {
+      deleteOlderCaches(segmentId, hash);
+      return { zipPath: cachedPath, filename, fromCache: true };
+    }
+
+    const tmpOut = join(CACHE_DIR, `${segmentId}-${hash}.building.zip`);
+    try {
+      if (existsSync(tmpOut)) unlinkSync(tmpOut);
+    } catch {
+      // ignore
+    }
+    await buildSegmentZipToPath(podcastId, episodeId, seg, tmpOut);
+    renameSync(tmpOut, cachedPath);
     deleteOlderCaches(segmentId, hash);
-    return { zipPath: cachedPath, filename, fromCache: true };
-  }
+    return { zipPath: cachedPath, filename, fromCache: false };
+  })();
 
-  const tmpOut = join(CACHE_DIR, `${segmentId}-${hash}.building.zip`);
+  inFlightBySegment.set(segmentId, promise);
   try {
-    if (existsSync(tmpOut)) unlinkSync(tmpOut);
-  } catch {
-    // ignore
+    return await promise;
+  } finally {
+    if (inFlightBySegment.get(segmentId) === promise) {
+      inFlightBySegment.delete(segmentId);
+    }
   }
-  await buildSegmentZipToPath(podcastId, episodeId, seg, tmpOut);
-  renameSync(tmpOut, cachedPath);
-  deleteOlderCaches(segmentId, hash);
-  return { zipPath: cachedPath, filename, fromCache: false };
+}
+
+/**
+ * Start a background segment project zip build. Returns false if already building.
+ * Poll getSegmentProjectExportStatus until ready or failed.
+ */
+export function startSegmentProjectExport(
+  episodeId: string,
+  podcastId: string,
+  segmentId: string,
+): boolean {
+  const current = exportStatusBySegment.get(segmentId);
+  if (current === "building") return false;
+  if (current === "ready") return true;
+  exportStatusBySegment.set(segmentId, "building");
+  exportErrorBySegment.delete(segmentId);
+  setImmediate(() => {
+    void getOrBuildSegmentProjectZip(episodeId, podcastId, segmentId)
+      .then(() => {
+        exportStatusBySegment.set(segmentId, "ready");
+      })
+      .catch((err: unknown) => {
+        exportStatusBySegment.set(segmentId, "failed");
+        exportErrorBySegment.set(
+          segmentId,
+          err instanceof Error ? err.message : "Failed to export project",
+        );
+      });
+  });
+  return true;
+}
+
+/** Status for prepare/poll. Clears ready/failed on read (like transcript). */
+export function getSegmentProjectExportStatus(segmentId: string): {
+  status: SegmentProjectExportStatus;
+  error?: string;
+} {
+  const status = exportStatusBySegment.get(segmentId);
+  if (!status) return { status: "idle" };
+  if (status === "building") return { status: "building" };
+  const error = exportErrorBySegment.get(segmentId);
+  exportStatusBySegment.delete(segmentId);
+  exportErrorBySegment.delete(segmentId);
+  if (status === "failed") return { status: "failed", error };
+  return { status: "ready" };
 }

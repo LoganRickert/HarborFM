@@ -15,6 +15,7 @@ import {
   cookieJar,
   login,
   testDataMp3,
+  importEpisodeProject,
 } from '../../lib/helpers.js';
 
 /** Write a short valid mono MP3 via ffmpeg (for hash-mismatch import tests). */
@@ -245,26 +246,7 @@ export async function run({ runOne }) {
   results.push(
     await runOne('POST import-project recreates draft with segments and multitrack', async () => {
       if (!zipBuffer) throw new Error('No zip from export step');
-      const formData = new FormData();
-      formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), 'project.zip');
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/podcasts/${encodeURIComponent(podcast.id)}/episodes/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      jar.store(
-        typeof res.headers.getSetCookie === 'function'
-          ? res.headers.getSetCookie()
-          : res.headers.get('set-cookie')
-            ? [res.headers.get('set-cookie')]
-            : [],
-      );
-      if (res.status !== 201) {
-        throw new Error(`Import expected 201, got ${res.status} ${await res.text()}`);
-      }
-      const data = await res.json();
-      if (!data.episodeId) throw new Error('Missing episodeId');
+      const data = await importEpisodeProject(jar, podcast.id, zipBuffer, 'project.zip');
       if (data.episodeId === episode.id) throw new Error('Imported episode id should be new');
 
       const epRes = await apiFetch(`/episodes/${data.episodeId}`, {}, jar);
@@ -341,18 +323,7 @@ export async function run({ runOne }) {
       zip.updateFile(segJsonPath, Buffer.from(JSON.stringify(segJson, null, 2)));
 
       const mutatedZip = zip.toBuffer();
-      const formData = new FormData();
-      formData.append('file', new Blob([mutatedZip], { type: 'application/zip' }), 'project-edited.zip');
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/podcasts/${encodeURIComponent(podcast.id)}/episodes/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      if (res.status !== 201) {
-        throw new Error(`Import edited zip expected 201, got ${res.status} ${await res.text()}`);
-      }
-      const data = await res.json();
+      const data = await importEpisodeProject(jar, podcast.id, mutatedZip, 'project-edited.zip');
       const segRes = await apiFetch(`/episodes/${data.episodeId}/segments`, {}, jar);
       const segs = (await segRes.json()).segments || [];
       if (segs.length !== 1) throw new Error(`Expected 1 segment, got ${segs.length}`);
@@ -378,7 +349,7 @@ export async function run({ runOne }) {
   );
 
   results.push(
-    await runOne('Import hand-added segment folder without segment.json (wav→mp3)', async () => {
+    await runOne('Import hand-added segment folder without segment.json (wav>mp3)', async () => {
       if (!zipBuffer) throw new Error('No zip from export step');
       const zip = new AdmZip(zipBuffer);
       const tmp = mkdtempSync(join(tmpdir(), 'hfm-e2e-hand-'));
@@ -387,18 +358,7 @@ export async function run({ runOne }) {
       zip.addFile('segments/009_hand_added/audio.wav', readFileSync(wavPath));
       // Intentionally no segment.json / waveform.json
       const mutatedZip = zip.toBuffer();
-      const formData = new FormData();
-      formData.append('file', new Blob([mutatedZip], { type: 'application/zip' }), 'project-hand.zip');
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/podcasts/${encodeURIComponent(podcast.id)}/episodes/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      if (res.status !== 201) {
-        throw new Error(`Hand-added import expected 201, got ${res.status} ${await res.text()}`);
-      }
-      const data = await res.json();
+      const data = await importEpisodeProject(jar, podcast.id, mutatedZip, 'project-hand.zip');
       const segRes = await apiFetch(`/episodes/${data.episodeId}/segments`, {}, jar);
       const segs = (await segRes.json()).segments || [];
       if (segs.length !== 2) {
@@ -407,7 +367,7 @@ export async function run({ runOne }) {
       const hand = segs.find((s) => String(s.name || '').toLowerCase().includes('hand'));
       if (!hand) throw new Error(`Expected hand-added segment name, got ${segs.map((s) => s.name).join(', ')}`);
       if (!String(hand.audioPath || '').endsWith('.mp3')) {
-        throw new Error(`Expected wav→mp3, got ${hand.audioPath}`);
+        throw new Error(`Expected wav>mp3, got ${hand.audioPath}`);
       }
       if (!(hand.durationSec > 0)) {
         throw new Error(`Expected probed duration, got ${hand.durationSec}`);
@@ -448,18 +408,7 @@ export async function run({ runOne }) {
       }
 
       const mutatedZip = zip.toBuffer();
-      const formData = new FormData();
-      formData.append('file', new Blob([mutatedZip], { type: 'application/zip' }), 'project-mt.zip');
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/podcasts/${encodeURIComponent(podcast.id)}/episodes/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      if (res.status !== 201) {
-        throw new Error(`Import mt-edited zip expected 201, got ${res.status} ${await res.text()}`);
-      }
-      const data = await res.json();
+      const data = await importEpisodeProject(jar, podcast.id, mutatedZip, 'project-mt.zip');
       const segRes = await apiFetch(`/episodes/${data.episodeId}/segments`, {}, jar);
       const segs = (await segRes.json()).segments || [];
       if (segs.length !== 1) throw new Error(`Expected 1 segment, got ${segs.length}`);
@@ -496,22 +445,7 @@ export async function run({ runOne }) {
       zip.deleteFile(guestPath);
 
       const mutatedZip = zip.toBuffer();
-      const formData = new FormData();
-      formData.append(
-        'file',
-        new Blob([mutatedZip], { type: 'application/zip' }),
-        'project-mt-delete.zip',
-      );
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/podcasts/${encodeURIComponent(podcast.id)}/episodes/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      if (res.status !== 201) {
-        throw new Error(`Import delete-track zip expected 201, got ${res.status} ${await res.text()}`);
-      }
-      const data = await res.json();
+      const data = await importEpisodeProject(jar, podcast.id, mutatedZip, 'project-mt-delete.zip');
       const segRes = await apiFetch(`/episodes/${data.episodeId}/segments`, {}, jar);
       const segs = (await segRes.json()).segments || [];
       if (segs.length !== 1) throw new Error(`Expected 1 segment, got ${segs.length}`);

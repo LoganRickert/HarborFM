@@ -147,7 +147,7 @@ export const segmentEpisodeTranscriptBodySchema = z.object({
   text: z.string().min(1, { message: 'Transcript text is required' }),
 });
 
-/** Query for POST /episodes/:episodeId/segments/:segmentId/transcript (generate). */
+/** Query for POST /episodes/:episodeId/segments/:segmentId/transcript (start generate; returns 202, poll transcript-status). */
 export const segmentTranscriptGenerateQuerySchema = z.object({
   regenerate: z
     .enum(['true', 'false'])
@@ -198,7 +198,7 @@ export const transcriptTextResponseSchema = z.object({
   text: z.string(),
 });
 
-/** Response for GET /episodes/:episodeId/transcript-status. */
+/** Response for GET /episodes/:episodeId/transcript-status and GET /episodes/:episodeId/segments/:segmentId/transcript-status. */
 export const transcriptStatusResponseSchema = z.object({
   status: z.enum(['idle', 'transcribing', 'done', 'failed']),
   error: z.string().optional(),

@@ -531,12 +531,21 @@ export function isEpisodeReleased(ep: {
   return new Date(ep.publishAt).getTime() <= Date.now();
 }
 
-export function markEpisodeAlertsSent(episodeId: string): void {
-  drizzleDb
+/**
+ * Atomically claim alert dispatch for an episode.
+ * Returns true only for the first caller; later callers get false (already claimed).
+ * Prevents double-send when the publish hook and the 15-minute poller overlap,
+ * or when multiple server processes race.
+ */
+export function claimEpisodeAlertsSend(episodeId: string): boolean {
+  const result = drizzleDb
     .update(episodes)
     .set({ episodeAlertsSentAt: new Date().toISOString() })
-    .where(eq(episodes.id, episodeId))
+    .where(
+      and(eq(episodes.id, episodeId), isNull(episodes.episodeAlertsSentAt)),
+    )
     .run();
+  return (result.changes ?? 0) > 0;
 }
 
 /** Episodes that are released, alerts enabled on show, and not yet sent. */

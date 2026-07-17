@@ -3,6 +3,7 @@ import { promisify } from "util";
 import { statSync, unlinkSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join, dirname, extname, basename, resolve, sep } from "path";
 import { tmpdir } from "os";
+import { randomUUID } from "crypto";
 import {
   processedDir,
   uploadsDir,
@@ -865,28 +866,25 @@ export async function trimAudioToWav(
   return safeOut;
 }
 
+export type SilencePeriod = {
+  start: number;
+  end: number;
+  duration: number;
+};
+
 /**
- * Remove silence periods longer than thresholdSeconds from audio file.
- * Uses FFmpeg's silencedetect to find silence, then removes those periods.
- * @param sourcePath - Full path to source audio (must be under allowedBaseDir)
- * @param allowedBaseDir - Base directory for source
- * @param thresholdSeconds - Minimum silence duration to remove (default: 2.0)
- * @param silenceThresholdDb - Silence threshold in dB (default: -60)
- * @param outputPath - Full path for output WAV (must be under allowedBaseDir)
+ * Detect silence periods via FFmpeg silencedetect.
+ * @param thresholdSeconds - Minimum silence duration to report (e.g. 0.3 for chunk cuts, 2.0 for remove-silence)
+ * @param silenceThresholdDb - Noise floor in dB (e.g. -40 or -60)
  */
-export async function removeSilenceFromWav(
+export async function detectSilencePeriods(
   sourcePath: string,
   allowedBaseDir: string,
-  thresholdSeconds: number,
-  silenceThresholdDb: number,
-  outputPath: string,
-): Promise<string> {
+  opts?: { thresholdSeconds?: number; silenceThresholdDb?: number },
+): Promise<SilencePeriod[]> {
   const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
-  prepareOutputPath(outputPath, allowedBaseDir);
-  const safeOut = outputPath;
-
-  // First, detect silence periods using silencedetect filter
-  // silencedetect outputs: silence_start, silence_end, silence_duration
+  const thresholdSeconds = opts?.thresholdSeconds ?? 0.3;
+  const silenceThresholdDb = opts?.silenceThresholdDb ?? -40;
   const { stderr } = await exec(
     FFMPEG_PATH,
     [
@@ -901,13 +899,7 @@ export async function removeSilenceFromWav(
     { maxBuffer: 10 * 1024 * 1024 },
   );
 
-  // Parse silence periods from stderr
-  // Format: silence_start: 10.5 | silence_end: 12.8 | silence_duration: 2.3
-  const silencePeriods: Array<{
-    start: number;
-    end: number;
-    duration: number;
-  }> = [];
+  const silencePeriods: SilencePeriod[] = [];
   const lines = stderr.split("\n");
   let currentStart: number | null = null;
 
@@ -930,6 +922,98 @@ export async function removeSilenceFromWav(
       currentStart = null;
     }
   }
+  return silencePeriods;
+}
+
+/**
+ * Probe audio duration as a float (not rounded). Path must exist under allowedBaseDir.
+ */
+export async function probeAudioDurationFloat(
+  filePath: string,
+  allowedBaseDir: string,
+): Promise<number> {
+  const resolvedPath = assertPathUnder(filePath, allowedBaseDir);
+  const { stdout } = await exec(
+    FFPROBE_PATH,
+    [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      resolvedPath,
+    ],
+    { maxBuffer: 64 * 1024 },
+  );
+  const d = parseFloat(stdout.trim());
+  if (Number.isNaN(d) || d <= 0) {
+    throw new Error("Could not probe audio duration");
+  }
+  return d;
+}
+
+/**
+ * Cut an MP3 chunk to os.tmpdir() for transcription uploads.
+ * Source must be under allowedBaseDir; output is under tmpdir().
+ */
+export async function extractAudioChunkToTmp(
+  sourcePath: string,
+  allowedBaseDir: string,
+  startSec: number,
+  durationSec: number,
+  opts?: { bitrateKbps?: number },
+): Promise<string> {
+  const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
+  const outPath = join(tmpdir(), `transcription_chunk_${randomUUID()}.mp3`);
+  prepareOutputPath(outPath, allowedBaseDir);
+  const bitrateKbps = opts?.bitrateKbps ?? 128;
+  const bitrate = `${Math.max(16, bitrateKbps)}k`;
+  await exec(
+    FFMPEG_PATH,
+    [
+      "-ss",
+      String(Math.max(0, startSec)),
+      "-i",
+      safeSource,
+      "-t",
+      String(Math.max(0.1, durationSec)),
+      "-acodec",
+      "libmp3lame",
+      "-b:a",
+      bitrate,
+      "-y",
+      outPath,
+    ],
+    { maxBuffer: 1024 * 1024 },
+  );
+  return outPath;
+}
+
+/**
+ * Remove silence periods longer than thresholdSeconds from audio file.
+ * Uses FFmpeg's silencedetect to find silence, then removes those periods.
+ * @param sourcePath - Full path to source audio (must be under allowedBaseDir)
+ * @param allowedBaseDir - Base directory for source
+ * @param thresholdSeconds - Minimum silence duration to remove (default: 2.0)
+ * @param silenceThresholdDb - Silence threshold in dB (default: -60)
+ * @param outputPath - Full path for output WAV (must be under allowedBaseDir)
+ */
+export async function removeSilenceFromWav(
+  sourcePath: string,
+  allowedBaseDir: string,
+  thresholdSeconds: number,
+  silenceThresholdDb: number,
+  outputPath: string,
+): Promise<string> {
+  const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
+  prepareOutputPath(outputPath, allowedBaseDir);
+  const safeOut = outputPath;
+
+  const silencePeriods = await detectSilencePeriods(safeSource, allowedBaseDir, {
+    thresholdSeconds,
+    silenceThresholdDb,
+  });
 
   // Get total duration
   const probe = await probeAudio(safeSource, allowedBaseDir);

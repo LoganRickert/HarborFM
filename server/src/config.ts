@@ -410,6 +410,13 @@ export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
 export const TRANSCRIPTION_FETCH_TIMEOUT_MS =
   Number(process.env.TRANSCRIPTION_FETCH_TIMEOUT_MS) || 900_000;
 
+/**
+ * Max audio bytes per Whisper/OpenAI request. Larger files are split into chunks.
+ * Env: TRANSCRIPTION_CHUNK_MAX_BYTES. Default 15MB.
+ */
+export const TRANSCRIPTION_CHUNK_MAX_BYTES =
+  Number(process.env.TRANSCRIPTION_CHUNK_MAX_BYTES) || 15 * 1024 * 1024;
+
 /** SendGrid scopes API URL (e.g. for testing API key). Env: SENDGRID_SCOPES_URL. Default "https://api.sendgrid.com/v3/scopes". */
 export const SENDGRID_SCOPES_URL =
   process.env.SENDGRID_SCOPES_URL?.trim() ||

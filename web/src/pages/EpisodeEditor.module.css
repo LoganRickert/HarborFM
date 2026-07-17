@@ -1603,6 +1603,59 @@
   font-size: 0.9375rem;
 }
 
+.generateChaptersReviewIntro {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.generateChaptersTableWrap {
+  margin-top: 0;
+  max-height: min(22rem, 50vh);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.generateChaptersTitleInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.5rem;
+  font-size: inherit;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.generateChaptersTitleInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.generateChaptersTableWrap .chaptersTable th,
+.generateChaptersTableWrap .chaptersTable td {
+  padding: 0.45rem 0.65rem;
+}
+
+.generateChaptersTableWrap .chaptersTable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-elevated, var(--bg));
+  z-index: 1;
+}
+
+.generateChaptersTableWrap .chaptersTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.generateChaptersTitleCol {
+  white-space: normal;
+  word-break: break-word;
+}
+
 .chaptersTable th,
 .chaptersTable td {
   padding: 0.5rem 0.75rem;

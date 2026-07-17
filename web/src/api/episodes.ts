@@ -48,11 +48,18 @@ export type ImportProjectResult = {
   episode?: Episode;
 };
 
-/** Upload a HarborFM project zip; recreates a draft episode on the show (managers and the owner). */
-export async function importEpisodeProject(
+export type ProjectImportStatusResponse = {
+  status: 'idle' | 'importing' | 'done' | 'failed';
+  episodeId?: string;
+  slug?: string;
+  error?: string;
+};
+
+/** Start episode project import (202). Poll getProjectImportStatus until done/failed. */
+export async function startImportEpisodeProject(
   podcastId: string,
   file: File,
-): Promise<ImportProjectResult> {
+): Promise<void> {
   const form = new FormData();
   form.append('file', file);
   const res = await fetch(`${BASE}/podcasts/${podcastId}/episodes/import-project`, {
@@ -61,11 +68,26 @@ export async function importEpisodeProject(
     headers: csrfHeaders(),
     body: form,
   });
+  if (res.status === 202 || res.status === 409) return;
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((err as { error?: string }).error ?? res.statusText);
   }
-  return res.json();
+}
+
+export function getProjectImportStatus(
+  podcastId: string,
+): Promise<ProjectImportStatusResponse> {
+  return fetch(`${BASE}/podcasts/${podcastId}/episodes/import-project/status`, {
+    credentials: 'include',
+  }).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
 }
 
 // Episode cast (assign hosts/guests to episode)

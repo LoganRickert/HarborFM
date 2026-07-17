@@ -34,8 +34,9 @@ export async function dispatchEpisodeAlerts(episodeId: string): Promise<void> {
   const podcast = repo.getPodcastAlertSettings(episode.podcastId);
   if (!podcast?.episodeAlertsEnabled) return;
 
-  // Claim early to avoid double-send from poller + PATCH race
-  repo.markEpisodeAlertsSent(episodeId);
+  // Atomic claim: publish hook and 15-minute poller (or multiple processes) can
+  // both enter dispatch; only the first UPDATE wins and is allowed to send.
+  if (!repo.claimEpisodeAlertsSend(episodeId)) return;
 
   const destinations = repo.listDestinations(podcast.id).filter((d) => d.enabled);
   if (destinations.length === 0) return;

@@ -80,17 +80,66 @@ export function downloadSegmentMp3Url(episodeId: string, segmentId: string): str
   return `${BASE}/episodes/${episodeId}/segments/${segmentId}/download-mp3`;
 }
 
-/** Cookie-session download URL for segment project zip (editors and above). */
+/** Cookie-session download URL for segment project zip (editors and above). Prefer prepare + status first. */
 export function downloadSegmentProjectUrl(episodeId: string, segmentId: string): string {
   return `${BASE}/episodes/${episodeId}/segments/${segmentId}/project-export`;
 }
 
-/** Import a segment project zip, overwriting the segment in place. */
-export function importSegmentProject(
+export type SegmentProjectExportStatusResponse = {
+  status: 'idle' | 'building' | 'ready' | 'failed';
+  error?: string;
+};
+
+export type SegmentProjectImportStatusResponse = {
+  status: 'idle' | 'importing' | 'done' | 'failed';
+  error?: string;
+};
+
+/** Start segment project zip build. 202 or 409 both OK. Poll getSegmentProjectExportStatus. */
+export function startSegmentProjectExport(
+  episodeId: string,
+  segmentId: string,
+): Promise<void> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/project-export/prepare`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfHeaders(),
+    },
+  ).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+export function getSegmentProjectExportStatus(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentProjectExportStatusResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/project-export/status`,
+    { credentials: 'include' },
+  ).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+/** Start segment project import (202). Poll getSegmentProjectImportStatus until done/failed. */
+export function startImportSegmentProject(
   episodeId: string,
   segmentId: string,
   file: File,
-): Promise<SegmentResponse> {
+): Promise<void> {
   const form = new FormData();
   form.append('file', file);
   return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/import-project`, {
@@ -99,6 +148,23 @@ export function importSegmentProject(
     headers: csrfHeaders(),
     body: form,
   }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+export function getSegmentProjectImportStatus(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentProjectImportStatusResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/import-project/status`,
+    { credentials: 'include' },
+  ).then((r) => {
     if (!r.ok) {
       return r.json().then((err: { error?: string }) => {
         throw new Error(err.error ?? r.statusText);
@@ -146,7 +212,8 @@ export function getSegmentTranscript(episodeId: string, segmentId: string): Prom
   });
 }
 
-export function generateSegmentTranscript(episodeId: string, segmentId: string, regenerate?: boolean): Promise<TranscriptTextResponse> {
+/** Start segment transcript generation. Returns when job is started (202) or already in progress (409). Poll getSegmentTranscriptStatus until done/failed. */
+export function generateSegmentTranscript(episodeId: string, segmentId: string, regenerate?: boolean): Promise<void> {
   const url = new URL(`${BASE}/episodes/${episodeId}/segments/${segmentId}/transcript`, window.location.origin);
   if (regenerate) {
     url.searchParams.set('regenerate', 'true');
@@ -156,6 +223,14 @@ export function generateSegmentTranscript(episodeId: string, segmentId: string, 
     credentials: 'include',
     headers: csrfHeaders(),
   }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (r.status === 200) return; // existing text returned when regenerate not set
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+  });
+}
+
+export function getSegmentTranscriptStatus(episodeId: string, segmentId: string): Promise<TranscriptStatusResponse> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/transcript-status`, { credentials: 'include' }).then((r) => {
     if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
     return r.json();
   });

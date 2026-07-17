@@ -372,3 +372,121 @@ export async function addRecordedSegment(jar, episodeId, filePath) {
   }
   return res.json();
 }
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Poll a JSON status endpoint until success or failure.
+ * Clears terminal statuses on the server when the API does so on read.
+ */
+export async function pollStatus(
+  path,
+  jar,
+  {
+    pendingStatuses = ['importing'],
+    successStatuses = ['done'],
+    timeoutMs = 120000,
+    intervalMs = 400,
+  } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const res = await apiFetch(path, {}, jar);
+    if (!res.ok) {
+      throw new Error(`Poll ${path} failed: ${res.status} ${await res.text()}`);
+    }
+    const data = await res.json();
+    if (successStatuses.includes(data.status)) return data;
+    if (data.status === 'failed') {
+      const err = new Error(data.error || 'Operation failed');
+      err.statusPayload = data;
+      throw err;
+    }
+    if (!pendingStatuses.includes(data.status)) {
+      throw new Error(data.error || `Unexpected status: ${data.status}`);
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`Timeout polling ${path} (last status: ${data.status})`);
+    }
+    await sleep(intervalMs);
+  }
+}
+
+async function postProjectZip(jar, url, zipBuffer, filename) {
+  const formData = new FormData();
+  formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), filename);
+  const headers = jar.apply({});
+  delete headers['Content-Type'];
+  const csrf = jar.get()['harborfm_csrf'];
+  if (csrf) headers['x-csrf-token'] = csrf;
+  const res = await fetch(url, { method: 'POST', headers, body: formData });
+  jar.store(getSetCookies(res));
+  return res;
+}
+
+/** Start episode project import (202) and poll until done. Returns { episodeId, slug }. */
+export async function importEpisodeProject(jar, podcastId, zipBuffer, filename = 'project.zip') {
+  const url = `${baseURL}/podcasts/${encodeURIComponent(podcastId)}/episodes/import-project`;
+  const res = await postProjectZip(jar, url, zipBuffer, filename);
+  if (res.status !== 202) {
+    throw new Error(`Import start expected 202, got ${res.status} ${await res.text()}`);
+  }
+  const status = await pollStatus(
+    `/podcasts/${encodeURIComponent(podcastId)}/episodes/import-project/status`,
+    jar,
+  );
+  if (!status.episodeId) {
+    throw new Error('Import finished without episodeId');
+  }
+  return { episodeId: status.episodeId, slug: status.slug };
+}
+
+/**
+ * Start episode project import and expect it to fail (validation after 202).
+ * Returns the failure error message.
+ */
+export async function importEpisodeProjectExpectFail(
+  jar,
+  podcastId,
+  zipBuffer,
+  filename = 'project.zip',
+) {
+  const url = `${baseURL}/podcasts/${encodeURIComponent(podcastId)}/episodes/import-project`;
+  const res = await postProjectZip(jar, url, zipBuffer, filename);
+  if (res.status !== 202) {
+    throw new Error(`Import start expected 202, got ${res.status} ${await res.text()}`);
+  }
+  try {
+    await pollStatus(
+      `/podcasts/${encodeURIComponent(podcastId)}/episodes/import-project/status`,
+      jar,
+    );
+    throw new Error('Expected import to fail, but it succeeded');
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Expected import to fail, but it succeeded') {
+      throw err;
+    }
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+/** Start segment project import (202) and poll until done. */
+export async function importSegmentProject(
+  jar,
+  episodeId,
+  segmentId,
+  zipBuffer,
+  filename = 'segment.zip',
+) {
+  const url = `${baseURL}/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/import-project`;
+  const res = await postProjectZip(jar, url, zipBuffer, filename);
+  if (res.status !== 202) {
+    throw new Error(`Segment import start expected 202, got ${res.status} ${await res.text()}`);
+  }
+  await pollStatus(
+    `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/import-project/status`,
+    jar,
+  );
+}

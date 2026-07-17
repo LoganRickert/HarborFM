@@ -17,3 +17,25 @@ export const llmAskBodySchema = z.object({
 });
 
 export type LlmAskBody = z.infer<typeof llmAskBodySchema>;
+
+/** Body for POST /llm/generate-chapters. */
+export const llmGenerateChaptersBodySchema = z.object({
+  transcript: z.string().min(1, { message: 'Transcript is required' }),
+  durationSec: z.number().optional(),
+});
+
+export type LlmGenerateChaptersBody = z.infer<typeof llmGenerateChaptersBodySchema>;
+
+export const llmChapterMarkerSchema = z.object({
+  startSec: z.number(),
+  start: z.string(),
+  title: z.string(),
+});
+
+/** Response for POST /llm/generate-chapters. */
+export const llmGenerateChaptersResponseSchema = z.object({
+  chapters: z.array(llmChapterMarkerSchema),
+});
+
+export type LlmChapterMarker = z.infer<typeof llmChapterMarkerSchema>;
+export type LlmGenerateChaptersResponse = z.infer<typeof llmGenerateChaptersResponseSchema>;

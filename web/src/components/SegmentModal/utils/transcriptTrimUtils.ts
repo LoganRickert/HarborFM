@@ -1,5 +1,7 @@
 /** Utilities for transcript–trim integration (soft delete, restore). */
 
+import { parseSrt, parseSrtTimeToSeconds } from './srt';
+
 /** Merge overlapping or adjacent trim ranges. E.g. [[0,5],[4,10],[15,20]] to [[0,10],[15,20]]. */
 export function mergeTrimRanges(ranges: Array<[number, number]>): Array<[number, number]> {
   if (ranges.length <= 1) return ranges;
@@ -29,6 +31,49 @@ export function getTrimContainingEntry(
     if (entryStart >= ts && entryEnd <= te) return i;
   }
   return -1;
+}
+
+/** True if a point in time falls inside any trim range [ts, te). */
+export function isTimeInTrim(sec: number, trimRanges: Array<[number, number]>): boolean {
+  return trimRanges.some(([ts, te]) => sec >= ts && sec < te);
+}
+
+/**
+ * Drop transcript cues that are soft-deleted by trims (same rule as the Transcript tab).
+ * SRT entries wholly inside a trim are removed; compact `HH:MM:SS | text` lines whose
+ * start falls inside a trim are removed. Returns the same format as the input.
+ */
+export function filterTranscriptExcludingTrims(
+  transcript: string,
+  trimRanges: Array<[number, number]>
+): string {
+  const raw = transcript.replace(/\r\n/g, '\n').trim();
+  if (!raw || trimRanges.length === 0) return transcript;
+
+  if (raw.includes('-->')) {
+    const kept = parseSrt(raw).filter((e) => {
+      const startSec = parseSrtTimeToSeconds(e.start);
+      const endSec = parseSrtTimeToSeconds(e.end);
+      return getTrimContainingEntry(startSec, endSec, trimRanges) < 0;
+    });
+    return kept
+      .map((e, i) => `${i + 1}\n${e.start} --> ${e.end}\n${e.text}`)
+      .join('\n\n');
+  }
+
+  const out: string[] = [];
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const pipe = trimmed.indexOf('|');
+    if (pipe > 0) {
+      const left = trimmed.slice(0, pipe).trim();
+      const sec = parseSrtTimeToSeconds(left);
+      if (left.match(/^\d{1,2}:\d{2}:\d{2}/) && isTimeInTrim(sec, trimRanges)) continue;
+    }
+    out.push(trimmed);
+  }
+  return out.join('\n');
 }
 
 /**

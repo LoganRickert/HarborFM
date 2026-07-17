@@ -14,6 +14,10 @@ import * as audioService from "../../services/audio.js";
 import { waveformPath } from "../segments/utils.js";
 import { getById as getLibraryAsset } from "../library/repo.js";
 import type { SegmentListRow } from "../segments/repo.js";
+import {
+  listRecordingRelPaths,
+  writeSegmentDawSidecars,
+} from "./projectDawSidecars.js";
 
 /** Find multitrack dir for a segment (segmentId or YYYYMMDD_HHMMSS_segmentId). */
 export function findMultitrackDir(
@@ -43,6 +47,8 @@ export type PackedSegmentResult = {
   waveformSha256: string | null;
   hasRecordings: boolean;
   libraryAssetId: string | null;
+  /** Relative recording paths under segDir (recordings/foo.mp3), if any. */
+  recordingFiles: string[];
 };
 
 /**
@@ -183,14 +189,28 @@ export async function packSegmentIntoDir(
     hasRecordings = true;
   }
 
+  const markers = parseJsonField(seg.markers);
+  const trimRanges = parseJsonField(seg.trimRanges);
+  await writeSegmentDawSidecars(segDir, {
+    audioFile,
+    durationSec: Number(seg.durationSec) || 0,
+    markers,
+    trimRanges,
+    timelineName: seg.name || undefined,
+  });
+
+  const segmentRppSha256 = sha256FileSync(join(segDir, "segment.rpp"));
+  const audacityLofSha256 = sha256FileSync(join(segDir, "audacity.lof"));
+  const timelineOtioSha256 = sha256FileSync(join(segDir, "timeline.otio"));
+
   const segmentJson = {
     originalId: seg.id,
     type: seg.type,
     position: seg.position,
     name: seg.name,
     durationSec: seg.durationSec,
-    trimRanges: parseJsonField(seg.trimRanges),
-    markers: parseJsonField(seg.markers),
+    trimRanges,
+    markers,
     audioEq: parseJsonField(seg.audioEq),
     disabled: seg.disabled,
     reusableAssetId: seg.reusableAssetId,
@@ -200,6 +220,9 @@ export async function packSegmentIntoDir(
     hasWaveform: existsSync(join(segDir, "waveform.json")),
     audioSha256,
     waveformSha256,
+    segmentRppSha256,
+    audacityLofSha256,
+    timelineOtioSha256,
   };
   writeFileSync(join(segDir, "segment.json"), JSON.stringify(segmentJson, null, 2));
 
@@ -209,5 +232,6 @@ export async function packSegmentIntoDir(
     waveformSha256,
     hasRecordings,
     libraryAssetId: seg.reusableAssetId,
+    recordingFiles: listRecordingRelPaths(segDir),
   };
 }

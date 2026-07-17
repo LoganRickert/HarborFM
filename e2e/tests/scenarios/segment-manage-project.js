@@ -15,6 +15,8 @@ import {
   cookieJar,
   login,
   testDataMp3,
+  importSegmentProject,
+  importEpisodeProjectExpectFail,
 } from '../../lib/helpers.js';
 
 function findMtDir(recordingsBase, segmentId) {
@@ -242,29 +244,14 @@ export async function run({ runOne }) {
       );
 
       const mutatedZip = zip.toBuffer();
-      const formData = new FormData();
-      formData.append(
-        'file',
-        new Blob([mutatedZip], { type: 'application/zip' }),
-        'segment.zip',
-      );
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/episodes/${encodeURIComponent(episode.id)}/segments/${encodeURIComponent(seg.id)}/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      jar.store(
-        typeof res.headers.getSetCookie === 'function'
-          ? res.headers.getSetCookie()
-          : res.headers.get('set-cookie')
-            ? [res.headers.get('set-cookie')]
-            : [],
-      );
-      if (res.status !== 200) {
-        throw new Error(`Import expected 200, got ${res.status} ${await res.text()}`);
+      await importSegmentProject(jar, episode.id, seg.id, mutatedZip, 'segment.zip');
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) {
+        throw new Error(`GET segments after import failed: ${segRes.status}`);
       }
-      const data = await res.json();
+      const segs = (await segRes.json()).segments || [];
+      const data = segs.find((s) => s.id === seg.id);
+      if (!data) throw new Error('Segment missing after import');
       if (data.id !== seg.id) {
         throw new Error(`Segment id should be unchanged: ${data.id} vs ${seg.id}`);
       }
@@ -292,22 +279,14 @@ export async function run({ runOne }) {
       zip.deleteFile(guestPath);
 
       const mutatedZip = zip.toBuffer();
-      const formData = new FormData();
-      formData.append(
-        'file',
-        new Blob([mutatedZip], { type: 'application/zip' }),
-        'segment-mt-delete.zip',
-      );
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/episodes/${encodeURIComponent(episode.id)}/segments/${encodeURIComponent(seg.id)}/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      if (res.status !== 200) {
-        throw new Error(`Import delete-track expected 200, got ${res.status} ${await res.text()}`);
+      await importSegmentProject(jar, episode.id, seg.id, mutatedZip, 'segment-mt-delete.zip');
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) {
+        throw new Error(`GET segments after delete-track import failed: ${segRes.status}`);
       }
-      const data = await res.json();
+      const segs = (await segRes.json()).segments || [];
+      const data = segs.find((s) => s.id === seg.id);
+      if (!data) throw new Error('Segment missing after delete-track import');
       if (data.id !== seg.id) {
         throw new Error(`Segment id should be unchanged: ${data.id} vs ${seg.id}`);
       }
@@ -338,24 +317,14 @@ export async function run({ runOne }) {
   results.push(
     await runOne('Episode import-project rejects kind:segment zip', async () => {
       if (!zipBuffer) throw new Error('No zip from export');
-      const formData = new FormData();
-      formData.append(
-        'file',
-        new Blob([zipBuffer], { type: 'application/zip' }),
+      const message = await importEpisodeProjectExpectFail(
+        jar,
+        podcast.id,
+        zipBuffer,
         'segment-as-episode.zip',
       );
-      const headers = jar.apply({});
-      delete headers['Content-Type'];
-      const csrf = jar.get()['harborfm_csrf'];
-      if (csrf) headers['x-csrf-token'] = csrf;
-      const url = `${process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api'}/podcasts/${encodeURIComponent(podcast.id)}/episodes/import-project`;
-      const res = await fetch(url, { method: 'POST', headers, body: formData });
-      if (res.status !== 400) {
-        throw new Error(`Expected 400 for segment zip as episode, got ${res.status}`);
-      }
-      const body = await res.json().catch(() => ({}));
-      if (!String(body.error || '').toLowerCase().includes('segment')) {
-        throw new Error(`Expected segment rejection message, got ${JSON.stringify(body)}`);
+      if (!String(message || '').toLowerCase().includes('segment')) {
+        throw new Error(`Expected segment rejection message, got ${message}`);
       }
     }),
   );

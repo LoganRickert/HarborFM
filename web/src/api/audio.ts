@@ -35,9 +35,43 @@ export function downloadEpisodeUrl(episodeId: string, type: 'source' | 'final' =
   return `${BASE}/episodes/${episodeId}/download?type=${type}`;
 }
 
-/** Authenticated download of episode project zip (editors and above). Cookie session works with <a href>. */
+/** Authenticated download of episode project zip (editors and above). Prefer prepare + status first. */
 export function downloadProjectUrl(episodeId: string): string {
   return `${BASE}/episodes/${episodeId}/project-export`;
+}
+
+export type ProjectExportStatusResponse = {
+  status: 'idle' | 'building' | 'ready' | 'failed';
+  error?: string;
+};
+
+/** Start project zip build. 202 or 409 (already building) both OK. Poll getProjectExportStatus. */
+export function startProjectExport(episodeId: string): Promise<void> {
+  return fetch(`${BASE}/episodes/${episodeId}/project-export/prepare`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+  }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+export function getProjectExportStatus(episodeId: string): Promise<ProjectExportStatusResponse> {
+  return fetch(`${BASE}/episodes/${episodeId}/project-export/status`, {
+    credentials: 'include',
+  }).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
 }
 
 export function downloadSoundbiteUrl(

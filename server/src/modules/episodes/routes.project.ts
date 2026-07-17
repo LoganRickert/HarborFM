@@ -12,16 +12,138 @@ import { assertSafeId } from "../../services/paths.js";
 import { writeRssFile, deleteTokenFeedTemplateFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import * as repo from "./repo.js";
-import { getOrBuildProjectZip } from "./projectExport.js";
 import {
-  ImportValidationError,
-  importProjectZip,
+  getOrBuildProjectZip,
+  getProjectExportStatus,
+  startProjectExport,
+} from "./projectExport.js";
+import {
+  getProjectImportStatus,
   removeTempPath,
+  startProjectImport,
   writeTempZip,
 } from "./projectImport.js";
-import { episodeRowWithFilename } from "./utils.js";
 
 export async function registerProjectRoutes(app: FastifyInstance) {
+  app.post(
+    "/episodes/:episodeId/project-export/prepare",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Episodes"],
+        summary: "Start episode project zip build",
+        description:
+          "Start building a HarborFM project zip in the background. Returns 202; poll GET project-export/status until ready or failed, then GET project-export to download.",
+        params: {
+          type: "object",
+          properties: { episodeId: { type: "string" } },
+          required: ["episodeId"],
+        },
+        response: {
+          202: {
+            description: "Build started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["building"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Build already in progress",
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+          400: { description: "Invalid episodeId" },
+          403: { description: "Forbidden" },
+          404: { description: "Episode not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId } = request.params as { episodeId: string };
+      try {
+        assertSafeId(episodeId, "episodeId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid episodeId" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply.status(403).send({ error: "Editors and above can download project zips" });
+      }
+      const episode = repo.getById(episodeId);
+      if (!episode) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      const started = startProjectExport(episodeId, access.podcastId);
+      if (!started) {
+        return reply.status(409).send({
+          status: "building",
+          message: "Project export already in progress",
+        });
+      }
+      return reply.status(202).send({ status: "building" });
+    },
+  );
+
+  app.get(
+    "/episodes/:episodeId/project-export/status",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Episodes"],
+        summary: "Get episode project zip build status",
+        description:
+          "Poll after POST project-export/prepare until ready or failed.",
+        params: {
+          type: "object",
+          properties: { episodeId: { type: "string" } },
+          required: ["episodeId"],
+        },
+        response: {
+          200: {
+            description: "Export status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "building", "ready", "failed"],
+              },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Invalid episodeId" },
+          403: { description: "Forbidden" },
+          404: { description: "Episode not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId } = request.params as { episodeId: string };
+      try {
+        assertSafeId(episodeId, "episodeId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid episodeId" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply.status(403).send({ error: "Editors and above can download project zips" });
+      }
+      return reply.send(getProjectExportStatus(episodeId));
+    },
+  );
+
   app.get(
     "/episodes/:episodeId/project-export",
     {
@@ -30,7 +152,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         tags: ["Episodes"],
         summary: "Download episode project zip",
         description:
-          "Download a HarborFM project zip (episode metadata, segments, multitrack recordings, library assets). Editors and above only. Cached under /tmp (best-effort).",
+          "Download a HarborFM project zip (episode metadata, segments, multitrack recordings, library assets). Editors and above only. Prefer POST prepare + status poll first; this endpoint awaits any in-flight build (singleflight) then streams the zip.",
         params: {
           type: "object",
           properties: { episodeId: { type: "string" } },
@@ -92,6 +214,63 @@ export async function registerProjectRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get(
+    "/podcasts/:podcastId/episodes/import-project/status",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Episodes"],
+        summary: "Get episode project import status",
+        description:
+          "Poll after POST import-project (202) until done or failed.",
+        params: {
+          type: "object",
+          properties: { podcastId: { type: "string" } },
+          required: ["podcastId"],
+        },
+        response: {
+          200: {
+            description: "Import status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "importing", "done", "failed"],
+              },
+              episodeId: { type: "string" },
+              slug: { type: "string" },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Invalid podcastId" },
+          403: { description: "Forbidden" },
+          404: { description: "Podcast not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId } = request.params as { podcastId: string };
+      try {
+        assertSafeId(podcastId, "podcastId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid podcastId" });
+      }
+      if (!canAccessPodcast(request.userId, podcastId)) {
+        return reply.status(404).send({ error: "Podcast not found" });
+      }
+      const role = getPodcastRole(request.userId, podcastId);
+      if (!canEditEpisodeOrPodcastMetadata(role)) {
+        return reply.status(403).send({
+          error: "Only managers and the owner can import project zips",
+        });
+      }
+      return reply.send(getProjectImportStatus(podcastId));
+    },
+  );
+
   app.post(
     "/podcasts/:podcastId/episodes/import-project",
     {
@@ -100,14 +279,27 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         tags: ["Episodes"],
         summary: "Import episode project zip",
         description:
-          "Upload a HarborFM project zip and recreate a draft episode (new ids). Managers and the owner only.",
+          "Upload a HarborFM project zip and recreate a draft episode (new ids). Returns 202; poll GET import-project/status until done or failed. Managers and the owner only.",
         params: {
           type: "object",
           properties: { podcastId: { type: "string" } },
           required: ["podcastId"],
         },
         response: {
-          201: { description: "Imported episode id and slug" },
+          202: {
+            description: "Import started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["importing"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Import already in progress",
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+            },
+          },
           400: { description: "Invalid zip" },
           403: { description: "Forbidden or at episode limit" },
           404: { description: "Podcast not found" },
@@ -153,43 +345,39 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "File must be a .zip project export" });
       }
 
-      let tmpZip: string | null = null;
       try {
         const buffer = await data.toBuffer();
         if (!buffer.length) {
           return reply.status(400).send({ error: "Empty zip file" });
         }
-        tmpZip = writeTempZip(buffer);
-        const result = await importProjectZip(
+        const tmpZip = writeTempZip(buffer);
+        const started = startProjectImport(
           podcastId,
           tmpZip,
           request.userId!,
+          () => {
+            try {
+              writeRssFile(podcastId, null);
+              deleteTokenFeedTemplateFile(podcastId);
+              notifyWebSubHub(podcastId, null);
+            } catch {
+              // non-fatal
+            }
+          },
         );
-
-        try {
-          writeRssFile(podcastId, null);
-          deleteTokenFeedTemplateFile(podcastId);
-          notifyWebSubHub(podcastId, null);
-        } catch {
-          // non-fatal
+        if (!started) {
+          removeTempPath(tmpZip);
+          return reply.status(409).send({
+            status: "importing",
+            message: "Project import already in progress",
+          });
         }
-
-        const row = repo.getById(result.episodeId);
-        return reply.status(201).send({
-          episodeId: result.episodeId,
-          slug: result.slug,
-          episode: row ? episodeRowWithFilename(row) : undefined,
-        });
+        return reply.status(202).send({ status: "importing" });
       } catch (err) {
-        if (err instanceof ImportValidationError) {
-          return reply.status(400).send({ error: err.message });
-        }
-        request.log.error({ err }, "import-project failed");
+        request.log.error({ err }, "import-project failed to start");
         return reply.status(500).send({
           error: err instanceof Error ? err.message : "Failed to import project",
         });
-      } finally {
-        if (tmpZip) removeTempPath(tmpZip);
       }
     },
   );

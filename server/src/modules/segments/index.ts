@@ -19,4 +19,4 @@ export async function segmentRoutes(app: FastifyInstance) {
   await app.register(registerSegmentProjectRoutes);
 }
 
-export { generateSrtFromWhisper, generateSrtFromOpenAI } from "./utils.js";
+export { generateSrtFromWhisper, generateSrtFromOpenAI, runTranscription } from "./utils.js";

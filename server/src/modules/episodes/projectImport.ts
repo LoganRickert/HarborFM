@@ -752,3 +752,78 @@ export function removeTempPath(path: string): void {
     // ignore
   }
 }
+
+export type ProjectImportStatus = "idle" | "importing" | "done" | "failed";
+
+type ProjectImportJobResult = { episodeId: string; slug: string };
+
+const importStatusByPodcast = new Map<
+  string,
+  "importing" | "done" | "failed"
+>();
+const importErrorByPodcast = new Map<string, string>();
+const importResultByPodcast = new Map<string, ProjectImportJobResult>();
+
+/**
+ * Start a background episode project import. Returns false if already importing
+ * for this podcast. Caller must have written tmpZip; this owns cleanup.
+ */
+export function startProjectImport(
+  podcastId: string,
+  tmpZip: string,
+  importerUserId: string,
+  onSuccess?: (result: ProjectImportJobResult) => void,
+): boolean {
+  if (importStatusByPodcast.get(podcastId) === "importing") return false;
+  importStatusByPodcast.set(podcastId, "importing");
+  importErrorByPodcast.delete(podcastId);
+  importResultByPodcast.delete(podcastId);
+  setImmediate(() => {
+    void importProjectZip(podcastId, tmpZip, importerUserId)
+      .then((result) => {
+        importResultByPodcast.set(podcastId, {
+          episodeId: result.episodeId,
+          slug: result.slug,
+        });
+        importStatusByPodcast.set(podcastId, "done");
+        onSuccess?.(result);
+      })
+      .catch((err: unknown) => {
+        importStatusByPodcast.set(podcastId, "failed");
+        const message =
+          err instanceof ImportValidationError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Failed to import project";
+        importErrorByPodcast.set(podcastId, message);
+      })
+      .finally(() => {
+        removeTempPath(tmpZip);
+      });
+  });
+  return true;
+}
+
+/** Status for import poll. Clears done/failed on read. */
+export function getProjectImportStatus(podcastId: string): {
+  status: ProjectImportStatus;
+  episodeId?: string;
+  slug?: string;
+  error?: string;
+} {
+  const status = importStatusByPodcast.get(podcastId);
+  if (!status) return { status: "idle" };
+  if (status === "importing") return { status: "importing" };
+  const error = importErrorByPodcast.get(podcastId);
+  const result = importResultByPodcast.get(podcastId);
+  importStatusByPodcast.delete(podcastId);
+  importErrorByPodcast.delete(podcastId);
+  importResultByPodcast.delete(podcastId);
+  if (status === "failed") return { status: "failed", error };
+  return {
+    status: "done",
+    episodeId: result?.episodeId,
+    slug: result?.slug,
+  };
+}

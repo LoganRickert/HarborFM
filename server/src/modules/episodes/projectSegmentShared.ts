@@ -18,6 +18,9 @@ export type SegmentProjectJson = {
   hasRecordings?: boolean;
   audioSha256?: string | null;
   waveformSha256?: string | null;
+  segmentRppSha256?: string | null;
+  audacityLofSha256?: string | null;
+  timelineOtioSha256?: string | null;
 };
 
 export function readJsonFile<T>(path: string): T {

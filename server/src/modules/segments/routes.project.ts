@@ -7,17 +7,22 @@ import { canAccessEpisode, canEditSegments } from "../../services/access.js";
 import { assertSafeId } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
-import { redactSegmentForClient } from "../../utils/segment.js";
 import {
-  ImportValidationError,
   removeTempPath,
   writeTempZip,
 } from "../episodes/projectImport.js";
-import { getOrBuildSegmentProjectZip } from "../episodes/projectSegmentExport.js";
-import { importSegmentProjectZip } from "../episodes/projectSegmentImport.js";
+import {
+  getOrBuildSegmentProjectZip,
+  getSegmentProjectExportStatus,
+  startSegmentProjectExport,
+} from "../episodes/projectSegmentExport.js";
+import {
+  getSegmentProjectImportStatus,
+  startSegmentProjectImport,
+} from "../episodes/projectSegmentImport.js";
 import { getPodcastTitle } from "../audio/repo.js";
 import * as episodeRepo from "../episodes/repo.js";
-import { mergeTrimRanges, waveformPath } from "./utils.js";
+import { mergeTrimRanges } from "./utils.js";
 import * as repo from "./repo.js";
 
 function parseTrimRanges(
@@ -85,8 +90,10 @@ function safeFilenamePart(raw: string, fallback: string): string {
         return code >= 32 && code !== 127;
       })
       .join("")
-      .replace(/[\\/:*?"<>|]/g, "-")
+      .replace(/[\\/:*?"<>|#%?&{}[\]=+;@!,`'^~]+/g, "-")
       .replace(/\s+/g, " ")
+      .replace(/-+/g, "-")
+      .replace(/^[.\s-]+|[.\s-]+$/g, "")
       .trim() || fallback;
   return cleaned.slice(0, 80);
 }
@@ -262,6 +269,155 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
     },
   );
 
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/project-export/prepare",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Start segment project zip build",
+        description:
+          "Start building a segment project zip in the background. Returns 202; poll GET project-export/status until ready or failed, then GET project-export to download.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          202: {
+            description: "Build started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["building"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Build already in progress",
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+          400: { description: "Invalid ids" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can download segment projects" });
+      }
+      const segment = repo.getSegmentById(segmentId, episodeId);
+      if (!segment) {
+        return reply.status(404).send({ error: "Segment not found" });
+      }
+      const hasAudio = !!repo.getSegmentAudioPath(
+        segment,
+        access.podcastId,
+        episodeId,
+      );
+      if (!hasAudio && segment.type !== "recorded" && segment.type !== "reusable") {
+        return reply.status(404).send({ error: "Segment has no exportable content" });
+      }
+      const started = startSegmentProjectExport(
+        episodeId,
+        access.podcastId,
+        segmentId,
+      );
+      if (!started) {
+        return reply.status(409).send({
+          status: "building",
+          message: "Segment project export already in progress",
+        });
+      }
+      return reply.status(202).send({ status: "building" });
+    },
+  );
+
+  app.get(
+    "/episodes/:episodeId/segments/:segmentId/project-export/status",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Get segment project zip build status",
+        description:
+          "Poll after POST project-export/prepare until ready or failed.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          200: {
+            description: "Export status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "building", "ready", "failed"],
+              },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Invalid ids" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can download segment projects" });
+      }
+      return reply.send(getSegmentProjectExportStatus(segmentId));
+    },
+  );
+
   app.get(
     "/episodes/:episodeId/segments/:segmentId/project-export",
     {
@@ -270,7 +426,7 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
         tags: ["Segments"],
         summary: "Download segment project zip",
         description:
-          "Download a HarborFM segment project zip (kind: segment). Editors and above only. Cached under /tmp (best-effort).",
+          "Download a HarborFM segment project zip (kind: segment). Editors and above only. Prefer POST prepare + status poll first; this endpoint awaits any in-flight build (singleflight) then streams the zip.",
         params: {
           type: "object",
           properties: {
@@ -319,7 +475,6 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
         access.podcastId,
         episodeId,
       );
-      // Allow export when audio or multitrack exists (packSegment may still write metadata)
       if (!hasAudio && segment.type !== "recorded" && segment.type !== "reusable") {
         return reply.status(404).send({ error: "Segment has no exportable content" });
       }
@@ -351,15 +506,15 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
     },
   );
 
-  app.post(
-    "/episodes/:episodeId/segments/:segmentId/import-project",
+  app.get(
+    "/episodes/:episodeId/segments/:segmentId/import-project/status",
     {
       preHandler: [requireAuth, requireNotReadOnly],
       schema: {
         tags: ["Segments"],
-        summary: "Import segment project zip (overwrite)",
+        summary: "Get segment project import status",
         description:
-          "Upload a HarborFM segment project zip and overwrite this segment in place. Editors and above only.",
+          "Poll after POST import-project (202) until done or failed.",
         params: {
           type: "object",
           properties: {
@@ -369,7 +524,82 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
           required: ["episodeId", "segmentId"],
         },
         response: {
-          200: { description: "Updated segment" },
+          200: {
+            description: "Import status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "importing", "done", "failed"],
+              },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Invalid ids" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can import segment projects" });
+      }
+      return reply.send(getSegmentProjectImportStatus(segmentId));
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/import-project",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Import segment project zip (overwrite)",
+        description:
+          "Upload a HarborFM segment project zip and overwrite this segment in place. Returns 202; poll GET import-project/status until done or failed. Editors and above only.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          202: {
+            description: "Import started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["importing"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Import already in progress",
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+            },
+          },
           400: { description: "Invalid zip" },
           403: { description: "Forbidden" },
           404: { description: "Not found" },
@@ -418,49 +648,35 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
           .send({ error: "File must be a .zip segment project export" });
       }
 
-      let tmpZip: string | null = null;
       try {
         const buffer = await data.toBuffer();
         if (!buffer.length) {
           return reply.status(400).send({ error: "Empty zip file" });
         }
-        tmpZip = writeTempZip(buffer);
-        await importSegmentProjectZip(
+        const tmpZip = writeTempZip(buffer);
+        const started = startSegmentProjectImport(
           access.podcastId,
           episodeId,
           segmentId,
           tmpZip,
           request.userId!,
+          () => {
+            broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
+          },
         );
-
-        const row = repo.getSegmentById(segmentId, episodeId);
-        if (!row) {
-          return reply.status(404).send({ error: "Segment not found" });
+        if (!started) {
+          removeTempPath(tmpZip);
+          return reply.status(409).send({
+            status: "importing",
+            message: "Segment import already in progress",
+          });
         }
-        const audio = repo.getSegmentAudioPath(
-          row,
-          access.podcastId,
-          episodeId,
-        );
-        const waveformExists =
-          audio && existsSync(audio.path)
-            ? existsSync(waveformPath(audio.path))
-            : false;
-        broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
-        return redactSegmentForClient({
-          ...row,
-          waveformExists,
-        });
+        return reply.status(202).send({ status: "importing" });
       } catch (err) {
-        if (err instanceof ImportValidationError) {
-          return reply.status(400).send({ error: err.message });
-        }
-        request.log.error({ err }, "segment import-project failed");
+        request.log.error({ err }, "segment import-project failed to start");
         return reply.status(500).send({
           error: err instanceof Error ? err.message : "Failed to import project",
         });
-      } finally {
-        if (tmpZip) removeTempPath(tmpZip);
       }
     },
   );

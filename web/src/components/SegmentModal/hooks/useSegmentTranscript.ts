@@ -4,10 +4,13 @@ import {
   segmentStreamUrl,
   getSegmentTranscript,
   generateSegmentTranscript,
+  getSegmentTranscriptStatus,
   deleteSegmentTranscript,
   updateSegmentTranscript,
 } from '../../../api/segments';
 import { parseSrt, parseSrtTimeToSeconds, formatSrtTimeFromSeconds } from '../utils/srt';
+
+const SEGMENT_TRANSCRIPT_POLL_INTERVAL_MS = 5000;
 
 export function useSegmentTranscript(
   episodeId: string,
@@ -24,6 +27,8 @@ export function useSegmentTranscript(
   const [playingEntryIndex, setPlayingEntryIndex] = useState<number | null>(null);
   const transcriptAudioRef = useRef<HTMLAudioElement>(null);
   const timeUpdateHandlerRef = useRef<(() => void) | null>(null);
+  const generateCancelledRef = useRef(false);
+  const generateGenRef = useRef(0);
 
   const deleteMutation = useMutation({
     mutationFn: (entryIndex?: number) => deleteSegmentTranscript(episodeId, segmentId, entryIndex),
@@ -39,6 +44,9 @@ export function useSegmentTranscript(
   });
 
   useEffect(() => {
+    generateCancelledRef.current = false;
+    generateGenRef.current += 1;
+    setGenerating(false);
     const el = transcriptAudioRef.current;
     setLoading(true);
     setNotFound(false);
@@ -56,6 +64,8 @@ export function useSegmentTranscript(
       })
       .finally(() => setLoading(false));
     return () => {
+      generateCancelledRef.current = true;
+      generateGenRef.current += 1;
       if (el) {
         el.pause();
         el.src = '';
@@ -67,16 +77,35 @@ export function useSegmentTranscript(
     };
   }, [episodeId, segmentId]);
 
-  function handleGenerate() {
+  async function handleGenerate() {
+    const gen = ++generateGenRef.current;
     setGenerating(true);
     setGenerateError(null);
-    generateSegmentTranscript(episodeId, segmentId, true)
-      .then((r) => {
-        setText(r.text);
-        setNotFound(false);
-      })
-      .catch((err) => setGenerateError(err?.message ?? 'Failed to generate transcript'))
-      .finally(() => setGenerating(false));
+    try {
+      await generateSegmentTranscript(episodeId, segmentId, true);
+      for (;;) {
+        if (generateCancelledRef.current || generateGenRef.current !== gen) return;
+        await new Promise((r) => setTimeout(r, SEGMENT_TRANSCRIPT_POLL_INTERVAL_MS));
+        if (generateCancelledRef.current || generateGenRef.current !== gen) return;
+        const { status, error } = await getSegmentTranscriptStatus(episodeId, segmentId);
+        if (generateCancelledRef.current || generateGenRef.current !== gen) return;
+        if (status === 'done') {
+          const r = await getSegmentTranscript(episodeId, segmentId);
+          if (generateCancelledRef.current || generateGenRef.current !== gen) return;
+          setText(r.text);
+          setNotFound(false);
+          return;
+        }
+        if (status === 'failed') {
+          throw new Error(error ?? 'Failed to generate transcript');
+        }
+      }
+    } catch (err) {
+      if (generateCancelledRef.current || generateGenRef.current !== gen) return;
+      setGenerateError(err instanceof Error ? err.message : 'Failed to generate transcript');
+    } finally {
+      if (generateGenRef.current === gen) setGenerating(false);
+    }
   }
 
   function handleDeleteEntry(entryIndex: number) {

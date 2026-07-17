@@ -1,20 +1,26 @@
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, CircleAlert, FolderUp, Lock, Plus } from 'lucide-react';
+import { ChevronRight, FolderUp, Lock, Plus } from 'lucide-react';
 import { getPodcast } from '../api/podcasts';
-import { importEpisodeProject, listEpisodes } from '../api/episodes';
+import {
+  getProjectImportStatus,
+  listEpisodes,
+  startImportEpisodeProject,
+} from '../api/episodes';
 import { formatDateShort } from '../utils/format';
 import { me, isReadOnly } from '../api/auth';
 import { FullPageLoading, InlineLoading } from '../components/Loading';
 import { Breadcrumb } from '../components/Breadcrumb';
+import { PleaseWaitDialog } from '../components/PleaseWaitDialog';
+import { pollUntil } from '../utils/projectZipTransfer';
 import styles from './EpisodesList.module.css';
 
 export function EpisodesList() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importing, setImporting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
   const { data: podcast, isLoading: podcastLoading } = useQuery({
@@ -40,16 +46,23 @@ export function EpisodesList() {
   const draftCount = episodes.filter((e) => e.status === 'draft').length;
 
   async function handleImportFile(file: File | undefined) {
-    if (!id || !file || importing) return;
+    if (!id || !file || (importOpen && !importError)) return;
     setImportError(null);
-    setImporting(true);
+    setImportOpen(true);
     try {
-      const result = await importEpisodeProject(id, file);
+      await startImportEpisodeProject(id, file);
+      const result = await pollUntil(() => getProjectImportStatus(id), {
+        pendingStatuses: ['importing'],
+        successStatuses: ['done'],
+      });
+      if (!result.episodeId) {
+        throw new Error('Import finished without an episode id');
+      }
+      setImportOpen(false);
       navigate(`/episodes/${result.episodeId}`);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed');
     } finally {
-      setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
@@ -97,11 +110,11 @@ export function EpisodesList() {
               <button
                 type="button"
                 className={styles.secondaryBtn}
-                disabled={importing}
+                disabled={importOpen && !importError}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <FolderUp size={18} strokeWidth={2.5} aria-hidden />
-                {importing ? 'Importing…' : 'Import Project'}
+                Import Project
               </button>
             )}
             {readOnly ? (
@@ -142,12 +155,16 @@ export function EpisodesList() {
             />
           )}
         </div>
-        {importError && (
-          <div className={styles.importError} role="alert">
-            <CircleAlert size={18} className={styles.importErrorIcon} aria-hidden />
-            <p className={styles.importErrorMessage}>{importError}</p>
-          </div>
-        )}
+        <PleaseWaitDialog
+          open={importOpen}
+          title="Please wait"
+          description="Importing project…"
+          error={importError}
+          onDismiss={() => {
+            setImportOpen(false);
+            setImportError(null);
+          }}
+        />
         <div className={styles.summary}>
           <span className={styles.summaryItem}>
             <span className={styles.summaryCount}>{publishedCount}</span>

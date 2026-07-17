@@ -1,12 +1,15 @@
-import { readFileSync } from "fs";
+import { readFileSync, unlinkSync, existsSync, statSync } from "fs";
 import { extname } from "path";
+import { tmpdir } from "os";
 import { Agent } from "undici";
 import { readSettings } from "../settings/index.js";
 import { assertPathUnder } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
+import type { SilencePeriod } from "../../services/audio.js";
 import { contentTypeFromAudioPath } from "../../utils/audio.js";
 import {
   OPENAI_TRANSCRIPTION_DEFAULT_URL,
+  TRANSCRIPTION_CHUNK_MAX_BYTES,
   TRANSCRIPTION_FETCH_TIMEOUT_MS,
   WAVEFORM_EXTENSION,
 } from "../../config.js";
@@ -18,6 +21,9 @@ const transcriptionAgent = new Agent({
 });
 
 type FetchWithDispatcher = RequestInit & { dispatcher: Agent };
+
+/** Search window (seconds) around a size-based target for silence midpoints. */
+const TRANSCRIPTION_CHUNK_SILENCE_WINDOW_SEC = 45;
 
 function isFetchTimeoutError(err: unknown): boolean {
   const name = err instanceof Error ? err.name : "";
@@ -42,6 +48,10 @@ export const renderErrorByEpisode = new Map<string, string>();
 /** In-memory transcript generation status per episode. Cleared when returning 'done' or 'failed'. */
 export const transcriptStatusByEpisode = new Map<string, "transcribing" | "done" | "failed">();
 export const transcriptErrorByEpisode = new Map<string, string>();
+
+/** In-memory transcript generation status per segment. Cleared when returning 'done' or 'failed'. */
+export const transcriptStatusBySegment = new Map<string, "transcribing" | "done" | "failed">();
+export const transcriptErrorBySegment = new Map<string, string>();
 
 /** In-memory video generation status per episode. Cleared when returning 'done' or 'failed'. */
 export const videoGenStatusByEpisode = new Map<string, "generating" | "done" | "failed">();
@@ -206,6 +216,126 @@ export function formatSrtEntries(entries: SrtEntry[]): string {
     .join("\n");
 }
 
+/**
+ * Plan absolute cut times [0, ..., durationSec] for chunked transcription.
+ * Prefers silence midpoints near each ~maxBytes target; falls back to hard cuts.
+ */
+export function planTranscriptionChunkBoundaries(
+  sizeBytes: number,
+  durationSec: number,
+  silencePeriods: SilencePeriod[],
+  maxBytes: number,
+  searchWindowSec: number = TRANSCRIPTION_CHUNK_SILENCE_WINDOW_SEC,
+): number[] {
+  if (durationSec <= 0) return [0, 0];
+  if (sizeBytes <= maxBytes) return [0, durationSec];
+
+  const bytesPerSec = sizeBytes / durationSec;
+  const targetChunkSec = maxBytes / bytesPerSec;
+  if (!Number.isFinite(targetChunkSec) || targetChunkSec <= 0) {
+    return [0, durationSec];
+  }
+
+  const cuts: number[] = [0];
+  let nextTarget = targetChunkSec;
+
+  while (nextTarget < durationSec - 0.5) {
+    const lastCut = cuts[cuts.length - 1]!;
+    let best: number | null = null;
+    let bestDist = Infinity;
+
+    for (const silence of silencePeriods) {
+      const mid = (silence.start + silence.end) / 2;
+      if (mid <= lastCut + 1) continue;
+      if (mid >= durationSec - 0.5) continue;
+      const dist = Math.abs(mid - nextTarget);
+      if (dist <= searchWindowSec && dist < bestDist) {
+        bestDist = dist;
+        best = mid;
+      }
+    }
+
+    let cut = best ?? nextTarget;
+    if (cut <= lastCut + 0.5) {
+      cut = Math.min(durationSec, lastCut + targetChunkSec);
+    }
+    cut = Math.min(cut, durationSec);
+    if (cut <= lastCut + 0.5) break;
+    cuts.push(cut);
+    nextTarget = cut + targetChunkSec;
+  }
+
+  if (cuts[cuts.length - 1]! < durationSec) {
+    cuts.push(durationSec);
+  }
+  return cuts;
+}
+
+/** Offset and concatenate per-chunk SRT texts into one transcript. */
+export function mergeChunkSrts(
+  chunks: Array<{ offsetSec: number; srt: string }>,
+): string {
+  const all: SrtEntry[] = [];
+  for (const chunk of chunks) {
+    for (const entry of parseSrt(chunk.srt)) {
+      all.push({
+        ...entry,
+        start: formatSrtTime(parseSrtTime(entry.start) + chunk.offsetSec),
+        end: formatSrtTime(parseSrtTime(entry.end) + chunk.offsetSec),
+      });
+    }
+  }
+  return formatSrtEntries(all);
+}
+
+function throwIfChunkTooLarge(status: number): void {
+  if (status === 413) {
+    throw new Error("CHUNK_TOO_LARGE");
+  }
+}
+
+function logTranscriptionHttpFailure(
+  provider: string,
+  status: number,
+  bodySnippet: string,
+): void {
+  const snippet = bodySnippet.replace(/\s+/g, " ").trim().slice(0, 200);
+  console.error(
+    `[transcription] ${provider} request failed: status=${status}${snippet ? ` body=${snippet}` : ""}`,
+  );
+}
+
+type TranscriptionProviderCall = (
+  audioPath: string,
+  allowedBaseDir: string,
+) => Promise<string | null>;
+
+async function transcribeWithProvider(
+  audioPath: string,
+  allowedBaseDir: string,
+  settings: ReturnType<typeof readSettings>,
+): Promise<string | null> {
+  if (settings.transcription_provider === "self_hosted") {
+    const whisperUrl = settings.whisper_asr_url?.trim();
+    if (!whisperUrl) return null;
+    return generateSrtFromWhisper(audioPath, allowedBaseDir, whisperUrl);
+  }
+  if (settings.transcription_provider === "openai") {
+    const url =
+      settings.openai_transcription_url?.trim() ||
+      OPENAI_TRANSCRIPTION_DEFAULT_URL;
+    const apiKey = settings.openai_transcription_api_key?.trim();
+    const model = settings.transcription_model?.trim() || "whisper-1";
+    if (!apiKey) return null;
+    return generateSrtFromOpenAI(audioPath, allowedBaseDir, {
+      url,
+      apiKey,
+      model,
+    });
+  }
+  return null;
+}
+
 type MarkerLike = {
   time: number;
   title?: string;
@@ -280,6 +410,7 @@ export function partitionTrimRangesAtSplit(
 
 /**
  * Run transcription (Whisper or OpenAI) on an audio file. Returns SRT text.
+ * Large files are split into ~TRANSCRIPTION_CHUNK_MAX_BYTES chunks at silence gaps.
  * Throws if provider not configured or transcription fails. May throw with message "CHUNK_TOO_LARGE".
  */
 export async function runTranscription(
@@ -287,32 +418,81 @@ export async function runTranscription(
   allowedBaseDir: string,
   settings: ReturnType<typeof readSettings>,
 ): Promise<string> {
-  let text: string | null = null;
-  if (settings.transcription_provider === "self_hosted") {
-    const whisperUrl = settings.whisper_asr_url?.trim();
-    if (whisperUrl) {
-      text = await generateSrtFromWhisper(audioPath, allowedBaseDir, whisperUrl);
+  assertPathUnder(audioPath, allowedBaseDir);
+  const sizeBytes = statSync(audioPath).size;
+  const call: TranscriptionProviderCall = (path, base) =>
+    transcribeWithProvider(path, base, settings);
+
+  if (sizeBytes <= TRANSCRIPTION_CHUNK_MAX_BYTES) {
+    const text = await call(audioPath, allowedBaseDir);
+    if (!text) {
+      throw new Error(
+        "Transcription service failed. Check Settings and try again.",
+      );
     }
-  } else if (settings.transcription_provider === "openai") {
-    const url =
-      settings.openai_transcription_url?.trim() ||
-      OPENAI_TRANSCRIPTION_DEFAULT_URL;
-    const apiKey = settings.openai_transcription_api_key?.trim();
-    const model = settings.transcription_model?.trim() || "whisper-1";
-    if (apiKey) {
-      text = await generateSrtFromOpenAI(audioPath, allowedBaseDir, {
-        url,
-        apiKey,
-        model,
-      });
+    return text;
+  }
+
+  const durationSec = await audioService.probeAudioDurationFloat(
+    audioPath,
+    allowedBaseDir,
+  );
+  const silencePeriods = await audioService.detectSilencePeriods(
+    audioPath,
+    allowedBaseDir,
+    { thresholdSeconds: 0.3, silenceThresholdDb: -40 },
+  );
+  // Chunks are re-encoded at 128kbps; plan cuts from that bitrate so uploads stay under maxBytes.
+  const outputBytesPerSec = (128 * 1000) / 8;
+  const estimatedOutputBytes = durationSec * outputBytesPerSec;
+  const boundaries = planTranscriptionChunkBoundaries(
+    estimatedOutputBytes,
+    durationSec,
+    silencePeriods,
+    TRANSCRIPTION_CHUNK_MAX_BYTES,
+  );
+
+  const tempChunks: string[] = [];
+  try {
+    const merged: Array<{ offsetSec: number; srt: string }> = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const startSec = boundaries[i]!;
+      const endSec = boundaries[i + 1]!;
+      const chunkDuration = endSec - startSec;
+      if (chunkDuration <= 0) continue;
+
+      const chunkPath = await audioService.extractAudioChunkToTmp(
+        audioPath,
+        allowedBaseDir,
+        startSec,
+        chunkDuration,
+      );
+      tempChunks.push(chunkPath);
+
+      const srt = await call(chunkPath, tmpdir());
+      if (!srt) {
+        throw new Error(
+          "Transcription service failed. Check Settings and try again.",
+        );
+      }
+      merged.push({ offsetSec: startSec, srt });
+    }
+
+    if (merged.length === 0) {
+      throw new Error(
+        "Transcription service failed. Check Settings and try again.",
+      );
+    }
+    return mergeChunkSrts(merged);
+  } finally {
+    for (const p of tempChunks) {
+      try {
+        if (existsSync(p)) unlinkSync(p);
+      } catch {
+        // ignore cleanup errors
+      }
     }
   }
-  if (!text) {
-    throw new Error(
-      "Transcription service failed. Check Settings and try again.",
-    );
-  }
-  return text;
 }
 
 /**
@@ -349,7 +529,12 @@ export async function generateSrtFromWhisper(
       body: form,
       dispatcher: transcriptionAgent,
     } as FetchWithDispatcher);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const bodySnippet = await res.text().catch(() => "");
+      logTranscriptionHttpFailure("whisper", res.status, bodySnippet);
+      throwIfChunkTooLarge(res.status);
+      return null;
+    }
     const contentType = res.headers.get("content-type") || "";
     let text: string;
     if (contentType.includes("application/json")) {
@@ -383,6 +568,7 @@ export async function generateSrtFromWhisper(
     }
     return text || null;
   } catch (err) {
+    if (err instanceof Error && err.message === "CHUNK_TOO_LARGE") throw err;
     if (isFetchTimeoutError(err)) {
       throw new Error(transcriptionTimeoutMessage());
     }
@@ -432,7 +618,11 @@ export async function generateSrtFromOpenAI(
       dispatcher: transcriptionAgent,
     } as FetchWithDispatcher);
     const bodyText = await res.text();
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logTranscriptionHttpFailure("openai", res.status, bodyText);
+      throwIfChunkTooLarge(res.status);
+      return null;
+    }
     if (supportsSrt) {
       return bodyText.trim() || null;
     }
@@ -447,6 +637,7 @@ export async function generateSrtFromOpenAI(
       return null;
     }
   } catch (err) {
+    if (err instanceof Error && err.message === "CHUNK_TOO_LARGE") throw err;
     if (isFetchTimeoutError(err)) {
       throw new Error(transcriptionTimeoutMessage());
     }

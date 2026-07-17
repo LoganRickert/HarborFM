@@ -43,7 +43,7 @@ import {
 } from "../segments/repo.js";
 import { findMultitrackDir } from "./projectSegmentPack.js";
 import { PROJECT_FORMAT_VERSION } from "./projectExport.js";
-import { ImportValidationError } from "./projectImport.js";
+import { ImportValidationError, removeTempPath } from "./projectImport.js";
 import {
   findSegmentAudioFile,
   nameFromSegmentFolder,
@@ -447,4 +447,68 @@ export async function importSegmentProjectZip(
       // best-effort
     }
   }
+}
+
+export type SegmentProjectImportStatus = "idle" | "importing" | "done" | "failed";
+
+const importStatusBySegment = new Map<string, "importing" | "done" | "failed">();
+const importErrorBySegment = new Map<string, string>();
+
+/**
+ * Start a background segment project import. Returns false if already importing
+ * for this segment. Caller must have written tmpZip; this owns cleanup.
+ */
+export function startSegmentProjectImport(
+  podcastId: string,
+  episodeId: string,
+  segmentId: string,
+  tmpZip: string,
+  importerUserId: string,
+  onSuccess?: () => void,
+): boolean {
+  if (importStatusBySegment.get(segmentId) === "importing") return false;
+  importStatusBySegment.set(segmentId, "importing");
+  importErrorBySegment.delete(segmentId);
+  setImmediate(() => {
+    void importSegmentProjectZip(
+      podcastId,
+      episodeId,
+      segmentId,
+      tmpZip,
+      importerUserId,
+    )
+      .then(() => {
+        importStatusBySegment.set(segmentId, "done");
+        onSuccess?.();
+      })
+      .catch((err: unknown) => {
+        importStatusBySegment.set(segmentId, "failed");
+        const message =
+          err instanceof ImportValidationError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Failed to import project";
+        importErrorBySegment.set(segmentId, message);
+      })
+      .finally(() => {
+        removeTempPath(tmpZip);
+      });
+  });
+  return true;
+}
+
+/** Status for import poll. Clears done/failed on read. */
+export function getSegmentProjectImportStatus(segmentId: string): {
+  status: SegmentProjectImportStatus;
+  error?: string;
+} {
+  const status = importStatusBySegment.get(segmentId);
+  if (!status) return { status: "idle" };
+  if (status === "importing") return { status: "importing" };
+  const error = importErrorBySegment.get(segmentId);
+  importStatusBySegment.delete(segmentId);
+  importErrorBySegment.delete(segmentId);
+  if (status === "failed") return { status: "failed", error };
+  return { status: "done" };
 }

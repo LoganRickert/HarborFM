@@ -58,7 +58,7 @@ function safeSegmentFolderName(name: string | null, index: number): string {
   return `${String(index).padStart(3, "0")}_${base}`;
 }
 
-/** Safe Content-Disposition filename part: strip path/control chars. */
+/** Safe Content-Disposition filename part: strip path/control/URL-unsafe chars. */
 function safeFilenamePart(raw: string, fallback: string): string {
   const cleaned =
     raw
@@ -68,8 +68,11 @@ function safeFilenamePart(raw: string, fallback: string): string {
         return code >= 32 && code !== 127;
       })
       .join("")
-      .replace(/[\\/:*?"<>|]/g, "-")
+      // Path separators, Windows-reserved, and URL/query-unsafe (# % ? & etc.).
+      .replace(/[\\/:*?"<>|#%?&{}[\]=+;@!,`'^~]+/g, "-")
       .replace(/\s+/g, " ")
+      .replace(/-+/g, "-")
+      .replace(/^[.\s-]+|[.\s-]+$/g, "")
       .trim() || fallback;
   return cleaned.slice(0, 80);
 }
@@ -355,36 +358,101 @@ async function buildZipToPath(
   }
 }
 
+export type ProjectExportStatus = "idle" | "building" | "ready" | "failed";
+
+const exportStatusByEpisode = new Map<string, "building" | "ready" | "failed">();
+const exportErrorByEpisode = new Map<string, string>();
+const inFlightByEpisode = new Map<string, Promise<ProjectExportResult>>();
+
 /**
  * Return a cached or freshly built project zip path under /tmp.
  * Cache key is episodeId + content fingerprint. Older hashes for the same
  * episode are deleted. OS /tmp cleanup is relied on; no TTL daemon.
+ * Concurrent callers for the same episode share one in-flight build.
  */
 export async function getOrBuildProjectZip(
   episodeId: string,
   podcastId: string,
 ): Promise<ProjectExportResult> {
-  const episode = episodeRepo.getById(episodeId);
-  if (!episode) throw new Error("Episode not found");
-  const hash = fingerprintEpisode(episodeId, podcastId);
-  ensureCacheDir();
-  const zipPath = join(CACHE_DIR, `${episodeId}-${hash}.zip`);
-  const podcastTitle =
-    (getPodcastTitle(podcastId) ?? "Podcast").trim() || "Podcast";
-  const filename = projectZipFilename(episode.title, podcastTitle);
+  const existing = inFlightByEpisode.get(episodeId);
+  if (existing) return existing;
 
-  if (existsSync(zipPath)) {
-    try {
-      statSync(zipPath);
-      return { zipPath, filename, fromCache: true };
-    } catch {
-      // rebuild
+  const promise = (async (): Promise<ProjectExportResult> => {
+    const episode = episodeRepo.getById(episodeId);
+    if (!episode) throw new Error("Episode not found");
+    const hash = fingerprintEpisode(episodeId, podcastId);
+    ensureCacheDir();
+    const zipPath = join(CACHE_DIR, `${episodeId}-${hash}.zip`);
+    const podcastTitle =
+      (getPodcastTitle(podcastId) ?? "Podcast").trim() || "Podcast";
+    const filename = projectZipFilename(episode.title, podcastTitle);
+
+    if (existsSync(zipPath)) {
+      try {
+        statSync(zipPath);
+        return { zipPath, filename, fromCache: true };
+      } catch {
+        // rebuild
+      }
+    }
+
+    await buildZipToPath(episodeId, podcastId, zipPath);
+    deleteOlderCaches(episodeId, hash);
+    return { zipPath, filename, fromCache: false };
+  })();
+
+  inFlightByEpisode.set(episodeId, promise);
+  try {
+    return await promise;
+  } finally {
+    if (inFlightByEpisode.get(episodeId) === promise) {
+      inFlightByEpisode.delete(episodeId);
     }
   }
+}
 
-  await buildZipToPath(episodeId, podcastId, zipPath);
-  deleteOlderCaches(episodeId, hash);
-  return { zipPath, filename, fromCache: false };
+/**
+ * Start a background project zip build. Returns false if already building.
+ * Poll getProjectExportStatus until ready or failed.
+ */
+export function startProjectExport(
+  episodeId: string,
+  podcastId: string,
+): boolean {
+  const current = exportStatusByEpisode.get(episodeId);
+  if (current === "building") return false;
+  if (current === "ready") return true;
+  exportStatusByEpisode.set(episodeId, "building");
+  exportErrorByEpisode.delete(episodeId);
+  setImmediate(() => {
+    void getOrBuildProjectZip(episodeId, podcastId)
+      .then(() => {
+        exportStatusByEpisode.set(episodeId, "ready");
+      })
+      .catch((err: unknown) => {
+        exportStatusByEpisode.set(episodeId, "failed");
+        exportErrorByEpisode.set(
+          episodeId,
+          err instanceof Error ? err.message : "Failed to export project",
+        );
+      });
+  });
+  return true;
+}
+
+/** Status for prepare/poll. Clears ready/failed on read (like transcript). */
+export function getProjectExportStatus(episodeId: string): {
+  status: ProjectExportStatus;
+  error?: string;
+} {
+  const status = exportStatusByEpisode.get(episodeId);
+  if (!status) return { status: "idle" };
+  if (status === "building") return { status: "building" };
+  const error = exportErrorByEpisode.get(episodeId);
+  exportStatusByEpisode.delete(episodeId);
+  exportErrorByEpisode.delete(episodeId);
+  if (status === "failed") return { status: "failed", error };
+  return { status: "ready" };
 }
 
 export function streamProjectZip(zipPath: string) {

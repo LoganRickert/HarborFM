@@ -58,12 +58,15 @@ export async function askOllama(
   baseUrl: string,
   model: string,
   prompt: string,
+  opts?: { json?: boolean },
 ): Promise<string> {
   const url = `${baseUrl}/api/generate`;
+  const body: Record<string, unknown> = { model, prompt, stream: false };
+  if (opts?.json) body.format = "json";
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, prompt, stream: false }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const errText = await res.text();
@@ -79,17 +82,22 @@ export async function askOpenai(
   apiKey: string,
   model: string,
   prompt: string,
+  opts?: { json?: boolean },
 ): Promise<string> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: [{ role: "user" as const, content: prompt }],
+  };
+  if (opts?.json) {
+    body.response_format = { type: "json_object" };
+  }
   const res = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user" as const, content: prompt }],
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

@@ -39,9 +39,8 @@ import {
   APP_NAME,
   EPISODE_AUDIO_UPLOAD_MAX_BYTES,
   IMPORT_AUDIO_FETCH_TIMEOUT_MS,
-  OPENAI_TRANSCRIPTION_DEFAULT_URL,
 } from "../../config.js";
-import { generateSrtFromWhisper, generateSrtFromOpenAI } from "../segments/index.js";
+import { runTranscription } from "../segments/index.js";
 import {
   slugify,
   downloadToFile,
@@ -561,31 +560,11 @@ export async function registerImportRoutes(app: FastifyInstance) {
                 isTranscriptionProviderConfigured(settings)
               ) {
                 try {
-                  let srtText: string | null = null;
-                  if (
-                    settings.transcription_provider === "self_hosted" &&
-                    settings.whisper_asr_url?.trim()
-                  ) {
-                    srtText = await generateSrtFromWhisper(
-                      outPath,
-                      procDir,
-                      settings.whisper_asr_url,
-                    );
-                  } else if (
-                    settings.transcription_provider === "openai" &&
-                    settings.openai_transcription_api_key?.trim()
-                  ) {
-                    const url =
-                      settings.openai_transcription_url?.trim() ??
-                      OPENAI_TRANSCRIPTION_DEFAULT_URL;
-                    const model =
-                      settings.transcription_model?.trim() || "whisper-1";
-                    srtText = await generateSrtFromOpenAI(outPath, procDir, {
-                      url,
-                      apiKey: settings.openai_transcription_api_key,
-                      model,
-                    });
-                  }
+                  const srtText = await runTranscription(
+                    outPath,
+                    procDir,
+                    settings,
+                  );
                   if (srtText) {
                     writeFileSync(transcriptPath, srtText, "utf-8");
                   }

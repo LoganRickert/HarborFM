@@ -8,7 +8,8 @@ import {
   updateSegment,
 } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
-import { getLlmAvailable, askLlm } from '../../api/llm';
+import { getLlmAvailable, askLlm, generateChapterMarkers } from '../../api/llm';
+import type { LlmChapterMarker } from '@harborfm/shared';
 import { parseSrt, parseSrtTimeToSeconds } from './utils/srt';
 import { X, Save } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -29,7 +30,9 @@ import { RemoveMarkerConfirmDialog } from './dialogs/RemoveMarkerConfirmDialog';
 import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { detectSilencePeriods } from './utils/detectSilence';
-import { mergeTrimRanges, getTrimContainingEntry } from './utils/transcriptTrimUtils';
+import { mergeTrimRanges, getTrimContainingEntry, filterTranscriptExcludingTrims, isTimeInTrim } from './utils/transcriptTrimUtils';
+
+const AI_CHAPTER_MARKER_COLOR = '#3b82f6';
 
 export type SegmentModalTab = 'edit' | 'functions' | 'transcript' | 'ask';
 
@@ -73,6 +76,8 @@ export function SegmentModal({
   const [askQuestion, setAskQuestion] = useState('');
   const [askResponse, setAskResponse] = useState<string | null>(null);
   const [askError, setAskError] = useState<string | null>(null);
+  const [proposedChapters, setProposedChapters] = useState<LlmChapterMarker[] | null>(null);
+  const [generateChaptersError, setGenerateChaptersError] = useState<string | null>(null);
 
   const transcript = useSegmentTranscript(episodeId, segmentId, segmentAudioPath);
 
@@ -148,6 +153,20 @@ export function SegmentModal({
     },
   });
 
+  const generateChaptersMutation = useMutation({
+    mutationFn: ({ transcript: t, durationSec }: { transcript: string; durationSec?: number }) =>
+      generateChapterMarkers(t, durationSec),
+    onSuccess: (data) => {
+      setGenerateChaptersError(null);
+      setProposedChapters(data.chapters ?? []);
+    },
+    onError: (err) => {
+      setGenerateChaptersError(
+        err instanceof Error ? err.message : 'Failed to generate chapter markers',
+      );
+    },
+  });
+
   function extractTextFromSrtForAsk(srtText: string, trimRanges: Array<[number, number]>): string {
     if (!srtText || !srtText.includes('-->')) return srtText;
     const entries = parseSrt(srtText);
@@ -175,6 +194,57 @@ export function SegmentModal({
         markers: edit.markers?.length ? edit.markers : undefined,
       },
     });
+  }
+
+  function handleGenerateChapters() {
+    setGenerateChaptersError(null);
+    const raw = transcript.text?.trim() ?? '';
+    if (!raw) {
+      setGenerateChaptersError('Generate a transcript first.');
+      return;
+    }
+    const trimmedTranscript = filterTranscriptExcludingTrims(raw, edit.trimRanges).trim();
+    if (!trimmedTranscript) {
+      setGenerateChaptersError('No transcript left after trims. Restore some cues or clear trims first.');
+      return;
+    }
+    generateChaptersMutation.mutate({
+      transcript: trimmedTranscript,
+      durationSec: edit.durationSec > 0 ? edit.durationSec : undefined,
+    });
+  }
+
+  function handleProposedChapterTitleChange(index: number, title: string) {
+    setProposedChapters((prev) => {
+      if (!prev) return prev;
+      return prev.map((c, i) => (i === index ? { ...c, title } : c));
+    });
+  }
+
+  function handleProposedChapterDelete(index: number) {
+    setProposedChapters((prev) => {
+      if (!prev) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
+  function handleProposedChaptersCancel() {
+    setProposedChapters(null);
+  }
+
+  function handleProposedChaptersInsert() {
+    if (!proposedChapters?.length) return;
+    const chapterMarkers = proposedChapters
+      .filter((c) => c.title.trim().length > 0 && !isTimeInTrim(c.startSec, edit.trimRanges))
+      .map((c) => ({
+        time: c.startSec,
+        title: c.title.trim(),
+        color: AI_CHAPTER_MARKER_COLOR,
+        markerType: 'chapter' as const,
+      }));
+    const kept = edit.markers.filter((m) => (m.markerType ?? '') !== 'chapter');
+    edit.setMarkers([...kept, ...chapterMarkers].sort((a, b) => a.time - b.time));
+    setProposedChapters(null);
   }
 
   const [removingSilence, setRemovingSilence] = useState(false);
@@ -318,6 +388,15 @@ export function SegmentModal({
           askError={askError}
           isRateLimitMessage={isRateLimitMessage}
           askMutationPending={askMutation.isPending}
+          onGenerateChapters={handleGenerateChapters}
+          generateChaptersPending={generateChaptersMutation.isPending}
+          generateChaptersError={generateChaptersError}
+          hasTranscript={hasTranscript}
+          proposedChapters={proposedChapters}
+          onProposedChapterTitleChange={handleProposedChapterTitleChange}
+          onProposedChapterDelete={handleProposedChapterDelete}
+          onProposedChaptersCancel={handleProposedChaptersCancel}
+          onProposedChaptersInsert={handleProposedChaptersInsert}
         />
       )}
     </div>

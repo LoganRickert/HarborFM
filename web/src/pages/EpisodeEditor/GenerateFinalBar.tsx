@@ -13,8 +13,16 @@ import {
   BarChart3,
   FolderArchive,
 } from 'lucide-react';
-import { downloadEpisodeUrl, downloadProjectUrl, finalEpisodeWaveformUrl } from '../../api/audio';
+import {
+  downloadEpisodeUrl,
+  downloadProjectUrl,
+  finalEpisodeWaveformUrl,
+  getProjectExportStatus,
+  startProjectExport,
+} from '../../api/audio';
+import { PleaseWaitDialog } from '../../components/PleaseWaitDialog';
 import { FeedVideoPlayer } from '../../components/Feed/FeedVideoPlayer';
+import { downloadAuthenticatedBlob, pollUntil } from '../../utils/projectZipTransfer';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import { formatDuration } from './utils';
 import { ChaptersCard } from './ChaptersCard';
@@ -98,6 +106,8 @@ export function GenerateFinalBar({
   const programmaticSeekRef = useRef(false);
   const autoPausingRef = useRef(false);
   const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
+  const [projectExportOpen, setProjectExportOpen] = useState(false);
+  const [projectExportError, setProjectExportError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isGeneratingTranscript, setIsGeneratingTranscript] = useState(false);
@@ -291,6 +301,23 @@ export function GenerateFinalBar({
       }
     } else if (onOpenTranscript) {
       onOpenTranscript();
+    }
+  }
+
+  async function handleDownloadProject() {
+    if (projectExportOpen) return;
+    setProjectExportError(null);
+    setProjectExportOpen(true);
+    try {
+      await startProjectExport(episodeId);
+      await pollUntil(() => getProjectExportStatus(episodeId), {
+        pendingStatuses: ['building'],
+        successStatuses: ['ready', 'idle'],
+      });
+      await downloadAuthenticatedBlob(downloadProjectUrl(episodeId), 'project.zip');
+      setProjectExportOpen(false);
+    } catch (err) {
+      setProjectExportError(err instanceof Error ? err.message : 'Failed to prepare download');
     }
   }
 
@@ -502,12 +529,23 @@ export function GenerateFinalBar({
             icon={<FolderArchive size={22} strokeWidth={1.75} aria-hidden />}
             label="Download Project"
             color="slate"
-            href={downloadProjectUrl(episodeId)}
-            download
+            onClick={() => void handleDownloadProject()}
+            disabled={projectExportOpen && !projectExportError}
             infoText="Download a zip of this episode (segments, finals, multitrack recordings) to archive or import later."
           />
         )}
       </div>
+
+      <PleaseWaitDialog
+        open={projectExportOpen}
+        title="Please wait"
+        description="Preparing your download…"
+        error={projectExportError}
+        onDismiss={() => {
+          setProjectExportOpen(false);
+          setProjectExportError(null);
+        }}
+      />
 
       <ChaptersCard
         markers={finalMarkers ?? []}

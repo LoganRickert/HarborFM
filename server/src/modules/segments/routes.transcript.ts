@@ -34,6 +34,8 @@ import {
   runTranscription,
   transcriptStatusByEpisode,
   transcriptErrorByEpisode,
+  transcriptStatusBySegment,
+  transcriptErrorBySegment,
   parseSrt,
   parseSrtTime,
   removeSrtEntryAndAdjustTimings,
@@ -102,7 +104,7 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
         tags: ["Segments"],
         summary: "Generate segment transcript",
         description:
-          "Generate or return transcript via Whisper ASR. Query regenerate=true to force regenerate.",
+          "Start transcription on segment audio. Returns 202; poll GET .../transcript-status until done or failed. Query regenerate=true to force regenerate. If transcript exists and regenerate is not set, returns 200 with existing text.",
         params: {
           type: "object",
           properties: {
@@ -116,12 +118,21 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
           properties: { regenerate: { type: "string" } },
         },
         response: {
-          200: { description: "text" },
+          200: { description: "Existing transcript text (when regenerate not set)" },
+          202: {
+            description: "Transcription started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["transcribing"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Transcription already in progress",
+            type: "object",
+            properties: { status: { type: "string" }, message: { type: "string" } },
+          },
           400: { description: "ASR not configured" },
           403: { description: "Permission denied" },
           404: { description: "Not found" },
-          413: { description: "Audio too large" },
-          502: { description: "ASR failed" },
         },
       },
     },
@@ -170,27 +181,119 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
           .status(403)
           .send({ error: "You do not have permission to use transcription." });
       }
-      try {
-        const text = await runTranscription(audio.path, audio.base, settings);
-        assertPathUnder(dirname(txtPath), audio.base);
-        writeFileSync(txtPath, text, "utf-8");
-        return reply.send({ text });
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg === "CHUNK_TOO_LARGE") {
-          return reply.status(413).send({
-            error:
-              "Audio file is too large for the transcription service. Try a shorter section or increase the server upload limit.",
-          });
-        }
-        request.log.error(err instanceof Error ? err : new Error(String(err)));
-        return reply
-          .status(502)
-          .send({
-            error:
-              "Transcription service failed. Check Settings and try again.",
-          });
+
+      if (transcriptStatusBySegment.get(segmentId) === "transcribing") {
+        return reply.status(409).send({
+          status: "transcribing",
+          message: "Transcript generation is already in progress.",
+        });
       }
+      transcriptStatusBySegment.set(segmentId, "transcribing");
+      transcriptErrorBySegment.delete(segmentId);
+      const audioPath = audio.path;
+      const audioBase = audio.base;
+      const log = request.log;
+      setImmediate(() => {
+        (async () => {
+          try {
+            const text = await runTranscription(audioPath, audioBase, settings);
+            assertPathUnder(dirname(txtPath), audioBase);
+            writeFileSync(txtPath, text, "utf-8");
+            transcriptStatusBySegment.set(segmentId, "done");
+            broadcastToEpisode(episodeId, {
+              type: "segmentTranscriptGenerated",
+              segmentId,
+              status: "done",
+            });
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg === "CHUNK_TOO_LARGE") {
+              transcriptErrorBySegment.set(
+                segmentId,
+                "Audio file is too large for the transcription service. Try a shorter section or increase the server upload limit.",
+              );
+            } else {
+              log.error(err instanceof Error ? err : new Error(String(err)));
+              transcriptErrorBySegment.set(
+                segmentId,
+                err instanceof Error
+                  ? err.message
+                  : "Transcription service failed. Check Settings and try again.",
+              );
+            }
+            transcriptStatusBySegment.set(segmentId, "failed");
+            broadcastToEpisode(episodeId, {
+              type: "segmentTranscriptGenerated",
+              segmentId,
+              status: "failed",
+              error: transcriptErrorBySegment.get(segmentId),
+            });
+          }
+        })();
+      });
+      return reply.status(202).send({ status: "transcribing" });
+    },
+  );
+
+  app.get(
+    "/episodes/:episodeId/segments/:segmentId/transcript-status",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Segments"],
+        summary: "Get segment transcript generation status",
+        description:
+          "Returns whether segment transcript generation is in progress, done, or failed. Poll after POST generate (202).",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          200: {
+            description: "Transcript status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "transcribing", "done", "failed"],
+              },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Validation failed" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = segmentEpisodeSegmentIdParamSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply
+          .status(400)
+          .send({ error: parsed.error.issues[0]?.message ?? "Validation failed", details: parsed.error.flatten() });
+      }
+      const { episodeId, segmentId } = parsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access)
+        return reply.status(404).send({ error: "Episode not found" });
+      const segment = repo.getSegmentById(segmentId, episodeId);
+      if (!segment)
+        return reply.status(404).send({ error: "Segment not found" });
+      const status = transcriptStatusBySegment.get(segmentId) ?? "idle";
+      const error =
+        status === "failed"
+          ? (transcriptErrorBySegment.get(segmentId) ?? "Transcript generation failed")
+          : undefined;
+      if (status === "done" || status === "failed") {
+        transcriptStatusBySegment.delete(segmentId);
+        transcriptErrorBySegment.delete(segmentId);
+      }
+      return reply.send({ status, error });
     },
   );
 

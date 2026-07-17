@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.12.0 - 2026-07-17
+
+- **Episode Alerts:** Claiming `episode_alerts_sent_at` is now an atomic UPDATE so an immediate publish and the 15-minute release poller cannot both send the same alert.
+- **Project / segment export and import:** Download Project, Download Segment, Import Project, and Import Segment run as background jobs (prepare/upload > status poll > finish) so long zips do not hold the HTTP socket. A non-dismissible Please wait dialog covers the wait; the same episode or segment cannot export or import twice at once.
+- **Project DAW sidecars:** Each segment folder gets `audacity.lof`, `labels.txt`, `segment.rpp`, and `timeline.otio`. Multitrack clips use `startMs` so tracks line up; OTIO media paths are relative to the segment folder (`recordings/…`) and omit tracks whose files are missing from the zip.
+- **Project export:** `segment.json` includes sha256 hashes for `segment.rpp`, `audacity.lof`, and `timeline.otio` when those DAW sidecars are written.
+- **AI chapter markers:** On the segment Ask tab, **Generate AI Chapter Markers** proposes chapters from the transcript. Review them inline (edit titles, delete rows), then **Insert Titles** to place blue chapter markers on the timeline (existing chapters are replaced; other markers are kept). Cancel restores Ask LLM.
+
 ## v1.11.1 - 2026-07-16
 
 - **Episode Alerts / Stripe:** Centered the "not enabled for your account" messages in a dark card matching the Episode Alerts disabled state.
