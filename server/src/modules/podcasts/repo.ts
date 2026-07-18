@@ -73,6 +73,7 @@ export interface PodcastListRow {
   subscriberOnlyReviews: number;
   subscriberOnlyMessages: number;
   showScheduledEpisodes: number;
+  subscribersKeepExpiredEpisodes: number;
   feedAccent: string;
   feedShowPodcastDescription: number;
   feedShowEpisodeDescription: number;
@@ -168,6 +169,9 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
     subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
     subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
     showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
+    subscribersKeepExpiredEpisodes: sql<number>`COALESCE(${podcasts.subscribersKeepExpiredEpisodes}, 0)`.as(
+      "subscribersKeepExpiredEpisodes",
+    ),
     feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
     feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
       "feedShowPodcastDescription",
@@ -335,6 +339,9 @@ export function getByIdWithFilenameForCreate(
       subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
       subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
       showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
+      subscribersKeepExpiredEpisodes: sql<number>`COALESCE(${podcasts.subscribersKeepExpiredEpisodes}, 0)`.as(
+        "subscribersKeepExpiredEpisodes",
+      ),
       feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
       feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
         "feedShowPodcastDescription",

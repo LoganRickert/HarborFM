@@ -1,7 +1,7 @@
 import { createRequire } from 'module';
 import { createHash } from 'crypto';
 import { execFileSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, mkdtempSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, mkdtempSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
@@ -16,6 +16,7 @@ import {
   login,
   testDataMp3,
   importSegmentProject,
+  importSegmentProjectExpectFail,
   importEpisodeProjectExpectFail,
 } from '../../lib/helpers.js';
 
@@ -45,6 +46,68 @@ function writeShortMp3(outPath, durationSec = 1) {
     ],
     { stdio: 'ignore' },
   );
+}
+
+function writeToneMp3(outPath, durationSec, freqHz = 440) {
+  execFileSync(
+    'ffmpeg',
+    [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      `sine=frequency=${freqHz}:sample_rate=48000:duration=${durationSec}`,
+      '-ac',
+      '1',
+      '-c:a',
+      'libmp3lame',
+      '-q:a',
+      '9',
+      outPath,
+    ],
+    { stdio: 'ignore' },
+  );
+}
+
+/** POST host-ducking (202) and poll until done. */
+async function setHostDucking(jar, episodeId, segmentId, enabled) {
+  const start = await apiFetch(
+    `/episodes/${episodeId}/segments/${segmentId}/host-ducking`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    },
+    jar,
+  );
+  if (start.status !== 202 && start.status !== 409) {
+    throw new Error(
+      `Host ducking start expected 202, got ${start.status} ${await start.text()}`,
+    );
+  }
+  const deadline = Date.now() + 120000;
+  for (;;) {
+    const res = await apiFetch(
+      `/episodes/${episodeId}/segments/${segmentId}/host-ducking/status`,
+      {},
+      jar,
+    );
+    if (!res.ok) {
+      throw new Error(`Host ducking status failed: ${res.status} ${await res.text()}`);
+    }
+    const data = await res.json();
+    if (data.status === 'done' || data.status === 'idle') return data;
+    if (data.status === 'failed') {
+      throw new Error(data.error || 'Host ducking remake failed');
+    }
+    if (data.status !== 'remaking') {
+      throw new Error(`Unexpected host ducking status: ${data.status}`);
+    }
+    if (Date.now() > deadline) {
+      throw new Error('Timeout polling host ducking status');
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -310,6 +373,476 @@ export async function run({ runOne }) {
       const afterSegs = afterManifest.segments || [];
       if (afterSegs.length !== 1) {
         throw new Error(`Expected pruned manifest with 1 track, got ${afterSegs.length}`);
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Import Segment applies changed timeline sidecar and remakes mix', async () => {
+      if (!zipBuffer) throw new Error('No zip from export');
+      // Fresh export so segment.rpp + hashes match planted multitrack again.
+      const exportRes = await apiFetch(
+        `/episodes/${episode.id}/segments/${seg.id}/project-export`,
+        {},
+        jar,
+      );
+      if (exportRes.status !== 200) {
+        throw new Error(`Re-export failed: ${exportRes.status} ${await exportRes.text()}`);
+      }
+      const freshZip = new AdmZip(Buffer.from(await exportRes.arrayBuffer()));
+      const names = freshZip.getEntries().map((e) => e.entryName.replace(/\\/g, '/'));
+      const rppPath = names.find((n) => n === 'segment/segment.rpp');
+      if (!rppPath) throw new Error('Export missing segment/segment.rpp');
+      const segJson = JSON.parse(freshZip.readAsText('segment/segment.json'));
+      if (!segJson.segmentRppSha256) {
+        throw new Error('segment.json missing segmentRppSha256');
+      }
+      const segBeforeRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      const segsBefore = ((await segBeforeRes.json()).segments || []).find((s) => s.id === seg.id);
+      const durationBefore = segsBefore?.durationSec ?? 0;
+
+      let rppText = freshZip.readAsText(rppPath);
+      // Shift first POSITION so layout changes without touching track bytes.
+      if (!/POSITION\s+[\d.]+/.test(rppText)) {
+        throw new Error('segment.rpp missing POSITION');
+      }
+      rppText = rppText.replace(/POSITION\s+[\d.]+/, 'POSITION 5');
+      // Lower the first track fader (linear amp) so import writes manifest volume.
+      if (!/VOLPAN\s+[\d.eE+-]+/.test(rppText)) {
+        throw new Error('segment.rpp missing VOLPAN');
+      }
+      rppText = rppText.replace(/VOLPAN\s+[\d.eE+-]+/, 'VOLPAN 0.25');
+      // Duplicate host item later on the timeline (same FILE, different POSITION).
+      const hostItemMatch = rppText.match(
+        /<ITEM[\s\S]*?FILE "recordings\/host\.mp3"[\s\S]*?>\s*>/,
+      );
+      if (hostItemMatch) {
+        const dup = hostItemMatch[0]
+          .replace(/POSITION\s+[\d.]+/, 'POSITION 8')
+          .replace(/LENGTH\s+[\d.]+/, 'LENGTH 1');
+        rppText = rppText.replace(hostItemMatch[0], `${hostItemMatch[0]}\n${dup}`);
+      }
+      freshZip.updateFile(rppPath, Buffer.from(rppText, 'utf8'));
+      const newHash = createHash('sha256').update(rppText, 'utf8').digest('hex');
+      if (newHash === segJson.segmentRppSha256) {
+        throw new Error('Mutated segment.rpp hash did not change');
+      }
+
+      const mutatedZip = freshZip.toBuffer();
+      await importSegmentProject(jar, episode.id, seg.id, mutatedZip, 'segment-timeline.zip');
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) {
+        throw new Error(`GET segments after timeline import failed: ${segRes.status}`);
+      }
+      const data = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (!data) throw new Error('Segment missing after timeline import');
+      if (!String(data.audioPath || '').endsWith('.wav')) {
+        throw new Error(`Expected remade mix .wav after timeline apply, got ${data.audioPath}`);
+      }
+      if (!(data.durationSec > durationBefore + 2)) {
+        throw new Error(
+          `Expected longer mix after POSITION shift (before ${durationBefore}, after ${data.durationSec})`,
+        );
+      }
+      const importedMt = findMtDir(
+        join(DATA_DIR, 'uploads', podcast.id, episode.id, 'recordings'),
+        seg.id,
+      );
+      if (!importedMt) throw new Error('Missing multitrack dir after timeline import');
+      const afterManifest = JSON.parse(
+        readFileSync(join(importedMt, 'tracks_manifest.json'), 'utf8'),
+      );
+      const afterSegs = afterManifest.segments || [];
+      if (afterSegs.length < 2) {
+        throw new Error(`Expected rebuilt manifest with clips, got ${afterSegs.length}`);
+      }
+      const starts = afterSegs.map((s) => s.startMs || 0);
+      if (!starts.some((ms) => ms >= 4000)) {
+        throw new Error(`Expected a clip startMs >= 4000 from POSITION 5, got ${starts.join(',')}`);
+      }
+      const volumes = afterSegs.map((s) => s.volume).filter((v) => v != null);
+      if (!volumes.some((v) => Math.abs(v - 0.25) < 0.001)) {
+        throw new Error(
+          `Expected a clip volume ≈ 0.25 from track VOLPAN, got ${JSON.stringify(volumes)}`,
+        );
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Import Segment rejects timeline media path escape', async () => {
+      if (!zipBuffer) throw new Error('No zip from export');
+      const exportRes = await apiFetch(
+        `/episodes/${episode.id}/segments/${seg.id}/project-export`,
+        {},
+        jar,
+      );
+      if (exportRes.status !== 200) {
+        throw new Error(`Re-export failed: ${exportRes.status}`);
+      }
+      const zip = new AdmZip(Buffer.from(await exportRes.arrayBuffer()));
+      const rppPath = 'segment/segment.rpp';
+      if (!zip.getEntry(rppPath)) throw new Error('Missing segment.rpp');
+      const badRpp = `<REAPER_PROJECT 0.1 "HarborFM" 0
+  <TRACK
+    NAME "Evil_0"
+    NCHAN 1
+    <ITEM
+      POSITION 0
+      LENGTH 1
+      SOFFS 0
+      <SOURCE MP3
+        FILE "../escape.mp3"
+      >
+    >
+  >
+>
+`;
+      zip.updateFile(rppPath, Buffer.from(badRpp, 'utf8'));
+      const message = await importSegmentProjectExpectFail(
+        jar,
+        episode.id,
+        seg.id,
+        zip.toBuffer(),
+        'segment-escape.zip',
+      );
+      const lower = String(message || '').toLowerCase();
+      if (!lower.includes('leaves the segment folder') && !lower.includes('escape')) {
+        throw new Error(`Expected path escape rejection, got ${message}`);
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Import Segment ignores unreadable segment.rpp and remakes from manifest', async () => {
+      if (!zipBuffer) throw new Error('No zip from export');
+      const exportRes = await apiFetch(
+        `/episodes/${episode.id}/segments/${seg.id}/project-export`,
+        {},
+        jar,
+      );
+      if (exportRes.status !== 200) {
+        throw new Error(`Re-export failed: ${exportRes.status}`);
+      }
+      const zip = new AdmZip(Buffer.from(await exportRes.arrayBuffer()));
+      const rppPath = 'segment/segment.rpp';
+      if (!zip.getEntry(rppPath)) throw new Error('Missing segment.rpp');
+      // Unreadable Reaper project: import should ignore it and use tracks_manifest.
+      zip.updateFile(rppPath, Buffer.from('NOT_A_REAPER_PROJECT {{{ invalid', 'utf8'));
+      const importResult = await importSegmentProject(
+        jar,
+        episode.id,
+        seg.id,
+        zip.toBuffer(),
+        'segment-bad-rpp.zip',
+      );
+      if (!String(importResult?.warning || '').toLowerCase().includes('reaper')) {
+        throw new Error(
+          `Expected Reaper ignored warning after bad segment.rpp, got ${JSON.stringify(importResult)}`,
+        );
+      }
+      const importedMt = findMtDir(
+        join(DATA_DIR, 'uploads', podcast.id, episode.id, 'recordings'),
+        seg.id,
+      );
+      if (!importedMt) throw new Error('Missing multitrack dir after bad-rpp import');
+      const afterManifest = JSON.parse(
+        readFileSync(join(importedMt, 'tracks_manifest.json'), 'utf8'),
+      );
+      const afterSegs = afterManifest.segments || [];
+      if (afterSegs.length < 1) {
+        throw new Error('Expected tracks_manifest segments after ignoring bad segment.rpp');
+      }
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      const data = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (!data) throw new Error('Segment missing after bad-rpp import');
+      if (!String(data.audioPath || '').endsWith('.wav')) {
+        throw new Error(`Expected remade mix .wav from manifest fallback, got ${data.audioPath}`);
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Import Segment accepts Windows backslash media paths in segment.rpp', async () => {
+      if (!zipBuffer) throw new Error('No zip from export');
+      const exportRes = await apiFetch(
+        `/episodes/${episode.id}/segments/${seg.id}/project-export`,
+        {},
+        jar,
+      );
+      if (exportRes.status !== 200) {
+        throw new Error(`Re-export failed: ${exportRes.status}`);
+      }
+      const zip = new AdmZip(Buffer.from(await exportRes.arrayBuffer()));
+      const rppPath = 'segment/segment.rpp';
+      if (!zip.getEntry(rppPath)) throw new Error('Missing segment.rpp');
+      let rppText = zip.readAsText(rppPath);
+      if (!rppText.includes('FILE "recordings/')) {
+        throw new Error('segment.rpp missing recordings FILE path');
+      }
+      // Reaper on Windows writes FILE "recordings\host.mp3"
+      rppText = rppText.replace(/FILE "recordings\//g, 'FILE "recordings\\');
+      if (!rppText.includes('recordings\\')) {
+        throw new Error('Failed to inject Windows backslash paths');
+      }
+      zip.updateFile(rppPath, Buffer.from(rppText, 'utf8'));
+      await importSegmentProject(jar, episode.id, seg.id, zip.toBuffer(), 'segment-win-paths.zip');
+      const importedMt = findMtDir(
+        join(DATA_DIR, 'uploads', podcast.id, episode.id, 'recordings'),
+        seg.id,
+      );
+      if (!importedMt) throw new Error('Missing multitrack dir after Windows-path import');
+      const afterManifest = JSON.parse(
+        readFileSync(join(importedMt, 'tracks_manifest.json'), 'utf8'),
+      );
+      if (!(afterManifest.segments || []).length) {
+        throw new Error('Expected rebuilt manifest after Windows-path segment.rpp');
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Host ducking enable remakes mix and writes host_ducking.json', async () => {
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) throw new Error(`GET segments failed: ${segRes.status}`);
+      const before = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (!before?.hasRecordings) {
+        throw new Error('Expected hasRecordings true for planted multitrack segment');
+      }
+      if (before.hostDuckingEnabled) {
+        await setHostDucking(jar, episode.id, seg.id, false);
+      }
+
+      await setHostDucking(jar, episode.id, seg.id, false);
+      const uploadsDir = join(DATA_DIR, 'uploads', podcast.id, episode.id);
+      const mixWav = join(uploadsDir, `${seg.id}.wav`);
+      const unduckedSha = existsSync(mixWav)
+        ? createHash('sha256').update(readFileSync(mixWav)).digest('hex')
+        : null;
+
+      await setHostDucking(jar, episode.id, seg.id, true);
+      const afterRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (afterRes.status !== 200) throw new Error(`GET segments after ducking failed: ${afterRes.status}`);
+      const updated = ((await afterRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (!updated?.hostDuckingEnabled) {
+        throw new Error('Expected hostDuckingEnabled true after enable');
+      }
+      if (!String(updated.audioPath || '').endsWith('.wav')) {
+        throw new Error(`Expected remade .wav after enabling ducking, got ${updated.audioPath}`);
+      }
+      const mt = findMtDir(
+        join(DATA_DIR, 'uploads', podcast.id, episode.id, 'recordings'),
+        seg.id,
+      );
+      if (!mt) throw new Error('Missing multitrack dir after ducking enable');
+      if (!existsSync(join(mt, 'host_ducking.json'))) {
+        throw new Error('Expected host_ducking.json after enabling ducking');
+      }
+      const ducking = JSON.parse(readFileSync(join(mt, 'host_ducking.json'), 'utf8'));
+      if (ducking.version !== 1 || !Array.isArray(ducking.tracks)) {
+        throw new Error('Invalid host_ducking.json shape');
+      }
+      const duckedSha = existsSync(mixWav)
+        ? createHash('sha256').update(readFileSync(mixWav)).digest('hex')
+        : null;
+      const hasMutes = (ducking.tracks || []).some(
+        (t) => Array.isArray(t.mute) && t.mute.length > 0,
+      );
+      if (unduckedSha && duckedSha && unduckedSha === duckedSha && hasMutes) {
+        throw new Error('Expected ducked mix to differ from unducked when mutes exist');
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Download Segment includes host_ducking.json and gated RPP ITEMs', async () => {
+      const mt = findMtDir(
+        join(DATA_DIR, 'uploads', podcast.id, episode.id, 'recordings'),
+        seg.id,
+      );
+      if (!mt) throw new Error('Missing multitrack dir before ducked export');
+      // Ensure a mid-take mute so gated export emits multiple ITEMs for host.
+      writeFileSync(
+        join(mt, 'host_ducking.json'),
+        JSON.stringify(
+          {
+            version: 1,
+            silenceThreshold: 12,
+            minSilenceSec: 2,
+            tracks: [
+              {
+                segmentId: 'host-clip',
+                filePath: 'host.mp3',
+                participantName: 'Host',
+                mute: [[1.0, Math.min(3, Math.max(1.5, durationSec - 1))]],
+              },
+              {
+                segmentId: 'guest-clip',
+                filePath: 'guest.mp3',
+                participantName: 'Guest',
+                mute: [],
+              },
+            ],
+          },
+          null,
+          2,
+        ),
+      );
+
+      const exportRes = await apiFetch(
+        `/episodes/${episode.id}/segments/${seg.id}/project-export`,
+        {},
+        jar,
+      );
+      if (exportRes.status !== 200) {
+        throw new Error(`Export failed: ${exportRes.status} ${await exportRes.text()}`);
+      }
+      const zip = new AdmZip(Buffer.from(await exportRes.arrayBuffer()));
+      const names = zip.getEntries().map((e) => e.entryName.replace(/\\/g, '/'));
+      if (!names.includes('segment/host_ducking.json')) {
+        throw new Error('Export missing segment/host_ducking.json');
+      }
+      const segJson = JSON.parse(zip.readAsText('segment/segment.json'));
+      if (!segJson.hostDuckingEnabled) {
+        throw new Error('segment.json expected hostDuckingEnabled true');
+      }
+      const rpp = zip.readAsText('segment/segment.rpp');
+      const hostItems = (rpp.match(/FILE\s+"[^"]*host\.mp3"/g) || []).length;
+      if (hostItems < 2) {
+        throw new Error(
+          `Expected multiple RPP ITEMs for ducked host.mp3, found ${hostItems}`,
+        );
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Host ducking disable remakes without exclusive gates flag', async () => {
+      await setHostDucking(jar, episode.id, seg.id, false);
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) throw new Error(`GET segments after disable failed: ${segRes.status}`);
+      const updated = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (updated?.hostDuckingEnabled) {
+        throw new Error('Expected hostDuckingEnabled false after disable');
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Host ducking does not silence mix after short join with inflated endMs', async () => {
+      const mt = findMtDir(
+        join(DATA_DIR, 'uploads', podcast.id, episode.id, 'recordings'),
+        seg.id,
+      );
+      if (!mt) throw new Error('Missing multitrack dir for short-join ducking test');
+
+      const longDur = 8;
+      const shortDur = 2;
+      const inflatedEndMs = longDur * 1000;
+      writeToneMp3(join(mt, 'long-host.mp3'), longDur, 440);
+      writeToneMp3(join(mt, 'short-join.mp3'), shortDur, 880);
+      // Drop prior fixture tracks so remake uses only these.
+      writeFileSync(
+        join(mt, 'tracks_manifest.json'),
+        JSON.stringify({
+          recordingEpochMs: epoch,
+          sessionStartedAtEpochMs: epoch,
+          episodeId: episode.id,
+          podcastId: podcast.id,
+          segments: [
+            {
+              segmentId: 'long-host',
+              producerId: 'host',
+              participantName: 'Host',
+              startMs: 0,
+              endMs: inflatedEndMs,
+              filePath: 'long-host.mp3',
+              codec: 'libmp3lame',
+            },
+            {
+              segmentId: 'short-join',
+              producerId: 'guest',
+              participantName: 'BriefGuest',
+              startMs: 0,
+              // Inflated like a leave that never updated endMs.
+              endMs: inflatedEndMs,
+              filePath: 'short-join.mp3',
+              codec: 'libmp3lame',
+            },
+          ],
+        }),
+      );
+
+      await setHostDucking(jar, episode.id, seg.id, true);
+
+      const ducking = JSON.parse(readFileSync(join(mt, 'host_ducking.json'), 'utf8'));
+      const shortTrack = (ducking.tracks || []).find((t) => t.filePath === 'short-join.mp3');
+      if (!shortTrack) throw new Error('Expected short-join in host_ducking.json');
+      // Short join must not hold exclusive floor past its real media end (~2s).
+      const mutePastShort = (ducking.tracks || [])
+        .filter((t) => t.filePath === 'long-host.mp3')
+        .flatMap((t) => t.mute || [])
+        .some(([s, e]) => s < shortDur + 0.5 && e > shortDur + 1.5);
+      if (mutePastShort) {
+        throw new Error(
+          `Long host muted well after short join ended: ${JSON.stringify(ducking.tracks)}`,
+        );
+      }
+
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      const updated = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (!updated?.hostDuckingEnabled) {
+        throw new Error('Expected hostDuckingEnabled after short-join remake');
+      }
+      if (!(updated.durationSec > shortDur + 2)) {
+        throw new Error(
+          `Expected mix duration near ${longDur}s after ducking, got ${updated.durationSec}`,
+        );
+      }
+
+      const segmentsDir = join(DATA_DIR, 'uploads', podcast.id, episode.id, 'segments');
+      const wavNames = existsSync(segmentsDir)
+        ? readdirSync(segmentsDir).filter((n) => n.endsWith('.wav'))
+        : [];
+      const mixWav = wavNames
+        .map((n) => join(segmentsDir, n))
+        .sort((a, b) => {
+          try {
+            return statSync(b).mtimeMs - statSync(a).mtimeMs;
+          } catch {
+            return 0;
+          }
+        })[0];
+      if (!mixWav || !existsSync(mixWav)) {
+        throw new Error(`Missing remade mix wav under ${segmentsDir}`);
+      }
+
+      // After short join ends, mix should still have audible energy (long host unmuted).
+      const midWav = join(mt, '_e2e_mid_slice.wav');
+      execFileSync(
+        'ffmpeg',
+        ['-y', '-ss', '3', '-t', '2', '-i', mixWav, '-c:a', 'pcm_s16le', midWav],
+        { stdio: 'ignore' },
+      );
+      let volOut = '';
+      try {
+        volOut = execFileSync(
+          'bash',
+          ['-c', `ffmpeg -i ${JSON.stringify(midWav)} -af volumedetect -f null - 2>&1`],
+          { encoding: 'utf8' },
+        );
+      } catch (err) {
+        volOut = `${err.stdout || ''}${err.stderr || ''}${err.message || ''}`;
+      }
+      const meanMatch = /mean_volume:\s*([-\d.]+)\s*dB/.exec(volOut);
+      if (!meanMatch) {
+        throw new Error(`volumedetect missing mean_volume in: ${volOut.slice(0, 400)}`);
+      }
+      const meanDb = Number(meanMatch[1]);
+      if (!(meanDb > -50)) {
+        throw new Error(
+          `Expected audible audio after short join (mean_volume > -50 dB), got ${meanDb}`,
+        );
       }
     }),
   );

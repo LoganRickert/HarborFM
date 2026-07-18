@@ -12,6 +12,7 @@ import {
   AudioLines,
   BarChart3,
   FolderArchive,
+  Paperclip,
 } from 'lucide-react';
 import {
   downloadEpisodeUrl,
@@ -28,6 +29,7 @@ import { formatDuration } from './utils';
 import { ChaptersCard } from './ChaptersCard';
 import { SoundbitesCard } from './SoundbitesCard';
 import { PollsDialog } from './PollsDialog';
+import { EpisodeFilesDialog } from './EpisodeFilesDialog';
 import { CollapsiblePublishPanel } from './CollapsiblePublishPanel';
 import { ActionTile } from './ActionTile';
 import type { PublishFormFields } from './EpisodePublishControls';
@@ -35,6 +37,8 @@ import styles from '../EpisodeEditor.module.css';
 
 export interface GenerateFinalBarProps {
   episodeId: string;
+  /** When false, Episode Files tile is shown disabled with a permissions info tip. */
+  canUploadEpisodeFiles?: boolean;
   segmentCount: number;
   onBuild: () => void;
   isBuilding: boolean;
@@ -70,6 +74,7 @@ export interface GenerateFinalBarProps {
 
 export function GenerateFinalBar({
   episodeId,
+  canUploadEpisodeFiles = false,
   segmentCount,
   onBuild,
   isBuilding,
@@ -114,6 +119,7 @@ export function GenerateFinalBar({
   const [chaptersExpanded, setChaptersExpanded] = useState(false);
   const [soundbitesExpanded, setSoundbitesExpanded] = useState(false);
   const [pollsOpen, setPollsOpen] = useState(false);
+  const [episodeFilesOpen, setEpisodeFilesOpen] = useState(false);
 
   const waveformCacheKey = finalUpdatedAt ?? episodeId ?? '';
   const waveformUrl =
@@ -504,6 +510,21 @@ export function GenerateFinalBar({
           disabled={metadataReadOnly && !pollsOpen}
           infoText="Create a listener poll for this episode. Poll data is kept when you rebuild."
         />
+        <ActionTile
+          icon={<Paperclip size={22} strokeWidth={1.75} aria-hidden />}
+          label="Episode Files"
+          color="slate"
+          onClick={() => setEpisodeFilesOpen(true)}
+          active={episodeFilesOpen}
+          disabled={
+            !canUploadEpisodeFiles || (metadataReadOnly && !episodeFilesOpen)
+          }
+          infoText={
+            canUploadEpisodeFiles
+              ? 'Upload files or add links for listeners. Shown on the public episode page.'
+              : 'You need Episode Files permission to use this. Ask an admin to enable Can Upload Episode Files on your account.'
+          }
+        />
         {showDownloadMp3 && (
           <ActionTile
             icon={<Download size={22} strokeWidth={1.75} aria-hidden />}
@@ -541,6 +562,7 @@ export function GenerateFinalBar({
         title="Please wait"
         description="Preparing your download…"
         error={projectExportError}
+        errorTitle="Download failed"
         onDismiss={() => {
           setProjectExportOpen(false);
           setProjectExportError(null);
@@ -578,6 +600,14 @@ export function GenerateFinalBar({
         onOpenChange={setPollsOpen}
         readOnly={metadataReadOnly || readOnly}
       />
+      {canUploadEpisodeFiles && (
+        <EpisodeFilesDialog
+          episodeId={episodeId}
+          open={episodeFilesOpen}
+          onOpenChange={setEpisodeFilesOpen}
+          readOnly={metadataReadOnly || readOnly}
+        />
+      )}
     </div>
   );
 }

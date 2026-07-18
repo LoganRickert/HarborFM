@@ -43,6 +43,7 @@ export const users = sqliteTable(
     canGenerateVideo: integer("can_generate_video"),
     canStripe: integer("can_stripe"),
     canEpisodeAlert: integer("can_episode_alert"),
+    canUploadEpisodeFiles: integer("can_upload_episode_files"),
     totpSecretEnc: text("totp_secret_enc"),
     twoFactorMethod: text("two_factor_method"),
     totpLockedUntil: text("totp_locked_until"),
@@ -132,6 +133,11 @@ export const podcasts = sqliteTable(
     subscriberOnlyReviews: integer("subscriber_only_reviews", { mode: "boolean" }).default(false),
     subscriberOnlyMessages: integer("subscriber_only_messages", { mode: "boolean" }).default(false),
     showScheduledEpisodes: integer("show_scheduled_episodes", { mode: "boolean" }).default(false),
+    subscribersKeepExpiredEpisodes: integer("subscribers_keep_expired_episodes", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
     stripeCredentialsId: text("stripe_credentials_id"),
     stripePaymentsEnabled: integer("stripe_payments_enabled", {
       mode: "boolean",
@@ -190,6 +196,8 @@ export const episodes = sqliteTable(
     episodeType: text("episode_type"),
     explicit: integer("explicit", { mode: "boolean" }),
     publishAt: text("publish_at"),
+    /** When set and in the past, episode is omitted from public surfaces (and private unless podcast keeps expired). */
+    expiresAt: text("expires_at"),
     status: text("status").notNull().default("draft"),
     artworkPath: text("artwork_path"),
     artworkUrl: text("artwork_url"),
@@ -208,6 +216,8 @@ export const episodes = sqliteTable(
     summary: text("summary"),
     contentEncoded: text("content_encoded"),
     subscriberOnly: integer("subscriber_only", { mode: "boolean" }).default(false),
+    subscriberOnlyStartsAt: text("subscriber_only_starts_at"),
+    subscriberOnlyEndsAt: text("subscriber_only_ends_at"),
     finalMarkers: text("final_markers"),
     finalSoundbites: text("final_soundbites"),
     contentLinks: text("content_links"),
@@ -230,6 +240,9 @@ export const episodes = sqliteTable(
     index("idx_episodes_podcast").on(table.podcastId),
     index("idx_episodes_status").on(table.status),
     index("idx_episodes_publish_at").on(table.publishAt),
+    index("idx_episodes_expires_at").on(table.expiresAt),
+    index("idx_episodes_subscriber_only_starts_at").on(table.subscriberOnlyStartsAt),
+    index("idx_episodes_subscriber_only_ends_at").on(table.subscriberOnlyEndsAt),
     index("idx_episodes_slug").on(table.slug),
     index("idx_episodes_podcast_slug").on(table.podcastId, table.slug),
   ],
@@ -379,6 +392,9 @@ export const episodeSegments = sqliteTable(
     markers: text("markers"),
     audioEq: text("audio_eq"),
     disabled: integer("disabled", { mode: "boolean" }).notNull().default(false),
+    hostDuckingEnabled: integer("host_ducking_enabled", { mode: "boolean" })
+      .notNull()
+      .default(false),
   },
   (table) => [index("idx_episode_segments_episode").on(table.episodeId)],
 );
@@ -401,6 +417,33 @@ export const episodeShowNotesItems = sqliteTable(
     updatedAt: text("updated_at").notNull().default(sqlNow()),
   },
   (table) => [index("idx_episode_show_notes_items_episode").on(table.episodeId)],
+);
+
+// ---------------------------------------------------------------------------
+// Episode files (088) - listener-facing attachments
+// ---------------------------------------------------------------------------
+export const episodeFiles = sqliteTable(
+  "episode_files",
+  {
+    id: text("id").primaryKey(),
+    episodeId: text("episode_id")
+      .notNull()
+      .references(() => episodes.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // 'file' | 'link'
+    title: text("title").notNull(),
+    description: text("description"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    storageName: text("storage_name"),
+    mimeType: text("mime_type"),
+    byteSize: integer("byte_size"),
+    originalFilename: text("original_filename"),
+    url: text("url"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_episode_files_episode_sort").on(table.episodeId, table.sortOrder),
+  ],
 );
 
 // ---------------------------------------------------------------------------

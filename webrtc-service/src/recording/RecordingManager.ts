@@ -395,7 +395,7 @@ export class RecordingManager {
     const filterComplex =
       filterParts.join(";") +
       ";" +
-      `${amixInputs}amix=inputs=${inputIdx}:duration=longest:dropout_transition=500[aout];` +
+      `${amixInputs}amix=inputs=${inputIdx}:duration=longest:dropout_transition=500:normalize=0[aout];` +
       `[aout]loudnorm=I=${SEGMENT_LOUDNESS_TARGET_LUFS}:TP=-1:LRA=14[out]`;
     const mixFf = spawn(
       "ffmpeg",

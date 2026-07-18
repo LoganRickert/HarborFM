@@ -27,6 +27,8 @@ import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { recordFailureAndMaybeBan } from "../../services/loginAttempts.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { redactSegmentForClient } from "../../utils/segment.js";
+import { remakeSegmentWithHostDucking } from "../../services/hostDuckingRemake.js";
+import { getSegmentById } from "../segments/repo.js";
 import {
   validateRecordingSecret,
   broadcastToSession,
@@ -386,14 +388,49 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
               }
             }
             setImmediate(() => {
-              for (const base of copiedBases) {
-                const audioPath = join(mtDir, base);
-                if (existsSync(audioPath)) {
-                  audioService.generateWaveformFile(audioPath, mtDir).catch((err) => {
-                    request.log.warn({ err, segmentId: body.segmentId, file: base }, "Per-track waveform failed");
+              void (async () => {
+                try {
+                  for (const base of copiedBases) {
+                    const audioPath = join(mtDir, base);
+                    if (existsSync(audioPath)) {
+                      try {
+                        await audioService.generateWaveformFile(
+                          audioPath,
+                          mtDir,
+                        );
+                      } catch (err) {
+                        request.log.warn(
+                          { err, segmentId: body.segmentId, file: base },
+                          "Per-track waveform failed",
+                        );
+                      }
+                    }
+                  }
+                  await remakeSegmentWithHostDucking({
+                    podcastId: body.podcastId,
+                    episodeId: body.episodeId,
+                    segmentId: body.segmentId,
+                    applyDucking: false,
+                    setEnabledFlag: false,
                   });
+                  const segRow = getSegmentById(
+                    body.segmentId,
+                    body.episodeId,
+                  );
+                  if (segRow) {
+                    broadcastToEpisode(body.episodeId, {
+                      type: "segmentUpdated",
+                      segmentId: body.segmentId,
+                      segment: redactSegmentForClient(segRow),
+                    });
+                  }
+                } catch (err) {
+                  request.log.warn(
+                    { err, segmentId: body.segmentId },
+                    "Host ducking remake after recording failed",
+                  );
                 }
-              }
+              })();
             });
           } catch (mtErr) {
             request.log.warn({ err: mtErr }, "Failed to save multitrack files (segment created successfully)");

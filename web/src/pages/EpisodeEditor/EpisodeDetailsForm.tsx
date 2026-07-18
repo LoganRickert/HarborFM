@@ -1,7 +1,12 @@
 import { useRef } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { Image } from 'lucide-react';
-import { type EpisodeForm } from './utils';
+import {
+  isExpiresAtBeforePublishAt,
+  isSubscriberOnlyWindowInvalid,
+  SUBSCRIBER_ONLY_WINDOW_INVALID_MESSAGE,
+  type EpisodeForm,
+} from './utils';
 import { EpisodePublishControls } from './EpisodePublishControls';
 import { HrefTextListField } from '../../components/EpisodeEditor/HrefTextListField';
 import { StructuredListField } from '../../components/EpisodeEditor/StructuredListField';
@@ -95,8 +100,12 @@ export function EpisodeDetailsForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isExpiresAtBeforePublishAt(form)) return;
+    if (isSubscriberOnlyWindowInvalid(form)) return;
     onSave();
   }
+
+  const subscriberOnlyWindowInvalid = isSubscriberOnlyWindowInvalid(form);
 
   return (
     <form id="episode-details-form" onSubmit={handleSubmit} className={styles.form}>
@@ -297,6 +306,7 @@ export function EpisodeDetailsForm({
               seasonNumber: form.seasonNumber,
               episodeNumber: form.episodeNumber,
               publishAt: form.publishAt,
+              expiresAt: form.expiresAt,
             }}
             onChange={(fields) => setForm((prev) => ({ ...prev, ...fields }))}
             variant="form"
@@ -320,9 +330,38 @@ export function EpisodeDetailsForm({
             <span className="toggle__track" aria-hidden="true" />
             <span>Subscriber Only</span>
           </label>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
-            Subscriber-only episodes are omitted from the public RSS and episode list; they appear only in tokenized subscriber feeds.
-          </p>
+          {form.subscriberOnly && (
+            <>
+              <label className={styles.label}>
+                Subscriber only from (optional)
+                <input
+                  type="datetime-local"
+                  value={form.subscriberOnlyStartsAt}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, subscriberOnlyStartsAt: e.target.value }))
+                  }
+                  className={styles.input}
+                />
+              </label>
+              <label className={styles.label}>
+                Subscriber only until (optional)
+                <input
+                  type="datetime-local"
+                  value={form.subscriberOnlyEndsAt}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, subscriberOnlyEndsAt: e.target.value }))
+                  }
+                  className={styles.input}
+                  aria-invalid={subscriberOnlyWindowInvalid}
+                />
+                {subscriberOnlyWindowInvalid && (
+                  <p className={styles.error} style={{ marginTop: '0.25rem' }}>
+                    {SUBSCRIBER_ONLY_WINDOW_INVALID_MESSAGE}
+                  </p>
+                )}
+              </label>
+            </>
+          )}
           <label className={styles.label}>
             Episode type
             <select

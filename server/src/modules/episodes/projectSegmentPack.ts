@@ -18,6 +18,10 @@ import {
   listRecordingRelPaths,
   writeSegmentDawSidecars,
 } from "./projectDawSidecars.js";
+import {
+  HOST_DUCKING_DEBUG_FILENAME,
+  HOST_DUCKING_FILENAME,
+} from "../../services/hostDucking.js";
 
 /** Find multitrack dir for a segment (segmentId or YYYYMMDD_HHMMSS_segmentId). */
 export function findMultitrackDir(
@@ -148,6 +152,11 @@ export async function packSegmentIntoDir(
         } catch {
           manifestObj = null;
         }
+      } else if (
+        name === HOST_DUCKING_FILENAME ||
+        name === HOST_DUCKING_DEBUG_FILENAME
+      ) {
+        copyFileSync(src, join(segDir, name));
       } else {
         copyFileSync(src, join(recDir, basename(name)));
       }
@@ -197,11 +206,15 @@ export async function packSegmentIntoDir(
     markers,
     trimRanges,
     timelineName: seg.name || undefined,
+    hostDuckingEnabled: Boolean(seg.hostDuckingEnabled),
   });
 
   const segmentRppSha256 = sha256FileSync(join(segDir, "segment.rpp"));
   const audacityLofSha256 = sha256FileSync(join(segDir, "audacity.lof"));
   const timelineOtioSha256 = sha256FileSync(join(segDir, "timeline.otio"));
+  const hostDuckingSha256 = sha256FileSync(
+    join(segDir, HOST_DUCKING_FILENAME),
+  );
 
   const segmentJson = {
     originalId: seg.id,
@@ -213,6 +226,7 @@ export async function packSegmentIntoDir(
     markers,
     audioEq: parseJsonField(seg.audioEq),
     disabled: seg.disabled,
+    hostDuckingEnabled: Boolean(seg.hostDuckingEnabled),
     reusableAssetId: seg.reusableAssetId,
     audioFile,
     audioSource,
@@ -223,6 +237,7 @@ export async function packSegmentIntoDir(
     segmentRppSha256,
     audacityLofSha256,
     timelineOtioSha256,
+    hostDuckingSha256,
   };
   writeFileSync(join(segDir, "segment.json"), JSON.stringify(segmentJson, null, 2));
 

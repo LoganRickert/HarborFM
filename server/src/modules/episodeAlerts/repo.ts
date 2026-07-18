@@ -476,6 +476,8 @@ export type EpisodeForAlert = {
   publishAt: string | null;
   status: string;
   subscriberOnly: boolean;
+  subscriberOnlyStartsAt: string | null;
+  subscriberOnlyEndsAt: string | null;
   episodeAlertsSentAt: string | null;
   seasonNumber: number | null;
   episodeNumber: number | null;
@@ -496,6 +498,8 @@ export function getEpisodeForAlert(episodeId: string): EpisodeForAlert | null {
       publishAt: episodes.publishAt,
       status: episodes.status,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`,
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
       episodeAlertsSentAt: episodes.episodeAlertsSentAt,
       seasonNumber: episodes.seasonNumber,
       episodeNumber: episodes.episodeNumber,
@@ -513,6 +517,8 @@ export function getEpisodeForAlert(episodeId: string): EpisodeForAlert | null {
   return {
     ...row,
     subscriberOnly: asBoolFlag(row.subscriberOnly),
+    subscriberOnlyStartsAt: row.subscriberOnlyStartsAt ?? null,
+    subscriberOnlyEndsAt: row.subscriberOnlyEndsAt ?? null,
     seasonNumber: row.seasonNumber ?? null,
     episodeNumber: row.episodeNumber ?? null,
     artworkPath: row.artworkPath ?? null,
@@ -560,6 +566,8 @@ export function listDueAlertEpisodes(limit = 50): EpisodeForAlert[] {
       publishAt: episodes.publishAt,
       status: episodes.status,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`,
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
       episodeAlertsSentAt: episodes.episodeAlertsSentAt,
       seasonNumber: episodes.seasonNumber,
       episodeNumber: episodes.episodeNumber,
@@ -583,6 +591,8 @@ export function listDueAlertEpisodes(limit = 50): EpisodeForAlert[] {
   return rows.map((r) => ({
     ...r,
     subscriberOnly: asBoolFlag(r.subscriberOnly),
+    subscriberOnlyStartsAt: r.subscriberOnlyStartsAt ?? null,
+    subscriberOnlyEndsAt: r.subscriberOnlyEndsAt ?? null,
     seasonNumber: r.seasonNumber ?? null,
     episodeNumber: r.episodeNumber ?? null,
     artworkPath: r.artworkPath ?? null,

@@ -10,6 +10,7 @@ import {
 } from "../../services/paths.js";
 import { getCookieSecureFlag } from "../../services/cookies.js";
 import { API_PREFIX } from "../../config.js";
+import { isCurrentlySubscriberOnly } from "../../utils/subscriberOnlyWindow.js";
 
 export function ensurePublicFeedsEnabled(
   reply: import("fastify").FastifyReply,
@@ -195,15 +196,25 @@ export function publicEpisodeDto(
   const hasAudio =
     Boolean(row.audioFinalPath) && (audioBytes == null || audioBytes > 0);
   const hasVideo = Boolean(row.videoFinalPath);
-  const subscriberOnly =
-    row.subscriberOnly === 1 || row.subscriberOnly === true;
+  const subscriberOnly = isCurrentlySubscriberOnly(row);
+  const subscriberOnlyFlagOn =
+    row.subscriberOnly === true || row.subscriberOnly === 1;
   const publishAtRaw = row.publishAt;
   const isScheduledNotReleased =
     publishAtRaw != null &&
     typeof publishAtRaw === "string" &&
     new Date(publishAtRaw) > new Date();
+  const expiresAtRaw = row.expiresAt;
+  const isExpired =
+    expiresAtRaw != null &&
+    typeof expiresAtRaw === "string" &&
+    expiresAtRaw.trim() !== "" &&
+    new Date(expiresAtRaw) <= new Date();
   const allowPublicAudio =
-    !subscriberOnlyFeed && !subscriberOnly && !isScheduledNotReleased;
+    !subscriberOnlyFeed &&
+    !subscriberOnly &&
+    !isScheduledNotReleased &&
+    !isExpired;
   const path = row.artworkPath as string | null | undefined;
   const baseDesc = String(row.description ?? "");
   const snapshotVal = row.descriptionCopyrightSnapshot;
@@ -219,18 +230,32 @@ export function publicEpisodeDto(
       : null;
   const hasSrt = srtPath && existsSync(srtPath);
   const allowPublicSrt =
-    hasSrt && !subscriberOnlyFeed && !subscriberOnly && !isScheduledNotReleased;
+    hasSrt &&
+    !subscriberOnlyFeed &&
+    !subscriberOnly &&
+    !isScheduledNotReleased &&
+    !isExpired;
   const chaptersPath =
     opts.podcastSlug && row.slug
       ? chaptersJsonPath(podcastId, String(row.id))
       : null;
   const hasChapters = chaptersPath && existsSync(chaptersPath);
   const allowPublicChapters =
-    hasChapters && !subscriberOnlyFeed && !subscriberOnly && !isScheduledNotReleased;
+    hasChapters &&
+    !subscriberOnlyFeed &&
+    !subscriberOnly &&
+    !isScheduledNotReleased &&
+    !isExpired;
 
   const rawMarkers = row.finalMarkers as string | null | undefined;
   let markers: Array<{ time: number; title?: string; color?: string }> = [];
-  if (!isScheduledNotReleased && rawMarkers != null && typeof rawMarkers === "string" && rawMarkers.trim()) {
+  if (
+    !isScheduledNotReleased &&
+    !isExpired &&
+    rawMarkers != null &&
+    typeof rawMarkers === "string" &&
+    rawMarkers.trim()
+  ) {
     try {
       const parsed = JSON.parse(rawMarkers) as unknown;
       if (Array.isArray(parsed)) {
@@ -246,7 +271,13 @@ export function publicEpisodeDto(
 
   const rawSoundbites = row.finalSoundbites as string | null | undefined;
   let soundbites: Array<{ time: number; duration: number; title?: string; color?: string }> = [];
-  if (!isScheduledNotReleased && rawSoundbites != null && typeof rawSoundbites === "string" && rawSoundbites.trim()) {
+  if (
+    !isScheduledNotReleased &&
+    !isExpired &&
+    rawSoundbites != null &&
+    typeof rawSoundbites === "string" &&
+    rawSoundbites.trim()
+  ) {
     try {
       const parsed = JSON.parse(rawSoundbites) as unknown;
       if (Array.isArray(parsed)) {
@@ -299,6 +330,13 @@ export function publicEpisodeDto(
         ? `/${API_PREFIX}/public/podcasts/${encodeURIComponent(opts.podcastSlug)}/episodes/${encodeURIComponent(String(row.slug))}/chapters.json`
         : null,
     subscriber_only: subscriberOnly ? 1 : 0,
+    // Only expose window dates when the toggle is on (ignored for gating when off).
+    subscriber_only_starts_at: subscriberOnlyFlagOn
+      ? (row.subscriberOnlyStartsAt ?? null)
+      : null,
+    subscriber_only_ends_at: subscriberOnlyFlagOn
+      ? (row.subscriberOnlyEndsAt ?? null)
+      : null,
     scheduled_not_released: isScheduledNotReleased ? 1 : 0,
     created_at: row.createdAt,
     updated_at: row.updatedAt,

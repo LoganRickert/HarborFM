@@ -17,6 +17,7 @@ import {
   getPublicPodcastForStream,
   getPublishedEpisodeForStream,
 } from "./repo.js";
+import { isCurrentlySubscriberOnly } from "../../utils/subscriberOnlyWindow.js";
 import {
   canAccessEpisode,
   canEditSegments,
@@ -630,7 +631,7 @@ export async function audioRoutes(app: FastifyInstance) {
         podcastId.trim(),
         episodeId.trim(),
       );
-      if (!episode || episode.subscriberOnly) {
+      if (!episode || isCurrentlySubscriberOnly(episode)) {
         return reply.status(404).send({ error: "Not found" });
       }
 
@@ -763,7 +764,7 @@ export async function audioRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Not found" });
       }
       const episode = getPublishedEpisodeForStream(podcastId.trim(), episodeId.trim());
-      if (!episode || episode.subscriberOnly || !episode.videoFinalPath) {
+      if (!episode || isCurrentlySubscriberOnly(episode) || !episode.videoFinalPath) {
         return reply.status(404).send({ error: "Not found" });
       }
       const path = resolveDataPath(episode.videoFinalPath);

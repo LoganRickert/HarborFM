@@ -30,6 +30,7 @@ export interface User {
   canGenerateVideo?: number; // 0 = false, 1 = true
   canStripe?: number; // 0 = false, 1 = true
   canEpisodeAlert?: number; // 0 = false, 1 = true
+  canUploadEpisodeFiles?: number; // 0 = false, 1 = true
   federatedIdentities?: FederatedIdentity[];
 }
 

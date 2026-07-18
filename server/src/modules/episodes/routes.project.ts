@@ -8,7 +8,9 @@ import {
   canEditSegments,
   getPodcastRole,
 } from "../../services/access.js";
+import { IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS } from "../../config.js";
 import { assertSafeId } from "../../services/paths.js";
+import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { writeRssFile, deleteTokenFeedTemplateFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import * as repo from "./repo.js";
@@ -240,6 +242,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
               episodeId: { type: "string" },
               slug: { type: "string" },
               error: { type: "string" },
+              warning: { type: "string" },
             },
             required: ["status"],
           },
@@ -274,12 +277,20 @@ export async function registerProjectRoutes(app: FastifyInstance) {
   app.post(
     "/podcasts/:podcastId/episodes/import-project",
     {
-      preHandler: [requireAuth, requireNotReadOnly],
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "import-project",
+          windowMs: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+          max: 1,
+        }),
+      ],
       schema: {
         tags: ["Episodes"],
         summary: "Import episode project zip",
         description:
-          "Upload a HarborFM project zip and recreate a draft episode (new ids). Returns 202; poll GET import-project/status until done or failed. Managers and the owner only.",
+          "Upload a HarborFM project zip and recreate a draft episode (new ids). Returns 202; poll GET import-project/status until done or failed. Managers and the owner only. Rate limited to once per 30 seconds per user.",
         params: {
           type: "object",
           properties: { podcastId: { type: "string" } },
@@ -303,6 +314,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           400: { description: "Invalid zip" },
           403: { description: "Forbidden or at episode limit" },
           404: { description: "Podcast not found" },
+          429: { description: "Rate limited" },
           500: { description: "Import failed" },
         },
       },

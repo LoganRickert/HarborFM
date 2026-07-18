@@ -18,6 +18,7 @@ import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js
 import { writeEpisodeChaptersJson } from "../../services/episodeChapters.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import { dispatchEpisodeAlerts } from "../episodeAlerts/index.js";
+import { sumFileBytesForEpisode } from "../episodeFiles/repo.js";
 import {
   assertPathUnder,
   assertResolvedPathUnder,
@@ -162,6 +163,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episodeType: data.episodeType ?? null,
         explicit: data.explicit == null ? null : Boolean(data.explicit),
         publishAt: data.publishAt ?? null,
+        expiresAt: data.expiresAt ?? null,
         status: data.status ?? "draft",
         artworkUrl: data.artworkUrl ?? null,
         episodeLink: data.episodeLink ?? null,
@@ -310,6 +312,76 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         publishAtValue = new Date().toISOString();
       }
 
+      // Merge patch with current dates so expiresAt > publishAt is enforced even when only one is sent.
+      const effectivePublishAt =
+        publishAtValue !== undefined
+          ? publishAtValue
+          : currentEpisode.publishAt;
+      const effectiveExpiresAt =
+        data.expiresAt !== undefined
+          ? data.expiresAt
+          : currentEpisode.expiresAt;
+      const effectivePublishAtStr =
+        typeof effectivePublishAt === "string" && effectivePublishAt.trim() !== ""
+          ? effectivePublishAt
+          : null;
+      const effectiveExpiresAtStr =
+        typeof effectiveExpiresAt === "string" && effectiveExpiresAt.trim() !== ""
+          ? effectiveExpiresAt
+          : null;
+      if (
+        effectivePublishAtStr != null &&
+        effectiveExpiresAtStr != null &&
+        new Date(effectiveExpiresAtStr).getTime() <=
+          new Date(effectivePublishAtStr).getTime()
+      ) {
+        return reply.status(400).send({
+          error: "Validation failed",
+          details: {
+            formErrors: [],
+            fieldErrors: {
+              expiresAt: ["Expires at must be after Publish at"],
+            },
+          },
+        });
+      }
+
+      const effectiveSoStartsAt =
+        data.subscriberOnlyStartsAt !== undefined
+          ? data.subscriberOnlyStartsAt
+          : currentEpisode.subscriberOnlyStartsAt;
+      const effectiveSoEndsAt =
+        data.subscriberOnlyEndsAt !== undefined
+          ? data.subscriberOnlyEndsAt
+          : currentEpisode.subscriberOnlyEndsAt;
+      const effectiveSoStartsAtStr =
+        typeof effectiveSoStartsAt === "string" &&
+        effectiveSoStartsAt.trim() !== ""
+          ? effectiveSoStartsAt
+          : null;
+      const effectiveSoEndsAtStr =
+        typeof effectiveSoEndsAt === "string" && effectiveSoEndsAt.trim() !== ""
+          ? effectiveSoEndsAt
+          : null;
+      if (
+        effectiveSoStartsAtStr != null &&
+        effectiveSoEndsAtStr != null &&
+        new Date(effectiveSoStartsAtStr).getTime() >=
+          new Date(effectiveSoEndsAtStr).getTime()
+      ) {
+        return reply.status(400).send({
+          error: "Validation failed",
+          details: {
+            formErrors: [],
+            fieldErrors: {
+              subscriberOnlyEndsAt: [
+                "Subscriber only until must be after Subscriber only from",
+              ],
+            },
+          },
+        });
+      }
+
       if (
         updateData.slug !== undefined &&
         updateData.slug !== currentEpisode.slug &&
@@ -365,6 +437,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episodeType: data.episodeType,
         explicit: data.explicit,
         publishAt: publishAtValue,
+        expiresAt: data.expiresAt,
         status: data.status,
         artworkUrl:
           data.artworkUrl !== undefined
@@ -379,6 +452,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             : data.episodeLink,
         guidIsPermalink: data.guidIsPermalink,
         subscriberOnly: data.subscriberOnly,
+        subscriberOnlyStartsAt: data.subscriberOnlyStartsAt,
+        subscriberOnlyEndsAt: data.subscriberOnlyEndsAt,
         updatedAt: sqlNow(),
       };
       const guidPayload = data.guid;
@@ -567,6 +642,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         } catch {
           /* best-effort */
         }
+      }
+      try {
+        bytesFreed += sumFileBytesForEpisode(episodeId);
+      } catch {
+        /* best-effort */
       }
 
       const procDir = join(getDataDir(), "processed", podcastId, episodeId);

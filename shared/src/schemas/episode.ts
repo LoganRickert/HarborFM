@@ -27,7 +27,46 @@ const nullableOptionalString = emptyStringToNull(z.string().nullable().optional(
 export const episodeTypeSchema = z.enum(['full', 'trailer', 'bonus']).nullable().optional();
 export const episodeStatusSchema = z.enum(['draft', 'scheduled', 'published']);
 
-export const episodeCreateSchema = z.object({
+function nonEmptyDate(v: string | null | undefined): string | null {
+  return typeof v === 'string' && v.trim() !== '' ? v : null;
+}
+
+function expiresAtAfterPublishAt(
+  data: { publishAt?: string | null; expiresAt?: string | null },
+  ctx: z.RefinementCtx,
+) {
+  const publishAt = nonEmptyDate(data.publishAt);
+  const expiresAt = nonEmptyDate(data.expiresAt);
+  if (publishAt == null || expiresAt == null) return;
+  if (new Date(expiresAt).getTime() <= new Date(publishAt).getTime()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['expiresAt'],
+      message: 'Expires at must be after Publish at',
+    });
+  }
+}
+
+function subscriberOnlyWindowOrder(
+  data: {
+    subscriberOnlyStartsAt?: string | null;
+    subscriberOnlyEndsAt?: string | null;
+  },
+  ctx: z.RefinementCtx,
+) {
+  const startsAt = nonEmptyDate(data.subscriberOnlyStartsAt);
+  const endsAt = nonEmptyDate(data.subscriberOnlyEndsAt);
+  if (startsAt == null || endsAt == null) return;
+  if (new Date(startsAt).getTime() >= new Date(endsAt).getTime()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['subscriberOnlyEndsAt'],
+      message: 'Subscriber only until must be after Subscriber only from',
+    });
+  }
+}
+
+const episodeCreateObjectSchema = z.object({
   title: z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string().min(1, { error: 'Title is required' })),
   description: z.string().default(''),
   subtitle: nullableOptionalString,
@@ -39,11 +78,14 @@ export const episodeCreateSchema = z.object({
   episodeType: episodeTypeSchema,
   explicit: z.union([z.literal(0), z.literal(1)]).nullable().optional(),
   publishAt: z.string().datetime({ offset: true }).nullable().optional(),
+  expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
   status: episodeStatusSchema.default('draft'),
   artworkUrl: nullableOptionalUrl,
   episodeLink: nullableOptionalUrl,
   guidIsPermalink: z.union([z.literal(0), z.literal(1)]).default(0),
 });
+
+export const episodeCreateSchema = episodeCreateObjectSchema.superRefine(expiresAtAfterPublishAt);
 
 const subscriberOnlySchema = z.preprocess(
   (v) => (v === true || v === 'true' || v === 1 || v === '1' ? 1 : v === false || v === 'false' || v === 0 || v === '0' ? 0 : v),
@@ -72,8 +114,9 @@ const contentLinkSchema = z.object({
  * Partial update schema. Do not use episodeCreateSchema.partial() alone: Zod 4 still
  * applies .default() for omitted keys (e.g. description "" / status draft), which
  * wipes fields on narrow PATCHes such as quick publish or chapter edits.
+ * Built from the object shape (not the refined create schema) so .omit/.partial work.
  */
-export const episodeUpdateSchema = episodeCreateSchema
+export const episodeUpdateSchema = episodeCreateObjectSchema
   .omit({
     description: true,
     status: true,
@@ -87,6 +130,8 @@ export const episodeUpdateSchema = episodeCreateSchema
     slug: z.string().regex(/^[a-z0-9-]+$/, { error: 'Slug: lowercase letters, numbers, hyphens only' }).optional(),
     guid: z.string().min(1, { message: 'GUID cannot be empty' }).optional(),
     subscriberOnly: subscriberOnlySchema,
+    subscriberOnlyStartsAt: z.string().datetime({ offset: true }).nullable().optional(),
+    subscriberOnlyEndsAt: z.string().datetime({ offset: true }).nullable().optional(),
     /** Chapter markers for the final audio. Overwrites markers from render. */
     finalMarkers: z.array(finalMarkerSchema).optional().nullable(),
     /** Soundbite markers for the final audio. Overwrites markers from render. */
@@ -101,7 +146,9 @@ export const episodeUpdateSchema = episodeCreateSchema
     fundingLinks: z.array(fundingLinkSchema).optional().nullable(),
     chat: chatSchema.optional().nullable(),
     valueBlocks: z.array(valueBlockSchema).optional().nullable(),
-  });
+  })
+  .superRefine(expiresAtAfterPublishAt)
+  .superRefine(subscriberOnlyWindowOrder);
 
 /** Episode as returned by GET /episodes/:id and list endpoints. Includes server-computed fields. */
 export const episodeResponseSchema = z.object({
@@ -119,6 +166,7 @@ export const episodeResponseSchema = z.object({
   episodeType: episodeTypeSchema,
   explicit: z.union([z.literal(0), z.literal(1)]).nullable(),
   publishAt: z.string().nullable(),
+  expiresAt: z.string().nullable().optional(),
   status: episodeStatusSchema,
   artworkPath: z.string().nullable(),
   artworkUrl: z.string().nullable(),
@@ -136,6 +184,10 @@ export const episodeResponseSchema = z.object({
   hasTranscript: z.boolean().optional(),
   /** True = omitted from public RSS and episode list; only in tokenized subscriber feed. */
   subscriberOnly: z.boolean().optional(),
+  /** When subscriberOnly is on: gating starts at this time (null = immediate). */
+  subscriberOnlyStartsAt: z.string().nullable().optional(),
+  /** When subscriberOnly is on: gating ends at this time (null = never ends). */
+  subscriberOnlyEndsAt: z.string().nullable().optional(),
   /** Chapter markers from segments (marker_type === 'chapter'); time in seconds of final audio. */
   finalMarkers: z.array(z.object({ time: z.number(), title: z.string().optional(), color: z.string().optional() })).optional().nullable(),
   /** Soundbite markers from segments (marker_type === 'soundbite'); time/duration in seconds of final audio. */

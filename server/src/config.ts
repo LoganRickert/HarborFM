@@ -256,6 +256,12 @@ export const RENDER_RATE_LIMIT_WINDOW_MS =
     ? Number(process.env.RENDER_RATE_LIMIT_WINDOW_MS)
     : 60_000;
 
+/** Import project/segment/Reaper rate limit: min ms between imports per user. 0 = no limit (e.g. for e2e). Env: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS. Default 30000. */
+export const IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS =
+  process.env.IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS)
+    : 30_000;
+
 /** Forgot-password request cooldown (minutes). Env: FORGOT_PASSWORD_RATE_MINUTES. Default 5. */
 export const FORGOT_PASSWORD_RATE_MINUTES =
   Number(process.env.FORGOT_PASSWORD_RATE_MINUTES) || 5;

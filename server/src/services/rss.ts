@@ -237,17 +237,33 @@ export function generateRss(
     exportPrefix = null; // token feed URLs are app paths only
   }
 
+  const keepExpiredForSubscribers =
+    includeSubscriberOnly && Boolean(podcast.subscribersKeepExpiredEpisodes);
+  const notExpiredSql = sql`(${episodes.expiresAt} IS NULL OR datetime(${episodes.expiresAt}) > datetime('now'))`;
+  const releasedSql = sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`;
   const episodeWhere = includeSubscriberOnly
-    ? and(
-        eq(episodes.podcastId, podcastId),
-        eq(episodes.status, "published"),
-        sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
-      )
+    ? keepExpiredForSubscribers
+      ? and(
+          eq(episodes.podcastId, podcastId),
+          eq(episodes.status, "published"),
+          releasedSql,
+        )
+      : and(
+          eq(episodes.podcastId, podcastId),
+          eq(episodes.status, "published"),
+          releasedSql,
+          notExpiredSql,
+        )
     : and(
         eq(episodes.podcastId, podcastId),
         eq(episodes.status, "published"),
-        eq(episodes.subscriberOnly, false),
-        sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        sql`(
+          COALESCE(${episodes.subscriberOnly}, 0) = 0
+          OR (${episodes.subscriberOnlyStartsAt} IS NOT NULL AND datetime(${episodes.subscriberOnlyStartsAt}) > datetime('now'))
+          OR (${episodes.subscriberOnlyEndsAt} IS NOT NULL AND datetime(${episodes.subscriberOnlyEndsAt}) <= datetime('now'))
+        )`,
+        releasedSql,
+        notExpiredSql,
       );
   const episodesList = drizzleDb
     .select()
@@ -1461,6 +1477,60 @@ function hasCrossOriginStylesheet(xml: string): boolean {
   return /<\?xml-stylesheet[^>]+href="https?:\/\//.test(xml);
 }
 
+/** True if any episode for the podcast expired after `sinceMs` (cache mtime) and is now past expires_at. */
+function podcastHasEpisodeExpiredSince(podcastId: string, sinceMs: number): boolean {
+  const sinceIso = new Date(sinceMs).toISOString();
+  const row = drizzleDb
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.podcastId, podcastId),
+        sql`${episodes.expiresAt} IS NOT NULL`,
+        sql`datetime(${episodes.expiresAt}) > datetime(${sinceIso})`,
+        sql`datetime(${episodes.expiresAt}) <= datetime('now')`,
+      ),
+    )
+    .limit(1)
+    .get();
+  return row != null;
+}
+
+/**
+ * True if a subscriber-only window boundary crossed after `sinceMs` (start became active or end passed),
+ * so public RSS inclusion of that episode may have changed.
+ */
+function podcastHasSubscriberOnlyWindowBoundarySince(
+  podcastId: string,
+  sinceMs: number,
+): boolean {
+  const sinceIso = new Date(sinceMs).toISOString();
+  const row = drizzleDb
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.podcastId, podcastId),
+        sql`COALESCE(${episodes.subscriberOnly}, 0) = 1`,
+        sql`(
+          (
+            ${episodes.subscriberOnlyStartsAt} IS NOT NULL
+            AND datetime(${episodes.subscriberOnlyStartsAt}) > datetime(${sinceIso})
+            AND datetime(${episodes.subscriberOnlyStartsAt}) <= datetime('now')
+          )
+          OR (
+            ${episodes.subscriberOnlyEndsAt} IS NOT NULL
+            AND datetime(${episodes.subscriberOnlyEndsAt}) > datetime(${sinceIso})
+            AND datetime(${episodes.subscriberOnlyEndsAt}) <= datetime('now')
+          )
+        )`,
+      ),
+    )
+    .limit(1)
+    .get();
+  return row != null;
+}
+
 /**
  * Return cached RSS XML if the feed file exists and is newer than maxAgeMs.
  * Otherwise return null (caller should generate and save).
@@ -1478,6 +1548,9 @@ export function getCachedRssIfFresh(
     const stat = statSync(safePath);
     const age = Date.now() - stat.mtimeMs;
     if (age >= maxAgeMs) return null;
+    if (podcastHasEpisodeExpiredSince(podcastId, stat.mtimeMs)) return null;
+    if (podcastHasSubscriberOnlyWindowBoundarySince(podcastId, stat.mtimeMs))
+      return null;
     const xml = readFileSync(safePath, "utf8");
     if (hasCrossOriginStylesheet(xml)) return null;
     return xml;
@@ -1519,6 +1592,21 @@ export function getCachedTokenFeedTemplateIfFresh(
     const stat = statSync(safePath);
     const age = Date.now() - stat.mtimeMs;
     if (age >= maxAgeMs) return null;
+    // When subscribers do not keep expired episodes, regenerate after expirations land.
+    const podcast = drizzleDb
+      .select({
+        keep: sql<number>`COALESCE(${podcasts.subscribersKeepExpiredEpisodes}, 0)`.as("keep"),
+      })
+      .from(podcasts)
+      .where(eq(podcasts.id, podcastId))
+      .limit(1)
+      .get();
+    if (
+      (podcast?.keep ?? 0) === 0 &&
+      podcastHasEpisodeExpiredSince(podcastId, stat.mtimeMs)
+    ) {
+      return null;
+    }
     return readFileSync(safePath, "utf8");
   } catch {
     return null;

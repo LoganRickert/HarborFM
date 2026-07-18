@@ -16,7 +16,13 @@ import {
   getRenderStatus,
   type EpisodeSegment,
 } from '../../api/segments';
-import { episodeToForm, formToApiPayload, publishFieldsToApiPayload } from './utils';
+import {
+  episodeToForm,
+  formToApiPayload,
+  isExpiresAtBeforePublishAt,
+  isSubscriberOnlyWindowInvalid,
+  publishFieldsToApiPayload,
+} from './utils';
 import { EpisodeDetailsSummaryCard } from './EpisodeDetailsSummaryCard';
 import { EpisodeDetailsForm, type EpisodeDetailsTab } from './EpisodeDetailsForm';
 import { GenerateFinalBar } from './GenerateFinalBar';
@@ -58,7 +64,7 @@ function isPublishOnlyUpdate(variables: Record<string, unknown> | undefined): bo
   if (!variables) return false;
   const keys = Object.keys(variables);
   if (keys.length === 0) return false;
-  const publishKeys = new Set(['status', 'seasonNumber', 'episodeNumber', 'publishAt']);
+  const publishKeys = new Set(['status', 'seasonNumber', 'episodeNumber', 'publishAt', 'expiresAt']);
   return keys.every((k) => publishKeys.has(k));
 }
 
@@ -660,6 +666,7 @@ export function EpisodeEditorContent({
           seasonNumber: episodeForm.seasonNumber,
           episodeNumber: episodeForm.episodeNumber,
           publishAt: episodeForm.publishAt,
+          expiresAt: episodeForm.expiresAt,
         }}
         onPublishSave={handlePublishSave}
         publishSaving={publishUpdateMutation.isPending}
@@ -689,6 +696,7 @@ export function EpisodeEditorContent({
               ? `/api/podcasts/${podcastId}/episodes/${id}/artwork/${encodeURIComponent(episode.artworkFilename)}`
               : undefined
         }
+        canUploadEpisodeFiles={meData?.user?.canUploadEpisodeFiles === 1}
         error={
           (renderStatus?.status === 'failed' ? (renderStatus.error ?? 'Build failed') : null) ??
           (renderMutation.isError ? renderMutation.error?.message : null) ??
@@ -813,6 +821,8 @@ export function EpisodeEditorContent({
                 descriptionTextareaRef={descriptionTextareaRef}
                 slugDisabled={user?.role !== 'admin'}
                 onSave={async () => {
+                  if (isExpiresAtBeforePublishAt(dialogForm)) return;
+                  if (isSubscriberOnlyWindowInvalid(dialogForm)) return;
                   const payload = formToApiPayload(dialogForm);
                   const fileToUpload = pendingArtworkFile;
                   if (fileToUpload) {
@@ -869,7 +879,12 @@ export function EpisodeEditorContent({
                 type="submit"
                 form="episode-details-form"
                 className={sharedStyles.dialogConfirm}
-                disabled={updateMutation.isPending || uploadArtworkMutation.isPending}
+                disabled={
+                  updateMutation.isPending ||
+                  uploadArtworkMutation.isPending ||
+                  isExpiresAtBeforePublishAt(dialogForm) ||
+                  isSubscriberOnlyWindowInvalid(dialogForm)
+                }
                 aria-label="Save episode details"
               >
                 {uploadArtworkMutation.isPending ? 'Uploading...' : updateMutation.isPending ? 'Saving...' : 'Save'}

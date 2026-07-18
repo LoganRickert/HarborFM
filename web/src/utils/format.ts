@@ -76,6 +76,25 @@ export function formatDateTime(dateStr: string | null | undefined): string {
   }
 }
 
+/** Format as date + short time + short timezone name, in local time. */
+export function formatDateTimeWithZone(dateStr: string | null | undefined): string {
+  const d = parseUtc(dateStr);
+  if (!d) return '';
+  try {
+    // dateStyle/timeStyle cannot be mixed with timeZoneName in some engines.
+    return d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+  } catch {
+    return formatDateTime(dateStr);
+  }
+}
+
 /** Format as short date (e.g. "Feb 12, 2025") for lists. */
 export function formatDateShort(dateStr: string | null | undefined): string {
   const d = parseUtc(dateStr);

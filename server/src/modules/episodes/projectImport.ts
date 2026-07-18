@@ -56,8 +56,14 @@ import {
 import { upsertPoll } from "../polls/repo.js";
 import { PROJECT_FORMAT_VERSION } from "./projectExport.js";
 import {
+  applyTimelineSidecarToManifest,
+  REAPER_IGNORED_WARNING,
+  timelineSidecarNeedsApply,
+} from "./projectDawTimelineImport.js";
+import {
   findFirstFile,
   findSegmentAudioFile,
+  ImportValidationError,
   nameFromSegmentFolder,
   readJsonFile,
   pruneMissingManifestTracks,
@@ -66,10 +72,18 @@ import {
   stringifyJsonField,
   type SegmentProjectJson,
 } from "./projectSegmentShared.js";
+import {
+  buildManifestForRemake,
+  HOST_DUCKING_FILENAME,
+  readHostDuckingFile,
+} from "../../services/hostDucking.js";
+
+export { ImportValidationError };
 
 export type ProjectImportResult = {
   episodeId: string;
   slug: string;
+  warning?: string;
 };
 
 type EpisodeProjectJson = {
@@ -85,6 +99,8 @@ type EpisodeProjectJson = {
   episodeLink?: string | null;
   artworkUrl?: string | null;
   subscriberOnly?: boolean | null;
+  subscriberOnlyStartsAt?: string | null;
+  subscriberOnlyEndsAt?: string | null;
   showNotesGuestVisible?: boolean | null;
   finalMarkers?: unknown;
   finalSoundbites?: unknown;
@@ -125,6 +141,7 @@ export async function importProjectZip(
   mkdirSync(extractRoot, { recursive: true });
 
   let bytesAdded = 0;
+  let warning: string | undefined;
   try {
     const zip = new AdmZip(zipPath);
     zip.extractAllTo(extractRoot, true);
@@ -191,6 +208,8 @@ export async function importProjectZip(
       episodeLink: episodeData.episodeLink ?? null,
       guidIsPermalink: false,
       subscriberOnly: Boolean(episodeData.subscriberOnly),
+      subscriberOnlyStartsAt: episodeData.subscriberOnlyStartsAt ?? null,
+      subscriberOnlyEndsAt: episodeData.subscriberOnlyEndsAt ?? null,
       showNotesGuestVisible: Boolean(episodeData.showNotesGuestVisible),
       finalMarkers: stringifyJsonField(episodeData.finalMarkers),
       finalSoundbites: stringifyJsonField(episodeData.finalSoundbites),
@@ -585,6 +604,7 @@ export async function importProjectZip(
           markers: stringifyJsonField(markers),
           audioEq: stringifyJsonField(segMeta.audioEq),
           disabled: Boolean(segMeta.disabled),
+          hostDuckingEnabled: Boolean(segMeta.hostDuckingEnabled),
           inProgress: false,
           recordFailed: false,
         })
@@ -615,8 +635,14 @@ export async function importProjectZip(
           const src = join(recSrc, fname);
           if (!statSync(src).isFile()) continue;
           if (fname === "tracks_manifest.json") continue;
+          if (fname === HOST_DUCKING_FILENAME) continue;
           copyFileSync(src, join(mtDest, basename(fname)));
           bytesAdded += statSync(join(mtDest, basename(fname))).size;
+        }
+        const duckingSrc = join(segDir, HOST_DUCKING_FILENAME);
+        if (existsSync(duckingSrc)) {
+          copyFileSync(duckingSrc, join(mtDest, HOST_DUCKING_FILENAME));
+          bytesAdded += statSync(join(mtDest, HOST_DUCKING_FILENAME)).size;
         }
         if (manifest) {
           tracksChanged = recordingsTracksChanged(mtDest, manifest);
@@ -626,6 +652,35 @@ export async function importProjectZip(
             join(mtDest, "tracks_manifest.json"),
             JSON.stringify(manifest, null, 2),
           );
+        }
+      }
+
+      if (timelineSidecarNeedsApply(segDir, segMeta.segmentRppSha256)) {
+        let epochMs: number | undefined;
+        if (manifest && typeof manifest.recordingEpochMs === "number") {
+          epochMs = manifest.recordingEpochMs;
+        }
+        if (!mtDest) {
+          mtDest = multitrackRecordingsDir(podcastId, id, newSegId, epochMs);
+        }
+        const applied = applyTimelineSidecarToManifest({
+          segDir,
+          mtDest,
+          existingManifest: manifest,
+        });
+        if (applied.ok) {
+          manifest = applied.manifest;
+          bytesAdded += applied.bytesAdded;
+          tracksChanged = true;
+        } else {
+          // Unreadable segment.rpp: keep tracks_manifest and remake from it.
+          console.warn(
+            `[projectImport] Ignoring segment.rpp (${applied.error}); using tracks_manifest.json`,
+          );
+          warning = REAPER_IGNORED_WARNING;
+          if (manifest?.segments?.length) {
+            tracksChanged = true;
+          }
         }
       }
 
@@ -654,9 +709,12 @@ export async function importProjectZip(
 
         const mixDest = segmentPath(podcastId, id, newSegId, "wav");
         try {
+          const duckingEnabled = Boolean(segMeta.hostDuckingEnabled);
+          const ducking = duckingEnabled ? readHostDuckingFile(mtDest) : null;
+          const remakeManifest = buildManifestForRemake(manifest, ducking, mtDest);
           const remade = await remakeMixFromMultitrackDir(
             mtDest,
-            manifest,
+            remakeManifest,
             mixDest,
             episodeUploads,
           );
@@ -721,20 +779,13 @@ export async function importProjectZip(
       addUserDiskBytes(ownerId, bytesAdded);
     }
 
-    return { episodeId: id, slug: finalSlug };
+    return { episodeId: id, slug: finalSlug, warning };
   } finally {
     try {
       rmSync(extractRoot, { recursive: true, force: true });
     } catch {
       // best-effort
     }
-  }
-}
-
-export class ImportValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ImportValidationError";
   }
 }
 
@@ -755,7 +806,11 @@ export function removeTempPath(path: string): void {
 
 export type ProjectImportStatus = "idle" | "importing" | "done" | "failed";
 
-type ProjectImportJobResult = { episodeId: string; slug: string };
+type ProjectImportJobResult = {
+  episodeId: string;
+  slug: string;
+  warning?: string;
+};
 
 const importStatusByPodcast = new Map<
   string,
@@ -784,6 +839,7 @@ export function startProjectImport(
         importResultByPodcast.set(podcastId, {
           episodeId: result.episodeId,
           slug: result.slug,
+          warning: result.warning,
         });
         importStatusByPodcast.set(podcastId, "done");
         onSuccess?.(result);
@@ -811,6 +867,7 @@ export function getProjectImportStatus(podcastId: string): {
   episodeId?: string;
   slug?: string;
   error?: string;
+  warning?: string;
 } {
   const status = importStatusByPodcast.get(podcastId);
   if (!status) return { status: "idle" };
@@ -825,5 +882,6 @@ export function getProjectImportStatus(podcastId: string): {
     status: "done",
     episodeId: result?.episodeId,
     slug: result?.slug,
+    warning: result?.warning,
   };
 }

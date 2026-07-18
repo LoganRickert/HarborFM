@@ -43,6 +43,7 @@ export const userUpdateBodySchema = z.object({
   canGenerateVideo: z.boolean().optional(),
   canStripe: z.boolean().optional(),
   canEpisodeAlert: z.boolean().optional(),
+  canUploadEpisodeFiles: z.boolean().optional(),
 });
 
 export type UserCreateBody = z.infer<typeof userCreateBodySchema>;

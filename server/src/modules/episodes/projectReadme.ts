@@ -36,6 +36,7 @@ segments/
     audio.mp3         # or audio.wav (required)
     waveform.json     # optional; regenerated on import
     recordings/       # optional multitrack takes
+    host_ducking.json # exclusive host gates (optional)
     audacity.lof      # open in Audacity (File > Open)
     labels.txt        # File > Import > Labels in Audacity
     segment.rpp       # open in Reaper
@@ -48,10 +49,18 @@ correct.
 
 ## Editing with DAWs
 
-Import into ${app} only looks at audio file hashes
-(\`audio.*\` and \`recordings/*\`). Sidecar files
-(\`timeline.otio\`, \`segment.rpp\`, \`audacity.lof\`,
-\`labels.txt\`) are ignored on import.
+Import into ${app} looks at audio file hashes (\`audio.*\` and
+\`recordings/*\`). When \`segment.rpp\` is present and its hash
+differs from \`segment.json\` (\`segmentRppSha256\`), import also
+applies that timeline sidecar: it rebuilds \`tracks_manifest.json\`
+from the clip layout and volume (track/item faders and mute) and
+remakes the mixed segment audio. If \`segment.rpp\` cannot be read,
+import ignores it and remakes the mix from \`tracks_manifest.json\`
+instead. Media paths in the sidecar must stay under the segment
+folder (no \`..\`). When host ducking is enabled and
+\`host_ducking.json\` is present, exclusive host gates are applied
+on remake. Other sidecars (\`timeline.otio\`, \`audacity.lof\`,
+\`labels.txt\`) are still ignored on import.
 
 ### Audacity
 
@@ -77,10 +86,25 @@ Import into ${app} only looks at audio file hashes
 2. Open that segment's \`segment.rpp\` (paths relative to the
    segment folder). Tracks are named \`Name_0\` /
    \`soundboard_<id>\`; reconnects share one track. Items use
-   \`startMs\` and do not loop. Stubs under 2KB are omitted.
-3. Edit, then replace the source files in place with the same
-   names, or render/export over those paths.
-4. Re-zip and **Import Project**.
+   \`startMs\`. Stubs under 2KB are omitted.
+3. Edit layout (move, trim, duplicate, or add clips), track or
+   item volume, play rate, loop, fades, pitch, and track ReaEQ /
+   ReaGate / ReaComp (Cockos). Those settings are stored in
+   \`tracks_manifest.json\` and round-trip on the next export.
+   Bypassed plugins are ignored for remake. Other FX are ignored.
+   Keep **new** media under the segment folder (for example
+   \`Media/yourfile.mp3\` next to \`segment.rpp\`) and include
+   that folder in the zip. Do not point clips at absolute paths
+   outside the segment folder. You may also replace source files
+   in place with the same names.
+4. Re-zip and **Import Project**, or on an existing segment use
+   **Import Reaper** with only \`segment.rpp\` (existing
+   recordings/mix on the server). A changed \`segment.rpp\`
+   rebuilds the multitrack layout (including volume / playback /
+   ReaEQ / ReaGate / ReaComp) and remakes the segment mix.
+   Relative track balance from Reaper faders is kept; the finished
+   mix is still loudness-normalized (about -18 LUFS), so overall
+   level will not match a hot Reaper master.
 
 ### DaVinci Resolve (OpenTimelineIO)
 
@@ -110,6 +134,8 @@ changed, it regenerates the waveform (when waveform tools are
 available), updates duration, and drops markers that fall past the
 new end. If you change a file under \`recordings/\`, ${app}
 regenerates track waveforms and remakes the mixed segment audio.
+A changed \`segment.rpp\` hash also remakes the mix from the
+timeline layout.
 
 ## Adding a new segment by hand
 
@@ -216,6 +242,7 @@ segment/
   audio.mp3         # or audio.wav (required)
   waveform.json     # optional; regenerated on import
   recordings/       # optional multitrack takes
+  host_ducking.json # exclusive host gates (optional)
   audacity.lof      # open in Audacity (File > Open)
   labels.txt        # File > Import > Labels in Audacity
   segment.rpp       # open in Reaper
@@ -224,9 +251,18 @@ segment/
 
 ## Editing with DAWs
 
-Import only cares about hashes of \`segment/audio.*\` and
-\`segment/recordings/*\`. Sidecars (\`.otio\`, \`.rpp\`, \`.lof\`,
-labels) are ignored on import.
+Import cares about hashes of \`segment/audio.*\` and
+\`segment/recordings/*\`. When \`segment/segment.rpp\` is present
+and its hash differs from \`segment.json\` (\`segmentRppSha256\`),
+import also applies that timeline: rebuilds
+\`tracks_manifest.json\` from the clip layout and volume
+(track/item faders and mute) and remakes the mixed segment
+audio. If \`segment.rpp\` cannot be read, import ignores it and
+remakes from \`tracks_manifest.json\` instead. Media paths must
+stay under \`segment/\` (no \`..\`). When host ducking is enabled
+and \`host_ducking.json\` is present, exclusive host gates are
+applied on remake. Other sidecars (\`.otio\`, \`.lof\`, labels)
+are ignored on import.
 
 ### Audacity
 
@@ -246,9 +282,25 @@ labels) are ignored on import.
 
 1. Open \`segment/segment.rpp\`. Tracks are \`Name_0\` /
    \`soundboard_<id>\` (reconnects combined); item \`POSITION\` is
-   \`startMs\`, loop off. Stubs under 2KB are omitted.
-2. Edit, then replace source files in place with the same names.
-3. Re-zip and **Import Segment**.
+   \`startMs\`. Stubs under 2KB are omitted.
+2. Edit layout (move, trim, duplicate, or add clips), track or
+   item volume, play rate, loop, fades, pitch, and track ReaEQ /
+   ReaGate / ReaComp (Cockos). Those settings are stored in
+   \`tracks_manifest.json\` and round-trip on the next export.
+   Bypassed plugins are ignored for remake. Other FX are ignored.
+   Keep **new** media under \`segment/\` (for example
+   \`segment/Media/yourfile.mp3\`) and include that folder in the
+   zip. Do not point clips at absolute paths outside the segment
+   folder. You may also replace source files in place.
+3. Re-zip and **Import Segment**, or upload only \`segment.rpp\`
+   via **Import Reaper** on Manage Segment (uses this segment's
+   existing \`recordings/\` or mix audio; clips for media the
+   server does not have are skipped). A changed \`segment.rpp\`
+   rebuilds the multitrack layout (including volume / playback /
+   ReaEQ / ReaGate / ReaComp) and remakes the segment mix.
+   Relative track balance from Reaper faders is kept; the finished
+   mix is still loudness-normalized (about -18 LUFS), so overall
+   level will not match a hot Reaper master.
 
 ### DaVinci Resolve (OpenTimelineIO)
 
@@ -273,7 +325,8 @@ On import, ${app} regenerates waveforms when audio hashes change,
 updates duration, and drops markers past the new end. Changed
 \`recordings/\` tracks remake the mixed segment audio. Delete a
 track file under \`recordings/\` (keep the manifest entry) to drop
-it from the remade mix.
+it from the remade mix. A changed \`segment.rpp\` hash also remakes
+the mix from the timeline layout.
 
 ## Re-zipping
 

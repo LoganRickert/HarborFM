@@ -206,6 +206,9 @@ importers:
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
+      rppp:
+        specifier: ^0.4.2
+        version: 0.4.2
       samba-client:
         specifier: ^7.2.0
         version: 7.2.0
@@ -4917,6 +4920,9 @@ packages:
     resolution: {integrity: sha512-oQL6lgK3e2QZeQ7gcgIkS2YZPg5slw37hYufJ3edKlfQSGGm8ICoxswK15ntSzF/a8+h7ekRy7k7oWc3BQ7y8A==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
+
+  rppp@0.4.2:
+    resolution: {integrity: sha512-Acgl1c0bSe+XCQK6Hs5g2Tfm2MlRf/ybCJUsn4qIx4NgmJG1tjdg2fUdjho6Z9O7XIrIG8725WNm/8Nwa8NUXQ==}
 
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
@@ -10851,6 +10857,8 @@ snapshots:
       '@rollup/rollup-win32-x64-gnu': 4.57.1
       '@rollup/rollup-win32-x64-msvc': 4.57.1
       fsevents: 2.3.3
+
+  rppp@0.4.2: {}
 
   run-parallel@1.2.0:
     dependencies:

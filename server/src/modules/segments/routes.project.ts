@@ -2,9 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { createReadStream, existsSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import { nanoid } from "nanoid";
+import { IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS } from "../../config.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { canAccessEpisode, canEditSegments } from "../../services/access.js";
 import { assertSafeId } from "../../services/paths.js";
+import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import * as audioService from "../../services/audio.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import {
@@ -20,6 +22,11 @@ import {
   getSegmentProjectImportStatus,
   startSegmentProjectImport,
 } from "../episodes/projectSegmentImport.js";
+import {
+  getSegmentReaperImportStatus,
+  startSegmentReaperImport,
+  writeTempRpp,
+} from "../episodes/projectSegmentReaperImport.js";
 import { getPodcastTitle } from "../audio/repo.js";
 import * as episodeRepo from "../episodes/repo.js";
 import { mergeTrimRanges } from "./utils.js";
@@ -533,6 +540,7 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
                 enum: ["idle", "importing", "done", "failed"],
               },
               error: { type: "string" },
+              warning: { type: "string" },
             },
             required: ["status"],
           },
@@ -571,12 +579,20 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
   app.post(
     "/episodes/:episodeId/segments/:segmentId/import-project",
     {
-      preHandler: [requireAuth, requireNotReadOnly],
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "import-segment-project",
+          windowMs: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+          max: 1,
+        }),
+      ],
       schema: {
         tags: ["Segments"],
         summary: "Import segment project zip (overwrite)",
         description:
-          "Upload a HarborFM segment project zip and overwrite this segment in place. Returns 202; poll GET import-project/status until done or failed. Editors and above only.",
+          "Upload a HarborFM segment project zip and overwrite this segment in place. Returns 202; poll GET import-project/status until done or failed. Editors and above only. Rate limited to once per 30 seconds per user.",
         params: {
           type: "object",
           properties: {
@@ -603,6 +619,7 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
           400: { description: "Invalid zip" },
           403: { description: "Forbidden" },
           404: { description: "Not found" },
+          429: { description: "Rate limited" },
           500: { description: "Import failed" },
         },
       },
@@ -676,6 +693,188 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
         request.log.error({ err }, "segment import-project failed to start");
         return reply.status(500).send({
           error: err instanceof Error ? err.message : "Failed to import project",
+        });
+      }
+    },
+  );
+
+  app.get(
+    "/episodes/:episodeId/segments/:segmentId/import-reaper/status",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Get segment Reaper import status",
+        description:
+          "Poll after POST import-reaper (202) until done or failed.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          200: {
+            description: "Import status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "importing", "done", "failed"],
+              },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Invalid ids" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can import Reaper projects" });
+      }
+      return reply.send(getSegmentReaperImportStatus(segmentId));
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/import-reaper",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "import-reaper",
+          windowMs: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+          max: 1,
+        }),
+      ],
+      schema: {
+        tags: ["Segments"],
+        summary: "Import segment.rpp (rebuild mix from existing tracks)",
+        description:
+          "Upload a segment.rpp and rebuild tracks_manifest + segment mix from existing recordings (or mix audio). Returns 202; poll GET import-reaper/status until done or failed. Editors and above only. Rate limited to once per 30 seconds per user.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          202: {
+            description: "Import started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["importing"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Import already in progress",
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+          400: { description: "Invalid file" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+          429: { description: "Rate limited" },
+          500: { description: "Import failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can import Reaper projects" });
+      }
+      const segment = repo.getSegmentById(segmentId, episodeId);
+      if (!segment) {
+        return reply.status(404).send({ error: "Segment not found" });
+      }
+
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send({ error: "No file uploaded" });
+      }
+      const filename = data.filename || "segment.rpp";
+      if (!filename.toLowerCase().endsWith(".rpp")) {
+        return reply
+          .status(400)
+          .send({ error: "File must be a .rpp Reaper project" });
+      }
+
+      try {
+        const buffer = await data.toBuffer();
+        if (!buffer.length) {
+          return reply.status(400).send({ error: "Empty Reaper file" });
+        }
+        const tmpRpp = writeTempRpp(buffer);
+        const started = startSegmentReaperImport(
+          access.podcastId,
+          episodeId,
+          segmentId,
+          tmpRpp,
+          request.userId!,
+          () => {
+            broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
+          },
+        );
+        if (!started) {
+          removeTempPath(tmpRpp);
+          return reply.status(409).send({
+            status: "importing",
+            message: "Reaper import already in progress",
+          });
+        }
+        return reply.status(202).send({ status: "importing" });
+      } catch (err) {
+        request.log.error({ err }, "segment import-reaper failed to start");
+        return reply.status(500).send({
+          error:
+            err instanceof Error ? err.message : "Failed to import Reaper file",
         });
       }
     },

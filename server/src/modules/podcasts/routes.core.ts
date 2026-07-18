@@ -873,6 +873,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.showScheduledEpisodes !== undefined) {
         set.showScheduledEpisodes = Boolean(data.showScheduledEpisodes);
       }
+      if (data.subscribersKeepExpiredEpisodes !== undefined) {
+        set.subscribersKeepExpiredEpisodes = Boolean(
+          data.subscribersKeepExpiredEpisodes,
+        );
+      }
       if (data.feedAccent !== undefined) set.feedAccent = data.feedAccent;
       if (data.feedShowPodcastDescription !== undefined) {
         set.feedShowPodcastDescription = Boolean(data.feedShowPodcastDescription);

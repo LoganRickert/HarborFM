@@ -243,6 +243,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.defaultCanEpisodeAlert !== undefined
           ? Boolean(body.defaultCanEpisodeAlert)
           : current.default_can_episode_alert;
+      const default_can_upload_episode_files =
+        body.defaultCanUploadEpisodeFiles !== undefined
+          ? Boolean(body.defaultCanUploadEpisodeFiles)
+          : current.default_can_upload_episode_files;
       const llm_provider =
         body.llmProvider === "openai"
           ? "openai"
@@ -601,6 +605,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         default_can_generate_video,
         default_can_stripe,
         default_can_episode_alert,
+        default_can_upload_episode_files,
         llm_provider,
         ollama_url,
         openai_api_key,

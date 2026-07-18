@@ -30,12 +30,18 @@ import {
   segmentCreateReusableBodySchema,
   segmentReorderBodySchema,
   segmentUpdateBodySchema,
+  segmentHostDuckingBodySchema,
 } from "@harborfm/shared";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { recoverRecordedSegment } from "../../services/segmentFromRecording.js";
 import { redactSegmentForClient } from "../../utils/segment.js";
 import * as repo from "./repo.js";
 import { ALLOWED_MIME, transcriptPath, waveformPath } from "./utils.js";
+import { findMultitrackDir } from "../episodes/projectSegmentPack.js";
+import {
+  getHostDuckingJobStatus,
+  startHostDuckingJob,
+} from "../../services/hostDuckingRemake.js";
 
 export async function registerCoreRoutes(app: FastifyInstance) {
   app.get(
@@ -76,9 +82,13 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           audio && existsSync(audio.path)
             ? existsSync(waveformPath(audio.path))
             : false;
+        const hasRecordings = Boolean(
+          findMultitrackDir(access.podcastId, episodeId, row.id),
+        );
         return redactSegmentForClient({
           ...row,
           waveformExists,
+          hasRecordings,
         });
       });
       return { segments };
@@ -411,7 +421,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.audioEq !== undefined ||
         body.disabled !== undefined;
       if (!hasUpdates) {
-        return reply.status(400).send({ error: "At least one of name, trimRanges, markers, audioEq, or disabled must be provided" });
+        return reply.status(400).send({
+          error:
+            "At least one of name, trimRanges, markers, audioEq, or disabled must be provided",
+        });
       }
       const row = repo.getSegmentDuration(segmentId, episodeId);
       if (!row) return reply.status(404).send({ error: "Segment not found" });
@@ -485,7 +498,176 @@ export async function registerCoreRoutes(app: FastifyInstance) {
 
       broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
       const updated = repo.getSegmentById(segmentId, episodeId);
-      return redactSegmentForClient(updated as Record<string, unknown>);
+      const hasRecordings = Boolean(
+        findMultitrackDir(access.podcastId, episodeId, segmentId),
+      );
+      const audio = updated
+        ? repo.getSegmentAudioPath(
+            updated as Parameters<typeof repo.getSegmentAudioPath>[0],
+            access.podcastId,
+            episodeId,
+          )
+        : null;
+      const waveformExists =
+        audio && existsSync(audio.path)
+          ? existsSync(waveformPath(audio.path))
+          : false;
+      return redactSegmentForClient({
+        ...(updated as Record<string, unknown>),
+        hasRecordings,
+        waveformExists,
+      });
+    },
+  );
+
+  app.get(
+    "/episodes/:episodeId/segments/:segmentId/host-ducking/status",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Get host ducking remake status",
+        description:
+          "Poll after POST host-ducking (202) until done or failed.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          200: {
+            description: "Remake status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "remaking", "done", "failed"],
+              },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Invalid ids" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = segmentEpisodeSegmentIdParamSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Validation failed",
+          details: parsed.error.flatten(),
+        });
+      }
+      const { episodeId, segmentId } = parsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "You do not have permission to edit segments." });
+      }
+      return reply.send(getHostDuckingJobStatus(segmentId));
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/host-ducking",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Enable or disable host ducking (remake mix)",
+        description:
+          "Start a background remake with or without exclusive host gates. Returns 202; poll GET host-ducking/status until done or failed. Editors and above only.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            enabled: { type: "boolean" },
+          },
+          required: ["enabled"],
+        },
+        response: {
+          202: {
+            description: "Remake started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["remaking"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Remake already in progress",
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+          400: { description: "Validation failed or not multitrack" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = segmentEpisodeSegmentIdParamSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Validation failed",
+          details: parsed.error.flatten(),
+        });
+      }
+      const { episodeId, segmentId } = parsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "You do not have permission to edit segments." });
+      }
+      const bodyParsed = segmentHostDuckingBodySchema.safeParse(request.body);
+      if (!bodyParsed.success) {
+        return reply.status(400).send({
+          error: bodyParsed.error.issues[0]?.message ?? "Validation failed",
+          details: bodyParsed.error.flatten(),
+        });
+      }
+      const row = repo.getSegmentById(segmentId, episodeId);
+      if (!row) return reply.status(404).send({ error: "Segment not found" });
+      const mtDir = findMultitrackDir(access.podcastId, episodeId, segmentId);
+      if (!mtDir) {
+        return reply.status(400).send({
+          error: "Host ducking is only available for multitrack segments",
+        });
+      }
+      const started = startHostDuckingJob({
+        podcastId: access.podcastId,
+        episodeId,
+        segmentId,
+        enabled: bodyParsed.data.enabled,
+        onSuccess: () => {
+          broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
+        },
+      });
+      if (!started) {
+        return reply.status(409).send({
+          status: "remaking",
+          message: "Host ducking remake already in progress",
+        });
+      }
+      return reply.status(202).send({ status: "remaking" });
     },
   );
 

@@ -97,6 +97,9 @@ export type EpisodeMeta = {
   slug: string | null;
   status: string;
   publishAt: string | null;
+  expiresAt: string | null;
+  subscriberOnlyStartsAt: string | null;
+  subscriberOnlyEndsAt: string | null;
 };
 
 /** Get episode meta fields for PATCH logic. */
@@ -108,6 +111,9 @@ export function getEpisodeMeta(id: string): EpisodeMeta | undefined {
       slug: episodes.slug,
       status: episodes.status,
       publishAt: episodes.publishAt,
+      expiresAt: episodes.expiresAt,
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
     })
     .from(episodes)
     .where(eq(episodes.id, id))

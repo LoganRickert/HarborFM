@@ -7,6 +7,10 @@ const E2E_DIR = join(__dirname, '..');
 
 export const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api';
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /** Simple cookie jar: object of name -> value, serialized as Cookie header. */
 export function cookieJar() {
   const jar = {};
@@ -256,16 +260,22 @@ export async function uploadEpisodeAudio(jar, episodeId, _podcastId, filePath) {
 
 /**
  * Process episode audio (transcode to final). Sync; returns episode. Requires upload first.
+ * Retries briefly on 429: process-audio shares a 1s ffmpeg rate-limit bucket.
  */
 export async function processEpisodeAudio(jar, episodeId) {
-  const res = await apiFetch(`/episodes/${episodeId}/process-audio`, {
-    method: 'POST',
-  }, jar);
-  if (!res.ok) {
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await apiFetch(`/episodes/${episodeId}/process-audio`, {
+      method: 'POST',
+    }, jar);
+    if (res.ok) return res.json();
     const t = await res.text();
+    if (res.status === 429 && attempt < maxAttempts) {
+      await sleep(1100);
+      continue;
+    }
     throw new Error(`Process episode audio failed: ${res.status} ${t}`);
   }
-  return res.json();
 }
 
 /** WebSocket URL for call signaling (derived from baseURL). */
@@ -373,10 +383,6 @@ export async function addRecordedSegment(jar, episodeId, filePath) {
   return res.json();
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 /**
  * Poll a JSON status endpoint until success or failure.
  * Clears terminal statuses on the server when the API does so on read.
@@ -415,15 +421,21 @@ export async function pollStatus(
 }
 
 async function postProjectZip(jar, url, zipBuffer, filename) {
-  const formData = new FormData();
-  formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), filename);
-  const headers = jar.apply({});
-  delete headers['Content-Type'];
-  const csrf = jar.get()['harborfm_csrf'];
-  if (csrf) headers['x-csrf-token'] = csrf;
-  const res = await fetch(url, { method: 'POST', headers, body: formData });
-  jar.store(getSetCookies(res));
-  return res;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const formData = new FormData();
+    formData.append('file', new Blob([zipBuffer], { type: 'application/zip' }), filename);
+    const headers = jar.apply({});
+    delete headers['Content-Type'];
+    const csrf = jar.get()['harborfm_csrf'];
+    if (csrf) headers['x-csrf-token'] = csrf;
+    const res = await fetch(url, { method: 'POST', headers, body: formData });
+    jar.store(getSetCookies(res));
+    if (res.status !== 429 || attempt >= maxAttempts) return res;
+    const retryAfterSec = Number(res.headers.get('Retry-After')) || 30;
+    await res.text().catch(() => {});
+    await sleep(Math.min(Math.max(retryAfterSec, 1) * 1000, 35_000));
+  }
 }
 
 /** Start episode project import (202) and poll until done. Returns { episodeId, slug }. */
@@ -485,8 +497,41 @@ export async function importSegmentProject(
   if (res.status !== 202) {
     throw new Error(`Segment import start expected 202, got ${res.status} ${await res.text()}`);
   }
-  await pollStatus(
+  return pollStatus(
     `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/import-project/status`,
     jar,
   );
+}
+
+/**
+ * Start segment project import and expect it to fail (validation after 202).
+ * Returns the failure error message.
+ */
+export async function importSegmentProjectExpectFail(
+  jar,
+  episodeId,
+  segmentId,
+  zipBuffer,
+  filename = 'segment.zip',
+) {
+  const url = `${baseURL}/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/import-project`;
+  const res = await postProjectZip(jar, url, zipBuffer, filename);
+  if (res.status !== 202) {
+    throw new Error(`Segment import start expected 202, got ${res.status} ${await res.text()}`);
+  }
+  try {
+    await pollStatus(
+      `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/import-project/status`,
+      jar,
+    );
+    throw new Error('Expected segment import to fail, but it succeeded');
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message === 'Expected segment import to fail, but it succeeded'
+    ) {
+      throw err;
+    }
+    return err instanceof Error ? err.message : String(err);
+  }
 }

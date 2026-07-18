@@ -17,6 +17,7 @@ import {
   getEpisodeAlertPublicOrigin,
 } from "./publicUrls.js";
 import * as repo from "./repo.js";
+import { isCurrentlySubscriberOnly } from "../../utils/subscriberOnlyWindow.js";
 
 export type { AlertVars } from "./alertVars.js";
 export { renderTemplate } from "./alertVars.js";
@@ -43,7 +44,7 @@ export async function dispatchEpisodeAlerts(episodeId: string): Promise<void> {
 
   const baseUrl = getEpisodeAlertPublicOrigin(podcast.id);
   const vars = buildVars(podcast, episode);
-  const episodeIsPremium = Boolean(episode.subscriberOnly);
+  const episodeIsPremium = isCurrentlySubscriberOnly(episode);
 
   // Community / webhook destinations (respect per-destination episode scope)
   for (const dest of destinations) {

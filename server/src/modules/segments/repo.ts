@@ -38,6 +38,7 @@ export type SegmentListRow = {
   audioEq: string | null;
   assetName: string | null;
   disabled: boolean;
+  hostDuckingEnabled: boolean;
 };
 
 /** List segments for episode with leftJoin reusableAssets for assetName. */
@@ -60,6 +61,7 @@ export function listSegmentsForEpisode(episodeId: string): SegmentListRow[] {
       audioEq: episodeSegments.audioEq,
       assetName: reusableAssets.name,
       disabled: episodeSegments.disabled,
+      hostDuckingEnabled: episodeSegments.hostDuckingEnabled,
     })
     .from(episodeSegments)
     .leftJoin(
@@ -378,6 +380,18 @@ export function updateSegmentDisabled(
   drizzleDb
     .update(episodeSegments)
     .set({ disabled })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentHostDuckingEnabled(
+  segmentId: string,
+  episodeId: string,
+  hostDuckingEnabled: boolean,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ hostDuckingEnabled })
     .where(updateWhere(segmentId, episodeId))
     .run();
 }

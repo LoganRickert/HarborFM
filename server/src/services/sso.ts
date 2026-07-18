@@ -93,6 +93,7 @@ export function createFederatedUser(): string {
     canGenerateVideo: limits.can_generate_video,
     canStripe: limits.can_stripe,
     canEpisodeAlert: limits.can_episode_alert,
+    canUploadEpisodeFiles: limits.can_upload_episode_files,
     emailVerified: true,
   }).run();
   return id;
@@ -122,6 +123,7 @@ export function createFederatedUserWithEmail(
     canGenerateVideo: limits.can_generate_video,
     canStripe: limits.can_stripe,
     canEpisodeAlert: limits.can_episode_alert,
+    canUploadEpisodeFiles: limits.can_upload_episode_files,
     emailVerified,
   }).run();
   return id;
@@ -204,6 +206,7 @@ function getDefaultUserLimits(): {
   can_generate_video: number;
   can_stripe: number;
   can_episode_alert: number;
+  can_upload_episode_files: number;
 } {
   try {
     const s = readSettings();
@@ -233,6 +236,7 @@ function getDefaultUserLimits(): {
       can_generate_video: s.default_can_generate_video ? 1 : 0,
       can_stripe: s.default_can_stripe ? 1 : 0,
       can_episode_alert: s.default_can_episode_alert ? 1 : 0,
+      can_upload_episode_files: s.default_can_upload_episode_files ? 1 : 0,
     };
   } catch (_err) {
     return {
@@ -245,6 +249,7 @@ function getDefaultUserLimits(): {
       can_generate_video: 0,
       can_stripe: 0,
       can_episode_alert: 0,
+      can_upload_episode_files: 0,
     };
   }
 }

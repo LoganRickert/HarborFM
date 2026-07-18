@@ -1,6 +1,7 @@
 import { useState, useEffect, useId } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { EpisodePublishControls, type PublishFormFields } from './EpisodePublishControls';
+import { isExpiresAtBeforePublishAt } from './utils';
 import styles from '../EpisodeEditor.module.css';
 
 function statusLabel(status: string): string {
@@ -63,6 +64,7 @@ export function CollapsiblePublishPanel({
   }
 
   async function handleSave() {
+    if (isExpiresAtBeforePublishAt(draft)) return;
     try {
       await onSave(draft);
       setDirty(false);
@@ -71,6 +73,8 @@ export function CollapsiblePublishPanel({
       // keep panel open on error
     }
   }
+
+  const saveBlocked = isExpiresAtBeforePublishAt(draft);
 
   if (readOnly) {
     return (
@@ -138,7 +142,7 @@ export function CollapsiblePublishPanel({
                 type="button"
                 className={styles.publishPanelSaveBtn}
                 onClick={handleSave}
-                disabled={isSaving || !dirty}
+                disabled={isSaving || !dirty || saveBlocked}
               >
                 {isSaving ? 'Saving…' : 'Save'}
               </button>

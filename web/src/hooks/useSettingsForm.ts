@@ -14,6 +14,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   defaultCanGenerateVideo: true,
   defaultCanStripe: true,
   defaultCanEpisodeAlert: true,
+  defaultCanUploadEpisodeFiles: true,
   llmProvider: 'none',
   ollamaUrl: 'http://localhost:11434',
   openaiApiKey: '',

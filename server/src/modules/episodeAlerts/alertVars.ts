@@ -5,6 +5,7 @@ import {
 } from "./publicUrls.js";
 import { formatSeasonEpisodeLabel } from "./emailBuilders.js";
 import type { EpisodeForAlert, PodcastAlertSettings } from "./repo.js";
+import { isCurrentlySubscriberOnly } from "../../utils/subscriberOnlyWindow.js";
 
 export type AlertVars = {
   title: string;
@@ -55,7 +56,7 @@ export function buildVars(
     ),
     rssUrl: `${origin}/api/public/rss/${encodeURIComponent(podcast.slug)}.xml`,
     publishAt: episode.publishAt ?? new Date().toISOString(),
-    premium: episode.subscriberOnly ? "true" : "false",
+    premium: isCurrentlySubscriberOnly(episode) ? "true" : "false",
     podcastTitle: podcast.title,
     artworkUrl: buildEpisodeAlertArtworkUrl(episode) ?? "",
     seasonEpisode:

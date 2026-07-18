@@ -166,6 +166,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       const canGenerateVideo = settingsData.default_can_generate_video ? 1 : 0;
       const canStripe = settingsData.default_can_stripe ? 1 : 0;
       const canEpisodeAlert = settingsData.default_can_episode_alert ? 1 : 0;
+      const canUploadEpisodeFiles = settingsData.default_can_upload_episode_files
+        ? 1
+        : 0;
 
       repo.insertUser({
         id,
@@ -181,6 +184,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         canGenerateVideo,
         canStripe,
         canEpisodeAlert,
+        canUploadEpisodeFiles,
         emailVerified: true,
       });
 
@@ -252,6 +256,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             canGenerateVideo: { type: "boolean" },
             canStripe: { type: "boolean" },
             canEpisodeAlert: { type: "boolean" },
+            canUploadEpisodeFiles: { type: "boolean" },
             password: { type: "string" },
             maxPodcasts: {},
             maxEpisodes: {},
@@ -315,6 +320,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (body.canStripe !== undefined) set.canStripe = body.canStripe ? 1 : 0;
       if (body.canEpisodeAlert !== undefined)
         set.canEpisodeAlert = body.canEpisodeAlert ? 1 : 0;
+      if (body.canUploadEpisodeFiles !== undefined)
+        set.canUploadEpisodeFiles = body.canUploadEpisodeFiles ? 1 : 0;
       if (body.password !== undefined) {
         set.passwordHash = await argon2.hash(body.password);
       }

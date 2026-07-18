@@ -109,6 +109,17 @@ export const segmentUpdateBodySchema = z.object({
   disabled: z.boolean().optional(),
 });
 
+/** Body for POST /episodes/:episodeId/segments/:segmentId/host-ducking. */
+export const segmentHostDuckingBodySchema = z.object({
+  enabled: z.boolean(),
+});
+
+/** Response for GET .../host-ducking/status. */
+export const segmentHostDuckingStatusResponseSchema = z.object({
+  status: z.enum(['idle', 'remaking', 'done', 'failed']),
+  error: z.string().optional(),
+});
+
 /** Body for POST /episodes/:episodeId/segments/:segmentId/trim. */
 export const segmentTrimBodySchema = z
   .object({
@@ -186,6 +197,10 @@ export const segmentResponseSchema = z.object({
   audioEq: audioEqSchema,
   /** When true, segment is excluded from the final generated episode. */
   disabled: z.boolean().optional(),
+  /** When true, exclusive host gates from host_ducking.json are applied on remake. */
+  hostDuckingEnabled: z.boolean().optional(),
+  /** True when multitrack recordings exist for this segment. */
+  hasRecordings: z.boolean().optional(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */
@@ -264,6 +279,10 @@ export type SegmentReorderBody = z.infer<typeof segmentReorderBodySchema>;
 export type SegmentUpdateNameBody = z.infer<typeof segmentUpdateNameBodySchema>;
 export type AudioEq = z.infer<typeof audioEqSchema>;
 export type SegmentUpdateBody = z.infer<typeof segmentUpdateBodySchema>;
+export type SegmentHostDuckingBody = z.infer<typeof segmentHostDuckingBodySchema>;
+export type SegmentHostDuckingStatusResponse = z.infer<
+  typeof segmentHostDuckingStatusResponseSchema
+>;
 export type TrimRange = z.infer<typeof trimRangeSchema>;
 export type SegmentTrimBody = z.infer<typeof segmentTrimBodySchema>;
 export type SegmentRemoveSilenceBody = z.infer<typeof segmentRemoveSilenceBodySchema>;

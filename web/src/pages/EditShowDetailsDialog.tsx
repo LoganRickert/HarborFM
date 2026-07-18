@@ -120,6 +120,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
         subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
         showScheduledEpisodes: podcast.showScheduledEpisodes !== undefined ? Boolean(podcast.showScheduledEpisodes) : false,
+        subscribersKeepExpiredEpisodes:
+          podcast.subscribersKeepExpiredEpisodes !== undefined
+            ? Boolean(podcast.subscribersKeepExpiredEpisodes)
+            : false,
       };
       setForm(next);
       setFormBaseline(snapshotForDirty(next));
@@ -141,6 +145,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
         subscriberOnlyReviews: podcast.subscriberOnlyReviews !== undefined ? Boolean(podcast.subscriberOnlyReviews) : false,
         subscriberOnlyMessages: podcast.subscriberOnlyMessages !== undefined ? Boolean(podcast.subscriberOnlyMessages) : false,
         showScheduledEpisodes: podcast.showScheduledEpisodes !== undefined ? Boolean(podcast.showScheduledEpisodes) : false,
+        subscribersKeepExpiredEpisodes:
+          podcast.subscribersKeepExpiredEpisodes !== undefined
+            ? Boolean(podcast.subscribersKeepExpiredEpisodes)
+            : false,
       };
       setForm(next);
       setFormBaseline(snapshotForDirty(next));
@@ -291,6 +299,10 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
       subscriberOnlyReviews: currentForm.subscriberOnlyReviews !== undefined ? currentForm.subscriberOnlyReviews : undefined,
       subscriberOnlyMessages: currentForm.subscriberOnlyMessages !== undefined ? currentForm.subscriberOnlyMessages : undefined,
       showScheduledEpisodes: currentForm.showScheduledEpisodes !== undefined ? currentForm.showScheduledEpisodes : undefined,
+      subscribersKeepExpiredEpisodes:
+        currentForm.subscribersKeepExpiredEpisodes !== undefined
+          ? currentForm.subscribersKeepExpiredEpisodes
+          : undefined,
     } as PodcastUpdate;
     if (podcast?.myRole === 'owner' && podcast?.dnsConfig) {
       const dc = podcast.dnsConfig;
@@ -510,6 +522,20 @@ export function EditShowDetailsDialog({ open, podcastId, onClose }: EditShowDeta
                 </label>
                 <p id="show-scheduled-episodes-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
                   When on, episodes scheduled for a future date appear on the public feed with a placeholder until the release date.
+                </p>
+                <label className="toggle" aria-describedby="keep-expired-subscribers-desc">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.subscribersKeepExpiredEpisodes)}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, subscribersKeepExpiredEpisodes: e.target.checked }))
+                    }
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Keep expired episodes for subscribers</span>
+                </label>
+                <p id="keep-expired-subscribers-desc" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                  When on, episodes past their Expires at date stay in subscriber/private feeds. The public feed and RSS always hide expired episodes.
                 </p>
                 <label className="toggle" aria-describedby="subscribers-enabled-desc">
                   <input

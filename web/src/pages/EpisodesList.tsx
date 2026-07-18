@@ -22,6 +22,8 @@ export function EpisodesList() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importWarning, setImportWarning] = useState<string | null>(null);
+  const [importedEpisodeId, setImportedEpisodeId] = useState<string | null>(null);
 
   const { data: podcast, isLoading: podcastLoading } = useQuery({
     queryKey: ['podcast', id],
@@ -46,8 +48,10 @@ export function EpisodesList() {
   const draftCount = episodes.filter((e) => e.status === 'draft').length;
 
   async function handleImportFile(file: File | undefined) {
-    if (!id || !file || (importOpen && !importError)) return;
+    if (!id || !file || (importOpen && !importError && !importWarning)) return;
     setImportError(null);
+    setImportWarning(null);
+    setImportedEpisodeId(null);
     setImportOpen(true);
     try {
       await startImportEpisodeProject(id, file);
@@ -58,12 +62,28 @@ export function EpisodesList() {
       if (!result.episodeId) {
         throw new Error('Import finished without an episode id');
       }
+      if (result.warning) {
+        setImportedEpisodeId(result.episodeId);
+        setImportWarning(result.warning);
+        return;
+      }
       setImportOpen(false);
       navigate(`/episodes/${result.episodeId}`);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed');
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  function dismissImportWait() {
+    const episodeId = importedEpisodeId;
+    setImportOpen(false);
+    setImportError(null);
+    setImportWarning(null);
+    setImportedEpisodeId(null);
+    if (episodeId) {
+      navigate(`/episodes/${episodeId}`);
     }
   }
 
@@ -110,7 +130,7 @@ export function EpisodesList() {
               <button
                 type="button"
                 className={styles.secondaryBtn}
-                disabled={importOpen && !importError}
+                disabled={importOpen && !importError && !importWarning}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <FolderUp size={18} strokeWidth={2.5} aria-hidden />
@@ -160,10 +180,10 @@ export function EpisodesList() {
           title="Please wait"
           description="Importing project…"
           error={importError}
-          onDismiss={() => {
-            setImportOpen(false);
-            setImportError(null);
-          }}
+          errorTitle="Import failed"
+          warning={importWarning}
+          warningTitle="Import finished"
+          onDismiss={dismissImportWait}
         />
         <div className={styles.summary}>
           <span className={styles.summaryItem}>
@@ -224,8 +244,12 @@ export function EpisodesList() {
                   <ul className={styles.list}>
                     {statusEpisodes.map((ep) => {
                       const isSubscriberOnly = Boolean(ep.subscriberOnly);
-                      const statusBadgeText =
-                        ep.publishAt && ep.publishAt.trim()
+                      const isExpired =
+                        Boolean(ep.expiresAt && ep.expiresAt.trim()) &&
+                        new Date(ep.expiresAt!).getTime() <= Date.now();
+                      const statusBadgeText = isExpired
+                        ? 'Expired'
+                        : ep.publishAt && ep.publishAt.trim()
                           ? formatDateShort(ep.publishAt)
                           : sectionLabel;
                       return (

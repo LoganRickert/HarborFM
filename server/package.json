@@ -59,6 +59,7 @@
     "openid-client": "^6.2.1",
     "otplib": "^13.3.0",
     "qrcode": "^1.5.4",
+    "rppp": "^0.4.2",
     "samba-client": "^7.2.0",
     "ssh2-sftp-client": "^12.0.1",
     "stripe": "^22.3.1",

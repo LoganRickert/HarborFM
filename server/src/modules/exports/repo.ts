@@ -117,6 +117,7 @@ export function getPublishedEpisodeRowsForDeploy(
         eq(episodesTable.podcastId, podcastId),
         eq(episodesTable.status, "published"),
         sql`(${episodesTable.publishAt} IS NULL OR datetime(${episodesTable.publishAt}) <= datetime('now'))`,
+        sql`(${episodesTable.expiresAt} IS NULL OR datetime(${episodesTable.expiresAt}) > datetime('now'))`,
       ),
     )
     .all() as PublishedEpisodeRow[];

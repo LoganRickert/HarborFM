@@ -37,6 +37,7 @@ import {
   FeedEpisodeChapters,
   FeedEpisodeSoundbites,
   FeedEpisodePoll,
+  FeedEpisodeFiles,
   FeedFundingSupport,
 } from '../components/Feed';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
@@ -331,6 +332,7 @@ export function FeedEpisode({
                 <p>{episode.description}</p>
               </div>
             )}
+            <FeedEpisodeFiles podcastSlug={podcastSlug!} episodeSlug={episodeSlug!} />
             {podcast.feedShowFunding !== false && (
               <FeedFundingSupport
                 fundingLinks={

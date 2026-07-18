@@ -130,6 +130,7 @@ export function getPublishedEpisodeForStream(
         eq(episodes.podcastId, podcastId),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        sql`(${episodes.expiresAt} IS NULL OR datetime(${episodes.expiresAt}) > datetime('now'))`,
       ),
     )
     .limit(1)

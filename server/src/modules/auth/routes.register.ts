@@ -171,6 +171,9 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
       const can_generate_video = settings.default_can_generate_video ? 1 : 0;
       const can_stripe = settings.default_can_stripe ? 1 : 0;
       const can_episode_alert = settings.default_can_episode_alert ? 1 : 0;
+      const can_upload_episode_files = settings.default_can_upload_episode_files
+        ? 1
+        : 0;
 
       const requiresVerification =
         isEmailProviderConfigured(settings) &&
@@ -207,6 +210,7 @@ export async function registerRegisterRoutes(app: FastifyInstance) {
         canGenerateVideo: can_generate_video,
         canStripe: can_stripe,
         canEpisodeAlert: can_episode_alert,
+        canUploadEpisodeFiles: can_upload_episode_files,
         emailVerified: email_verified === 1,
         emailVerificationTokenHash: email_verification_token_hash,
         emailVerificationExpiresAt: email_verification_expires_at,

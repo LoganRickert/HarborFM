@@ -130,6 +130,8 @@ export interface Podcast {
   subscriberOnlyMessages?: number | boolean;
   /** When true, future-dated scheduled/published episodes appear on the public feed with a placeholder. */
   showScheduledEpisodes?: number | boolean;
+  /** When true, expired episodes remain in subscriber/private feeds. Public always hides them. */
+  subscribersKeepExpiredEpisodes?: number | boolean;
   /** Named accent for public feed page theming. */
   feedAccent?: string;
   feedShowPodcastDescription?: number | boolean;

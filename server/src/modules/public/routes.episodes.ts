@@ -16,6 +16,7 @@ import {
   publicCastDto,
   publicEpisodeDto,
 } from "./utils.js";
+import { isCurrentlySubscriberOnly } from "../../utils/subscriberOnlyWindow.js";
 import * as repo from "./repo.js";
 
 export async function registerEpisodesRoutes(app: FastifyInstance) {
@@ -323,7 +324,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
       const row = repo.getEpisodeForWaveform(podcast.id, episodeSlug);
       if (
         !row ||
-        row.subscriberOnly === 1 ||
+        isCurrentlySubscriberOnly(row) ||
         !row.audioFinalPath
       ) {
         return reply.status(404).send({ error: "Waveform not found" });
@@ -387,7 +388,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Podcast not found" });
 
       const row = repo.getPublishedEpisodeBySlug(podcast.id, episodeSlug);
-      if (!row || row.subscriberOnly === 1)
+      if (!row || isCurrentlySubscriberOnly(row))
         return reply.status(404).send({ error: "Transcript not found" });
 
       const srtPath = transcriptSrtPath(podcast.id, row.id);
@@ -446,7 +447,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Chapters not found" });
 
       const row = repo.getPublishedEpisodeBySlug(podcast.id, episodeSlug);
-      if (!row || row.subscriberOnly === 1)
+      if (!row || isCurrentlySubscriberOnly(row))
         return reply.status(404).send({ error: "Chapters not found" });
 
       const path = chaptersJsonPath(podcast.id, row.id);

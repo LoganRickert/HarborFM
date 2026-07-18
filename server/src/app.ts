@@ -47,6 +47,7 @@ import { audioRoutes } from "./modules/audio/index.js";
 import { libraryRoutes } from "./modules/library/index.js";
 import { segmentRoutes } from "./modules/segments/index.js";
 import { showNotesRoutes } from "./modules/showNotes/index.js";
+import { episodeFilesRoutes } from "./modules/episodeFiles/index.js";
 import { rssRoutes } from "./modules/rss/index.js";
 import { exportRoutes } from "./modules/exports/index.js";
 import { settingsRoutes } from "./modules/settings/index.js";
@@ -286,6 +287,7 @@ async function main() {
   await app.register(libraryRoutes, { prefix: apiPrefix });
   await app.register(segmentRoutes, { prefix: apiPrefix });
   await app.register(showNotesRoutes, { prefix: apiPrefix });
+  await app.register(episodeFilesRoutes, { prefix: apiPrefix });
   await app.register(rssRoutes, { prefix: apiPrefix });
   await app.register(exportRoutes, { prefix: apiPrefix });
   await app.register(settingsRoutes, { prefix: apiPrefix });

@@ -1,7 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import { MessageCircle, Lock, Share2, FileText, Bell } from 'lucide-react';
 import { FeedEpisodeHeaderProps } from '../../../types/feed';
-import { formatDate, formatDuration, formatSeasonEpisode } from '../../../utils/format';
+import {
+  formatDate,
+  formatDateTimeWithZone,
+  formatDuration,
+  formatSeasonEpisode,
+  parseUtc,
+} from '../../../utils/format';
 import { ShareDialog } from '../../ShareDialog';
 import { FeedEpisodeTranscriptDialog } from './FeedEpisodeTranscriptDialog';
 import { useSubscriberAuth } from '../../../hooks/useSubscriberAuth';
@@ -31,6 +37,29 @@ export function FeedEpisodeHeader({
   );
   const isEpisodeSubscriberOnly = Boolean(episode.subscriberOnly);
   const shouldShowGoldLock = isPodcastSubscriberOnly || isEpisodeSubscriberOnly;
+  const subscriberOnlyWindowLabel = (() => {
+    const now = Date.now();
+    const startsRaw = episode.subscriberOnlyStartsAt?.trim() || '';
+    const endsRaw = episode.subscriberOnlyEndsAt?.trim() || '';
+    const startsMs = startsRaw ? parseUtc(startsRaw)?.getTime() : null;
+    const endsMs = endsRaw ? parseUtc(endsRaw)?.getTime() : null;
+
+    // Before the window opens: announce the future start.
+    if (startsMs != null && Number.isFinite(startsMs) && startsMs > now) {
+      const formatted = formatDateTimeWithZone(startsRaw);
+      return formatted
+        ? { prefix: 'Subscriber Only Starting', date: formatted }
+        : null;
+    }
+    // Inside the window (or end-only): announce the future end. Never after it passes.
+    if (endsMs != null && Number.isFinite(endsMs) && endsMs > now) {
+      const formatted = formatDateTimeWithZone(endsRaw);
+      return formatted
+        ? { prefix: 'Subscriber Only until', date: formatted }
+        : null;
+    }
+    return null;
+  })();
   const isAuthenticated = Boolean(
     podcastSlug && getTokenIdForPodcast(podcastSlug),
   );
@@ -181,6 +210,17 @@ export function FeedEpisodeHeader({
           </div>
         </div>
       </div>
+      {subscriberOnlyWindowLabel && (
+        <div className={styles.subscriberOnlyWindowCard} role="status">
+          <Lock size={18} strokeWidth={2.5} className={styles.subscriberOnlyWindowIcon} aria-hidden />
+          <span className={styles.subscriberOnlyWindowText}>
+            {subscriberOnlyWindowLabel.prefix}{' '}
+            <span className={styles.subscriberOnlyWindowDate}>
+              {subscriberOnlyWindowLabel.date}
+            </span>
+          </span>
+        </div>
+      )}
       {children}
     </div>
   );

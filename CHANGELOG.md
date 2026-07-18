@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.13.0 - 2026-07-17
+
+- **Host ducking:** For multitrack segments, Manage Segment can enable exclusive host gating. When one host is clearly speaking, other hosts are cut for that stretch. Off by default. When enabled, export writes gated clips into `segment.rpp` / `timeline.otio` and includes `host_ducking.json`.
+- **Episode expiration:** Optional **Expires at** hides an episode from the public feed, RSS, sitemap, and public audio after that time. Studio access is unchanged. **Keep expired episodes for subscribers** in Edit Show Details can leave them in private/subscriber feeds only. Expires at must be after Publish at.
+- **Subscriber-only window:** With **Subscriber Only** on, optional **Subscriber only from** / **Subscriber only until** limit when the episode is gated for the public. Outside that window, public list, RSS, and audio treat it as free. Private/subscriber feeds are unchanged.
+- **Episode Files:** Final Episode can attach files or links for listeners, with drag-and-drop reorder. The public episode page shows an expandable **Episode Files** card with embeds, image lightbox, and downloads. Controlled by **Can Upload Episode Files**. Separate from the Show Notes checklist.
+- **Import Reaper:** Manage Segment **Import Reaper** applies an edited `segment.rpp` to the segment's existing recordings and remakes the mix. Clips whose audio files are missing on the server are skipped. Extra Reaper tracks are kept like library/soundboard clips.
+- **Reaper edits stick:** Import preserves clip speed, loop, fades, pitch, and track ReaEQ / ReaGate / ReaComp in the remade mix and writes them back on export. Bypassed plugins are ignored.
+- **Reaper volume & mute:** Mute and fader level are tracked separately, so muted tracks keep their volume when unmuted. Remade mixes skip muted clips and match Reaper's summing. On export, faders are raised so the loudest unmuted track sits at 0 dB when everything was below unity.
+- **Project / segment import:** When `segment.rpp` changed since export, import rebuilds the multitrack layout from that timeline, copies new media into `recordings/`, and remakes the mix. Reaper fader, mute, and gain edits affect the remade mix. If the Reaper file cannot be read, import falls back to `tracks_manifest.json` and shows a clear error.
+
 ## v1.12.0 - 2026-07-17
 
 - **Episode Alerts:** Claiming `episode_alerts_sent_at` is now an atomic UPDATE so an immediate publish and the 15-minute release poller cannot both send the same alert.

@@ -83,6 +83,11 @@ import * as m081 from "./migrations/081_stripe_checkout_paused.js";
 import * as m082 from "./migrations/082_stripe_credentials_verified.js";
 import * as m083 from "./migrations/083_user_can_episode_alert.js";
 import * as m084 from "./migrations/084_episode_alerts.js";
+import * as m085 from "./migrations/085_episode_expiration.js";
+import * as m086 from "./migrations/086_episode_subscriber_only_window.js";
+import * as m087 from "./migrations/087_user_can_upload_episode_files.js";
+import * as m088 from "./migrations/088_episode_files.js";
+import * as m089 from "./migrations/089_segment_host_ducking.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -169,6 +174,11 @@ const migrations = [
   { name: "082_stripe_credentials_verified", ...m082 },
   { name: "083_user_can_episode_alert", ...m083 },
   { name: "084_episode_alerts", ...m084 },
+  { name: "085_episode_expiration", ...m085 },
+  { name: "086_episode_subscriber_only_window", ...m086 },
+  { name: "087_user_can_upload_episode_files", ...m087 },
+  { name: "088_episode_files", ...m088 },
+  { name: "089_segment_host_ducking", ...m089 },
 ];
 
 const MIGRATIONS_TABLE = `

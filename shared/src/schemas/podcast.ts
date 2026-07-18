@@ -142,6 +142,8 @@ export const podcastUpdateSchema = podcastCreateSchema
     subscriberOnlyMessages: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     /** When true, episodes scheduled for a future date appear on the public feed with a placeholder. Accept boolean or 0/1. */
     showScheduledEpisodes: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /** When true, expired episodes remain in subscriber/private feeds. Public always hides them. Accept boolean or 0/1. */
+    subscribersKeepExpiredEpisodes: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     /** Primary accent color for the public feed page. */
     feedAccent: feedAccentSchema.optional(),
     feedShowPodcastDescription: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),

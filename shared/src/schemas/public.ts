@@ -84,6 +84,9 @@ export const publicEpisodeSchema = z.object({
   srtUrl: z.string().nullable().optional(),
   /** When true, episode is subscriber-only; public page shows locked card (no audioUrl). */
   subscriberOnly: z.boolean().optional(),
+  /** Optional window bounds when subscriber-only gating is configured (ISO datetimes). */
+  subscriberOnlyStartsAt: z.string().nullable().optional(),
+  subscriberOnlyEndsAt: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   /** Private URLs (only present when authenticated with subscriber token) */

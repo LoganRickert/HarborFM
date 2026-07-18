@@ -28,6 +28,8 @@ export function redactSegmentForClient(
     assetName: segment.assetName,
     waveformExists: segment.waveformExists,
     disabled: segment.disabled,
+    hostDuckingEnabled: segment.hostDuckingEnabled,
+    hasRecordings: segment.hasRecordings,
   };
   const path = segment.audioPath;
   if (path != null && typeof path === "string" && path.length > 0) {

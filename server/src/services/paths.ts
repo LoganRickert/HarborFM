@@ -104,6 +104,29 @@ export function uploadsDir(podcastId: string, episodeId: string): string {
   return dir;
 }
 
+/** Directory for Episode Files (listener attachments). Creates dir if missing. */
+export function episodeFilesDir(podcastId: string, episodeId: string): string {
+  assertSafeId(podcastId, "podcastId");
+  assertSafeId(episodeId, "episodeId");
+  const dir = join(DATA_DIR, "uploads", podcastId, episodeId, "files");
+  ensureDir(dir);
+  return dir;
+}
+
+/** Absolute path for one Episode File blob. Does not create dir. */
+export function episodeFilePath(
+  podcastId: string,
+  episodeId: string,
+  storageName: string,
+): string {
+  assertSafeId(podcastId, "podcastId");
+  assertSafeId(episodeId, "episodeId");
+  if (!/^[a-zA-Z0-9._-]+$/.test(storageName)) {
+    throw new Error("Invalid storage name");
+  }
+  return join(DATA_DIR, "uploads", podcastId, episodeId, "files", storageName);
+}
+
 export function processedDir(podcastId: string, episodeId: string): string {
   assertSafeId(podcastId, "podcastId");
   assertSafeId(episodeId, "episodeId");

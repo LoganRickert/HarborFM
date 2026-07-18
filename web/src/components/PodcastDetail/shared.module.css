@@ -222,6 +222,12 @@ textarea.input {
   font-size: 1rem;
 }
 
+.input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+  cursor: pointer;
+}
+
 .input:focus,
 .select:focus,
 textarea.input:focus {

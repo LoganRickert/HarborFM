@@ -193,6 +193,11 @@
   color: var(--text);
   font-size: 1rem;
 }
+.input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+  cursor: pointer;
+}
 .input:focus:not(:disabled),
 .textarea:focus:not(:disabled),
 .select:focus:not(:disabled) {
@@ -2992,6 +2997,14 @@
   flex-direction: column;
 }
 
+.dialogContentScrollable > .dialogHeaderRow {
+  flex-shrink: 0;
+}
+
+.dialogContentScrollable > .dialogActions {
+  flex-shrink: 0;
+}
+
 /* Episode Details dialog: header, description, scroll body, footer */
 .dialogDetailsGrid .dialogHeaderRow,
 .dialogDetailsGrid .dialogDescription {
@@ -3725,6 +3738,65 @@
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+.hostDuckingSetting {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.hostDuckingSettingLabel {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hostDuckingSegmented {
+  display: flex;
+  width: 100%;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 40%, #000 18%);
+  border: 1px solid var(--border);
+}
+
+.hostDuckingSegmentedBtn,
+.hostDuckingSegmentedActive {
+  flex: 1;
+  min-height: 34px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hostDuckingSegmentedBtn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.hostDuckingSegmentedBtn:disabled,
+.hostDuckingSegmentedActive:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hostDuckingSegmentedActive {
+  background: color-mix(in srgb, var(--bg-elevated) 80%, var(--accent, #2d6a4f) 12%);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 .manageSegmentAction {
   display: grid;

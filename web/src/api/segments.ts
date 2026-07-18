@@ -1,4 +1,4 @@
-import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody } from '@harborfm/shared';
+import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody, SegmentHostDuckingStatusResponse } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
@@ -64,6 +64,44 @@ export function updateSegment(episodeId: string, segmentId: string, payload: Seg
   });
 }
 
+/** Start host ducking remake (202). Poll getSegmentHostDuckingStatus until done/failed. */
+export function startSegmentHostDucking(
+  episodeId: string,
+  segmentId: string,
+  enabled: boolean,
+): Promise<void> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/host-ducking`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ enabled }),
+  }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+export function getSegmentHostDuckingStatus(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentHostDuckingStatusResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/host-ducking/status`,
+    { credentials: 'include' },
+  ).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
 export function recoverRecordedSegment(episodeId: string, segmentId: string): Promise<SegmentResponse> {
   return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/recover`, {
     method: 'POST',
@@ -93,6 +131,7 @@ export type SegmentProjectExportStatusResponse = {
 export type SegmentProjectImportStatusResponse = {
   status: 'idle' | 'importing' | 'done' | 'failed';
   error?: string;
+  warning?: string;
 };
 
 /** Start segment project zip build. 202 or 409 both OK. Poll getSegmentProjectExportStatus. */
@@ -163,6 +202,51 @@ export function getSegmentProjectImportStatus(
 ): Promise<SegmentProjectImportStatusResponse> {
   return fetch(
     `${BASE}/episodes/${episodeId}/segments/${segmentId}/import-project/status`,
+    { credentials: 'include' },
+  ).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+export type SegmentReaperImportStatusResponse = {
+  status: 'idle' | 'importing' | 'done' | 'failed';
+  error?: string;
+};
+
+/** Start segment.rpp import (202). Poll getSegmentReaperImportStatus until done/failed. */
+export function startImportSegmentReaper(
+  episodeId: string,
+  segmentId: string,
+  file: File,
+): Promise<void> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/import-reaper`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+export function getSegmentReaperImportStatus(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentReaperImportStatusResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/import-reaper/status`,
     { credentials: 'include' },
   ).then((r) => {
     if (!r.ok) {

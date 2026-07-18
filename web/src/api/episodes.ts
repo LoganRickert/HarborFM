@@ -53,6 +53,7 @@ export type ProjectImportStatusResponse = {
   episodeId?: string;
   slug?: string;
   error?: string;
+  warning?: string;
 };
 
 /** Start episode project import (202). Poll getProjectImportStatus until done/failed. */

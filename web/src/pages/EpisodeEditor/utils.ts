@@ -17,11 +17,14 @@ export interface EpisodeForm {
   episodeNumber: string;
   status: string;
   publishAt: string;
+  expiresAt: string;
   explicit: boolean;
   episodeType: 'full' | 'trailer' | 'bonus' | '';
   episodeLink: string;
   guidIsPermalink: boolean;
   subscriberOnly: boolean;
+  subscriberOnlyStartsAt: string;
+  subscriberOnlyEndsAt: string;
   contentLinks: Array<{ href: string; text: string }>;
   podcastTxts: Array<{ purpose: string; value: string }>;
   socialInteracts: Array<{
@@ -160,11 +163,18 @@ export function episodeToForm(episode: Episode): EpisodeForm {
     episodeNumber: episode.episodeNumber != null ? String(episode.episodeNumber) : '',
     status: episode.status,
     publishAt: episode.publishAt ? toDateTimeLocalValue(episode.publishAt) : '',
+    expiresAt: episode.expiresAt ? toDateTimeLocalValue(episode.expiresAt) : '',
     explicit: !!episode.explicit,
     episodeType: (episode.episodeType as 'full' | 'trailer' | 'bonus') || 'full',
     episodeLink: episode.episodeLink ?? '',
     guidIsPermalink: episode.guidIsPermalink === 1,
     subscriberOnly: !!(episode.subscriberOnly),
+    subscriberOnlyStartsAt: episode.subscriberOnlyStartsAt
+      ? toDateTimeLocalValue(episode.subscriberOnlyStartsAt)
+      : '',
+    subscriberOnlyEndsAt: episode.subscriberOnlyEndsAt
+      ? toDateTimeLocalValue(episode.subscriberOnlyEndsAt)
+      : '',
     contentLinks,
     podcastTxts,
     socialInteracts,
@@ -177,15 +187,51 @@ export function episodeToForm(episode: Episode): EpisodeForm {
   };
 }
 
-export type PublishFormFields = Pick<EpisodeForm, 'status' | 'seasonNumber' | 'episodeNumber' | 'publishAt'>;
+export type PublishFormFields = Pick<
+  EpisodeForm,
+  'status' | 'seasonNumber' | 'episodeNumber' | 'publishAt' | 'expiresAt'
+>;
+
+/** True when both dates are set and expiresAt is not strictly after publishAt. */
+export function isExpiresAtBeforePublishAt(fields: {
+  publishAt?: string | null;
+  expiresAt?: string | null;
+}): boolean {
+  const publishAt = typeof fields.publishAt === 'string' ? fields.publishAt.trim() : '';
+  const expiresAt = typeof fields.expiresAt === 'string' ? fields.expiresAt.trim() : '';
+  if (!publishAt || !expiresAt) return false;
+  return new Date(expiresAt).getTime() <= new Date(publishAt).getTime();
+}
+
+export const EXPIRES_AT_BEFORE_PUBLISH_AT_MESSAGE = 'Expires at must be after Publish at';
+
+/** True when both window dates are set and start is not strictly before end. */
+export function isSubscriberOnlyWindowInvalid(fields: {
+  subscriberOnlyStartsAt?: string | null;
+  subscriberOnlyEndsAt?: string | null;
+}): boolean {
+  const startsAt =
+    typeof fields.subscriberOnlyStartsAt === 'string' ? fields.subscriberOnlyStartsAt.trim() : '';
+  const endsAt =
+    typeof fields.subscriberOnlyEndsAt === 'string' ? fields.subscriberOnlyEndsAt.trim() : '';
+  if (!startsAt || !endsAt) return false;
+  return new Date(startsAt).getTime() >= new Date(endsAt).getTime();
+}
+
+export const SUBSCRIBER_ONLY_WINDOW_INVALID_MESSAGE =
+  'Subscriber only until must be after Subscriber only from';
 
 /** Build API update payload for publish fields only. */
 export function publishFieldsToApiPayload(fields: PublishFormFields) {
+  if (isExpiresAtBeforePublishAt(fields)) {
+    throw new Error(EXPIRES_AT_BEFORE_PUBLISH_AT_MESSAGE);
+  }
   return {
     status: fields.status as 'draft' | 'scheduled' | 'published',
     seasonNumber: fields.seasonNumber === '' ? null : parseInt(fields.seasonNumber, 10),
     episodeNumber: fields.episodeNumber === '' ? null : parseInt(fields.episodeNumber, 10),
     publishAt: fields.publishAt ? new Date(fields.publishAt).toISOString() : null,
+    expiresAt: fields.expiresAt ? new Date(fields.expiresAt).toISOString() : null,
   };
 }
 
@@ -306,6 +352,13 @@ export function formToApiPayload(form: EpisodeForm) {
     })
     .filter((b) => b.type && b.method && b.recipients.length > 0);
 
+  if (isExpiresAtBeforePublishAt(form)) {
+    throw new Error(EXPIRES_AT_BEFORE_PUBLISH_AT_MESSAGE);
+  }
+  if (isSubscriberOnlyWindowInvalid(form)) {
+    throw new Error(SUBSCRIBER_ONLY_WINDOW_INVALID_MESSAGE);
+  }
+
   return {
     title: form.title,
     slug: form.slug || slugify(form.title),
@@ -321,9 +374,16 @@ export function formToApiPayload(form: EpisodeForm) {
     artworkUrl: form.artworkUrl === '' ? null : form.artworkUrl,
     explicit: form.explicit ? 1 : 0,
     publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
+    expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
     episodeLink: form.episodeLink || null,
     guidIsPermalink: form.guidIsPermalink ? 1 : 0,
     subscriberOnly: form.subscriberOnly ? 1 : 0,
+    subscriberOnlyStartsAt: form.subscriberOnlyStartsAt
+      ? new Date(form.subscriberOnlyStartsAt).toISOString()
+      : null,
+    subscriberOnlyEndsAt: form.subscriberOnlyEndsAt
+      ? new Date(form.subscriberOnlyEndsAt).toISOString()
+      : null,
     contentLinks: contentLinks.length > 0 ? contentLinks : null,
     podcastTxts: podcastTxts.length > 0 ? podcastTxts : null,
     socialInteracts: socialInteracts.length > 0 ? socialInteracts : null,

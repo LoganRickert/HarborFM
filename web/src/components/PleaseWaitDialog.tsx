@@ -8,6 +8,12 @@ export interface PleaseWaitDialogProps {
   description?: string;
   /** When set, dialog is in error state and can be dismissed. */
   error?: string | null;
+  /** Title shown when `error` is set (defaults to "Something went wrong"). */
+  errorTitle?: string;
+  /** Non-fatal notice after success; dialog stays open until dismissed. */
+  warning?: string | null;
+  /** Title shown when `warning` is set (defaults to "Import finished"). */
+  warningTitle?: string;
   onDismiss?: () => void;
 }
 
@@ -16,15 +22,20 @@ export function PleaseWaitDialog({
   title = 'Please wait',
   description = 'This may take a moment…',
   error = null,
+  errorTitle = 'Something went wrong',
+  warning = null,
+  warningTitle = 'Import finished',
   onDismiss,
 }: PleaseWaitDialogProps) {
   const isError = Boolean(error);
+  const isWarning = Boolean(warning) && !isError;
+  const canDismiss = isError || isWarning;
 
   return (
     <Dialog.Root
       open={open}
       onOpenChange={(o) => {
-        if (!o && isError) onDismiss?.();
+        if (!o && canDismiss) onDismiss?.();
       }}
     >
       <Dialog.Portal>
@@ -32,30 +43,32 @@ export function PleaseWaitDialog({
         <Dialog.Content
           className={`${styles.dialogContent} ${styles.dialogContentOnModal}`}
           onEscapeKeyDown={(e) => {
-            if (!isError) {
+            if (!canDismiss) {
               e.preventDefault();
               e.stopPropagation();
             }
           }}
           onPointerDownOutside={(e) => {
-            if (!isError) e.preventDefault();
+            if (!canDismiss) e.preventDefault();
           }}
           onInteractOutside={(e) => {
-            if (!isError) e.preventDefault();
+            if (!canDismiss) e.preventDefault();
           }}
         >
           <div className={styles.dialogHeaderRow}>
-            <Dialog.Title className={styles.dialogTitle}>{title}</Dialog.Title>
+            <Dialog.Title className={styles.dialogTitle}>
+              {isError ? errorTitle : isWarning ? warningTitle : title}
+            </Dialog.Title>
           </div>
           <Dialog.Description className={styles.dialogDescription}>
-            {isError ? error : description}
+            {isError ? error : isWarning ? warning : description}
           </Dialog.Description>
-          {!isError && (
+          {!canDismiss && (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '0.5rem 0 0.25rem' }}>
               <InlineLoading label={title} />
             </div>
           )}
-          {isError && (
+          {canDismiss && (
             <div className={styles.dialogActions}>
               <button
                 type="button"

@@ -39,13 +39,25 @@ import {
   addUserDiskBytes,
   getSegmentById,
   updateSegmentAudio,
+  updateSegmentHostDuckingEnabled,
   updateSegmentMarkers,
 } from "../segments/repo.js";
 import { findMultitrackDir } from "./projectSegmentPack.js";
 import { PROJECT_FORMAT_VERSION } from "./projectExport.js";
-import { ImportValidationError, removeTempPath } from "./projectImport.js";
+import { removeTempPath } from "./projectImport.js";
+import {
+  applyTimelineSidecarToManifest,
+  REAPER_IGNORED_WARNING,
+  timelineSidecarNeedsApply,
+} from "./projectDawTimelineImport.js";
+import {
+  buildManifestForRemake,
+  HOST_DUCKING_FILENAME,
+  readHostDuckingFile,
+} from "../../services/hostDucking.js";
 import {
   findSegmentAudioFile,
+  ImportValidationError,
   nameFromSegmentFolder,
   pruneMissingManifestTracks,
   readJsonFile,
@@ -58,6 +70,8 @@ import {
 export type SegmentImportResult = {
   segmentId: string;
   bytesAdded: number;
+  /** Non-fatal notice for the client (e.g. Reaper file ignored). */
+  warning?: string;
 };
 
 /**
@@ -101,6 +115,7 @@ export async function applySegmentFolderOntoExisting(opts: {
     "--version",
   ]);
   let bytesAdded = 0;
+  let warning: string | undefined;
 
   // Prefer storing as recorded overwrite for a consistent in-place edit.
   // If zip includes library/ for a reusable asset, recreate and promote to recorded.
@@ -260,8 +275,14 @@ export async function applySegmentFolderOntoExisting(opts: {
       const src = join(recSrc, fname);
       if (!statSync(src).isFile()) continue;
       if (fname === "tracks_manifest.json") continue;
+      if (fname === HOST_DUCKING_FILENAME) continue;
       copyFileSync(src, join(mtDest, basename(fname)));
       bytesAdded += statSync(join(mtDest, basename(fname))).size;
+    }
+    const duckingSrc = join(segDir, HOST_DUCKING_FILENAME);
+    if (existsSync(duckingSrc)) {
+      copyFileSync(duckingSrc, join(mtDest, HOST_DUCKING_FILENAME));
+      bytesAdded += statSync(join(mtDest, HOST_DUCKING_FILENAME)).size;
     }
     if (manifest) {
       tracksChanged = recordingsTracksChanged(mtDest, manifest);
@@ -271,6 +292,40 @@ export async function applySegmentFolderOntoExisting(opts: {
         join(mtDest, "tracks_manifest.json"),
         JSON.stringify(manifest, null, 2),
       );
+    }
+  }
+
+  if (timelineSidecarNeedsApply(segDir, segMeta.segmentRppSha256)) {
+    let epochMs: number | undefined;
+    if (manifest && typeof manifest.recordingEpochMs === "number") {
+      epochMs = manifest.recordingEpochMs;
+    }
+    if (!mtDest) {
+      mtDest = multitrackRecordingsDir(
+        podcastId,
+        episodeId,
+        segmentId,
+        epochMs,
+      );
+    }
+    const applied = applyTimelineSidecarToManifest({
+      segDir,
+      mtDest,
+      existingManifest: manifest,
+    });
+    if (applied.ok) {
+      manifest = applied.manifest;
+      bytesAdded += applied.bytesAdded;
+      tracksChanged = true;
+    } else {
+      // Unreadable segment.rpp: keep tracks_manifest and remake from it.
+      console.warn(
+        `[projectImport] Ignoring segment.rpp (${applied.error}); using tracks_manifest.json`,
+      );
+      warning = REAPER_IGNORED_WARNING;
+      if (manifest?.segments?.length) {
+        tracksChanged = true;
+      }
     }
   }
 
@@ -298,9 +353,12 @@ export async function applySegmentFolderOntoExisting(opts: {
 
     const mixDest = segmentPath(podcastId, episodeId, segmentId, "wav");
     try {
+      const duckingEnabled = Boolean(segMeta.hostDuckingEnabled);
+      const ducking = duckingEnabled ? readHostDuckingFile(mtDest) : null;
+      const remakeManifest = buildManifestForRemake(manifest, ducking, mtDest);
       const remade = await remakeMixFromMultitrackDir(
         mtDest,
-        manifest,
+        remakeManifest,
         mixDest,
         episodeUploads,
       );
@@ -325,6 +383,14 @@ export async function applySegmentFolderOntoExisting(opts: {
     } catch {
       needSegmentWaveformRegen = true;
     }
+  }
+
+  if (segMeta.hostDuckingEnabled !== undefined) {
+    updateSegmentHostDuckingEnabled(
+      segmentId,
+      episodeId,
+      Boolean(segMeta.hostDuckingEnabled),
+    );
   }
 
   if (
@@ -366,7 +432,7 @@ export async function applySegmentFolderOntoExisting(opts: {
     addUserDiskBytes(ownerId, bytesAdded);
   }
 
-  return { segmentId, bytesAdded };
+  return { segmentId, bytesAdded, warning };
 }
 
 function resolveSegmentDir(extractRoot: string): string {
@@ -453,6 +519,7 @@ export type SegmentProjectImportStatus = "idle" | "importing" | "done" | "failed
 
 const importStatusBySegment = new Map<string, "importing" | "done" | "failed">();
 const importErrorBySegment = new Map<string, string>();
+const importWarningBySegment = new Map<string, string>();
 
 /**
  * Start a background segment project import. Returns false if already importing
@@ -469,6 +536,7 @@ export function startSegmentProjectImport(
   if (importStatusBySegment.get(segmentId) === "importing") return false;
   importStatusBySegment.set(segmentId, "importing");
   importErrorBySegment.delete(segmentId);
+  importWarningBySegment.delete(segmentId);
   setImmediate(() => {
     void importSegmentProjectZip(
       podcastId,
@@ -477,7 +545,10 @@ export function startSegmentProjectImport(
       tmpZip,
       importerUserId,
     )
-      .then(() => {
+      .then((result) => {
+        if (result.warning) {
+          importWarningBySegment.set(segmentId, result.warning);
+        }
         importStatusBySegment.set(segmentId, "done");
         onSuccess?.();
       })
@@ -502,13 +573,16 @@ export function startSegmentProjectImport(
 export function getSegmentProjectImportStatus(segmentId: string): {
   status: SegmentProjectImportStatus;
   error?: string;
+  warning?: string;
 } {
   const status = importStatusBySegment.get(segmentId);
   if (!status) return { status: "idle" };
   if (status === "importing") return { status: "importing" };
   const error = importErrorBySegment.get(segmentId);
+  const warning = importWarningBySegment.get(segmentId);
   importStatusBySegment.delete(segmentId);
   importErrorBySegment.delete(segmentId);
+  importWarningBySegment.delete(segmentId);
   if (status === "failed") return { status: "failed", error };
-  return { status: "done" };
+  return { status: "done", warning };
 }

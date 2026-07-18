@@ -216,6 +216,7 @@ export function generatePodcastSitemapXml(
           sql`${episodes.publishAt} IS NULL`,
           lte(sql`datetime(${episodes.publishAt})`, sql`datetime('now')`),
         ),
+        sql`(${episodes.expiresAt} IS NULL OR datetime(${episodes.expiresAt}) > datetime('now'))`,
       ),
     )
     .orderBy(desc(episodes.publishAt), desc(episodes.createdAt))

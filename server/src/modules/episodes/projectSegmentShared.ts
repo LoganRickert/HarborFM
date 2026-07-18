@@ -3,6 +3,13 @@ import { basename, join } from "path";
 import { sha256FileSync } from "../../utils/hash.js";
 import type { MultitrackManifest } from "../../services/multitrackRemake.js";
 
+export class ImportValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImportValidationError";
+  }
+}
+
 export type SegmentProjectJson = {
   type?: "recorded" | "reusable";
   position?: number;
@@ -21,6 +28,8 @@ export type SegmentProjectJson = {
   segmentRppSha256?: string | null;
   audacityLofSha256?: string | null;
   timelineOtioSha256?: string | null;
+  hostDuckingEnabled?: boolean;
+  hostDuckingSha256?: string | null;
 };
 
 export function readJsonFile<T>(path: string): T {

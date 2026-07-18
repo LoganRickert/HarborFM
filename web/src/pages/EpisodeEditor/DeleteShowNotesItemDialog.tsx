@@ -8,6 +8,9 @@ export interface DeleteShowNotesItemDialogProps {
   description: string;
   onConfirm: () => void;
   isDeleting: boolean;
+  /** Dialog title; defaults to show-notes wording. */
+  title?: string;
+  confirmLabel?: string;
 }
 
 export function DeleteShowNotesItemDialog({
@@ -16,6 +19,8 @@ export function DeleteShowNotesItemDialog({
   description,
   onConfirm,
   isDeleting,
+  title = 'Remove topic?',
+  confirmLabel = 'Remove',
 }: DeleteShowNotesItemDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onOpenChange(false)}>
@@ -23,7 +28,7 @@ export function DeleteShowNotesItemDialog({
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content className={styles.dialogContent}>
           <div className={styles.dialogHeaderRow}>
-            <Dialog.Title className={styles.dialogTitle}>Remove topic?</Dialog.Title>
+            <Dialog.Title className={styles.dialogTitle}>{title}</Dialog.Title>
             <Dialog.Close asChild>
               <button type="button" className={styles.dialogClose} aria-label="Close">
                 <X size={18} strokeWidth={2} aria-hidden="true" />
@@ -45,9 +50,9 @@ export function DeleteShowNotesItemDialog({
                 onOpenChange(false);
               }}
               disabled={isDeleting}
-              aria-label="Confirm remove topic"
+              aria-label={`Confirm ${confirmLabel.toLowerCase()}`}
             >
-              {isDeleting ? 'Removing...' : 'Remove'}
+              {isDeleting ? 'Removing...' : confirmLabel}
             </button>
           </div>
         </Dialog.Content>

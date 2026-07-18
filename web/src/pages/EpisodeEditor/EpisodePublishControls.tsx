@@ -1,5 +1,9 @@
 import styles from '../EpisodeEditor.module.css';
-import type { PublishFormFields } from './utils';
+import {
+  EXPIRES_AT_BEFORE_PUBLISH_AT_MESSAGE,
+  isExpiresAtBeforePublishAt,
+  type PublishFormFields,
+} from './utils';
 
 export type { PublishFormFields };
 
@@ -35,6 +39,7 @@ export function EpisodePublishControls({
 }: EpisodePublishControlsProps) {
   const isCompact = variant === 'compact';
   const publicStatusBlocked = !hasFinalAudio;
+  const expiresInvalid = isExpiresAtBeforePublishAt(values);
 
   if (readOnly) {
     const metaParts: string[] = [];
@@ -46,6 +51,15 @@ export function EpisodePublishControls({
     if (values.publishAt) {
       try {
         metaParts.push(new Date(values.publishAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }));
+      } catch {
+        // ignore
+      }
+    }
+    if (values.expiresAt) {
+      try {
+        metaParts.push(
+          `Expires ${new Date(values.expiresAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`,
+        );
       } catch {
         // ignore
       }
@@ -88,6 +102,12 @@ export function EpisodePublishControls({
   const statusHint = publicStatusBlocked ? (
     <p className={styles.publishStatusFinalHint} role="note">
       Build the final episode before publishing or scheduling.
+    </p>
+  ) : null;
+
+  const expiresError = expiresInvalid ? (
+    <p className={styles.error} role="alert" style={{ margin: '0.35rem 0 0' }}>
+      {EXPIRES_AT_BEFORE_PUBLISH_AT_MESSAGE}
     </p>
   ) : null;
 
@@ -147,6 +167,19 @@ export function EpisodePublishControls({
             />
           </label>
         </div>
+        <div className={styles.publishControlsRow}>
+          <label className={styles.publishControlsDatetimeLabel}>
+            <span className={styles.publishControlsFieldLabel}>Expires at</span>
+            <input
+              type="datetime-local"
+              value={values.expiresAt}
+              onChange={(e) => onChange({ expiresAt: e.target.value })}
+              className={styles.publishControlsDatetimeInput}
+              aria-label="Expires at date and time"
+            />
+          </label>
+          {expiresError}
+        </div>
       </div>
     );
   }
@@ -168,6 +201,16 @@ export function EpisodePublishControls({
           onChange={(e) => onChange({ publishAt: e.target.value })}
           className={styles.input}
         />
+      </label>
+      <label className={styles.label}>
+        Expires at (optional)
+        <input
+          type="datetime-local"
+          value={values.expiresAt}
+          onChange={(e) => onChange({ expiresAt: e.target.value })}
+          className={styles.input}
+        />
+        {expiresError}
       </label>
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
         <label className={styles.label} style={{ flex: '1 1 80px' }}>

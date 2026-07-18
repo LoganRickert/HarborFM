@@ -85,6 +85,8 @@ export interface PublicEpisode {
   videoUrl?: string | null;
   srtUrl?: string | null;
   subscriberOnly?: boolean;
+  subscriberOnlyStartsAt?: string | null;
+  subscriberOnlyEndsAt?: string | null;
   createdAt: string;
   updatedAt: string;
   privateAudioUrl?: string | null;
@@ -241,6 +243,10 @@ function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
     videoUrl: (r.video_url as string | null) ?? null,
     srtUrl: r.srt_url != null ? String(r.srt_url) : null,
     subscriberOnly: r.subscriber_only === 1 || r.subscriber_only === true,
+    subscriberOnlyStartsAt:
+      r.subscriber_only_starts_at != null ? String(r.subscriber_only_starts_at) : null,
+    subscriberOnlyEndsAt:
+      r.subscriber_only_ends_at != null ? String(r.subscriber_only_ends_at) : null,
     createdAt: String(r.created_at ?? ''),
     updatedAt: String(r.updated_at ?? ''),
     privateAudioUrl: (r.private_audio_url as string | null) ?? null,

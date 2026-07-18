@@ -25,6 +25,7 @@ export function getPodcastMetaForFeed(slug: string): {
   publicFeedDisabled: number;
   subscriberOnlyFeedEnabled: number;
   showScheduledEpisodes: number;
+  subscribersKeepExpiredEpisodes: number;
 } | undefined {
   const row = drizzleDb
     .select({
@@ -32,15 +33,44 @@ export function getPodcastMetaForFeed(slug: string): {
       publicFeedDisabled: sql<number>`COALESCE(${podcasts.publicFeedDisabled}, 0)`.as("publicFeedDisabled"),
       subscriberOnlyFeedEnabled: sql<number>`COALESCE(${podcasts.subscriberOnlyFeedEnabled}, 0)`.as("subscriberOnlyFeedEnabled"),
       showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
+      subscribersKeepExpiredEpisodes: sql<number>`COALESCE(${podcasts.subscribersKeepExpiredEpisodes}, 0)`.as(
+        "subscribersKeepExpiredEpisodes",
+      ),
     })
     .from(podcasts)
     .where(eq(podcasts.slug, slug))
     .limit(1)
     .get();
   return row as
-    | { id: string; publicFeedDisabled: number; subscriberOnlyFeedEnabled: number; showScheduledEpisodes: number }
+    | {
+        id: string;
+        publicFeedDisabled: number;
+        subscriberOnlyFeedEnabled: number;
+        showScheduledEpisodes: number;
+        subscribersKeepExpiredEpisodes: number;
+      }
     | undefined;
 }
+
+/** True when expires_at is null/empty or still in the future. */
+export const episodeNotExpiredSql = sql`(${episodes.expiresAt} IS NULL OR datetime(${episodes.expiresAt}) > datetime('now'))`;
+
+/**
+ * For private/subscriber access: allow expired episodes when the podcast keeps them for subscribers.
+ */
+export const episodeNotExpiredUnlessSubscribersKeepSql = sql`(
+  COALESCE((SELECT subscribers_keep_expired_episodes FROM podcasts WHERE id = ${episodes.podcastId}), 0) = 1
+  OR (${episodes.expiresAt} IS NULL OR datetime(${episodes.expiresAt}) > datetime('now'))
+)`;
+
+/**
+ * True when the episode is not currently subscriber-gated (flag off, before start, or after end).
+ */
+export const episodeNotCurrentlySubscriberOnlySql = sql`(
+  COALESCE(${episodes.subscriberOnly}, 0) = 0
+  OR (${episodes.subscriberOnlyStartsAt} IS NOT NULL AND datetime(${episodes.subscriberOnlyStartsAt}) > datetime('now'))
+  OR (${episodes.subscriberOnlyEndsAt} IS NOT NULL AND datetime(${episodes.subscriberOnlyEndsAt}) <= datetime('now'))
+)`;
 
 /** Full podcast row for public podcast page (by slug). */
 export function getPodcastBySlug(slug: string) {
@@ -61,6 +91,9 @@ export function getPodcastBySlug(slug: string) {
       subscriberOnlyReviews: sql<number>`COALESCE(${podcasts.subscriberOnlyReviews}, 0)`.as("subscriberOnlyReviews"),
       subscriberOnlyMessages: sql<number>`COALESCE(${podcasts.subscriberOnlyMessages}, 0)`.as("subscriberOnlyMessages"),
       showScheduledEpisodes: sql<number>`COALESCE(${podcasts.showScheduledEpisodes}, 0)`.as("showScheduledEpisodes"),
+      subscribersKeepExpiredEpisodes: sql<number>`COALESCE(${podcasts.subscribersKeepExpiredEpisodes}, 0)`.as(
+        "subscribersKeepExpiredEpisodes",
+      ),
       linkDomain: podcasts.linkDomain,
       managedDomain: podcasts.managedDomain,
       managedSubDomain: podcasts.managedSubDomain,
@@ -332,6 +365,7 @@ export function getEpisodeCastBySlugs(podcastSlug: string, episodeSlug: string) 
         eq(episodes.slug, episodeSlug),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        episodeNotExpiredSql,
       ),
     )
     .limit(1)
@@ -378,6 +412,7 @@ export type ListPublishedEpisodesOptions = {
 const publishedEpisodeWhereBase = and(
   eq(episodes.status, "published"),
   sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+  episodeNotExpiredSql,
 );
 
 /** List published episodes for a podcast. */
@@ -389,13 +424,14 @@ export function listPublishedEpisodes(
   const scheduledOrPublishedBase = and(
     eq(episodes.podcastId, podcastId),
     inArray(episodes.status, ["scheduled", "published"]),
+    episodeNotExpiredSql,
   );
   const baseWhere = includeScheduledEpisodes
     ? scheduledOrPublishedBase
     : and(eq(episodes.podcastId, podcastId), publishedEpisodeWhereBase);
   const episodeWhereSubscriber = includeSubscriberOnly
     ? baseWhere
-    : and(baseWhere, eq(episodes.subscriberOnly, false));
+    : and(baseWhere, episodeNotCurrentlySubscriberOnlySql);
   const episodeWhereType =
     episodeType != null && episodeType !== ""
       ? and(episodeWhereSubscriber, eq(episodes.episodeType, episodeType))
@@ -440,6 +476,8 @@ export function listPublishedEpisodes(
       finalMarkers: episodes.finalMarkers,
       finalSoundbites: episodes.finalSoundbites,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
       createdAt: episodes.createdAt,
       updatedAt: episodes.updatedAt,
     })
@@ -482,6 +520,8 @@ export function getPublishedEpisodeBySlug(podcastId: string, episodeSlug: string
       finalMarkers: episodes.finalMarkers,
       finalSoundbites: episodes.finalSoundbites,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
       createdAt: episodes.createdAt,
       updatedAt: episodes.updatedAt,
     })
@@ -492,6 +532,7 @@ export function getPublishedEpisodeBySlug(podcastId: string, episodeSlug: string
         eq(episodes.slug, episodeSlug),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        episodeNotExpiredSql,
       ),
     )
     .limit(1)
@@ -509,11 +550,13 @@ export function getPublicEpisodeBySlug(
     eq(episodes.slug, episodeSlug),
     eq(episodes.status, "published"),
     sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+    episodeNotExpiredSql,
   );
   const relaxedWhere = and(
     eq(episodes.podcastId, podcastId),
     eq(episodes.slug, episodeSlug),
     inArray(episodes.status, ["scheduled", "published"]),
+    episodeNotExpiredSql,
   );
   return drizzleDb
     .select({
@@ -539,6 +582,8 @@ export function getPublicEpisodeBySlug(
       finalMarkers: episodes.finalMarkers,
       finalSoundbites: episodes.finalSoundbites,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
       createdAt: episodes.createdAt,
       updatedAt: episodes.updatedAt,
       fundingLinks: episodes.fundingLinks,
@@ -549,16 +594,24 @@ export function getPublicEpisodeBySlug(
     .get();
 }
 
-/** Get episode row for waveform (id, audioFinalPath, subscriberOnly). */
+/** Get episode row for waveform (id, audioFinalPath, subscriber-only window fields). */
 export function getEpisodeForWaveform(
   podcastId: string,
   episodeSlug: string,
-): { id: string; audioFinalPath: string | null; subscriberOnly: number } | undefined {
+): {
+  id: string;
+  audioFinalPath: string | null;
+  subscriberOnly: number;
+  subscriberOnlyStartsAt: string | null;
+  subscriberOnlyEndsAt: string | null;
+} | undefined {
   const row = drizzleDb
     .select({
       id: episodes.id,
       audioFinalPath: episodes.audioFinalPath,
       subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
     })
     .from(episodes)
     .where(
@@ -567,12 +620,19 @@ export function getEpisodeForWaveform(
         eq(episodes.slug, episodeSlug),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        episodeNotExpiredSql,
       ),
     )
     .limit(1)
     .get();
   return row as
-    | { id: string; audioFinalPath: string | null; subscriberOnly: number }
+    | {
+        id: string;
+        audioFinalPath: string | null;
+        subscriberOnly: number;
+        subscriberOnlyStartsAt: string | null;
+        subscriberOnlyEndsAt: string | null;
+      }
     | undefined;
 }
 
@@ -593,6 +653,7 @@ export function getEpisodeVideoForPrivate(
         eq(episodes.id, episodeId),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        episodeNotExpiredUnlessSubscribersKeepSql,
       ),
     )
     .limit(1)
@@ -617,6 +678,7 @@ export function getEpisodeAudioForPrivate(
         eq(episodes.id, episodeId),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        episodeNotExpiredUnlessSubscribersKeepSql,
       ),
     )
     .limit(1)
@@ -639,6 +701,7 @@ export function getPublishedEpisodeByIdOrSlug(
         eq(episodes.id, episodeIdOrSlug),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        episodeNotExpiredUnlessSubscribersKeepSql,
       ),
     )
     .limit(1)
@@ -653,6 +716,7 @@ export function getPublishedEpisodeByIdOrSlug(
         eq(episodes.slug, episodeIdOrSlug),
         eq(episodes.status, "published"),
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
+        episodeNotExpiredUnlessSubscribersKeepSql,
       ),
     )
     .limit(1)

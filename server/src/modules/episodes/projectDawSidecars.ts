@@ -10,6 +10,23 @@ import { basename, extname, join } from "path";
 import { promisify } from "util";
 import { APP_NAME, FFPROBE_PATH } from "../../config.js";
 import { assertPathUnder } from "../../services/paths.js";
+import {
+  buildManifestForDawClips,
+  HOST_DUCKING_FILENAME,
+  readHostDuckingFile,
+} from "../../services/hostDucking.js";
+import type {
+  MultitrackCompParams,
+  MultitrackEqBand,
+  MultitrackGateParams,
+  MultitrackManifest,
+} from "../../services/multitrackRemake.js";
+import {
+  encodeReaCompChunkToBase64Lines,
+  encodeReaGateChunkToBase64Lines,
+  formatDualChunkVstB64Lines,
+} from "./projectReaperDynamics.js";
+import { encodeReaEqChunkToBase64Lines } from "./projectReaperEq.js";
 
 const exec = promisify(execFile);
 
@@ -73,10 +90,26 @@ export type SegmentTrackClip = {
   durationSec: number;
   /** Timeline start offset in seconds (from tracks_manifest startMs). */
   startSec: number;
+  /** Media in-point in seconds (trim into the source file). */
+  sourceOffsetSec?: number;
   participantId?: string | null;
   participantName?: string | null;
   source?: string | null;
   soundboardAssetId?: string | null;
+  volume?: number;
+  muted?: boolean;
+  playRate?: number;
+  preservePitch?: boolean;
+  pitchSemitones?: number;
+  fadeInSec?: number;
+  fadeOutSec?: number;
+  loop?: boolean;
+  eqBands?: MultitrackEqBand[];
+  reaEqChunkBase64?: string;
+  gate?: MultitrackGateParams;
+  reaGateChunkBase64?: string;
+  comp?: MultitrackCompParams;
+  reaCompChunkBase64?: string;
 };
 
 /** One Reaper/Resolve track; may hold several clips (e.g. reconnects). */
@@ -84,6 +117,9 @@ export type DawLane = {
   name: string;
   kind: "participant" | "soundboard" | "other";
   clips: SegmentTrackClip[];
+  /** Lane fader (linear); from first clip volume when set. */
+  volume?: number;
+  muted?: boolean;
 };
 
 export function isAudioFilename(name: string): boolean {
@@ -362,8 +398,10 @@ async function resolveClipDurationSec(
   segDir: string,
   startMs: number,
   endMs: number | null,
+  lengthMs: number | null,
   fallbackDurationSec: number,
 ): Promise<number> {
+  if (lengthMs != null && lengthMs > 0) return lengthMs / 1000;
   const probed = await probeMediaDurationSec(absPath, segDir);
   if (probed != null && probed > 0) return probed;
   if (endMs != null && endMs > startMs) return (endMs - startMs) / 1000;
@@ -374,11 +412,27 @@ type ManifestSegEntry = {
   filePath?: string;
   startMs?: number | string;
   endMs?: number | string;
+  lengthMs?: number | string;
+  sourceOffsetMs?: number | string;
   segmentId?: string;
   participantId?: string | null;
   participantName?: string | null;
   source?: string | null;
   soundboardAssetId?: string | null;
+  volume?: number;
+  muted?: boolean;
+  playRate?: number;
+  preservePitch?: boolean;
+  pitchSemitones?: number;
+  fadeInSec?: number;
+  fadeOutSec?: number;
+  loop?: boolean;
+  eqBands?: SegmentTrackClip["eqBands"];
+  reaEqChunkBase64?: string;
+  gate?: SegmentTrackClip["gate"];
+  reaGateChunkBase64?: string;
+  comp?: SegmentTrackClip["comp"];
+  reaCompChunkBase64?: string;
 };
 
 /**
@@ -394,7 +448,6 @@ export async function buildSegmentTrackClips(
   const recDir = join(segDir, "recordings");
   const manifestPath = join(recDir, "tracks_manifest.json");
   const clips: SegmentTrackClip[] = [];
-  const seen = new Set<string>();
 
   if (existsSync(manifestPath)) {
     try {
@@ -410,27 +463,29 @@ export async function buildSegmentTrackClips(
         const mediaPath = `recordings/${trackBase}`;
         const abs = join(segDir, mediaPath);
         if (!isUsableDawMedia(abs)) continue;
-        if (seen.has(mediaPath)) continue;
-        seen.add(mediaPath);
 
         const startMs = readNonNegNumber(entry.startMs) ?? 0;
         const endMs = readNonNegNumber(entry.endMs);
+        const lengthMs = readNonNegNumber(entry.lengthMs);
+        const sourceOffsetMs = readNonNegNumber(entry.sourceOffsetMs) ?? 0;
         const durationSec = await resolveClipDurationSec(
           abs,
           segDir,
           startMs,
           endMs,
+          lengthMs,
           fallbackDurationSec,
         );
         const name =
           (typeof entry.segmentId === "string" && entry.segmentId.trim()) ||
           trackBase.replace(/\.[^.]+$/, "") ||
           trackBase;
-        clips.push({
+        const clip: SegmentTrackClip = {
           name,
           mediaPath,
           durationSec: Math.max(0, durationSec),
           startSec: startMs / 1000,
+          sourceOffsetSec: sourceOffsetMs > 0 ? sourceOffsetMs / 1000 : 0,
           participantId:
             typeof entry.participantId === "string"
               ? entry.participantId
@@ -444,7 +499,49 @@ export async function buildSegmentTrackClips(
             typeof entry.soundboardAssetId === "string"
               ? entry.soundboardAssetId
               : null,
-        });
+        };
+        if (typeof entry.volume === "number") clip.volume = entry.volume;
+        if (entry.muted === true) clip.muted = true;
+        if (typeof entry.playRate === "number") clip.playRate = entry.playRate;
+        if (typeof entry.preservePitch === "boolean") {
+          clip.preservePitch = entry.preservePitch;
+        }
+        if (typeof entry.pitchSemitones === "number") {
+          clip.pitchSemitones = entry.pitchSemitones;
+        }
+        if (typeof entry.fadeInSec === "number") clip.fadeInSec = entry.fadeInSec;
+        if (typeof entry.fadeOutSec === "number") {
+          clip.fadeOutSec = entry.fadeOutSec;
+        }
+        if (entry.loop === true) clip.loop = true;
+        if (Array.isArray(entry.eqBands) && entry.eqBands.length > 0) {
+          clip.eqBands = entry.eqBands;
+        }
+        if (
+          typeof entry.reaEqChunkBase64 === "string" &&
+          entry.reaEqChunkBase64
+        ) {
+          clip.reaEqChunkBase64 = entry.reaEqChunkBase64;
+        }
+        if (entry.gate && typeof entry.gate === "object") {
+          clip.gate = entry.gate;
+        }
+        if (
+          typeof entry.reaGateChunkBase64 === "string" &&
+          entry.reaGateChunkBase64
+        ) {
+          clip.reaGateChunkBase64 = entry.reaGateChunkBase64;
+        }
+        if (entry.comp && typeof entry.comp === "object") {
+          clip.comp = entry.comp;
+        }
+        if (
+          typeof entry.reaCompChunkBase64 === "string" &&
+          entry.reaCompChunkBase64
+        ) {
+          clip.reaCompChunkBase64 = entry.reaCompChunkBase64;
+        }
+        clips.push(clip);
       }
     } catch {
       // fall through to directory listing
@@ -459,6 +556,7 @@ export async function buildSegmentTrackClips(
         abs,
         segDir,
         0,
+        null,
         null,
         fallbackDurationSec,
       );
@@ -478,6 +576,7 @@ export async function buildSegmentTrackClips(
         abs,
         segDir,
         0,
+        null,
         null,
         fallbackDurationSec,
       );
@@ -556,8 +655,8 @@ export function buildDawLanes(clips: SegmentTrackClip[]): DawLane[] {
   const earliest = (g: { clips: SegmentTrackClip[] }) =>
     g.clips[0]?.startSec ?? 0;
 
-  const kindRank = (k: DawLane["kind"]) =>
-    k === "participant" ? 0 : k === "other" ? 1 : 2;
+  // Participants (hosts/guests) first; library/soundboard/other below.
+  const kindRank = (k: DawLane["kind"]) => (k === "participant" ? 0 : 1);
 
   const ordered = [...groups.values()].sort((a, b) => {
     const kr = kindRank(a.kind) - kindRank(b.kind);
@@ -578,7 +677,44 @@ export function buildDawLanes(clips: SegmentTrackClip[]): DawLane[] {
     } else {
       name = g.base;
     }
-    return { name, kind: g.kind, clips: g.clips };
+    const vol = g.clips.find((c) => typeof c.volume === "number")?.volume;
+    const muted = g.clips.some((c) => c.muted === true);
+    const lane: DawLane = { name, kind: g.kind, clips: g.clips };
+    if (typeof vol === "number") lane.volume = vol;
+    if (muted) lane.muted = true;
+    return lane;
+  });
+}
+
+/**
+ * When all unmuted faders are at or below 0 dB (typical Harbor session ducking),
+ * scale so the loudest unmuted track is 0 dB. Preserves relative balance and
+ * gives a natural Reaper fader range. Skipped if any fader is already above 0 dB.
+ */
+function renormLaneVolumesForReaperExport(lanes: DawLane[]): DawLane[] {
+  let max = 0;
+  for (const lane of lanes) {
+    if (lane.muted) continue;
+    const v =
+      typeof lane.volume === "number" && Number.isFinite(lane.volume)
+        ? lane.volume
+        : 1;
+    if (v > max) max = v;
+  }
+  if (max <= 0 || max >= 1 - 1e-9) return lanes;
+  const scale = 1 / max;
+  return lanes.map((lane) => {
+    const next: DawLane = {
+      ...lane,
+      clips: lane.clips.map((c) => {
+        if (typeof c.volume !== "number") return c;
+        return { ...c, volume: c.volume * scale };
+      }),
+    };
+    if (typeof lane.volume === "number") {
+      next.volume = lane.volume * scale;
+    }
+    return next;
   });
 }
 
@@ -595,22 +731,132 @@ export function flattenDawLanes(lanes: DawLane[]): SegmentTrackClip[] {
 function buildRppItem(clip: SegmentTrackClip): string {
   const fileName = basename(clip.mediaPath);
   const source = reaperSourceTag(fileName);
+  const soffs = Math.max(0, clip.sourceOffsetSec ?? 0);
+  const loop = clip.loop ? 1 : 0;
+  const fadeIn = Math.max(0, clip.fadeInSec ?? 0);
+  const fadeOut = Math.max(0, clip.fadeOutSec ?? 0);
+  const playRate =
+    typeof clip.playRate === "number" && clip.playRate > 0 ? clip.playRate : 1;
+  const preservePitch = clip.preservePitch === false ? 0 : 1;
+  const pitch =
+    typeof clip.pitchSemitones === "number" ? clip.pitchSemitones : 0;
+  // Item VOLPAN is relative to track fader; keep item at unity when volume is
+  // stored as the combined track×item gain on the clip.
+  const itemVol = 1;
   return `    <ITEM
       POSITION ${fmtRppSec(clip.startSec)}
       SNAPOFFS 0
       LENGTH ${fmtRppSec(clip.durationSec)}
-      LOOP 0
+      LOOP ${loop}
       ALLTAKES 0
+      FADEIN 1 ${fmtRppSec(fadeIn)} 0 1 0 0 0
+      FADEOUT 1 ${fmtRppSec(fadeOut)} 0 1 0 0 0
       MUTE 0
       SEL 0
       NAME "${escapeRppString(fileName)}"
-      VOLPAN 1 0 1 -1
-      SOFFS 0
-      PLAYRATE 1 1 0 -1 0 0.0025
+      VOLPAN ${itemVol} 0 1 -1
+      SOFFS ${fmtRppSec(soffs)}
+      PLAYRATE ${playRate} ${preservePitch} ${pitch} -1 0 0.0025
       CHANMODE 0
       <SOURCE ${source}
         FILE "${escapeRppString(clip.mediaPath)}"
       >
+    >`;
+}
+
+/**
+ * Format VST state for an RPP block the way Reaper / rppp expect:
+ * - first line exactly 80 chars (ends the first b64 chunk)
+ * - remaining state in 128-char lines (last line shorter or ends with `=`)
+ * - trailing `AAAQAAAA` footer on its own line
+ */
+function formatVstB64Lines(b64: string): string[] {
+  let cleaned = b64.replace(/\s+/g, "");
+  if (!cleaned) return [];
+  if (cleaned.endsWith("AAAQAAAA") && cleaned.length > 8) {
+    cleaned = cleaned.slice(0, -8);
+  }
+  const lines: string[] = [];
+  if (cleaned.length <= 80) {
+    lines.push(cleaned);
+  } else {
+    lines.push(cleaned.slice(0, 80));
+    const rest = cleaned.slice(80);
+    for (let i = 0; i < rest.length; i += 128) {
+      lines.push(rest.slice(i, i + 128));
+    }
+  }
+  lines.push("AAAQAAAA");
+  return lines;
+}
+
+function vstPluginBlock(
+  headerLine: string,
+  lines: string[],
+): string {
+  const body = lines.map((l) => `        ${l}`).join("\n");
+  return `      BYPASS 0 0 0
+      <VST ${headerLine}
+${body}
+      >
+      WAK 0 0`;
+}
+
+/** Track FXCHAIN in stable order: ReaEQ → ReaGate → ReaComp. */
+function buildTrackFxChain(clip: SegmentTrackClip): string | null {
+  const plugins: string[] = [];
+
+  let eqLines: string[] | null = null;
+  if (clip.reaEqChunkBase64 && clip.reaEqChunkBase64.trim()) {
+    eqLines = formatVstB64Lines(clip.reaEqChunkBase64);
+  } else if (clip.eqBands && clip.eqBands.length > 0) {
+    eqLines = encodeReaEqChunkToBase64Lines(clip.eqBands);
+  }
+  if (eqLines && eqLines.length > 0) {
+    plugins.push(
+      vstPluginBlock(
+        `"VST: ReaEQ (Cockos)" reaeq.dll 0 "" 1919247729<56535472656571726561657100000000> ""`,
+        eqLines,
+      ),
+    );
+  }
+
+  let gateLines: string[] | null = null;
+  if (clip.reaGateChunkBase64 && clip.reaGateChunkBase64.trim()) {
+    gateLines = formatDualChunkVstB64Lines(clip.reaGateChunkBase64);
+  } else if (clip.gate) {
+    gateLines = encodeReaGateChunkToBase64Lines(clip.gate);
+  }
+  if (gateLines && gateLines.length > 0) {
+    plugins.push(
+      vstPluginBlock(
+        `"VST: ReaGate (Cockos)" reagate.dll 0 "" 1919248244<56535472656774726561676174650000> ""`,
+        gateLines,
+      ),
+    );
+  }
+
+  let compLines: string[] | null = null;
+  if (clip.reaCompChunkBase64 && clip.reaCompChunkBase64.trim()) {
+    compLines = formatDualChunkVstB64Lines(clip.reaCompChunkBase64);
+  } else if (clip.comp) {
+    compLines = encodeReaCompChunkToBase64Lines(clip.comp);
+  }
+  if (compLines && compLines.length > 0) {
+    plugins.push(
+      vstPluginBlock(
+        `"VST: ReaComp (Cockos)" reacomp.dll 0 "" 1919247216<56535472656370726561636F6D700000> ""`,
+        compLines,
+      ),
+    );
+  }
+
+  if (plugins.length === 0) return null;
+  return `    <FXCHAIN
+      SHOW 0
+      LASTSEL 0
+      DOCKED 0
+${plugins.join("\n")}
     >`;
 }
 
@@ -665,19 +911,40 @@ export function buildRppMarkerLines(markers: DawMarker[]): string[] {
 
 /**
  * segment.rpp: one TRACK per participant/soundboard lane; multiple ITEMs when
- * a participant reconnects. LOOP 0 so one-shots play once. NCHAN 1 = mono.
+ * a participant reconnects. NCHAN 1 = mono. Playback / EQ / gate / comp fields
+ * round-trip from tracks_manifest when present.
  */
 export function buildSegmentRppText(
   lanes: DawLane[],
   markers?: DawMarker[],
 ): string | null {
   if (lanes.length === 0) return null;
-  const tracks = lanes.map((lane) => {
+  const exportLanes = renormLaneVolumesForReaperExport(lanes);
+  const tracks = exportLanes.map((lane) => {
     const items = lane.clips.map(buildRppItem).join("\n");
+    const trackVol =
+      typeof lane.volume === "number" && Number.isFinite(lane.volume)
+        ? lane.volume
+        : 1;
+    const muted = lane.muted === true || trackVol === 0 ? 1 : 0;
+    const fxClip =
+      lane.clips.find(
+        (c) =>
+          c.reaEqChunkBase64 ||
+          (c.eqBands && c.eqBands.length) ||
+          c.reaGateChunkBase64 ||
+          c.gate ||
+          c.reaCompChunkBase64 ||
+          c.comp,
+      ) ?? null;
+    const fx = fxClip ? buildTrackFxChain(fxClip) : null;
+    const fxBlock = fx ? `${fx}\n` : "";
     return `  <TRACK
     NAME "${escapeRppString(lane.name)}"
     NCHAN 1
-${items}
+    VOLPAN ${trackVol} 0 -1 -1 1
+    MUTESOLO ${muted} 0 0
+${fxBlock}${items}
   >`;
   });
   const markerLines = buildRppMarkerLines(markers ?? []);
@@ -769,11 +1036,14 @@ function resolveStereoDualMonoMetadata(): Record<string, unknown> {
 
 function otioClip(clip: SegmentTrackClip): unknown {
   const dur = Math.max(0, clip.durationSec);
+  const soffs = Math.max(0, clip.sourceOffsetSec ?? 0);
   const audioMeta = resolveStereoDualMonoMetadata();
+  // available_range covers enough of the media for the in-point + duration.
+  const availableDur = soffs + dur;
   return {
     OTIO_SCHEMA: "Clip.1",
     name: clip.name,
-    source_range: timeRange(0, dur),
+    source_range: timeRange(soffs, dur),
     effects: [],
     markers: [],
     metadata: audioMeta,
@@ -783,7 +1053,7 @@ function otioClip(clip: SegmentTrackClip): unknown {
       // Relative to the .otio file (segment folder). Resolve resolves by
       // basename against the timeline's directory / search paths.
       target_url: clip.mediaPath.replace(/\\/g, "/"),
-      available_range: timeRange(0, dur),
+      available_range: timeRange(0, availableDur),
       metadata: audioMeta,
     },
   };
@@ -845,6 +1115,8 @@ export function buildSegmentOtioTimeline(
 
 /**
  * Write audacity.lof, labels.txt, segment.rpp, and timeline.otio into segDir.
+ * When hostDuckingEnabled, DAW clips use gated intervals from host_ducking.json
+ * while recordings/tracks_manifest.json stays as full takes.
  */
 export async function writeSegmentDawSidecars(
   segDir: string,
@@ -854,42 +1126,69 @@ export async function writeSegmentDawSidecars(
     markers: unknown;
     trimRanges: unknown;
     timelineName?: string;
+    hostDuckingEnabled?: boolean;
   },
 ): Promise<void> {
-  const clips = await buildSegmentTrackClips(
-    segDir,
-    opts.audioFile,
-    opts.durationSec,
-  );
-  const lanes = buildDawLanes(clips);
-  const flat = flattenDawLanes(lanes);
-  const markers = parseDawMarkers(opts.markers);
+  const recDir = join(segDir, "recordings");
+  const manifestPath = join(recDir, "tracks_manifest.json");
+  let restoredManifest: string | null = null;
 
-  // Audacity: one file per clip (cannot merge onto one track via LOF).
-  // Same folder as segment.rpp / timeline.otio; paths like recordings/….
-  const lof = buildAudacityLof(flat);
-  if (lof) writeFileSync(join(segDir, "audacity.lof"), lof, "utf8");
+  if (opts.hostDuckingEnabled && existsSync(manifestPath)) {
+    const ducking =
+      readHostDuckingFile(segDir) ??
+      (existsSync(join(recDir, HOST_DUCKING_FILENAME))
+        ? readHostDuckingFile(recDir)
+        : null);
+    if (ducking) {
+      try {
+        restoredManifest = readFileSync(manifestPath, "utf8");
+        const raw = JSON.parse(restoredManifest) as MultitrackManifest;
+        const gated = buildManifestForDawClips(raw, ducking, recDir);
+        writeFileSync(manifestPath, JSON.stringify(gated, null, 2));
+      } catch {
+        restoredManifest = null;
+      }
+    }
+  }
 
-  const labels = buildAudacityLabelsText(
-    opts.markers,
-    opts.trimRanges,
-    flat,
-  );
-  if (labels) writeFileSync(join(segDir, "labels.txt"), labels, "utf8");
-
-  const rpp = buildSegmentRppText(lanes, markers);
-  if (rpp) writeFileSync(join(segDir, "segment.rpp"), rpp, "utf8");
-
-  if (lanes.length > 0) {
-    const timeline = buildSegmentOtioTimeline(
-      opts.timelineName?.trim() || "Segment",
-      lanes,
-      markers,
+  try {
+    const clips = await buildSegmentTrackClips(
+      segDir,
+      opts.audioFile,
+      opts.durationSec,
     );
-    writeFileSync(
-      join(segDir, "timeline.otio"),
-      JSON.stringify(timeline, null, 2) + "\n",
-      "utf8",
+    const lanes = buildDawLanes(clips);
+    const flat = flattenDawLanes(lanes);
+    const markers = parseDawMarkers(opts.markers);
+
+    const lof = buildAudacityLof(flat);
+    if (lof) writeFileSync(join(segDir, "audacity.lof"), lof, "utf8");
+
+    const labels = buildAudacityLabelsText(
+      opts.markers,
+      opts.trimRanges,
+      flat,
     );
+    if (labels) writeFileSync(join(segDir, "labels.txt"), labels, "utf8");
+
+    const rpp = buildSegmentRppText(lanes, markers);
+    if (rpp) writeFileSync(join(segDir, "segment.rpp"), rpp, "utf8");
+
+    if (lanes.length > 0) {
+      const timeline = buildSegmentOtioTimeline(
+        opts.timelineName?.trim() || "Segment",
+        lanes,
+        markers,
+      );
+      writeFileSync(
+        join(segDir, "timeline.otio"),
+        JSON.stringify(timeline, null, 2) + "\n",
+        "utf8",
+      );
+    }
+  } finally {
+    if (restoredManifest != null) {
+      writeFileSync(manifestPath, restoredManifest);
+    }
   }
 }

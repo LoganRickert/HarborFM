@@ -194,13 +194,41 @@
 
 .metaRow {
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
   font-size: 0.875rem;
   color: var(--text-muted);
 }
 
 .date {
   display: inline-block;
+}
+
+.subscriberOnlyWindowCard {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  background: rgba(212, 168, 75, 0.08);
+  border: 1px solid rgba(212, 168, 75, 0.4);
+  border-radius: var(--radius);
+}
+
+.subscriberOnlyWindowIcon {
+  flex-shrink: 0;
+  color: #d4a84b;
+}
+
+.subscriberOnlyWindowText {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #d4a84b;
+  line-height: 1.35;
+}
+
+.subscriberOnlyWindowDate {
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {
@@ -224,6 +252,22 @@
   .subRow,
   .metaRow {
     justify-content: center;
+  }
+
+  .actions {
+    align-items: center;
+    width: 100%;
+  }
+
+  .subscriberOnlyWindowCard {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .subscriberOnlyWindowDate {
+    display: block;
+    margin-top: 0.15rem;
+    white-space: normal;
   }
 
   .messageBtn,
