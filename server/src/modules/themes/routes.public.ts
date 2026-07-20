@@ -5,7 +5,7 @@ import { feedThemePagePublicPathSchema } from "@harborfm/shared";
 import { API_PREFIX } from "../../config.js";
 import { assertPathUnder } from "../../services/paths.js";
 import { getPodcastByHost } from "../../services/dns/custom-domain-resolver.js";
-import { getBuiltinThemeDir, userThemeDirPath } from "./paths.js";
+import { getServerThemeDir, userThemeDirPath } from "./paths.js";
 import { getThemeById, isServerWideThemeId } from "./repo.js";
 import {
   isLiquidFeedTheme,
@@ -209,7 +209,7 @@ export async function themePublicRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: "Not found" });
       }
       const assetPath = (request.params as { "*": string })["*"] || "";
-      return serveThemeAsset(reply, getBuiltinThemeDir(builtinId), assetPath);
+      return serveThemeAsset(reply, getServerThemeDir(builtinId), assetPath);
     },
   );
 

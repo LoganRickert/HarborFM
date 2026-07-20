@@ -9,15 +9,26 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Bundled first-party themes (Fluid). Relative to this package when running from src or dist. */
-export function getBuiltinThemesRoot(): string {
+/**
+ * Shipped first-party theme packages baked into the image/repo (Fluid, Folio).
+ * Read-only seed source; runtime server themes live under DATA_DIR.
+ */
+export function getShippedThemesRoot(): string {
   // From server/src/modules/themes or server/dist/modules/themes up to server/themes
   return join(__dirname, "..", "..", "..", "themes");
 }
 
-export function getBuiltinThemeDir(builtinId: string): string {
-  assertSafeId(builtinId, "builtinThemeId");
-  return join(getBuiltinThemesRoot(), builtinId);
+/** Persistent server-wide themes: `{DATA_DIR}/themes/server`. */
+export function getServerThemesRoot(): string {
+  const dir = join(getDataDir(), "themes", "server");
+  ensureDir(dir);
+  return dir;
+}
+
+/** Absolute path to one server-wide theme package under DATA_DIR. */
+export function getServerThemeDir(themeId: string): string {
+  assertSafeId(themeId, "serverThemeId");
+  return join(getServerThemesRoot(), themeId);
 }
 
 export function userThemesRoot(userId: string): string {

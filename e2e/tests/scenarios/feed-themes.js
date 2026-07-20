@@ -3,6 +3,7 @@
  * scope promote/demote, rate limit, harborfm mounts, canImportTheme gates, sitemap pages.
  */
 import { createRequire } from 'module';
+import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import {
@@ -19,6 +20,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const E2E_DIR = join(__dirname, '../..');
+const DATA_DIR = process.env.E2E_DATA_DIR || join(E2E_DIR, 'data');
 const require = createRequire(join(E2E_DIR, '../server/package.json'));
 const AdmZip = require('adm-zip');
 
@@ -565,6 +567,21 @@ export async function run({ runOne }) {
       const promoted = await promote.json();
       if (promoted.id !== packageId || promoted.scope !== 'server') {
         throw new Error(`Unexpected promote payload: ${JSON.stringify(promoted)}`);
+      }
+
+      const serverThemePath = join(DATA_DIR, 'themes', 'server', packageId, 'theme.json');
+      if (!existsSync(serverThemePath)) {
+        throw new Error(`Expected promoted theme under data dir: ${serverThemePath}`);
+      }
+      const promotedManifest = JSON.parse(readFileSync(serverThemePath, 'utf8'));
+      if (promotedManifest.allowOverride !== false) {
+        throw new Error(
+          `Promoted server theme.json should set allowOverride: false, got ${JSON.stringify(promotedManifest.allowOverride)}`,
+        );
+      }
+      const shippedLeak = join(E2E_DIR, '../server/themes', packageId, 'theme.json');
+      if (existsSync(shippedLeak)) {
+        throw new Error(`Promoted theme must not write into image seed path: ${shippedLeak}`);
       }
 
       // Promote clears podcasts that used the old user theme id

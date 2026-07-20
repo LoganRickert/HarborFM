@@ -704,9 +704,9 @@ Public shows use the default React SPA feed unless you pick a **page theme** und
 
 ### Built-ins and custom themes
 
-- **Fluid** and **Folio** ship with the server under `server/themes/`. Folio is a multi-page theme (home plus about, crew, support, connect, episodes).
+- **Fluid** and **Folio** ship with the app and are seeded into `{DATA_DIR}/themes/server` on first boot. On upgrade, Harbor replaces a data copy only when its `theme.json` still allows override (default) and the shipped `version` differs. Any admin edit (or promote) sets `allowOverride: false` so customized server themes are never overwritten. Folio is a multi-page theme (home plus about, crew, support, connect, episodes).
 - Eligible users open **Themes** to download a built-in as a zip, import their own zip, or edit an imported copy.
-- Admins can promote a personal theme to a **server-wide** theme (available to every show) or demote it back, and can delete server themes.
+- Admins can promote a personal theme to a **server-wide** theme (stored under the data directory, available to every show) or demote it back, and can delete server themes.
 
 ### Who can use it
 

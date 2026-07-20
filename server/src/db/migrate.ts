@@ -238,12 +238,12 @@ import("../modules/settings/index.js")
     console.warn("Could not run settings migrations:", err);
   });
 
-// Register bundled themes under server/themes/* as server-wide feed_themes rows
+// Seed shipped themes into DATA_DIR and register server-wide feed_themes rows
 try {
   const result = syncServerThemesFromDisk();
   if (result.upserted > 0 || result.removed > 0) {
     console.log(
-      "[themes] Synced server-wide themes from disk: %d present, %d removed",
+      "[themes] Synced server-wide themes from data: %d present, %d removed",
       result.upserted,
       result.removed,
     );

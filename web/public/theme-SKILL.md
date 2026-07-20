@@ -129,6 +129,7 @@ Max zip size: **10 MB**.
 | `version` | yes | String, 1–64 chars. Also used as CSS cache-bust (`?v=`). |
 | `index` | no | Home template basename. Default `podcast`. |
 | `pages` | no | Extra template → public `.html` filename overrides. |
+| `allowOverride` | no | Harbor-managed for server themes. Omitted/true: image upgrades may replace the data copy when `version` changes. `false`: skip seed overwrite (set automatically after admin edits or promote). Do not set this in author zips. |
 
 ### Extra pages
 

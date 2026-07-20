@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { Liquid } from "liquidjs";
 import { FEED_DEFAULT_THEME } from "@harborfm/shared";
-import { getBuiltinThemeDir, userThemeDirPath } from "./paths.js";
+import { getServerThemeDir, userThemeDirPath } from "./paths.js";
 import { getServerThemeById, getThemeById } from "./repo.js";
 import { resolveAccent } from "./accent.js";
 import { sanitizeThemeText } from "./sanitize.js";
@@ -58,7 +58,7 @@ export function resolveThemePackage(
   }
   const serverTheme = getServerThemeById(id);
   if (serverTheme) {
-    const root = getBuiltinThemeDir(serverTheme.id);
+    const root = getServerThemeDir(serverTheme.id);
     if (!existsSync(join(root, "theme.json"))) {
       return { ok: false, reason: `${id} package missing` };
     }

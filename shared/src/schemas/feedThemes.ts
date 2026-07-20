@@ -44,6 +44,12 @@ export const feedThemeManifestSchema = z.object({
    * Keys are template basenames; values are public .html filenames.
    */
   pages: z.record(feedThemeTemplateBasenameSchema, feedThemePagePublicPathSchema).optional(),
+  /**
+   * When false, Harbor will not replace this server theme from the shipped image on upgrade.
+   * Omitted / true means shipped upgrades may overwrite (server themes only). Set to false
+   * automatically when an admin edits the theme.
+   */
+  allowOverride: z.boolean().optional(),
 });
 
 export type FeedThemeManifest = z.infer<typeof feedThemeManifestSchema>;

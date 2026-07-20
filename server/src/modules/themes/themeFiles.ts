@@ -23,7 +23,7 @@ import { users } from "../../db/schema.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import {
   assertThemeAssetPath,
-  getBuiltinThemeDir,
+  getServerThemeDir,
   userThemeDir,
   userThemeDirPath,
 } from "./paths.js";
@@ -180,6 +180,23 @@ function sanitizeOrThrow(relPath: string, text: string): string {
   return sanitizeThemeText(text);
 }
 
+/**
+ * After any admin edit to a server-wide theme, pin it so image upgrades do not overwrite.
+ */
+function lockServerThemeFromSeedOverride(access: ThemeAccess): void {
+  if (access.row.scope !== "server") return;
+  const current = readThemeManifest(access.root);
+  if (!current || current.allowOverride === false) return;
+  const next: FeedThemeManifest = { ...current, allowOverride: false };
+  const parsed = feedThemeManifestSchema.safeParse(next);
+  if (!parsed.success) return;
+  writeUtf8UnderRoot(
+    access.root,
+    "theme.json",
+    `${JSON.stringify(parsed.data, null, 2)}\n`,
+  );
+}
+
 function syncDbFromDisk(access: ThemeAccess): void {
   const manifest = readThemeManifest(access.root);
   if (!manifest) {
@@ -233,7 +250,7 @@ export function resolveThemeAccess(userId: string, themeId: string): ThemeAccess
     if (!admin) {
       throw new ThemeImportError("Admin access required", 403);
     }
-    const root = getBuiltinThemeDir(row.id);
+    const root = getServerThemeDir(row.id);
     if (!existsSync(root)) {
       throw new ThemeImportError("Theme package not found on disk", 404);
     }
@@ -325,6 +342,7 @@ export function writeThemeTextFile(
   if (rel === "theme.json") {
     throw new ThemeImportError("Edit theme.json via metadata endpoints", 400);
   }
+  lockServerThemeFromSeedOverride(access);
   const text = sanitizeOrThrow(rel, body);
   writeUtf8UnderRoot(access.root, rel, text);
   if (rel.startsWith("templates/")) {
@@ -352,6 +370,7 @@ export function writeThemeBinaryFile(
   if (!isImageThemePath(rel)) {
     throw new ThemeImportError("Path not allowed", 400);
   }
+  lockServerThemeFromSeedOverride(access);
   writeBufferUnderRoot(access.root, rel, buf);
   syncDbFromDisk(access);
 }
@@ -375,6 +394,7 @@ export function createEmptyThemeFile(access: ThemeAccess, relRaw: string): void 
   if (existsSync(full)) {
     throw new ThemeImportError("File already exists", 409);
   }
+  lockServerThemeFromSeedOverride(access);
   writeUtf8UnderRoot(access.root, rel, "");
   if (rel.startsWith("templates/")) {
     validateManifestAgainstDisk(access.root);
@@ -394,6 +414,7 @@ export function deleteThemeFile(access: ThemeAccess, relRaw: string): void {
   if (!existsSync(full) || !statSync(full).isFile()) {
     throw new ThemeImportError("File not found", 404);
   }
+  lockServerThemeFromSeedOverride(access);
   unlinkSync(full);
   if (rel.startsWith("templates/")) {
     validateManifestAgainstDisk(access.root);
@@ -438,6 +459,8 @@ export function patchThemeMetadata(
         : patch.pages !== undefined
           ? patch.pages
           : current.pages,
+    allowOverride:
+      access.row.scope === "server" ? false : current.allowOverride,
   };
 
   if (!next.name) throw new ThemeImportError("Name is required");
@@ -445,6 +468,9 @@ export function patchThemeMetadata(
 
   if (next.pages && Object.keys(next.pages).length === 0) {
     delete next.pages;
+  }
+  if (next.allowOverride === undefined) {
+    delete next.allowOverride;
   }
 
   const parsed = feedThemeManifestSchema.safeParse(next);
@@ -483,7 +509,7 @@ export function patchThemeMetadata(
 
 /**
  * Promote a personal theme to a server-wide theme (admin).
- * Copies files to server/themes/{packageId}/, upserts server row, removes personal row.
+ * Copies files to {DATA_DIR}/themes/server/{packageId}/, upserts server row, removes personal row.
  */
 export function promoteThemeToServer(userId: string, themeId: string): { id: string } {
   if (!isAdminUser(userId)) {
@@ -502,7 +528,7 @@ export function promoteThemeToServer(userId: string, themeId: string): { id: str
     throw new ThemeImportError("theme.json id does not match package id", 400);
   }
 
-  const dest = getBuiltinThemeDir(packageId);
+  const dest = getServerThemeDir(packageId);
   if (existsSync(dest)) {
     throw new ThemeImportError(`Server theme folder already exists: ${packageId}`, 409);
   }
@@ -514,6 +540,13 @@ export function promoteThemeToServer(userId: string, themeId: string): { id: str
   mkdirSync(dest, { recursive: true });
   try {
     cpSync(access.root, dest, { recursive: true });
+    // Promoted packages are custom; never overwrite from shipped image upgrades.
+    const locked: FeedThemeManifest = { ...manifest, allowOverride: false };
+    const parsed = feedThemeManifestSchema.safeParse(locked);
+    if (!parsed.success) {
+      throw new ThemeImportError(parsed.error.issues[0]?.message ?? "Invalid theme.json", 400);
+    }
+    writeUtf8UnderRoot(dest, "theme.json", `${JSON.stringify(parsed.data, null, 2)}\n`);
   } catch (err) {
     rmSync(dest, { recursive: true, force: true });
     throw err;
@@ -621,7 +654,7 @@ export function deleteServerTheme(userId: string, themeId: string): void {
   if (!row) {
     throw new ThemeImportError("Theme not found", 404);
   }
-  const root = getBuiltinThemeDir(row.id);
+  const root = getServerThemeDir(row.id);
   if (existsSync(root)) {
     rmSync(root, { recursive: true, force: true });
   }

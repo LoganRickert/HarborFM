@@ -13,7 +13,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import AdmZip from "adm-zip";
 import { feedThemeManifestSchema } from "@harborfm/shared";
-import { getBuiltinThemeDir, userThemeDirPath } from "./paths.js";
+import { getServerThemeDir, userThemeDirPath } from "./paths.js";
 import * as repo from "./repo.js";
 
 const CACHE_DIR = join(tmpdir(), "harborfm-theme-zips");
@@ -117,7 +117,7 @@ export function getOrBuildThemeZip(opts: {
 }
 
 export function getOrBuildServerThemeZip(builtinId: string): ThemeZipResult {
-  const dir = getBuiltinThemeDir(builtinId);
+  const dir = getServerThemeDir(builtinId);
   const meta = readManifestMeta(dir);
   const serverRow = repo.getServerThemeById(builtinId);
   if (!serverRow && !existsSync(join(dir, "theme.json"))) {

@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.14.1 - 2026-07-20
+
+- **Page themes:** Server themes live under `{DATA_DIR}/themes/server` so Docker image updates do not wipe promoted or edited packages. Shipped Fluid/Folio still seed on boot; upgrades refresh a data copy only when `theme.json` allows override and the shipped `version` differs. Admin edits and promote set `allowOverride: false` so customized server themes are preserved.
+
 ## v1.14.0 - 2026-07-19
 
 - **Page themes:** Shows can use packaged Liquid themes instead of the default SPA feed. Built-in **Fluid** and **Folio** ship with the server; Folio includes multi-page routes (about, crew, support, connect, episodes). Theme pages are included in each podcast’s sitemap.

@@ -1,11 +1,24 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "fs";
 import { join } from "path";
 import {
   feedThemeManifestSchema,
   feedThemePackageIdSchema,
   type FeedBuiltinThemeListItem,
 } from "@harborfm/shared";
-import { getBuiltinThemesRoot } from "./paths.js";
+import {
+  getServerThemeDir,
+  getServerThemesRoot,
+  getShippedThemesRoot,
+} from "./paths.js";
+import { readThemeManifest } from "./themePages.js";
 import * as repo from "./repo.js";
 
 const BUILTIN_BLURBS: Record<string, string> = {
@@ -14,51 +27,99 @@ const BUILTIN_BLURBS: Record<string, string> = {
 };
 
 type DiskBuiltin = {
-  /** Folder name under server/themes; also used as feed_themes.id */
+  /** Folder name under themes/server; also used as feed_themes.id */
   id: string;
   packageId: string;
   name: string;
   version: string;
 };
 
-/** Scan bundled theme directories on disk (any folder with a valid theme.json). */
-export function listDiskBuiltinThemes(): DiskBuiltin[] {
-  const root = getBuiltinThemesRoot();
+function readValidThemeFromDir(root: string, entry: string): DiskBuiltin | null {
+  const dir = join(root, entry);
+  if (!statSync(dir).isDirectory()) return null;
+  const idCheck = feedThemePackageIdSchema.safeParse(entry);
+  if (!idCheck.success) return null;
+  const manifestPath = join(dir, "theme.json");
+  if (!existsSync(manifestPath)) return null;
+  try {
+    const parsed = feedThemeManifestSchema.safeParse(
+      JSON.parse(readFileSync(manifestPath, "utf8")),
+    );
+    if (!parsed.success) return null;
+    // Folder name must match package id so asset paths stay predictable.
+    if (parsed.data.id !== entry) return null;
+    return {
+      id: entry,
+      packageId: parsed.data.id,
+      name: parsed.data.name,
+      version: parsed.data.version,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Scan a themes root for valid packages (folder name = theme.json id). */
+function listThemesInRoot(root: string): DiskBuiltin[] {
   if (!existsSync(root)) return [];
   const items: DiskBuiltin[] = [];
   for (const entry of readdirSync(root)) {
-    const dir = join(root, entry);
-    if (!statSync(dir).isDirectory()) continue;
-    const idCheck = feedThemePackageIdSchema.safeParse(entry);
-    if (!idCheck.success) continue;
-    const manifestPath = join(dir, "theme.json");
-    if (!existsSync(manifestPath)) continue;
-    let packageId = entry;
-    let name = entry;
-    let version = "0";
-    try {
-      const parsed = feedThemeManifestSchema.safeParse(
-        JSON.parse(readFileSync(manifestPath, "utf8")),
-      );
-      if (!parsed.success) continue;
-      packageId = parsed.data.id;
-      name = parsed.data.name;
-      version = parsed.data.version;
-      // Folder name must match package id so asset paths stay predictable.
-      if (packageId !== entry) continue;
-    } catch {
-      continue;
-    }
-    items.push({ id: entry, packageId, name, version });
+    const theme = readValidThemeFromDir(root, entry);
+    if (theme) items.push(theme);
   }
   return items;
 }
 
 /**
- * Upsert server-wide feed_themes rows from disk packages.
- * Call on startup so newly added server/themes/* folders become selectable.
+ * Copy each shipped package into `{DATA_DIR}/themes/server/{id}` when missing,
+ * or when the data copy still allows override and the shipped version differs.
+ * Does not overwrite when theme.json has `allowOverride: false` (set after admin edits).
+ */
+export function seedShippedThemesIntoDataDir(): {
+  seeded: number;
+  updated: number;
+} {
+  const shippedRoot = getShippedThemesRoot();
+  const shipped = listThemesInRoot(shippedRoot);
+  let seeded = 0;
+  let updated = 0;
+  for (const theme of shipped) {
+    const dest = getServerThemeDir(theme.id);
+    const destManifestPath = join(dest, "theme.json");
+    const src = join(shippedRoot, theme.id);
+
+    if (existsSync(destManifestPath)) {
+      const existing = readThemeManifest(dest);
+      if (existing?.allowOverride === false) continue;
+      if (existing?.version === theme.version) continue;
+    }
+
+    const isUpdate = existsSync(destManifestPath);
+    try {
+      rmSync(dest, { recursive: true, force: true });
+      mkdirSync(dest, { recursive: true });
+      cpSync(src, dest, { recursive: true });
+      if (isUpdate) updated += 1;
+      else seeded += 1;
+    } catch (err) {
+      rmSync(dest, { recursive: true, force: true });
+      throw err;
+    }
+  }
+  return { seeded, updated };
+}
+
+/** Scan persistent server theme directories on disk. */
+export function listDiskBuiltinThemes(): DiskBuiltin[] {
+  return listThemesInRoot(getServerThemesRoot());
+}
+
+/**
+ * Seed shipped themes into DATA_DIR if needed, then upsert server-wide feed_themes rows.
+ * Call on startup so data-backed packages become selectable.
  */
 export function syncServerThemesFromDisk(): { upserted: number; removed: number } {
+  seedShippedThemesIntoDataDir();
   const disk = listDiskBuiltinThemes();
   for (const theme of disk) {
     repo.upsertServerTheme({
@@ -80,14 +141,14 @@ export function listBuiltinThemes(): FeedBuiltinThemeListItem[] {
       id: theme.id,
       name: theme.name,
       version: theme.version,
-      description: BUILTIN_BLURBS[theme.id] ?? "Built-in page theme.",
+      description: BUILTIN_BLURBS[theme.id] ?? "Server page theme.",
     }));
   }
   return listDiskBuiltinThemes().map((theme) => ({
     id: theme.id,
     name: theme.name,
     version: theme.version,
-    description: BUILTIN_BLURBS[theme.id] ?? "Built-in page theme.",
+    description: BUILTIN_BLURBS[theme.id] ?? "Server page theme.",
   }));
 }
 
