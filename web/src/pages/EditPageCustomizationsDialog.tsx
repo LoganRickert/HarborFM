@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getPodcast, updatePodcast } from '../api/podcasts';
+import { listBuiltinThemes, listThemes } from '../api/themes';
 import type { FeedAccent, PodcastUpdate } from '@harborfm/shared';
 import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
@@ -18,6 +19,7 @@ export interface EditPageCustomizationsDialogProps {
 }
 
 type FormState = {
+  feedTheme: string;
   feedAccent: FeedAccent;
   feedShowPodcastDescription: boolean;
   feedShowEpisodeDescription: boolean;
@@ -30,6 +32,7 @@ type FormState = {
 };
 
 const DEFAULT_FORM: FormState = {
+  feedTheme: 'default',
   feedAccent: 'green',
   feedShowPodcastDescription: true,
   feedShowEpisodeDescription: true,
@@ -58,13 +61,32 @@ export function EditPageCustomizationsDialog({
     enabled: open && !!podcastId,
   });
 
+  const { data: themesData } = useQuery({
+    queryKey: ['themes'],
+    queryFn: listThemes,
+    enabled: open,
+    staleTime: 60_000,
+  });
+
+  const { data: builtinsData } = useQuery({
+    queryKey: ['themes', 'builtins'],
+    queryFn: listBuiltinThemes,
+    enabled: open,
+    staleTime: 60_000,
+  });
+
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [formBaseline, setFormBaseline] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && podcast) {
       const accentRaw = typeof podcast.feedAccent === 'string' ? podcast.feedAccent : 'green';
+      const themeRaw =
+        typeof podcast.feedTheme === 'string' && podcast.feedTheme.trim()
+          ? podcast.feedTheme.trim()
+          : 'default';
       const initial: FormState = {
+        feedTheme: themeRaw,
         feedAccent: isFeedAccent(accentRaw) ? accentRaw : 'green',
         feedShowPodcastDescription: asBool(podcast.feedShowPodcastDescription, true),
         feedShowEpisodeDescription: asBool(podcast.feedShowEpisodeDescription, true),
@@ -94,6 +116,7 @@ export function EditPageCustomizationsDialog({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const payload: PodcastUpdate = {
+      feedTheme: form.feedTheme,
       feedAccent: form.feedAccent,
       feedShowPodcastDescription: form.feedShowPodcastDescription,
       feedShowEpisodeDescription: form.feedShowEpisodeDescription,
@@ -162,6 +185,29 @@ export function EditPageCustomizationsDialog({
                 className={localStyles.form}
               >
                 <h3 className={localStyles.sectionTitle}>Appearance</h3>
+                <div className={localStyles.selectField}>
+                  <label className={localStyles.selectLabel} htmlFor="feed-theme-select">
+                    Page Theme
+                  </label>
+                  <select
+                    id="feed-theme-select"
+                    className={localStyles.select}
+                    value={form.feedTheme}
+                    onChange={(e) => setForm((f) => ({ ...f, feedTheme: e.target.value }))}
+                  >
+                    <option value="default">Default HarborFM</option>
+                    {(builtinsData?.builtins ?? []).map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {theme.name}
+                      </option>
+                    ))}
+                    {(themesData?.themes ?? []).map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {theme.name} (v{theme.version})
+                      </option>
+                    ))}
+                    </select>
+                </div>
                 <div className={localStyles.accentField}>
                   <span className={localStyles.accentLabel} id="primary-color-label">
                     Primary Color

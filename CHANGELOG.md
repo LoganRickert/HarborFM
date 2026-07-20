@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.14.0 - 2026-07-19
+
+- **Page themes:** Shows can use packaged Liquid themes instead of the default SPA feed. Built-in **Fluid** and **Folio** ship with the server; Folio includes multi-page routes (about, crew, support, connect, episodes). Theme pages are included in each podcast’s sitemap.
+- **Themes studio:** New Themes page to download built-ins, import a theme zip, and manage your copies. Admins can promote a personal theme to a server-wide theme (or demote it back) and delete server themes.
+- **Theme editor:** Edit name, version, home template, and page routes; create/edit/delete theme files (Liquid, CSS, images) in a near-fullscreen dialog. Import is gated by **Can Import Theme** / **Default Can Import Theme**.
+- **Authoring:** Themes use `{% render 'harborfm/…' %}` mount points for HarborFM blocks. Downloadable `SKILL.md` documents the zip layout, mounts, and accent contrast rules ([theme-SKILL.md](theme-SKILL.md)). Theme zip import is rate limited (2 per minute per user).
+
 ## v1.13.0 - 2026-07-17
 
 - **Host ducking:** For multitrack segments, Manage Segment can enable exclusive host gating. When one host is clearly speaking, other hosts are cut for that stretch. Off by default. When enabled, export writes gated clips into `segment.rpp` / `timeline.otio` and includes `host_ducking.json`.

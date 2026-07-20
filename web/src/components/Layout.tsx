@@ -80,6 +80,11 @@ export function Layout() {
               <NavLink to="/library" className={({ isActive }) => isActive ? styles.navLinkActive : styles.navLink}>
                 Library
               </NavLink>
+              {user?.canImportTheme === 1 && (
+                <NavLink to="/themes" className={({ isActive }) => isActive ? styles.navLinkActive : styles.navLink}>
+                  Themes
+                </NavLink>
+              )}
               <NavLink to="/messages" className={({ isActive }) => isActive ? styles.navLinkActive : styles.navLink}>
                 Messages
               </NavLink>
@@ -180,6 +185,15 @@ export function Layout() {
           >
             Library
           </NavLink>
+          {user?.canImportTheme === 1 && (
+            <NavLink
+              to="/themes"
+              className={({ isActive }) => isActive ? styles.mobileNavLinkActive : styles.mobileNavLink}
+              onClick={() => setMenuOpen(false)}
+            >
+              Themes
+            </NavLink>
+          )}
           <NavLink
             to="/messages"
             className={({ isActive }) => isActive ? styles.mobileNavLinkActive : styles.mobileNavLink}

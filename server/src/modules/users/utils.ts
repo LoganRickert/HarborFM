@@ -20,6 +20,7 @@ export type RawUserRow = {
   canStripe: number;
   canEpisodeAlert: number;
   canUploadEpisodeFiles: number;
+  canImportTheme: number;
 };
 
 export interface User {
@@ -44,6 +45,7 @@ export interface User {
   canStripe: number;
   canEpisodeAlert: number;
   canUploadEpisodeFiles: number;
+  canImportTheme: number;
   federatedIdentities?: Array<{
     providerType: string;
     issuer: string;
@@ -77,6 +79,7 @@ export function toUser(
     canStripe: r.canStripe,
     canEpisodeAlert: r.canEpisodeAlert,
     canUploadEpisodeFiles: r.canUploadEpisodeFiles,
+    canImportTheme: r.canImportTheme,
     federatedIdentities: federatedIdentities ?? [],
   };
 }

@@ -88,6 +88,9 @@ import * as m086 from "./migrations/086_episode_subscriber_only_window.js";
 import * as m087 from "./migrations/087_user_can_upload_episode_files.js";
 import * as m088 from "./migrations/088_episode_files.js";
 import * as m089 from "./migrations/089_segment_host_ducking.js";
+import * as m090 from "./migrations/090_feed_themes.js";
+import * as m091 from "./migrations/091_feed_themes_server_scope.js";
+import { syncServerThemesFromDisk } from "../modules/themes/builtins.js";
 
 const migrations = [
   { name: "001_initial", ...m001 },
@@ -179,6 +182,8 @@ const migrations = [
   { name: "087_user_can_upload_episode_files", ...m087 },
   { name: "088_episode_files", ...m088 },
   { name: "089_segment_host_ducking", ...m089 },
+  { name: "090_feed_themes", ...m090 },
+  { name: "091_feed_themes_server_scope", ...m091 },
 ];
 
 const MIGRATIONS_TABLE = `
@@ -232,3 +237,17 @@ import("../modules/settings/index.js")
   .catch((err) => {
     console.warn("Could not run settings migrations:", err);
   });
+
+// Register bundled themes under server/themes/* as server-wide feed_themes rows
+try {
+  const result = syncServerThemesFromDisk();
+  if (result.upserted > 0 || result.removed > 0) {
+    console.log(
+      "[themes] Synced server-wide themes from disk: %d present, %d removed",
+      result.upserted,
+      result.removed,
+    );
+  }
+} catch (err) {
+  console.warn("Could not sync server-wide themes:", err);
+}

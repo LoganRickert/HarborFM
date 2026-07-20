@@ -169,6 +169,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       const canUploadEpisodeFiles = settingsData.default_can_upload_episode_files
         ? 1
         : 0;
+      const canImportTheme = settingsData.default_can_import_theme ? 1 : 0;
 
       repo.insertUser({
         id,
@@ -185,6 +186,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         canStripe,
         canEpisodeAlert,
         canUploadEpisodeFiles,
+        canImportTheme,
         emailVerified: true,
       });
 
@@ -257,6 +259,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             canStripe: { type: "boolean" },
             canEpisodeAlert: { type: "boolean" },
             canUploadEpisodeFiles: { type: "boolean" },
+            canImportTheme: { type: "boolean" },
             password: { type: "string" },
             maxPodcasts: {},
             maxEpisodes: {},
@@ -322,6 +325,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         set.canEpisodeAlert = body.canEpisodeAlert ? 1 : 0;
       if (body.canUploadEpisodeFiles !== undefined)
         set.canUploadEpisodeFiles = body.canUploadEpisodeFiles ? 1 : 0;
+      if (body.canImportTheme !== undefined)
+        set.canImportTheme = body.canImportTheme ? 1 : 0;
       if (body.password !== undefined) {
         set.passwordHash = await argon2.hash(body.password);
       }

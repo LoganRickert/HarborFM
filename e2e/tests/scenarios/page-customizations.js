@@ -1,6 +1,6 @@
 /**
- * Page Customizations: feed accent + public feed visibility flags.
- * - Defaults on public GET: green accent, all visibility flags on.
+ * Page Customizations: feed accent, feed theme, + public feed visibility flags.
+ * - Defaults on public GET: green accent, default theme, all visibility flags on.
  * - PATCH persists accent + toggles; public GET returns snake_case fields.
  * - Authenticated GET returns camelCase fields.
  * - Invalid feedAccent is rejected.
@@ -52,6 +52,10 @@ export async function run({ runOne }) {
       assertPublicFlag(data, 'feed_show_author', true, 'feedShowAuthor');
       assertPublicFlag(data, 'feed_show_podroll', true, 'feedShowPodroll');
       assertPublicFlag(data, 'feed_show_cast', true, 'feedShowCast');
+      const theme = data.feed_theme ?? data.feedTheme;
+      if (theme !== 'default') {
+        throw new Error(`Expected feed_theme default, got ${JSON.stringify(theme)}`);
+      }
     }),
   );
 
@@ -145,6 +149,35 @@ export async function run({ runOne }) {
   );
 
   results.push(
+    await runOne('PATCH feedTheme fluid; public GET reflects value', async () => {
+      const patchRes = await apiFetch(
+        `/podcasts/${podcast.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedTheme: 'fluid' }),
+        },
+        jar,
+      );
+      if (patchRes.status !== 200) {
+        throw new Error(`PATCH expected 200, got ${patchRes.status}: ${await patchRes.text()}`);
+      }
+      const res = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}`);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const theme = data.feed_theme ?? data.feedTheme;
+      if (theme !== 'fluid') {
+        throw new Error(`Expected feed_theme fluid, got ${JSON.stringify(theme)}`);
+      }
+      const auth = await apiFetch(`/podcasts/${podcast.id}`, {}, jar);
+      const authData = await auth.json();
+      if (authData.feedTheme !== 'fluid') {
+        throw new Error(`Expected feedTheme fluid, got ${JSON.stringify(authData.feedTheme)}`);
+      }
+    }),
+  );
+
+  results.push(
     await runOne('PATCH restores accent green and visibility flags on', async () => {
       const patchRes = await apiFetch(
         `/podcasts/${podcast.id}`,
@@ -153,6 +186,7 @@ export async function run({ runOne }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             feedAccent: 'cyan',
+            feedTheme: 'default',
             feedShowPodcastDescription: true,
             feedShowEpisodeDescription: true,
             feedShowFunding: true,

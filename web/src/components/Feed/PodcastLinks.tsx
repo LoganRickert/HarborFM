@@ -94,6 +94,7 @@ function LinkGroup({
               aria-label={`${platformLabel} (opens in new tab)`}
             >
               <Icon size={20} aria-hidden />
+              <span className={styles.linkIconLabel}>{platformLabel}</span>
             </a>
           );
         })}
@@ -111,23 +112,35 @@ export function hasPodcastLinks(podcast: PodcastWithLinks) {
   });
 }
 
-export function PodcastLinks({ podcast }: { podcast: PodcastWithLinks }) {
+export function PodcastLinks({
+  podcast,
+  plain = false,
+}: {
+  podcast: PodcastWithLinks;
+  plain?: boolean;
+}) {
   if (!hasPodcastLinks(podcast)) return null;
 
   return (
-    <div className={styles.linksContainer}>
+    <div className={plain ? `${styles.linksContainer} ${styles.linksContainerFluid}` : styles.linksContainer}>
       <LinkGroup label="Listen on" platforms={PODCAST_PLATFORMS} podcast={podcast} />
       <LinkGroup label="Follow" platforms={SOCIAL_PLATFORMS} podcast={podcast} />
     </div>
   );
 }
 
-export function PodcastLinksCard({ podcast }: { podcast: PodcastWithLinks }) {
+export function PodcastLinksCard({
+  podcast,
+  plain = false,
+}: {
+  podcast: PodcastWithLinks;
+  plain?: boolean;
+}) {
   if (!hasPodcastLinks(podcast)) return null;
 
   return (
-    <div className={sharedStyles.card}>
-      <PodcastLinks podcast={podcast} />
+    <div className={plain ? undefined : sharedStyles.card}>
+      <PodcastLinks podcast={podcast} plain={plain} />
     </div>
   );
 }

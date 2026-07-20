@@ -2,6 +2,10 @@
   margin-top: 1rem;
 }
 
+.castCardPlain {
+  margin-top: 0;
+}
+
 .castTitle {
   font-size: 1.5rem;
   font-weight: 600;
@@ -125,4 +129,62 @@ a.castSocial:hover {
 .loadMoreBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Fluid theme */
+.castTitleFluid {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.15rem;
+}
+
+.castSectionTitleFluid {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.castCardPlain .castRow {
+  padding: 0.85rem 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 0;
+}
+
+.castCardPlain .castAvatar,
+.castCardPlain .castAvatarPlaceholder {
+  border-radius: 2px;
+  width: 3.25rem;
+  height: 3.25rem;
+  min-width: 3.25rem;
+}
+
+.castCardPlain .castName {
+  letter-spacing: -0.01em;
+}
+
+.loadMoreFluid {
+  border-top-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.loadMoreBtnFluid {
+  border: none;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--bg, #0c0e12);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.loadMoreBtnFluid:hover:not(:disabled) {
+  background: var(--accent-dim, var(--accent));
+  color: var(--bg, #0c0e12);
 }

@@ -239,6 +239,7 @@ async function main() {
     join(E2E_DIR, 'tests', 'scenarios', 'show-cast-permissions.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'show-cast-list.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'page-customizations.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'feed-themes.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'podcast-stats-source.js'),
   ];
 

@@ -6,6 +6,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { submitContact } from '../api/contact';
 import { setupStatus } from '../api/setup';
 import { Captcha, type CaptchaHandle } from './Captcha';
+import { feedAccentCssVars } from '../utils/feedAccent';
 import styles from './FeedbackModal.module.css';
 
 const MESSAGE_MIN_HEIGHT = 80;
@@ -21,9 +22,11 @@ export interface FeedbackModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   context?: FeedbackModalContext;
+  /** Podcast feed accent; applied as CSS vars so themes can style the dialog. */
+  accent?: string | null;
 }
 
-export function FeedbackModal({ open, onOpenChange, context }: FeedbackModalProps) {
+export function FeedbackModal({ open, onOpenChange, context, accent }: FeedbackModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
@@ -82,8 +85,13 @@ export function FeedbackModal({ open, onOpenChange, context }: FeedbackModalProp
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
-      <Dialog.Overlay className={styles.overlay} />
-      <Dialog.Content className={styles.dialog} aria-describedby={undefined}>
+      <Dialog.Overlay className={styles.overlay} data-harborfm-dialog-overlay="feedback" />
+      <Dialog.Content
+        className={styles.dialog}
+        aria-describedby={undefined}
+        data-harborfm-dialog="feedback"
+        style={feedAccentCssVars(accent)}
+      >
         <div className={styles.dialogHeader}>
           <div>
             <Dialog.Title className={styles.title}>Message</Dialog.Title>

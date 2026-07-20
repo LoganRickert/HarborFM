@@ -32,11 +32,14 @@ import { Messages } from './pages/Messages';
 import { FeedHome } from './pages/FeedHome';
 import { FeedPodcast } from './pages/FeedPodcast';
 import { FeedEpisode } from './pages/FeedEpisode';
+import { FeedThemePage } from './pages/FeedThemePage';
+import { isThemePageFileSegment } from './utils/feedTheme';
 import { SubscribeSuccess } from './pages/SubscribeSuccess';
 import { EmbedEpisode } from './pages/EmbedEpisode';
 import { CallJoin } from './pages/CallJoin';
 import { CallJoinIndex } from './pages/CallJoinIndex';
 import { Library } from './pages/Library';
+import { Themes } from './pages/Themes';
 import { SubscriberAuthProvider } from './hooks/useSubscriberAuth';
 import { ConsentBanner } from './components/ConsentBanner/ConsentBanner';
 
@@ -261,8 +264,8 @@ function RootRoute() {
   );
 }
 
-/** For path /:episodeSlug: on custom domain show episode at short URL; otherwise redirect to /. */
-function CustomFeedEpisodeWrapper() {
+/** For path /:segment: on custom domain, theme .html pages or episode short URL; otherwise redirect to /. */
+function CustomFeedSegmentWrapper() {
   const host = typeof window !== 'undefined' ? window.location.host : '';
   const { episodeSlug } = useParams<{ episodeSlug: string }>();
   const { data, isLoading, isFetching, isFetched } = useQuery({
@@ -285,6 +288,14 @@ function CustomFeedEpisodeWrapper() {
   }
 
   if (data?.customFeedSlug && episodeSlug) {
+    if (isThemePageFileSegment(episodeSlug)) {
+      return (
+        <FeedThemePage
+          podcastSlugOverride={data.customFeedSlug}
+          pageFileOverride={episodeSlug}
+        />
+      );
+    }
     return (
       <FeedEpisode
         podcastSlugOverride={data.customFeedSlug}
@@ -294,6 +305,15 @@ function CustomFeedEpisodeWrapper() {
   }
 
   return <Navigate to="/" replace />;
+}
+
+/** Second /feed/:slug/:segment: theme .html page or episode. */
+function FeedSecondSegment() {
+  const { episodeSlug } = useParams<{ episodeSlug: string }>();
+  if (isThemePageFileSegment(episodeSlug)) {
+    return <FeedThemePage pageFileOverride={episodeSlug} />;
+  }
+  return <FeedEpisode />;
 }
 
 export default function App() {
@@ -319,7 +339,7 @@ export default function App() {
           <Route path="/feed" element={<PublicFeedsGuard><FeedHome /></PublicFeedsGuard>} />
           <Route path="/feed/:podcastSlug/subscribe/success" element={<PublicFeedsGuard><SubscribeSuccess /></PublicFeedsGuard>} />
           <Route path="/feed/:podcastSlug" element={<PublicFeedsGuard><FeedPodcast /></PublicFeedsGuard>} />
-          <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><FeedEpisode /></PublicFeedsGuard>} />
+          <Route path="/feed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><FeedSecondSegment /></PublicFeedsGuard>} />
           <Route path="/embed/:podcastSlug/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
           <Route path="/embed/:episodeSlug" element={<PublicFeedsGuard><EmbedEpisode /></PublicFeedsGuard>} />
         <Route path="/" element={<RootRoute />}>
@@ -333,13 +353,14 @@ export default function App() {
           <Route path="episodes/:id" element={<EpisodeEditor />} />
           <Route path="library" element={<Library />} />
           <Route path="library/:userId" element={<RequireAdmin><Library /></RequireAdmin>} />
+          <Route path="themes" element={<Themes />} />
           <Route path="dashboard/:userId" element={<RequireAdmin><Dashboard /></RequireAdmin>} />
           <Route path="profile" element={<Profile />} />
           <Route path="users" element={<RequireAdmin><Users /></RequireAdmin>} />
           <Route path="messages" element={<Messages />} />
           <Route path="settings" element={<RequireAdmin><Settings /></RequireAdmin>} />
         </Route>
-          <Route path="/:episodeSlug" element={<PublicFeedsGuard><CustomFeedEpisodeWrapper /></PublicFeedsGuard>} />
+          <Route path="/:episodeSlug" element={<PublicFeedsGuard><CustomFeedSegmentWrapper /></PublicFeedsGuard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </SubscriberAuthProvider>

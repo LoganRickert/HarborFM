@@ -45,6 +45,10 @@
   transition: color 0.15s ease, background 0.15s ease;
 }
 
+.linkIconLabel {
+  display: none;
+}
+
 .linkIcon:hover {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -64,4 +68,53 @@
     flex-basis: 100%;
     width: 100%;
   }
+}
+
+/* Fluid / Liquid themes: labeled chips */
+.linksContainerFluid {
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.linksContainerFluid .linkGroup {
+  align-items: flex-start;
+  width: 100%;
+  gap: 0.55rem;
+}
+
+.linksContainerFluid .linkGroupLabel {
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  margin-bottom: 0.05rem;
+}
+
+.linksContainerFluid .linkGroupIcons {
+  justify-content: flex-start;
+  gap: 0.55rem;
+}
+
+.linksContainerFluid .linkIcon {
+  width: auto;
+  height: auto;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.85rem;
+  gap: 0.5rem;
+  border-radius: 2px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.linksContainerFluid .linkIconLabel {
+  display: inline;
+  line-height: 1.2;
+}
+
+.linksContainerFluid .linkIcon:hover {
+  color: var(--bg, #0c0e12);
+  background: var(--accent);
+  text-decoration: none;
 }

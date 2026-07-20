@@ -37,6 +37,8 @@ export function userRateLimitPreHandler(opts: {
     const userId = (request as FastifyRequest & { userId?: string }).userId;
     // If no userId, skip (this limiter is meant for authed routes).
     if (!userId) return;
+    // windowMs <= 0 disables the limiter (e.g. e2e overrides).
+    if (windowMs <= 0) return;
 
     const now = Date.now();
     prune(now);

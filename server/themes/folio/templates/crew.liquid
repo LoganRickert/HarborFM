@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>Crew | {{ podcast.title }}</title>
+</head>
+<body class="folio-theme">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero">
+        <div>
+          <p class="folio-hero__eyebrow">People</p>
+          <h1 class="folio-hero__title">Crew</h1>
+          <p class="folio-hero__lede">
+            {% if show.author %}
+              {% if podcast.author_name != "" %}
+                The hosts and guests behind {{ podcast.title }}, led by {{ podcast.author_name }}.
+              {% else %}
+                The hosts and guests behind {{ podcast.title }}.
+              {% endif %}
+            {% else %}
+              The hosts and guests behind {{ podcast.title }}.
+            {% endif %}
+          </p>
+        </div>
+      </header>
+
+      <section class="folio-section folio-section--wide">
+        {% if show.cast %}
+          {% render 'harborfm/cast' %}
+        {% else %}
+          <div class="folio-panel">
+            <p class="folio-prose">
+              Cast is hidden in page customizations, or no cast members are assigned yet.
+            </p>
+          </div>
+        {% endif %}
+      </section>
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+  </div>
+</body>
+</html>

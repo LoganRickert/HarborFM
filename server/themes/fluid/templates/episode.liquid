@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ episode.title }} | {{ podcast.title }}</title>
+  <style>
+    :root {
+      --accent: {{ accent.color }};
+      --accent-dim: {{ accent.dim }};
+      --accent-glow: {{ accent.glow }};
+    }
+  </style>
+</head>
+<body class="fluid-theme">
+  {% render 'harborfm/site_header' %}
+
+  <div class="fluid-page">
+    <header class="fluid-band fluid-band--hero">
+      <div class="fluid-inner">
+        <div class="fluid-show fluid-show--episode">
+          {% if podcast.artwork_url %}
+            <img class="fluid-show__art fluid-show__art--sm" src="{{ podcast.artwork_url }}" alt="" width="112" height="112" />
+          {% endif %}
+          <div class="fluid-show__text">
+            {% render 'harborfm/breadcrumbs' %}
+            <h1 class="fluid-show__title">{{ episode.title }}</h1>
+            {% if show.author %}
+              {% if podcast.author_name != "" %}
+                <p class="fluid-show__meta">{{ podcast.title }} · {{ podcast.author_name }}</p>
+              {% else %}
+                <p class="fluid-show__meta">{{ podcast.title }}</p>
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="fluid-band">
+      <div class="fluid-inner">
+        {% render 'harborfm/player' %}
+      </div>
+    </section>
+
+    {% if show.episode_description %}
+      {% if episode.description != "" %}
+        <section class="fluid-band">
+          <div class="fluid-inner">
+            <h2 class="fluid-section__title">Show notes</h2>
+            <p class="fluid-prose">{{ episode.description }}</p>
+          </div>
+        </section>
+      {% endif %}
+    {% endif %}
+
+    {% if show.funding %}
+      <section class="fluid-band">
+        <div class="fluid-inner">
+          {% render 'harborfm/funding' %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if show.cast %}
+      <section class="fluid-band">
+        <div class="fluid-inner">
+          {% render 'harborfm/cast' %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if show.reviews_episode %}
+      <section class="fluid-band">
+        <div class="fluid-inner">
+          {% render 'harborfm/reviews' %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if show.links %}
+      <section class="fluid-band">
+        <div class="fluid-inner">
+          {% render 'harborfm/links' %}
+        </div>
+      </section>
+    {% endif %}
+  </div>
+</body>
+</html>

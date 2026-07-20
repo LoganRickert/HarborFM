@@ -79,6 +79,7 @@ RUN pnpm install --frozen-lockfile --prod && pnpm rebuild \
   && (COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm -C node_modules/.pnpm/canvas@3.2.1/node_modules/canvas run install 2>/dev/null || true)
 
 COPY --chown=appuser:appuser --from=builder /app/server/dist ./server/dist
+COPY --chown=appuser:appuser --from=builder /app/server/themes ./server/themes
 COPY --chown=appuser:appuser --from=builder /app/server/initial-assets.json ./server/
 COPY --chown=appuser:appuser --from=builder /app/web/dist ./server/public
 

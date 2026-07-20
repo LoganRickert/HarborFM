@@ -15,6 +15,7 @@ export function FeedPodcastHeader({
   onAlertsClick,
   shareUrl,
   shareTitle,
+  plain = false,
 }: FeedPodcastHeaderProps) {
   const [showLockInfo, setShowLockInfo] = useManageSubscriptionDialog();
   const [shareOpen, setShareOpen] = useState(false);
@@ -32,80 +33,102 @@ export function FeedPodcastHeader({
   // Hide RSS button if subscriber-only with no public feed and user is not authenticated
   const showRssButton = !(isSubscriberOnly && !isAuthenticated);
 
+  const actionButtonsClass = plain
+    ? `${styles.actionButtons} ${styles.actionButtonsFluid}`
+    : styles.actionButtons;
+  const textBtnClass = plain
+    ? `${styles.messageBtn} ${styles.fluidTextBtn}`
+    : styles.messageBtn;
+  const iconBtnClass = plain
+    ? `${styles.rssButton} ${styles.fluidIconBtn}`
+    : styles.rssButton;
+  const shareBtnClass = plain
+    ? `${styles.shareBtn} ${styles.fluidIconBtn}`
+    : styles.shareBtn;
+  const lockBtnClass = plain
+    ? `${styles.lockButton} ${styles.fluidLockBtn}`
+    : styles.lockButton;
+
   return (
     <>
-      <div className={styles.header}>
+      <div className={plain ? `${styles.header} ${styles.headerFluid}` : styles.header}>
         {(podcast.artworkUrl || podcast.artworkFilename) && (
           <img
             src={podcast.artworkUrl ?? (podcast.artworkFilename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}` : '')}
             alt={podcast.title}
-            className={styles.artwork}
+            className={plain ? `${styles.artwork} ${styles.artworkFluid}` : styles.artwork}
           />
         )}
-        <div className={styles.content}>
-          <div className={styles.top}>
+        <div className={plain ? `${styles.content} ${styles.contentFluid}` : styles.content}>
+          <div className={plain ? `${styles.top} ${styles.topFluid}` : styles.top}>
             <div>
-              <h1 className={styles.title}>{podcast.title}</h1>
+              <h1 className={plain ? `${styles.title} ${styles.titleFluid}` : styles.title}>
+                {podcast.title}
+              </h1>
               {podcast.feedShowAuthor !== false && podcast.authorName && (
-                <p className={styles.author}>by {podcast.authorName}</p>
+                <p className={plain ? `${styles.author} ${styles.authorFluid}` : styles.author}>
+                  by {podcast.authorName}
+                </p>
               )}
             </div>
-            <div className={styles.actions}>
-              <div className={styles.actionButtons}>
+            <div className={plain ? `${styles.actions} ${styles.actionsFluid}` : styles.actions}>
+              <div className={actionButtonsClass}>
                 {onMessageClick && (
                   <button
                     type="button"
-                    className={styles.messageBtn}
+                    className={textBtnClass}
                     onClick={onMessageClick}
                     aria-label="Send message"
                   >
-                    <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
+                    <MessageCircle size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
                     Message
                   </button>
                 )}
                 {onAlertsClick && (
                   <button
                     type="button"
-                    className={styles.messageBtn}
+                    className={textBtnClass}
                     onClick={onAlertsClick}
                     aria-label="Get episode alerts"
                   >
-                    <Bell size={18} strokeWidth={2.5} aria-hidden />
-                    Get Alerts
+                    <Bell size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
+                    Alerts
                   </button>
                 )}
                 {showRssButton && (
                   <a
                     href={rssUrl}
-                    className={styles.rssButton}
+                    className={iconBtnClass}
                     title={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
                     aria-label={tokenId ? 'Private RSS Feed (Subscriber)' : 'RSS Feed'}
                   >
-                    <Rss size={18} strokeWidth={2.5} aria-hidden />
+                    <Rss size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
+                    {plain ? 'Feed' : null}
                   </a>
                 )}
                 {shareUrl != null && (
                   <button
                     type="button"
-                    className={styles.shareBtn}
+                    className={shareBtnClass}
                     onClick={() => setShareOpen(true)}
                     aria-label="Share"
                     title="Share"
                   >
-                    <Share2 size={18} strokeWidth={2.5} aria-hidden />
+                    <Share2 size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
+                    {plain ? 'Share' : null}
                   </button>
                 )}
               </div>
               {hasSubscriberFeatures && (
                 <button
                   type="button"
-                  className={styles.lockButton}
+                  className={lockBtnClass}
                   onClick={() => setShowLockInfo(true)}
                   aria-label={isAuthenticated ? 'Manage Subscription' : 'Subscribe'}
                 >
                   <Lock
-                    size={18}
-                    strokeWidth={2.5}
+                    size={plain ? 16 : 18}
+                    strokeWidth={2.25}
                     className={
                       isSubscriberOnly
                         ? `${styles.lockIcon} ${styles.lockIconGold}`
@@ -119,12 +142,18 @@ export function FeedPodcastHeader({
             </div>
           </div>
           {podcast.feedShowPodcastDescription !== false && podcast.description && (
-            <p className={styles.description}>{podcast.description}</p>
+            <p
+              className={
+                plain ? `${styles.description} ${styles.descriptionFluid}` : styles.description
+              }
+            >
+              {podcast.description}
+            </p>
           )}
         </div>
       </div>
       {podcast.feedShowFunding !== false && (
-        <FeedFundingSupport fundingLinks={podcast.fundingLinks} />
+        <FeedFundingSupport fundingLinks={podcast.fundingLinks} plain={plain} />
       )}
       {showLockInfo && (
         <SubscriptionInfoDialog

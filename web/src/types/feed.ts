@@ -6,6 +6,7 @@ export interface FeedSearchControlsProps {
   sortNewestFirst: boolean;
   onSortToggle: (newest: boolean) => void;
   placeholder?: string;
+  plain?: boolean;
 }
 
 export interface FeedEpisodePlayerProps {
@@ -33,6 +34,7 @@ export interface FeedEpisodeCardProps {
   useShortEpisodeUrls?: boolean;
   /** When false, hide the episode description blurb on the card. Default true. */
   showDescription?: boolean;
+  plain?: boolean;
 }
 
 export interface FeedPaginationProps {
@@ -61,6 +63,7 @@ export interface FeedPodcastHeaderProps {
   /** When set, a Share button (icon only) is shown. Embed option is hidden in ShareDialog. */
   shareUrl?: string;
   shareTitle?: string;
+  plain?: boolean;
 }
 
 export interface FeedEpisodesListProps {
@@ -74,6 +77,7 @@ export interface FeedEpisodesListProps {
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;
   useShortEpisodeUrls?: boolean;
+  plain?: boolean;
 }
 
 export interface FeedBreadcrumbsProps {
@@ -101,6 +105,7 @@ export interface FeedEpisodeHeaderProps {
   onTranscriptSeek?: (timeSec: number) => void;
   /** Current playback position; highlights the active transcript cue. */
   currentTime?: number;
+  plain?: boolean;
 }
 
 export interface FeedSubscriberOnlyMessageProps {

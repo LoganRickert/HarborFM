@@ -60,3 +60,69 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Fluid theme: full-width support rail, not a boxed card */
+.blockFluid {
+  margin-top: 1.5rem;
+  padding: 1.15rem 0 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.headingFluid {
+  margin: 0 0 0.85rem;
+  padding: 0;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.listFluid {
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.btnFluid {
+  padding: 0.55rem 0.95rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  border: none;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent);
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.btnFluid .icon {
+  opacity: 0.9;
+  color: var(--accent);
+}
+
+.btnFluid:hover {
+  color: var(--bg, #0c0e12);
+  background: var(--accent);
+  border-color: transparent;
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.btnFluid:hover .icon {
+  color: inherit;
+  opacity: 1;
+}
+
+.btnFluid:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

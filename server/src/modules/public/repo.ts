@@ -77,6 +77,7 @@ export function getPodcastBySlug(slug: string) {
   return drizzleDb
     .select({
       id: podcasts.id,
+      ownerUserId: podcasts.ownerUserId,
       title: podcasts.title,
       slug: podcasts.slug,
       description: podcasts.description,
@@ -112,6 +113,7 @@ export function getPodcastBySlug(slug: string) {
       podroll: podcasts.podroll,
       fundingLinks: podcasts.fundingLinks,
       feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
+      feedTheme: sql<string>`COALESCE(${podcasts.feedTheme}, 'default')`.as("feedTheme"),
       feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
         "feedShowPodcastDescription",
       ),

@@ -5,6 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { setupStatus } from '../api/setup';
 import { signupEpisodeAlerts } from '../api/episodeAlerts';
 import { Captcha, type CaptchaHandle } from './Captcha';
+import { feedAccentCssVars } from '../utils/feedAccent';
 import styles from './FeedbackModal.module.css';
 
 export interface GetAlertsModalProps {
@@ -12,6 +13,8 @@ export interface GetAlertsModalProps {
   onOpenChange: (open: boolean) => void;
   podcastSlug: string;
   podcastTitle?: string;
+  /** Podcast feed accent; applied as CSS vars so themes can style the dialog. */
+  accent?: string | null;
 }
 
 export function GetAlertsModal({
@@ -19,6 +22,7 @@ export function GetAlertsModal({
   onOpenChange,
   podcastSlug,
   podcastTitle,
+  accent,
 }: GetAlertsModalProps) {
   const [email, setEmail] = useState('');
   const captchaRef = useRef<CaptchaHandle>(null);
@@ -57,8 +61,13 @@ export function GetAlertsModal({
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
-      <Dialog.Overlay className={styles.overlay} />
-      <Dialog.Content className={styles.dialog} aria-describedby={undefined}>
+      <Dialog.Overlay className={styles.overlay} data-harborfm-dialog-overlay="alerts" />
+      <Dialog.Content
+        className={styles.dialog}
+        aria-describedby={undefined}
+        data-harborfm-dialog="alerts"
+        style={feedAccentCssVars(accent)}
+      >
         <div className={styles.dialogHeader}>
           <div>
             <Dialog.Title className={styles.title}>Get Alerts</Dialog.Title>

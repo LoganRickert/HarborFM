@@ -191,19 +191,29 @@ function resolveCallJoinMeta(request: FastifyRequest): SpaPageMeta | null {
   };
 }
 
+function isThemePageSegment(segment: string | undefined): boolean {
+  if (!segment) return false;
+  return /^[a-z0-9][a-z0-9_-]*\.html$/i.test(segment);
+}
+
 function resolveFeedRoute(
   pathname: string,
   host: string,
-): { podcastSlug: string; episodeSlug?: string } | null {
+): { podcastSlug: string; episodeSlug?: string; themePage?: string } | null {
   const clean = pathname.split("?")[0].replace(/\/$/, "") || "/";
 
   const feedMatch = clean.match(/^\/feed\/([^/]+)(?:\/([^/]+))?$/);
   if (feedMatch) {
+    const second = feedMatch[2] ? decodeURIComponent(feedMatch[2]) : undefined;
+    if (second && isThemePageSegment(second)) {
+      return {
+        podcastSlug: decodeURIComponent(feedMatch[1]),
+        themePage: second.toLowerCase(),
+      };
+    }
     return {
       podcastSlug: decodeURIComponent(feedMatch[1]),
-      episodeSlug: feedMatch[2]
-        ? decodeURIComponent(feedMatch[2])
-        : undefined,
+      episodeSlug: second,
     };
   }
 
@@ -216,12 +226,16 @@ function resolveFeedRoute(
 
   const segmentMatch = clean.match(/^\/([^/]+)$/);
   if (!segmentMatch) return null;
-  const segment = decodeURIComponent(segmentMatch[1]).toLowerCase();
+  const segmentRaw = decodeURIComponent(segmentMatch[1]);
+  const segment = segmentRaw.toLowerCase();
   if (RESERVED_SINGLE_SEGMENTS.has(segment)) return null;
+  if (isThemePageSegment(segment)) {
+    return { podcastSlug: hostMatch.slug, themePage: segment };
+  }
 
   return {
     podcastSlug: hostMatch.slug,
-    episodeSlug: decodeURIComponent(segmentMatch[1]),
+    episodeSlug: segmentRaw,
   };
 }
 
@@ -255,7 +269,8 @@ export function resolveSpaMetaForRequest(
   const podcastDto = publicPodcastDto(podcastRow) as Record<string, unknown>;
   const podcastCover = podcastCoverUrl(origin, podcastDto) ?? defaultImage;
 
-  if (!route.episodeSlug) {
+  // Home and theme .html pages share podcast-level meta.
+  if (!route.episodeSlug || route.themePage) {
     return {
       title: `${String(podcastRow.title)} | ${siteName}`,
       description: String(podcastRow.description ?? "").trim(),

@@ -35,6 +35,32 @@ export const feedAccentSchema = z.enum([
 
 export type FeedAccent = z.infer<typeof feedAccentSchema>;
 
+/** React SPA feed (not a packaged theme). Server-wide themes live in feed_themes. */
+export const FEED_DEFAULT_THEME = 'default' as const;
+
+/**
+ * @deprecated Prefer FEED_DEFAULT_THEME. Packaged server-wide themes are DB rows, not this list.
+ * Kept so older clients still treat `default` as the SPA feed.
+ */
+export const FEED_BUILTIN_THEMES = [FEED_DEFAULT_THEME] as const;
+export const feedBuiltinThemeSchema = z.enum(FEED_BUILTIN_THEMES);
+export type FeedBuiltinTheme = z.infer<typeof feedBuiltinThemeSchema>;
+
+/**
+ * @deprecated Empty. Server-wide packaged themes come from feed_themes (scope=server).
+ * Kept temporarily so older imports do not break.
+ */
+export const FEED_LIQUID_BUILTIN_THEMES = [] as const;
+export type FeedLiquidBuiltinTheme = string;
+
+/** feedTheme is default, a server-wide theme id, or a user theme row id. */
+export const feedThemeSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-zA-Z0-9_-]+$/, { error: 'Invalid feed theme id' });
+export type FeedTheme = z.infer<typeof feedThemeSchema>;
+
 export const podcastCreateSchema = z.object({
   title: z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string().min(1, { error: 'Title is required' })),
   slug: z.string().min(1).regex(/^[a-z0-9-]+$/, { error: 'Slug: lowercase letters, numbers, hyphens only' }),
@@ -146,6 +172,8 @@ export const podcastUpdateSchema = podcastCreateSchema
     subscribersKeepExpiredEpisodes: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     /** Primary accent color for the public feed page. */
     feedAccent: feedAccentSchema.optional(),
+    /** Page theme: default | fluid | folio | custom theme id. */
+    feedTheme: feedThemeSchema.optional(),
     feedShowPodcastDescription: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     feedShowEpisodeDescription: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     feedShowFunding: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),

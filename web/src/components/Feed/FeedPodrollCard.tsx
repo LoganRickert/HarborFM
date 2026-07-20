@@ -5,19 +5,26 @@ export type PodrollEntry = NonNullable<PublicPodcast['podroll']>[number];
 
 export interface FeedPodrollCardProps {
   podroll: PublicPodcast['podroll'];
+  plain?: boolean;
 }
 
 const FALLBACK_COVER = '/favicon.svg';
 
-export function FeedPodrollCard({ podroll }: FeedPodrollCardProps) {
+export function FeedPodrollCard({ podroll, plain = false }: FeedPodrollCardProps) {
   const items = (podroll ?? []).filter(
     (p) => p.homeUrl?.trim() || p.feedUrl?.trim(),
   );
   if (items.length === 0) return null;
 
   return (
-    <section className={styles.card} aria-labelledby="podroll-card-title">
-      <h2 id="podroll-card-title" className={styles.title}>
+    <section
+      className={plain ? `${styles.card} ${styles.cardPlain}` : styles.card}
+      aria-labelledby="podroll-card-title"
+    >
+      <h2
+        id="podroll-card-title"
+        className={plain ? `${styles.title} ${styles.titleFluid}` : styles.title}
+      >
         Recommended Podcasts
       </h2>
       <ul className={styles.list}>

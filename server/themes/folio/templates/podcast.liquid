@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>Episodes | {{ podcast.title }}</title>
+</head>
+<body class="folio-theme">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero">
+        <div>
+          <p class="folio-hero__eyebrow">Archive</p>
+          <h1 class="folio-hero__title">Episodes</h1>
+          <p class="folio-hero__lede">
+            Search and sort every published episode from {{ podcast.title }}.
+          </p>
+        </div>
+      </header>
+
+      <section class="folio-section folio-section--wide">
+        <div class="folio-panel">
+          <h2 class="folio-section__title">All episodes</h2>
+          {% render 'harborfm/search' %}
+          {% render 'harborfm/episodes' %}
+        </div>
+      </section>
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+  </div>
+</body>
+</html>

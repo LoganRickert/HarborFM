@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>Support | {{ podcast.title }}</title>
+</head>
+<body class="folio-theme">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero">
+        <div>
+          <p class="folio-hero__eyebrow">Support</p>
+          <h1 class="folio-hero__title">Keep it going</h1>
+          <p class="folio-hero__lede">
+            Ways to support the show, and leave a review if you like.
+          </p>
+        </div>
+      </header>
+
+      <section class="folio-section folio-section--wide">
+        <div class="folio-panel">
+          <h2 class="folio-section__title">Funding</h2>
+          {% if show.funding %}
+            {% render 'harborfm/funding' %}
+          {% else %}
+            <p class="folio-prose">Add funding links on the podcast to populate this section.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      {% if show.reviews_podcast %}
+        <section class="folio-section folio-section--wide">
+          <div class="folio-panel">
+            <h2 class="folio-section__title">Listener reviews</h2>
+            {% render 'harborfm/reviews' %}
+          </div>
+        </section>
+      {% endif %}
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+  </div>
+</body>
+</html>

@@ -11,6 +11,18 @@
   padding-right: max(calc(1rem + env(safe-area-inset-right, 0px)), calc(50vw - 400px));
 }
 
+/* Fluid / full-bleed themes */
+.siteHeaderFlush {
+  margin-top: 0;
+  margin-bottom: 0;
+  background: color-mix(in srgb, var(--bg, #0c0e12) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  backdrop-filter: blur(10px);
+  /* Align header innards with Fluid content column (968px). */
+  padding-left: max(calc(1rem + env(safe-area-inset-left, 0px)), calc(50vw - 484px));
+  padding-right: max(calc(1rem + env(safe-area-inset-right, 0px)), calc(50vw - 484px));
+}
+
 .siteHeaderContent {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -87,4 +99,32 @@
   border-color: var(--accent);
   background: var(--accent-glow);
   text-decoration: none;
+}
+
+.siteHeaderContentFluid {
+  max-width: 968px;
+  width: 100%;
+  padding: 0.85rem 0;
+}
+
+.logoFluid {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  justify-self: start;
+  grid-column: 1;
+}
+
+.signInIconFluid {
+  border-radius: 2px;
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  margin-right: 0;
+}
+
+.signInIconFluid:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg, #0c0e12);
 }

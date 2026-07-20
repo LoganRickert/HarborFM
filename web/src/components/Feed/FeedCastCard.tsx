@@ -56,9 +56,10 @@ export function FeedCastMember({ member }: { member: PublicCastMember }) {
 
 export interface FeedCastCardProps {
   podcastSlug: string;
+  plain?: boolean;
 }
 
-export function FeedCastCard({ podcastSlug }: FeedCastCardProps) {
+export function FeedCastCard({ podcastSlug, plain = false }: FeedCastCardProps) {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
       queryKey: ['public-cast', podcastSlug],
@@ -81,27 +82,53 @@ export function FeedCastCard({ podcastSlug }: FeedCastCardProps) {
   if (isLoading || (hosts.length === 0 && allGuests.length === 0)) return null;
 
   return (
-    <div className={`${sharedStyles.card} ${styles.castCard}`}>
-      <h2 className={styles.castTitle}>Cast</h2>
+    <div
+      className={
+        plain
+          ? `${styles.castCard} ${styles.castCardPlain}`
+          : `${sharedStyles.card} ${styles.castCard}`
+      }
+    >
+      <h2 className={plain ? `${styles.castTitle} ${styles.castTitleFluid}` : styles.castTitle}>
+        Cast
+      </h2>
 
       {hosts.length > 0 && (
         <section style={{ marginBottom: '1.5rem' }}>
-          <h3 className={styles.castSectionTitle}>Hosts</h3>
+          <h3
+            className={
+              plain
+                ? `${styles.castSectionTitle} ${styles.castSectionTitleFluid}`
+                : styles.castSectionTitle
+            }
+          >
+            Hosts
+          </h3>
           <FeedCastList cast={hosts} />
         </section>
       )}
 
       {allGuests.length > 0 && (
         <section>
-          <h3 className={styles.castSectionTitle}>Guests</h3>
+          <h3
+            className={
+              plain
+                ? `${styles.castSectionTitle} ${styles.castSectionTitleFluid}`
+                : styles.castSectionTitle
+            }
+          >
+            Guests
+          </h3>
           <FeedCastList cast={allGuests} />
           {hasNextPage && (
-            <div className={styles.loadMore}>
+            <div className={plain ? `${styles.loadMore} ${styles.loadMoreFluid}` : styles.loadMore}>
               <button
                 type="button"
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className={styles.loadMoreBtn}
+                className={
+                  plain ? `${styles.loadMoreBtn} ${styles.loadMoreBtnFluid}` : styles.loadMoreBtn
+                }
                 aria-label="Load more guests"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load more'}

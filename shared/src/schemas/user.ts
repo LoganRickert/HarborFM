@@ -44,6 +44,7 @@ export const userUpdateBodySchema = z.object({
   canStripe: z.boolean().optional(),
   canEpisodeAlert: z.boolean().optional(),
   canUploadEpisodeFiles: z.boolean().optional(),
+  canImportTheme: z.boolean().optional(),
 });
 
 export type UserCreateBody = z.infer<typeof userCreateBodySchema>;

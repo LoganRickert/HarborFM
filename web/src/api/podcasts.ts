@@ -134,6 +134,8 @@ export interface Podcast {
   subscribersKeepExpiredEpisodes?: number | boolean;
   /** Named accent for public feed page theming. */
   feedAccent?: string;
+  /** Page theme: default | fluid | folio | custom theme id. */
+  feedTheme?: string;
   feedShowPodcastDescription?: number | boolean;
   feedShowEpisodeDescription?: number | boolean;
   feedShowFunding?: number | boolean;

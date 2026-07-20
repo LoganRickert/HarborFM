@@ -75,6 +75,7 @@ export interface PodcastListRow {
   showScheduledEpisodes: number;
   subscribersKeepExpiredEpisodes: number;
   feedAccent: string;
+  feedTheme: string;
   feedShowPodcastDescription: number;
   feedShowEpisodeDescription: number;
   feedShowFunding: number;
@@ -173,6 +174,7 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
       "subscribersKeepExpiredEpisodes",
     ),
     feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
+    feedTheme: sql<string>`COALESCE(${podcasts.feedTheme}, 'default')`.as("feedTheme"),
     feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
       "feedShowPodcastDescription",
     ),
@@ -343,6 +345,7 @@ export function getByIdWithFilenameForCreate(
         "subscribersKeepExpiredEpisodes",
       ),
       feedAccent: sql<string>`COALESCE(${podcasts.feedAccent}, 'green')`.as("feedAccent"),
+      feedTheme: sql<string>`COALESCE(${podcasts.feedTheme}, 'default')`.as("feedTheme"),
       feedShowPodcastDescription: sql<number>`COALESCE(${podcasts.feedShowPodcastDescription}, 1)`.as(
         "feedShowPodcastDescription",
       ),

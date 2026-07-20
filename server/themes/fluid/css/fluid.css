@@ -1,0 +1,152 @@
+/*
+ * Fluid: full-bleed section bands, content rail capped at 968px.
+ * No cards. Sections stretch edge-to-edge; only the text/media column is narrow.
+ */
+
+.fluid-theme {
+  --fluid-max: 968px;
+  --fluid-pad: 1.25rem;
+  --fluid-band-a: transparent;
+  --fluid-band-b: color-mix(in srgb, var(--bg-elevated, #14171e) 55%, transparent);
+  --fluid-band-hero: color-mix(in srgb, var(--accent) 10%, var(--bg, #0c0e12));
+  margin: 0;
+  min-height: 100vh;
+  width: 100%;
+  color: var(--text, #e8eaef);
+  font-family: var(--font-sans, "DM Sans", system-ui, sans-serif);
+  background-color: var(--bg, #0c0e12);
+  background-image:
+    radial-gradient(
+      ellipse 80% 50% at 50% -10%,
+      color-mix(in srgb, var(--accent) 16%, transparent),
+      transparent 65%
+    );
+  background-attachment: fixed;
+}
+
+.fluid-page {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Full-bleed horizontal band (background + padding stretch). */
+.fluid-band {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 2.25rem 0;
+  border: none;
+  border-radius: 0;
+  background: var(--fluid-band-a);
+  border-top: 1px solid color-mix(in srgb, var(--border, #2a2f3d) 55%, transparent);
+}
+
+.fluid-band:first-child {
+  border-top: none;
+}
+
+.fluid-band:nth-child(even) {
+  background: var(--fluid-band-b);
+}
+
+.fluid-band--hero {
+  background:
+    linear-gradient(
+      180deg,
+      var(--fluid-band-hero),
+      color-mix(in srgb, var(--bg, #0c0e12) 40%, transparent)
+    );
+  padding-top: 2.75rem;
+  padding-bottom: 2.75rem;
+  border-top: none;
+}
+
+/* Content rail only. Never the band. */
+.fluid-inner {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--fluid-max);
+  margin: 0 auto;
+  padding-left: max(var(--fluid-pad), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--fluid-pad), env(safe-area-inset-right, 0px));
+}
+
+.fluid-show {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.5rem 1.75rem;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .fluid-show {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fluid-show__art {
+  width: 10rem;
+  height: 10rem;
+  object-fit: cover;
+  border-radius: 0.75rem;
+}
+
+.fluid-show__art--sm {
+  width: 7rem;
+  height: 7rem;
+}
+
+.fluid-show__title {
+  margin: 0 0 0.4rem;
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+.fluid-show__meta {
+  margin: 0 0 0.85rem;
+  color: var(--text-muted, #8b92a3);
+  font-size: 1rem;
+}
+
+.fluid-show__desc {
+  margin: 0;
+  max-width: 42rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text, #e8eaef) 88%, transparent);
+}
+
+.fluid-show__funding {
+  margin-top: 1rem;
+}
+
+.fluid-section__title {
+  margin: 0 0 1.15rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.fluid-prose {
+  margin: 0;
+  max-width: 46rem;
+  line-height: 1.65;
+  color: color-mix(in srgb, var(--text, #e8eaef) 90%, transparent);
+}
+
+[data-harborfm-block] {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-harborfm-block="search"] {
+  margin-bottom: 1rem;
+}

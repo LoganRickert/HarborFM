@@ -26,6 +26,7 @@ export function FeedEpisodeHeader({
   transcriptUrl,
   onTranscriptSeek,
   currentTime,
+  plain = false,
   children,
 }: FeedEpisodeHeaderProps & { children?: ReactNode }) {
   const [shareOpen, setShareOpen] = useState(false);
@@ -114,51 +115,53 @@ export function FeedEpisodeHeader({
             </div>
           ) : null}
           <h1 className={styles.title}>{episode.title}</h1>
-          <div className={styles.actions}>
-            <div className={styles.subRow}>
+          <div className={plain ? `${styles.actions} ${styles.actionsFluid}` : styles.actions}>
+            <div className={plain ? `${styles.subRow} ${styles.subRowFluid}` : styles.subRow}>
               {onMessageClick && (
                 <button
                   type="button"
-                  className={styles.messageBtn}
+                  className={plain ? `${styles.messageBtn} ${styles.fluidTextBtn}` : styles.messageBtn}
                   onClick={onMessageClick}
                   aria-label="Send message"
                 >
-                  <MessageCircle size={18} strokeWidth={2.5} aria-hidden />
+                  <MessageCircle size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
                   Message
                 </button>
               )}
               {onAlertsClick && (
                 <button
                   type="button"
-                  className={styles.messageBtn}
+                  className={plain ? `${styles.messageBtn} ${styles.fluidTextBtn}` : styles.messageBtn}
                   onClick={onAlertsClick}
                   aria-label="Get episode alerts"
                 >
-                  <Bell size={18} strokeWidth={2.5} aria-hidden />
-                  Get Alerts
+                  <Bell size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
+                  {plain ? 'Alerts' : 'Get Alerts'}
                 </button>
               )}
               {shareUrl != null && (
                 <button
                   type="button"
-                  className={styles.shareBtn}
+                  className={plain ? `${styles.shareBtn} ${styles.fluidTextBtn}` : styles.shareBtn}
                   onClick={() => setShareOpen(true)}
                   aria-label="Share"
                   title="Share"
                 >
-                  <Share2 size={18} strokeWidth={2.5} aria-hidden />
+                  <Share2 size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
                   Share
                 </button>
               )}
               {hasTranscript && (
                 <button
                   type="button"
-                  className={styles.transcriptBtn}
+                  className={
+                    plain ? `${styles.transcriptBtn} ${styles.fluidTextBtn}` : styles.transcriptBtn
+                  }
                   onClick={() => setTranscriptOpen(true)}
                   aria-label="Transcript"
                   title="Transcript"
                 >
-                  <FileText size={18} strokeWidth={2.5} aria-hidden />
+                  <FileText size={plain ? 16 : 18} strokeWidth={2.25} aria-hidden />
                   Transcript
                 </button>
               )}
@@ -166,13 +169,13 @@ export function FeedEpisodeHeader({
             {hasSubscriberFeatures && onLockClick && (
               <button
                 type="button"
-                className={styles.lockButton}
+                className={plain ? `${styles.lockButton} ${styles.fluidLockBtn}` : styles.lockButton}
                 onClick={onLockClick}
                 aria-label={isAuthenticated ? 'Manage Subscription' : 'Subscribe'}
               >
                 <Lock
-                  size={18}
-                  strokeWidth={2.5}
+                  size={plain ? 16 : 18}
+                  strokeWidth={2.25}
                   className={
                     shouldShowGoldLock
                       ? `${styles.lockIcon} ${styles.lockIconGold}`

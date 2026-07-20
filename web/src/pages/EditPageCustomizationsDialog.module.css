@@ -22,6 +22,36 @@
   border-bottom: 1px solid var(--border);
 }
 
+.selectField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.selectLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.select {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated, var(--surface));
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.fieldHint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .accentField {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>{{ episode.title }} | {{ podcast.title }}</title>
+</head>
+<body class="folio-theme">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero">
+        <div>
+          {% render 'harborfm/breadcrumbs' %}
+          <p class="folio-hero__eyebrow">Episode</p>
+          <h1 class="folio-hero__title">{{ episode.title }}</h1>
+          {% if show.author %}
+            {% if podcast.author_name != "" %}
+              <p class="folio-meta">{{ podcast.title }} · {{ podcast.author_name }}</p>
+            {% else %}
+              <p class="folio-meta">{{ podcast.title }}</p>
+            {% endif %}
+          {% endif %}
+        </div>
+      </header>
+
+      <section class="folio-section folio-section--wide">
+        {% render 'harborfm/player' %}
+      </section>
+
+      {% if show.episode_description %}
+        {% if episode.description != "" %}
+          <section class="folio-section folio-section--wide">
+            <div class="folio-panel">
+              <h2 class="folio-section__title">Show notes</h2>
+              <p class="folio-prose">{{ episode.description }}</p>
+            </div>
+          </section>
+        {% endif %}
+      {% endif %}
+
+      {% if show.funding %}
+        <section class="folio-section folio-section--wide">
+          <div class="folio-panel">
+            <h2 class="folio-section__title">Support</h2>
+            {% render 'harborfm/funding' %}
+          </div>
+        </section>
+      {% endif %}
+
+      {% if show.reviews_episode %}
+        <section class="folio-section folio-section--wide">
+          <div class="folio-panel">
+            <h2 class="folio-section__title">Reviews</h2>
+            {% render 'harborfm/reviews' %}
+          </div>
+        </section>
+      {% endif %}
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+  </div>
+</body>
+</html>

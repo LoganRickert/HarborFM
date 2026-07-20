@@ -30,6 +30,7 @@ import {
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { RECORD_MIN_FREE_BYTES, DNS_SECRETS_AAD } from "../../config.js";
 import {
+  FEED_DEFAULT_THEME,
   podcastAnalyticsQuerySchema,
   podcastCreateSchema,
   podcastUpdateSchema,
@@ -37,6 +38,7 @@ import {
 } from "@harborfm/shared";
 import { assertPathUnder, assertSafeId, artworkDir, resolveDataPath } from "../../services/paths.js";
 import { readSettings } from "../settings/index.js";
+import { isServerWideThemeId, themeOwnedByPodcastOwner } from "../themes/index.js";
 import { encryptSecret } from "../../services/secrets.js";
 import { getCanonicalFeedUrl } from "../../services/dns/custom-domain-resolver.js";
 import { runDnsUpdateTask } from "../../services/dns/update-task.js";
@@ -770,6 +772,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           categoryPrimaryTwo: podcasts.categoryPrimaryTwo,
           categoryPrimaryThree: podcasts.categoryPrimaryThree,
           artworkPath: podcasts.artworkPath,
+          ownerUserId: podcasts.ownerUserId,
         })
         .from(podcasts)
         .where(eq(podcasts.id, id))
@@ -879,6 +882,20 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         );
       }
       if (data.feedAccent !== undefined) set.feedAccent = data.feedAccent;
+      if (data.feedTheme !== undefined) {
+        const themeId = String(data.feedTheme).trim();
+        if (themeId === FEED_DEFAULT_THEME || isServerWideThemeId(themeId)) {
+          set.feedTheme = themeId;
+        } else {
+          const ownerId = currentRow?.ownerUserId;
+          if (!ownerId || !themeOwnedByPodcastOwner(themeId, ownerId)) {
+            return reply.status(400).send({
+              error: "Invalid feed theme for this podcast",
+            });
+          }
+          set.feedTheme = themeId;
+        }
+      }
       if (data.feedShowPodcastDescription !== undefined) {
         set.feedShowPodcastDescription = Boolean(data.feedShowPodcastDescription);
       }

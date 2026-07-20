@@ -13,6 +13,7 @@ export function FeedEpisodesList({
   isFetchingNextPage,
   onLoadMore,
   useShortEpisodeUrls = false,
+  plain = false,
 }: FeedEpisodesListProps) {
   if (episodes.length === 0) {
     return <p className={styles.muted}>No episodes found.</p>;
@@ -20,7 +21,7 @@ export function FeedEpisodesList({
 
   return (
     <>
-      <ul className={styles.list}>
+      <ul className={plain ? `${styles.list} ${styles.listPlain}` : styles.list}>
         {episodes.map((ep) => (
           <FeedEpisodeCard
             key={ep.id}
@@ -33,16 +34,17 @@ export function FeedEpisodesList({
             onPause={onPause}
             useShortEpisodeUrls={useShortEpisodeUrls}
             showDescription={podcast.feedShowEpisodeDescription !== false}
+            plain={plain}
           />
         ))}
       </ul>
       {hasNextPage && onLoadMore && (
-        <div className={styles.loadMore}>
+        <div className={plain ? `${styles.loadMore} ${styles.loadMoreFluid}` : styles.loadMore}>
           <button
             type="button"
             onClick={onLoadMore}
             disabled={isFetchingNextPage}
-            className={styles.loadMoreBtn}
+            className={plain ? `${styles.loadMoreBtn} ${styles.loadMoreBtnFluid}` : styles.loadMoreBtn}
             aria-label="Load More Episodes"
           >
             {isFetchingNextPage ? 'Loading...' : 'Load More Episodes'}

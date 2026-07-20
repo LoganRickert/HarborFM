@@ -1,0 +1,20 @@
+<nav class="folio-top" aria-label="Show pages">
+  <div class="folio-top__inner">
+    <a class="folio-brand" href="{{ urls.home }}">
+      {% if podcast.artwork_url %}
+        <img class="folio-brand__mark" src="{{ podcast.artwork_url }}" alt="" width="36" height="36" />
+      {% endif %}
+      <span class="folio-brand__text">
+        <span class="folio-brand__title">{{ podcast.title }}</span>
+      </span>
+    </a>
+    <ul class="folio-nav">
+      <li><a href="{{ urls.home }}"{% if page == "home" %} aria-current="page"{% endif %}>Home</a></li>
+      <li><a href="{{ urls.pages.podcast }}"{% if page == "podcast" %} aria-current="page"{% endif %}>Episodes</a></li>
+      <li><a href="{{ urls.pages.about }}"{% if page == "about" %} aria-current="page"{% endif %}>About</a></li>
+      <li><a href="{{ urls.pages.crew }}"{% if page == "crew" %} aria-current="page"{% endif %}>Crew</a></li>
+      <li><a href="{{ urls.pages.support }}"{% if page == "support" %} aria-current="page"{% endif %}>Support</a></li>
+      <li><a href="{{ urls.pages.connect }}"{% if page == "connect" %} aria-current="page"{% endif %}>Connect</a></li>
+    </ul>
+  </div>
+</nav>

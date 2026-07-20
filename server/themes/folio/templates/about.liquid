@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>About | {{ podcast.title }}</title>
+</head>
+<body class="folio-theme">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero folio-hero--split">
+        {% if podcast.artwork_url %}
+          <img class="folio-hero__art" src="{{ podcast.artwork_url }}" alt="" width="136" height="136" />
+        {% endif %}
+        <div>
+          <p class="folio-hero__eyebrow">About</p>
+          <h1 class="folio-hero__title">{{ podcast.title }}</h1>
+          {% if show.author %}
+            {% if podcast.author_name != "" %}
+              <p class="folio-hero__lede">Hosted by {{ podcast.author_name }}.</p>
+            {% endif %}
+          {% endif %}
+        </div>
+      </header>
+
+      <section class="folio-section folio-section--wide">
+        <div class="folio-panel">
+          {% if show.podcast_description %}
+            {% if podcast.description != "" %}
+              <p class="folio-prose">{{ podcast.description }}</p>
+            {% else %}
+              <p class="folio-prose">Add a podcast description in HarborFM to fill this page.</p>
+            {% endif %}
+          {% else %}
+            <p class="folio-prose">Podcast description is hidden in page customizations.</p>
+          {% endif %}
+        </div>
+      </section>
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+  </div>
+</body>
+</html>

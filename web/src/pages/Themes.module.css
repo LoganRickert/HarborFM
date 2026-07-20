@@ -1,0 +1,579 @@
+.page {
+  max-width: var(--max-content);
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.gateMessage {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.importCard {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  background: var(--bg-elevated);
+  margin-bottom: 1.5rem;
+}
+
+.importTitle {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dropZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: 11.5rem;
+  padding: 2rem 1.5rem;
+  border: 2px dashed color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: 14px;
+  background:
+    radial-gradient(
+      ellipse 70% 80% at 50% 0%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--accent) 6%, var(--bg));
+  text-align: center;
+  cursor: pointer;
+  color: var(--text);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+/* Keep dragenter/leave on the zone itself (children otherwise flicker the highlight). */
+.dropZone > * {
+  pointer-events: none;
+}
+
+.dropZone:hover:not(.dropZoneBusy) {
+  border-color: var(--accent);
+  background:
+    radial-gradient(
+      ellipse 70% 80% at 50% 0%,
+      color-mix(in srgb, var(--accent) 20%, transparent),
+      transparent 70%
+    ),
+    color-mix(in srgb, var(--accent) 10%, var(--bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.dropZone:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.dropZoneActive {
+  border-color: var(--accent);
+  border-style: solid;
+  background:
+    radial-gradient(
+      ellipse 70% 80% at 50% 40%,
+      color-mix(in srgb, var(--accent) 24%, transparent),
+      transparent 72%
+    ),
+    color-mix(in srgb, var(--accent) 12%, var(--bg));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.dropZoneBusy {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.dropZoneIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.dropZoneText {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.dropZoneHint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.dropZoneAction {
+  margin-top: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.fileInput {
+  display: none;
+}
+
+.errorCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0.875rem;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--text);
+}
+
+.errorIcon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: #f87171;
+}
+
+.errorCardMessage {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: #fecaca;
+}
+
+.importSuccessCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--success, #22c55e) 48%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--success, #22c55e) 20%, var(--bg-elevated));
+  color: var(--text);
+}
+
+.importSuccessIcon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: var(--success, #4ade80);
+}
+
+.importSuccessMessage {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.builtinCard {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  background: var(--bg-elevated);
+  margin-bottom: 1.5rem;
+}
+
+.builtinHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.builtinHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.builtinHeaderTop .importTitle {
+  margin: 0;
+}
+
+.builtinLead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.skillDownloadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.skillDownloadBtn:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+  color: var(--text);
+  text-decoration: none;
+}
+
+.builtinList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.builtinItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 55%, var(--bg-elevated));
+}
+
+.builtinMeta {
+  min-width: 0;
+  flex: 1;
+}
+
+.builtinTitleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-bottom: 0.25rem;
+}
+
+.builtinName {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.builtinVersion {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.builtinCopyBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.builtinDescription {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.downloadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.downloadBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-elevated));
+  border-color: var(--accent);
+}
+
+.downloadBtn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.tableWrap {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.tableHeader {
+  padding: 1rem 1rem 0.25rem;
+}
+
+.tableTitle {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .builtinItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .downloadBtn,
+  .skillDownloadBtn {
+    justify-content: center;
+  }
+
+  .builtinHeaderTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th:last-child,
+.table td:last-child {
+  text-align: right;
+}
+
+.table th {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-elevated) 85%, var(--border));
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.nameCell {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.metaMuted {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-top: 0.15rem;
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger, #ef4444);
+  cursor: pointer;
+}
+
+.iconActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.iconActionBtn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.iconActionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.deleteBtn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 50%, var(--border));
+  background: color-mix(in srgb, var(--danger, #ef4444) 8%, transparent);
+}
+
+.deleteBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialogOverlay {
+  background: rgba(0, 0, 0, 0.6);
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.dialogContent {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1001;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 420px;
+  width: calc(100% - 2rem);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.dialogHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dialogDescription {
+  margin: 0 0 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.dialogActionsCancelLeft {
+  justify-content: flex-start;
+}
+
+.cancel {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.submitDanger {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.submitDanger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

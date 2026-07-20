@@ -465,7 +465,7 @@ export function InstanceList({
               value={addForm.url}
               onChange={(e) => setAddForm((f) => ({ ...f, url: e.target.value }))}
               required
-              placeholder="https://harbor.example.com"
+              placeholder="https://harborfm.example.com"
             />
             <label className={styles.addFormLabel}>IP</label>
             <input

@@ -159,6 +159,11 @@ export function publicPodcastDto(
       String((row as { feedAccent: string }).feedAccent).trim()
         ? String((row as { feedAccent: string }).feedAccent).trim()
         : "green",
+    feed_theme:
+      typeof (row as { feedTheme?: unknown }).feedTheme === "string" &&
+      String((row as { feedTheme: string }).feedTheme).trim()
+        ? String((row as { feedTheme: string }).feedTheme).trim()
+        : "default",
     feed_show_podcast_description:
       (row as { feedShowPodcastDescription?: number | boolean | null })
         .feedShowPodcastDescription ?? 1,

@@ -8,6 +8,16 @@
   margin-bottom: 1.5rem;
 }
 
+.cardPlain {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .title {
   margin: 0 0 1rem;
   font-size: 1.25rem;
@@ -70,4 +80,42 @@
   line-height: 1.3;
   min-width: 0;
   overflow-wrap: break-word;
+}
+
+/* Fluid theme */
+.titleFluid {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 1.15rem;
+}
+
+.cardPlain .item {
+  padding: 0;
+  border-radius: 0;
+  align-items: flex-start;
+  text-align: left;
+  gap: 0.65rem;
+}
+
+.cardPlain .item:hover {
+  background: transparent;
+}
+
+.cardPlain .cover {
+  border-radius: 2px;
+  max-width: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.cardPlain .item:hover .cover {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.cardPlain .name {
+  font-size: 0.875rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }

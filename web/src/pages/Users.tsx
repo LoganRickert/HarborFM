@@ -46,6 +46,7 @@ export function Users() {
   const [editCanStripe, setEditCanStripe] = useState(false);
   const [editCanEpisodeAlert, setEditCanEpisodeAlert] = useState(false);
   const [editCanUploadEpisodeFiles, setEditCanUploadEpisodeFiles] = useState(false);
+  const [editCanImportTheme, setEditCanImportTheme] = useState(false);
   const [editFormBaseline, setEditFormBaseline] = useState<string | null>(null);
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState('');
@@ -131,6 +132,7 @@ export function Users() {
       canEpisodeAlert: (user as { canEpisodeAlert?: number }).canEpisodeAlert === 1,
       canUploadEpisodeFiles:
         (user as { canUploadEpisodeFiles?: number }).canUploadEpisodeFiles === 1,
+      canImportTheme: (user as { canImportTheme?: number }).canImportTheme === 1,
     };
     setEditEmail(next.email);
     setEditUsername(next.username);
@@ -148,6 +150,7 @@ export function Users() {
     setEditCanStripe(next.canStripe);
     setEditCanEpisodeAlert(next.canEpisodeAlert);
     setEditCanUploadEpisodeFiles(next.canUploadEpisodeFiles);
+    setEditCanImportTheme(next.canImportTheme);
     setEditFormBaseline(snapshotForDirty(next));
   }
 
@@ -235,6 +238,11 @@ export function Users() {
     if (editCanUploadEpisodeFiles !== currentCanUploadEpisodeFiles) {
       updates.canUploadEpisodeFiles = editCanUploadEpisodeFiles;
     }
+    const currentCanImportTheme =
+      (userToEdit as { canImportTheme?: number }).canImportTheme === 1;
+    if (editCanImportTheme !== currentCanImportTheme) {
+      updates.canImportTheme = editCanImportTheme;
+    }
 
     if (Object.keys(updates).length > 0) {
       updateUserMutation.mutate({ userId: userToEdit.id, data: updates });
@@ -274,6 +282,7 @@ export function Users() {
       canStripe: editCanStripe,
       canEpisodeAlert: editCanEpisodeAlert,
       canUploadEpisodeFiles: editCanUploadEpisodeFiles,
+      canImportTheme: editCanImportTheme,
     }),
     [
       editEmail,
@@ -292,6 +301,7 @@ export function Users() {
       editCanStripe,
       editCanEpisodeAlert,
       editCanUploadEpisodeFiles,
+      editCanImportTheme,
     ],
   );
   const editIsDirty = useBaselineDirty(editFormBaseline, editFormCurrent);
@@ -618,6 +628,20 @@ export function Users() {
                 </label>
                 <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
                   When enabled, the user can upload Episode Files (listener attachments and links) on episodes.
+                </p>
+              </div>
+              <div className={styles.formGroup}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={editCanImportTheme}
+                    onChange={(e) => setEditCanImportTheme(e.target.checked)}
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Can Import Theme</span>
+                </label>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '3.5rem' }}>
+                  When enabled, the user can import themes.
                 </p>
               </div>
               <div className={styles.formGroup}>

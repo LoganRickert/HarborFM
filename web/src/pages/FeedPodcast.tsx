@@ -7,16 +7,18 @@ import {
   getPublicEpisodes,
   getPublicConfig,
   getPublicPodcastArtworkUrl,
+  getPodcastThemeRender,
   type PublicEpisodeWithAuth,
 } from '../api/public';
 import { FullPageLoading } from '../components/Loading';
-import { isFeedUnavailableError } from '../api/client';
+import { isFeedUnavailableError, type ApiError } from '../api/client';
 import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedbackModal } from '../components/FeedbackModal';
 import { GetAlertsModal } from '../components/GetAlertsModal';
 import { getPublicEpisodeAlerts } from '../api/episodeAlerts';
 import { useMeta } from '../hooks/useMeta';
 import { getSiteDisplayName } from '../utils/siteBranding';
+import { isLiquidFeedTheme } from '../utils/feedTheme';
 import {
   FeedSiteHeader,
   FeedPodcastHeader,
@@ -28,7 +30,9 @@ import {
   FeedCastCard,
   ReviewsCard,
   FeedPodrollCard,
+  FeedFundingSupport,
 } from '../components/Feed';
+import { LiquidFeedPage, type LiquidFeedBlocks } from '../components/Feed/LiquidFeedPage';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import { feedAccentCssVars } from '../utils/feedAccent';
 import sharedStyles from '../styles/shared.module.css';
@@ -113,6 +117,27 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     staleTime: 60_000,
   });
 
+  const wantsLiquidTheme = Boolean(podcast && isLiquidFeedTheme(podcast.feedTheme));
+
+  const {
+    data: themeRender,
+    isLoading: themeRenderLoading,
+    isError: themeRenderError,
+    error: themeRenderQueryError,
+    refetch: refetchThemeRender,
+  } = useQuery({
+    queryKey: ['theme-render-podcast', podcastSlug],
+    queryFn: () => getPodcastThemeRender(podcastSlug!),
+    enabled: !!podcastSlug && wantsLiquidTheme,
+    retry: false,
+  });
+
+  const themeRenderStatus = (themeRenderQueryError as ApiError | undefined)?.status;
+  const themeRenderFallback =
+    wantsLiquidTheme && themeRenderError && (themeRenderStatus === 400 || themeRenderStatus === 404);
+  const themeRenderHardError = wantsLiquidTheme && themeRenderError && !themeRenderFallback;
+  const useLiquidLayout = wantsLiquidTheme && !themeRenderFallback && !!themeRender;
+
   const featuredTrailer = useMemo(() => {
     const trailers = trailerEpisodesData?.episodes ?? [];
     return (
@@ -173,9 +198,122 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     favicon: isCustomDomain ? podcastArtwork : undefined,
   });
 
+  const canWriteReview =
+    podcast && (!podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug));
+  const canShowMessage =
+    podcast && (!podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug));
+
+  const liquidBlocks = useMemo((): LiquidFeedBlocks => {
+    if (!useLiquidLayout || !podcast) return {};
+    return {
+      site_header: <FeedSiteHeader flush />,
+      show_header: (
+        <FeedPodcastHeader
+          podcast={podcast}
+          podcastSlug={podcastSlug}
+          plain
+          onMessageClick={canShowMessage ? () => setFeedbackOpen(true) : undefined}
+          onAlertsClick={
+            alertsInfo?.emailSignupAvailable ? () => setAlertsOpen(true) : undefined
+          }
+          shareUrl={
+            podcast.canonicalFeedUrl ??
+            (typeof window !== 'undefined'
+              ? `${window.location.origin}${window.location.pathname}`
+              : undefined)
+          }
+          shareTitle={`${podcast.title} - HarborFM`}
+        />
+      ),
+      search: (
+        <FeedSearchControls
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          sortNewestFirst={sortNewestFirst}
+          onSortToggle={setSortNewestFirst}
+          placeholder="Search episodes..."
+          plain
+        />
+      ),
+      episodes: (
+        <>
+          {episodesLoading && <p className={sharedStyles.muted}>Loading episodes...</p>}
+          {!episodesLoading && filteredAndSortedEpisodes.length === 0 && (
+            <p className={sharedStyles.muted}>
+              {searchQuery
+                ? 'No episodes match your search.'
+                : featuredTrailer
+                  ? 'No other episodes yet.'
+                  : 'No episodes yet.'}
+            </p>
+          )}
+          {!episodesLoading && filteredAndSortedEpisodes.length > 0 && (
+            <FeedEpisodesList
+              episodes={filteredAndSortedEpisodes}
+              podcast={podcast}
+              podcastSlug={podcastSlug}
+              playingEpisodeId={playingEpisodeId}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              onLoadMore={() => fetchNextPage()}
+              useShortEpisodeUrls={!!podcastSlugOverride}
+              plain
+            />
+          )}
+        </>
+      ),
+      funding:
+        podcast.feedShowFunding !== false ? (
+          <FeedFundingSupport fundingLinks={podcast.fundingLinks ?? null} plain />
+        ) : undefined,
+      links: hasPodcastLinks(podcast) ? (
+        <PodcastLinksCard podcast={podcast} plain />
+      ) : undefined,
+      cast:
+        podcast.feedShowCast !== false ? (
+          <FeedCastCard podcastSlug={podcastSlug} plain />
+        ) : undefined,
+      podroll:
+        podcast.feedShowPodroll !== false ? (
+          <FeedPodrollCard podroll={podcast.podroll} plain />
+        ) : undefined,
+      reviews:
+        publicConfig?.reviewsEnabled === true && podcast.feedShowReviewsPodcast !== false ? (
+          <ReviewsCard
+            podcastSlug={podcastSlug}
+            enabled
+            showWriteButton={Boolean(canWriteReview)}
+            plain
+          />
+        ) : undefined,
+    };
+  }, [
+    useLiquidLayout,
+    podcast,
+    searchQuery,
+    sortNewestFirst,
+    episodesLoading,
+    filteredAndSortedEpisodes,
+    featuredTrailer,
+    podcastSlug,
+    playingEpisodeId,
+    handlePlay,
+    handlePause,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    podcastSlugOverride,
+    publicConfig?.reviewsEnabled,
+    canWriteReview,
+    canShowMessage,
+    alertsInfo?.emailSignupAvailable,
+  ]);
+
   if (!podcastSlug) return null;
 
-  if (podcastLoading) {
+  if (podcastLoading || (wantsLiquidTheme && themeRenderLoading && !themeRenderFallback)) {
     return <FullPageLoading />;
   }
 
@@ -198,8 +336,51 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   }
 
   const isSubscriberOnly = Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled);
-  const canWriteReview = !podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug);
-  const canShowMessage = !podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug);
+
+  if (themeRenderHardError) {
+    return (
+      <div className={sharedStyles.wrapper}>
+        <div className={sharedStyles.container}>
+          <FeedSiteHeader />
+          <main>
+            <FeedUnavailable onRetry={() => void refetchThemeRender()} />
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  const modals = (
+    <>
+      <FeedbackModal
+        open={feedbackOpen}
+        onOpenChange={setFeedbackOpen}
+        context={{ podcastSlug: podcastSlug ?? undefined, podcastTitle: podcast.title }}
+        accent={podcast.feedAccent}
+      />
+      <GetAlertsModal
+        open={alertsOpen}
+        onOpenChange={setAlertsOpen}
+        podcastSlug={podcastSlug}
+        podcastTitle={podcast.title}
+        accent={podcast.feedAccent}
+      />
+    </>
+  );
+
+  if (useLiquidLayout && themeRender) {
+    return (
+      <>
+        <LiquidFeedPage
+          html={themeRender.html}
+          cssHrefs={themeRender.cssHrefs}
+          accent={podcast.feedAccent}
+          blocks={liquidBlocks}
+        />
+        {modals}
+      </>
+    );
+  }
 
   return (
     <div className={sharedStyles.wrapper} style={feedAccentCssVars(podcast.feedAccent)}>
@@ -295,17 +476,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
         </main>
       </div>
 
-      <FeedbackModal
-        open={feedbackOpen}
-        onOpenChange={setFeedbackOpen}
-        context={{ podcastSlug: podcastSlug ?? undefined, podcastTitle: podcast.title }}
-      />
-      <GetAlertsModal
-        open={alertsOpen}
-        onOpenChange={setAlertsOpen}
-        podcastSlug={podcastSlug}
-        podcastTitle={podcast.title}
-      />
+      {modals}
     </div>
   );
 }

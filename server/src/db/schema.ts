@@ -44,6 +44,7 @@ export const users = sqliteTable(
     canStripe: integer("can_stripe"),
     canEpisodeAlert: integer("can_episode_alert"),
     canUploadEpisodeFiles: integer("can_upload_episode_files"),
+    canImportTheme: integer("can_import_theme"),
     totpSecretEnc: text("totp_secret_enc"),
     twoFactorMethod: text("two_factor_method"),
     totpLockedUntil: text("totp_locked_until"),
@@ -163,6 +164,7 @@ export const podcasts = sqliteTable(
     feedShowAuthor: integer("feed_show_author", { mode: "boolean" }).default(true),
     feedShowPodroll: integer("feed_show_podroll", { mode: "boolean" }).default(true),
     feedShowCast: integer("feed_show_cast", { mode: "boolean" }).default(true),
+    feedTheme: text("feed_theme").default("default"),
     episodeAlertsEnabled: integer("episode_alerts_enabled", {
       mode: "boolean",
     }).default(false),
@@ -1193,5 +1195,31 @@ export const stripeRefundRequests = sqliteTable(
   (table) => [
     index("idx_stripe_refund_requests_podcast_id").on(table.podcastId),
     index("idx_stripe_refund_requests_subscription_id").on(table.subscriptionId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Feed themes (server-wide packages + user-imported copies)
+// ---------------------------------------------------------------------------
+export const feedThemes = sqliteTable(
+  "feed_themes",
+  {
+    id: text("id").primaryKey(),
+    /** Null when scope is server (bundled / server-wide theme). */
+    ownerUserId: text("owner_user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    /** user = personal import; server = available to every podcast. */
+    scope: text("scope").notNull().default("user"),
+    packageId: text("package_id").notNull(),
+    name: text("name").notNull(),
+    version: text("version").notNull(),
+    byteSize: integer("byte_size").notNull().default(0),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_feed_themes_owner").on(table.ownerUserId),
+    index("idx_feed_themes_scope").on(table.scope),
   ],
 );

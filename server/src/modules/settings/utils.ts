@@ -30,6 +30,7 @@ export interface AppSettings {
   default_can_stripe: boolean;
   default_can_episode_alert: boolean;
   default_can_upload_episode_files: boolean;
+  default_can_import_theme: boolean;
   llm_provider: "none" | "ollama" | "openai";
   ollama_url: string;
   openai_api_key: string;
@@ -171,6 +172,7 @@ export const DEFAULTS: AppSettings = {
   default_can_stripe: true,
   default_can_episode_alert: true,
   default_can_upload_episode_files: true,
+  default_can_import_theme: true,
   llm_provider: "none",
   ollama_url: "http://localhost:11434",
   openai_api_key: "",
@@ -299,6 +301,8 @@ export function buildAppSettingsFromRows(
       settings.default_can_episode_alert = parseBool(row.value);
     else if (row.key === "default_can_upload_episode_files")
       settings.default_can_upload_episode_files = parseBool(row.value);
+    else if (row.key === "default_can_import_theme")
+      settings.default_can_import_theme = parseBool(row.value);
     else if (row.key === "llm_provider")
       settings.llm_provider = row.value as AppSettings["llm_provider"];
     else if (row.key === "ollama_url") settings.ollama_url = row.value;
@@ -485,6 +489,8 @@ export function buildAppSettingsFromRows(
     default_can_upload_episode_files:
       settings.default_can_upload_episode_files ??
       DEFAULTS.default_can_upload_episode_files,
+    default_can_import_theme:
+      settings.default_can_import_theme ?? DEFAULTS.default_can_import_theme,
     model:
       settings.model ??
       (settings.llm_provider === "openai"
@@ -658,6 +664,7 @@ export function settingsToApiResponse(
     defaultCanStripe: settings.default_can_stripe,
     defaultCanEpisodeAlert: settings.default_can_episode_alert,
     defaultCanUploadEpisodeFiles: settings.default_can_upload_episode_files,
+    defaultCanImportTheme: settings.default_can_import_theme,
     llmProvider: settings.llm_provider,
     ollamaUrl: settings.ollama_url,
     openaiApiKey: settings.openai_api_key ? "(set)" : "",

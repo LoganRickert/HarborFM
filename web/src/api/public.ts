@@ -53,6 +53,7 @@ export interface PublicPodcast {
   fundingLinks?: Array<{ url: string; text?: string | null }> | null;
   /** Named accent for public feed theming (default green). */
   feedAccent?: string;
+  feedTheme?: string;
   feedShowPodcastDescription?: boolean;
   feedShowEpisodeDescription?: boolean;
   feedShowFunding?: boolean;
@@ -176,6 +177,12 @@ function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
         : typeof r.feedAccent === 'string' && r.feedAccent.trim()
           ? r.feedAccent.trim()
           : 'green',
+    feedTheme:
+      typeof r.feed_theme === 'string' && r.feed_theme.trim()
+        ? r.feed_theme.trim()
+        : typeof r.feedTheme === 'string' && r.feedTheme.trim()
+          ? r.feedTheme.trim()
+          : 'default',
     feedShowPodcastDescription: asPublicBool(
       r.feed_show_podcast_description ?? r.feedShowPodcastDescription,
       true,
@@ -539,5 +546,37 @@ export function completePublicStripeCheckout(podcastSlug: string, sessionId: str
     alreadyClaimed?: boolean;
   }>(
     `/public/podcasts/${encodeURIComponent(podcastSlug)}/stripe/checkout/success?session_id=${encodeURIComponent(sessionId)}`,
+  );
+}
+
+export interface ThemeRenderResponse {
+  themeId: string;
+  html: string;
+  cssHrefs: string[];
+  accent: string;
+  indexTemplate?: string;
+  page?: string;
+  template?: string;
+}
+
+export function getPodcastThemeRender(slug: string): Promise<ThemeRenderResponse> {
+  return apiGet<ThemeRenderResponse>(`/public/podcasts/${encodeURIComponent(slug)}/theme-render`);
+}
+
+export function getEpisodeThemeRender(
+  slug: string,
+  episodeSlug: string,
+): Promise<ThemeRenderResponse> {
+  return apiGet<ThemeRenderResponse>(
+    `/public/podcasts/${encodeURIComponent(slug)}/episodes/${encodeURIComponent(episodeSlug)}/theme-render`,
+  );
+}
+
+export function getThemePageRender(
+  slug: string,
+  pageFile: string,
+): Promise<ThemeRenderResponse> {
+  return apiGet<ThemeRenderResponse>(
+    `/public/podcasts/${encodeURIComponent(slug)}/theme-render/pages/${encodeURIComponent(pageFile)}`,
   );
 }

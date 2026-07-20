@@ -88,27 +88,43 @@ async function fetchJson<T>(url: string, host: string): Promise<T | null> {
   }
 }
 
+function isThemePageSegment(segment: string | undefined): boolean {
+  if (!segment) return false;
+  return /^[a-z0-9][a-z0-9_-]*\.html$/i.test(segment);
+}
+
 function resolveFeedRoute(
   pathname: string,
   customFeedSlug?: string,
-): { podcastSlug: string; episodeSlug?: string } | null {
+): { podcastSlug: string; episodeSlug?: string; themePage?: boolean } | null {
   const clean = pathname.split('?')[0].replace(/\/$/, '') || '/';
   const feedMatch = clean.match(/^\/feed\/([^/]+)(?:\/([^/]+))?$/);
   if (feedMatch) {
+    const second = feedMatch[2] ? decodeURIComponent(feedMatch[2]) : undefined;
+    if (second && isThemePageSegment(second)) {
+      return {
+        podcastSlug: decodeURIComponent(feedMatch[1]),
+        themePage: true,
+      };
+    }
     return {
       podcastSlug: decodeURIComponent(feedMatch[1]),
-      episodeSlug: feedMatch[2] ? decodeURIComponent(feedMatch[2]) : undefined,
+      episodeSlug: second,
     };
   }
   if (!customFeedSlug) return null;
   if (clean === '/' || clean === '') return { podcastSlug: customFeedSlug };
   const segmentMatch = clean.match(/^\/([^/]+)$/);
   if (!segmentMatch) return null;
-  const segment = decodeURIComponent(segmentMatch[1]).toLowerCase();
+  const segmentRaw = decodeURIComponent(segmentMatch[1]);
+  const segment = segmentRaw.toLowerCase();
   if (RESERVED_SINGLE_SEGMENTS.has(segment)) return null;
+  if (isThemePageSegment(segment)) {
+    return { podcastSlug: customFeedSlug, themePage: true };
+  }
   return {
     podcastSlug: customFeedSlug,
-    episodeSlug: decodeURIComponent(segmentMatch[1]),
+    episodeSlug: segmentRaw,
   };
 }
 
@@ -164,7 +180,7 @@ async function resolveSpaMeta(
 
   const podcastCover = podcastCoverUrl(origin, podcast) ?? defaultImage;
 
-  if (!route.episodeSlug) {
+  if (!route.episodeSlug || route.themePage) {
     return {
       title: `${podcast.title} | ${siteName}`,
       description: (podcast.description ?? '').trim(),

@@ -1,0 +1,32 @@
+.liquidFeed {
+  min-height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Full-bleed bands; only the inner rail is capped. */
+.liquidFeed :global(.fluid-page) {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.liquidFeed :global(.fluid-band) {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.liquidFeed :global(.fluid-inner) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 968px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.liquidFeed :global([data-harborfm-block]) {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}

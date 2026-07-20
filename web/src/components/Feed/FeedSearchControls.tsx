@@ -8,9 +8,10 @@ export function FeedSearchControls({
   sortNewestFirst,
   onSortToggle,
   placeholder = 'Search...',
+  plain = false,
 }: FeedSearchControlsProps) {
   return (
-    <div className={styles.controls}>
+    <div className={plain ? `${styles.controls} ${styles.controlsFluid}` : styles.controls}>
       <div className={styles.searchWrap}>
         <Search size={18} className={styles.searchIcon} aria-hidden />
         <input
@@ -18,14 +19,22 @@ export function FeedSearchControls({
           placeholder={placeholder}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className={styles.searchInput}
+          className={plain ? `${styles.searchInput} ${styles.searchInputFluid}` : styles.searchInput}
           aria-label={placeholder}
         />
       </div>
-      <div className={styles.sortToggle}>
+      <div className={plain ? `${styles.sortToggle} ${styles.sortToggleFluid}` : styles.sortToggle}>
         <button
           type="button"
-          className={sortNewestFirst ? styles.sortBtnActive : styles.sortBtn}
+          className={
+            sortNewestFirst
+              ? plain
+                ? `${styles.sortBtnActive} ${styles.sortBtnFluidActive}`
+                : styles.sortBtnActive
+              : plain
+                ? `${styles.sortBtn} ${styles.sortBtnFluid}`
+                : styles.sortBtn
+          }
           onClick={() => onSortToggle(true)}
           aria-label="Sort by newest"
           aria-pressed={sortNewestFirst}
@@ -35,7 +44,15 @@ export function FeedSearchControls({
         </button>
         <button
           type="button"
-          className={!sortNewestFirst ? styles.sortBtnActive : styles.sortBtn}
+          className={
+            !sortNewestFirst
+              ? plain
+                ? `${styles.sortBtnActive} ${styles.sortBtnFluidActive}`
+                : styles.sortBtnActive
+              : plain
+                ? `${styles.sortBtn} ${styles.sortBtnFluid}`
+                : styles.sortBtn
+          }
           onClick={() => onSortToggle(false)}
           aria-label="Sort by oldest"
           aria-pressed={!sortNewestFirst}

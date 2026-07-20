@@ -19,6 +19,11 @@ import {
   sitemapDir,
   sitemapIndexDir,
 } from "./paths.js";
+import {
+  isLiquidFeedTheme,
+  resolveThemePackage,
+} from "../modules/themes/render.js";
+import { resolveThemePages } from "../modules/themes/themePages.js";
 
 function escapeXml(s: string): string {
   return s
@@ -180,12 +185,20 @@ export function generatePodcastSitemapXml(
       id: podcasts.id,
       slug: podcasts.slug,
       updatedAt: podcasts.updatedAt,
+      ownerUserId: podcasts.ownerUserId,
+      feedTheme: sql<string>`COALESCE(${podcasts.feedTheme}, 'default')`.as("feedTheme"),
     })
     .from(podcasts)
     .where(eq(podcasts.id, podcastId))
     .limit(1)
     .get() as
-    | { id: string; slug: string; updatedAt: string }
+    | {
+        id: string;
+        slug: string;
+        updatedAt: string;
+        ownerUserId: string;
+        feedTheme: string;
+      }
     | undefined;
   if (!podcast) throw new Error("Podcast not found");
   const slugEnc = encodeURIComponent(podcast.slug);
@@ -200,6 +213,27 @@ export function generatePodcastSitemapXml(
       priority: 0.8,
     },
   ];
+
+  if (isLiquidFeedTheme(podcast.feedTheme)) {
+    const resolved = resolveThemePackage(
+      podcast.feedTheme,
+      podcast.ownerUserId,
+    );
+    if (resolved.ok) {
+      const { pages } = resolveThemePages(resolved.root);
+      for (const page of pages) {
+        const pagePath = customDomain
+          ? `/${page.publicPath}`
+          : `/feed/${slugEnc}/${page.publicPath}`;
+        entries.push({
+          loc: loc(baseUrl, pagePath),
+          lastmod: feedLastmod,
+          changefreq: "monthly",
+          priority: 0.5,
+        });
+      }
+    }
+  }
 
   const episodeRows = drizzleDb
     .select({

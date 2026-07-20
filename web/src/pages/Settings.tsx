@@ -144,6 +144,7 @@ export function Settings() {
         defaultCanStripe: form.defaultCanStripe,
         defaultCanEpisodeAlert: form.defaultCanEpisodeAlert,
         defaultCanUploadEpisodeFiles: form.defaultCanUploadEpisodeFiles,
+        defaultCanImportTheme: form.defaultCanImportTheme,
         llmProvider: form.llmProvider,
         ollamaUrl: form.ollamaUrl,
         openaiApiKey: form.openaiApiKey === '(set)' ? undefined : form.openaiApiKey,

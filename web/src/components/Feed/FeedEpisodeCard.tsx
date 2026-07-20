@@ -16,6 +16,7 @@ export function FeedEpisodeCard({
   onPause,
   useShortEpisodeUrls = false,
   showDescription = true,
+  plain = false,
 }: FeedEpisodeCardProps) {
   const isPlaying = playingEpisodeId === episode.id;
   const episodeLinkTo = useShortEpisodeUrls ? `/${episode.slug}` : `/feed/${podcastSlug}/${episode.slug}`;
@@ -26,14 +27,16 @@ export function FeedEpisodeCard({
   const scheduledNotReleased = Boolean(episode.scheduledNotReleased);
   const episodeType = String(episode.episodeType ?? '').toLowerCase();
 
+  const className = [
+    styles.episode,
+    plain ? styles.episodePlain : '',
+    isSubscriberOnly ? styles.episodeSubscriberOnly : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <li
-      className={
-        isSubscriberOnly
-          ? `${styles.episode} ${styles.episodeSubscriberOnly}`
-          : styles.episode
-      }
-    >
+    <li className={className}>
       {(episodeType === 'trailer' || episodeType === 'bonus') && (
         <span
           className={`${styles.typePill} ${
@@ -62,8 +65,11 @@ export function FeedEpisodeCard({
             )}
           </div>
         </div>
-        <Link to={episodeLinkTo} className={styles.viewBtn}>
-          View Episode
+        <Link
+          to={episodeLinkTo}
+          className={plain ? `${styles.viewBtn} ${styles.viewBtnFluid}` : styles.viewBtn}
+        >
+          {plain ? 'Open' : 'View Episode'}
           <ArrowRight size={14} strokeWidth={2.5} />
         </Link>
       </div>

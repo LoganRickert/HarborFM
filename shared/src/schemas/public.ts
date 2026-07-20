@@ -36,6 +36,7 @@ export const publicPodcastSchema = z.object({
   discordUrl: z.string().nullable().optional(),
   fundingLinks: z.array(fundingLinkResponseSchema).optional().nullable(),
   feedAccent: z.string().optional(),
+  feedTheme: z.string().optional(),
   feedShowPodcastDescription: z.boolean().optional(),
   feedShowEpisodeDescription: z.boolean().optional(),
   feedShowFunding: z.boolean().optional(),

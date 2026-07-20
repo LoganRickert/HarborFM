@@ -307,11 +307,16 @@ export function SubscriptionInfoDialog({
     <>
     <div
       className={styles.overlay}
+      data-harborfm-dialog-overlay="subscription"
       onClick={() => {
         if (!regenerateOpen && !refundRequestOpen && !manageBusy) onClose();
       }}
     >
-      <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={styles.dialog}
+        data-harborfm-dialog="subscription"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className={styles.header}>
           <Lock
             size={20}

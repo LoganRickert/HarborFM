@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>{{ podcast.title }} | {{ site.name }}</title>
+</head>
+<body class="folio-theme folio-page-home">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero folio-hero--split">
+        {% if podcast.artwork_url %}
+          <img class="folio-hero__art" src="{{ podcast.artwork_url }}" alt="" width="136" height="136" />
+        {% endif %}
+        <div>
+          <p class="folio-hero__eyebrow">Podcast</p>
+          <h1 class="folio-hero__title">{{ podcast.title }}</h1>
+          {% if show.podcast_description %}
+            {% if podcast.description != "" %}
+              <p class="folio-hero__lede">{{ podcast.description }}</p>
+            {% endif %}
+          {% endif %}
+        </div>
+      </header>
+
+      <section class="folio-section folio-section--wide">
+        <div class="folio-panel">
+          {% render 'harborfm/show_header' %}
+        </div>
+      </section>
+
+      <section class="folio-section folio-section--wide">
+        <h2 class="folio-section__title">Explore</h2>
+        <div class="folio-grid">
+          <a class="folio-tile" href="{{ urls.pages.podcast }}">
+            <p class="folio-tile__label">Listen</p>
+            <h3 class="folio-tile__title">Episodes</h3>
+            <p class="folio-tile__copy">Full archive with search, sort, and playback.</p>
+            <span class="folio-tile__arrow">Open archive</span>
+          </a>
+          <a class="folio-tile" href="{{ urls.pages.about }}">
+            <p class="folio-tile__label">Story</p>
+            <h3 class="folio-tile__title">About</h3>
+            <p class="folio-tile__copy">What the show is about and who makes it.</p>
+            <span class="folio-tile__arrow">Read more</span>
+          </a>
+          <a class="folio-tile" href="{{ urls.pages.crew }}">
+            <p class="folio-tile__label">People</p>
+            <h3 class="folio-tile__title">Crew</h3>
+            <p class="folio-tile__copy">Hosts and guests behind the mic.</p>
+            <span class="folio-tile__arrow">Meet the crew</span>
+          </a>
+          <a class="folio-tile" href="{{ urls.pages.support }}">
+            <p class="folio-tile__label">Help</p>
+            <h3 class="folio-tile__title">Support</h3>
+            <p class="folio-tile__copy">Funding and ways to keep the show going.</p>
+            <span class="folio-tile__arrow">Support us</span>
+          </a>
+          <a class="folio-tile" href="{{ urls.pages.connect }}">
+            <p class="folio-tile__label">Find us</p>
+            <h3 class="folio-tile__title">Connect</h3>
+            <p class="folio-tile__copy">Platforms, socials, and recommended shows.</p>
+            <span class="folio-tile__arrow">Connect</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+  </div>
+</body>
+</html>

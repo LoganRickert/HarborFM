@@ -15,9 +15,16 @@ export interface ReviewsCardProps {
   enabled?: boolean;
   /** When false, hide the "Write a review" button (e.g. when only subscribers can review and user is not a subscriber). Default true. */
   showWriteButton?: boolean;
+  plain?: boolean;
 }
 
-export function ReviewsCard({ podcastSlug, episodeSlug, enabled = true, showWriteButton = true }: ReviewsCardProps) {
+export function ReviewsCard({
+  podcastSlug,
+  episodeSlug,
+  enabled = true,
+  showWriteButton = true,
+  plain = false,
+}: ReviewsCardProps) {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [reviewIdToDelete, setReviewIdToDelete] = useState<string | null>(null);
@@ -52,15 +59,21 @@ export function ReviewsCard({ podcastSlug, episodeSlug, enabled = true, showWrit
   if (!enabled) return null;
 
   return (
-    <section className={styles.card} aria-labelledby="reviews-card-title">
+    <section
+      className={plain ? `${styles.card} ${styles.cardPlain}` : styles.card}
+      aria-labelledby="reviews-card-title"
+    >
       <div className={styles.header}>
-        <h2 id="reviews-card-title" className={styles.title}>
+        <h2
+          id="reviews-card-title"
+          className={plain ? `${styles.title} ${styles.titleFluid}` : styles.title}
+        >
           {episodeSlug ? 'Episode Reviews' : 'Reviews'}
         </h2>
         {showWriteButton && (
           <button
             type="button"
-            className={styles.writeBtn}
+            className={plain ? `${styles.writeBtn} ${styles.writeBtnFluid}` : styles.writeBtn}
             onClick={() => setModalOpen(true)}
             aria-label="Write a review"
           >

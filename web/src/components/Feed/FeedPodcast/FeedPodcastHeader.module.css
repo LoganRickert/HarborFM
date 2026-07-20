@@ -200,6 +200,148 @@
   border-color: var(--border);
 }
 
+/* Fluid theme: left-aligned hero + editorial chrome */
+.headerFluid {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 1.75rem;
+  text-align: left;
+}
+
+.artworkFluid {
+  width: 10rem;
+  height: 10rem;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.contentFluid {
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.topFluid {
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  gap: 0.85rem;
+}
+
+.titleFluid {
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.authorFluid {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.descriptionFluid {
+  max-width: 42rem;
+  text-align: left;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+@media (max-width: 640px) {
+  .headerFluid {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .artworkFluid {
+    width: 8rem;
+    height: 8rem;
+  }
+}
+
+/* Fluid theme: editorial action strip (no outlined pills) */
+.actionsFluid {
+  width: 100%;
+  margin-top: 0.35rem;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.actionButtonsFluid {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0;
+  max-width: 100%;
+  padding: 0.2rem;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 2px;
+}
+
+.fluidTextBtn,
+.fluidIconBtn {
+  width: auto;
+  height: auto;
+  min-height: 2.25rem;
+  padding: 0.55rem 0.95rem;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: inset 0 -2px 0 transparent;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.fluidTextBtn:hover,
+.fluidIconBtn:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--bg, #0c0e12) 35%, transparent);
+  border-color: transparent;
+  box-shadow: inset 0 -2px 0 var(--accent);
+  text-decoration: none;
+}
+
+.fluidTextBtn:focus-visible,
+.fluidIconBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.fluidLockBtn {
+  border: none;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--bg, #0c0e12);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.65rem 1.15rem;
+}
+
+.fluidLockBtn:hover {
+  background: var(--accent-dim, var(--accent));
+  border-color: transparent;
+  color: var(--bg, #0c0e12);
+}
+
+.fluidLockBtn .lockIcon,
+.fluidLockBtn .lockIconGold,
+.fluidLockBtn:hover .lockIcon,
+.fluidLockBtn:hover .lockIconGold {
+  color: inherit;
+}
+
 @media (max-width: 640px) {
   .header {
     flex-direction: column;
@@ -224,6 +366,21 @@
     width: 100%;
     justify-content: center;
     gap: 0.5rem;
+  }
+
+  .actionButtonsFluid {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .actionButtonsFluid .fluidTextBtn,
+  .actionButtonsFluid .fluidIconBtn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .fluidLockBtn {
+    width: 100%;
   }
 
   .artwork {

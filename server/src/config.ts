@@ -262,6 +262,16 @@ export const IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS =
     ? Number(process.env.IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS)
     : 30_000;
 
+/** Theme ZIP import rate limit window (ms). 0 = no limit. Env: THEME_IMPORT_RATE_LIMIT_WINDOW_MS. Default 60000. */
+export const THEME_IMPORT_RATE_LIMIT_WINDOW_MS =
+  process.env.THEME_IMPORT_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.THEME_IMPORT_RATE_LIMIT_WINDOW_MS)
+    : 60_000;
+
+/** Theme ZIP import rate limit max requests per window. Env: THEME_IMPORT_RATE_LIMIT_MAX. Default 2. */
+export const THEME_IMPORT_RATE_LIMIT_MAX =
+  Number(process.env.THEME_IMPORT_RATE_LIMIT_MAX) || 2;
+
 /** Forgot-password request cooldown (minutes). Env: FORGOT_PASSWORD_RATE_MINUTES. Default 5. */
 export const FORGOT_PASSWORD_RATE_MINUTES =
   Number(process.env.FORGOT_PASSWORD_RATE_MINUTES) || 5;

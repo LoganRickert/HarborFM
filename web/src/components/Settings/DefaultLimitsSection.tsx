@@ -143,6 +143,18 @@ export function DefaultLimitsSection({ form, onFormChange }: SettingsFormProps) 
       <p className={styles.toggleHelp}>
         When enabled, new users can upload Episode Files (listener attachments and links) by default. When disabled, new users cannot use Episode Files until an admin enables it.
       </p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={form.defaultCanImportTheme}
+          onChange={(e) => onFormChange({ defaultCanImportTheme: e.target.checked })}
+        />
+        <span className="toggle__track" aria-hidden="true" />
+        <span>Default Can Import Theme</span>
+      </label>
+      <p className={styles.toggleHelp}>
+        When enabled, new users can import themes by default. When disabled, new users cannot import themes until an admin enables it.
+      </p>
     </SectionCard>
   );
 }

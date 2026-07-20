@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>Connect | {{ podcast.title }}</title>
+</head>
+<body class="folio-theme">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero">
+        <div>
+          <p class="folio-hero__eyebrow">Connect</p>
+          <h1 class="folio-hero__title">Find the show</h1>
+          <p class="folio-hero__lede">
+            Platforms, socials, and shows we recommend.
+          </p>
+        </div>
+      </header>
+
+      {% if show.links %}
+        <section class="folio-section folio-section--wide">
+          <div class="folio-panel">
+            {% render 'harborfm/links' %}
+          </div>
+        </section>
+      {% else %}
+        <section class="folio-section folio-section--wide">
+          <div class="folio-panel">
+            <p class="folio-prose">Add podcast platform or social URLs to populate this page.</p>
+          </div>
+        </section>
+      {% endif %}
+
+      {% if show.podroll %}
+        <section class="folio-section folio-section--wide">
+          <div class="folio-panel">
+            <h2 class="folio-section__title">Recommended</h2>
+            {% render 'harborfm/podroll' %}
+          </div>
+        </section>
+      {% endif %}
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+  </div>
+</body>
+</html>

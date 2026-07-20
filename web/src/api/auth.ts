@@ -19,6 +19,7 @@ export interface User {
   canStripe?: number; // 0 = false, 1 = true
   canEpisodeAlert?: number; // 0 = false, 1 = true
   canUploadEpisodeFiles?: number; // 0 = false, 1 = true
+  canImportTheme?: number; // 0 = false, 1 = true
   lastLoginAt?: string | null;
   lastLoginIp?: string | null;
   lastLoginLocation?: string | null;

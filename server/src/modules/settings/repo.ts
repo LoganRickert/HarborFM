@@ -121,6 +121,10 @@ export function writeSettings(settings: AppSettings): void {
     "default_can_upload_episode_files",
     String(settings.default_can_upload_episode_files),
   );
+  upsert(
+    "default_can_import_theme",
+    String(settings.default_can_import_theme),
+  );
   upsert("llm_provider", settings.llm_provider);
   upsert("ollama_url", settings.ollama_url);
   upsert("openai_api_key", settings.openai_api_key);

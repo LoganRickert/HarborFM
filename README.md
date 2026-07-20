@@ -41,6 +41,7 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 - [Features](#features)
 - [Stripe payments](#stripe-payments)
 - [Episode Alerts](#episode-alerts)
+- [Page themes](#page-themes)
 - [Embed](#embed)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
@@ -545,6 +546,8 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Episode Alerts.** When a show publishes (or a scheduled episode becomes live), Harbor can email listeners and post to communities. Destinations include built-in or BYO email, Discord, Slack, Telegram, Mastodon, Matrix, Lemmy, Bluesky, and JSON webhooks. See [Episode Alerts](#episode-alerts).
 
+- **Page themes.** Replace the default public SPA feed with a packaged Liquid theme (built-in Fluid / Folio, or a zip you import). Multi-page themes expose routes such as about and crew; those pages appear in the podcast sitemap. See [Page themes](#page-themes).
+
 ## Stripe payments
 
 HarborFM does not process payments with a platform Stripe account. Each eligible user brings their own Stripe keys (**bring your own key**). Secrets are encrypted with the same secrets key used for exports (`HARBORFM_SECRETS_KEY` / `SECRETS_DIR`), using AAD from `STRIPE_SECRETS_AAD`.
@@ -695,6 +698,27 @@ Verified list counts appear on the Episode Alerts card. Alert emails include art
 
 Alerts run when an episode becomes released (publish from the editor, or the ~15 minute poller for scheduled `publishAt`). Each episode is marked once via `episode_alerts_sent_at` so sends are not duplicated. Verify and unsubscribe links prefer the show’s custom domain when configured.
 
+## Page themes
+
+Public shows use the default React SPA feed unless you pick a **page theme** under Edit Page Customizations. Packaged themes are Liquid templates with CSS (and optional images). Harbor injects interactive blocks via `{% render 'harborfm/…' %}` mounts (for example episodes, player, cast).
+
+### Built-ins and custom themes
+
+- **Fluid** and **Folio** ship with the server under `server/themes/`. Folio is a multi-page theme (home plus about, crew, support, connect, episodes).
+- Eligible users open **Themes** to download a built-in as a zip, import their own zip, or edit an imported copy.
+- Admins can promote a personal theme to a **server-wide** theme (available to every show) or demote it back, and can delete server themes.
+
+### Who can use it
+
+- **`defaultCanImportTheme`** (Settings > Default Limits): whether newly registered users can import and edit themes. Default is on.
+- **`canImportTheme`** (Users admin): per-user flag. When off, that user cannot import, download, or edit theme files (403). Selecting a built-in or server theme on a show they manage still works when the theme is available.
+
+### Theme editor and authoring
+
+The Themes page opens a near-fullscreen editor for name, version, home template, page routes, and files (Liquid, CSS, images). Required files (`theme.json`, podcast and episode templates) cannot be deleted.
+
+Authoring guide: [theme-SKILL.md](theme-SKILL.md) in the repo (also downloadable as **SKILL.md** from the Themes page at `/theme-SKILL.md`). Theme zip import is rate limited to 2 per minute per user.
+
 ## Embed
 
 When public feeds are enabled, you can embed a single episode player on another site using an iframe.
@@ -784,6 +808,7 @@ Each podcast has an **owner** (the user who created it) and optional **collabora
 - **New episode** is only available to **managers** and the **owner**; view and editor roles see it disabled.
 - **Stripe (`canStripe` / `defaultCanStripe`)** is an account flag, not a show role. It gates whether the user can use Stripe Payments at all. See [Stripe payments](#stripe-payments).
 - **Episode Alerts (`canEpisodeAlert` / `defaultCanEpisodeAlert`)** is an account flag, not a show role. It gates whether the user can configure Episode Alerts. See [Episode Alerts](#episode-alerts).
+- **Page themes (`canImportTheme` / `defaultCanImportTheme`)** is an account flag, not a show role. It gates whether the user can import, download, and edit theme packages. See [Page themes](#page-themes).
 
 ## Export
 
@@ -1163,7 +1188,7 @@ Replace `keycloak.example.com` and `harborfm` below with your Keycloak host and 
    - Keycloak needs your **SP public certificate** so it can verify signed requests from HarborFM.
    - If you don't have a key pair yet, generate one on your machine:
      - `openssl genrsa -out sp-key.pem 2048`
-     - `openssl req -x509 -new -key sp-key.pem -out sp-cert.pem -days 3650 -subj "/CN=harbor-sp"`
+     - `openssl req -x509 -new -key sp-key.pem -out sp-cert.pem -days 3650 -subj "/CN=harborfm-sp"`
    - Inside HarborFM (Step 3) you will paste the contents of **sp-key.pem** (private key) into **SP private key (PEM)**.
    - Here in Keycloak, import only the **certificate** (**sp-cert.pem**): choose **Certificate (PEM)** if available and upload the sp-cert.pem or paste the contents of sp-cert.pem (including `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----`).
 8. Click **Save**.
