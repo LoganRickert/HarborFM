@@ -7,10 +7,24 @@ import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 import { ArrowLeft, FileDown } from '@lucide/astro';
 
-const guidePath = join(dirname(fileURLToPath(import.meta.url)), '../content/theme-guide.md');
+/** Astro may rewrite import.meta.url at build time; try several roots. */
+function findThemeGuide(): string | null {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, '../content/theme-guide.md'),
+    join(process.cwd(), 'src/content/theme-guide.md'),
+    join(process.cwd(), 'docs/src/content/theme-guide.md'),
+  ];
+  for (const path of candidates) {
+    if (existsSync(path)) return path;
+  }
+  return null;
+}
+
+const guidePath = findThemeGuide();
 
 let guideHtml = '<p>Theme guide not found.</p>';
-if (existsSync(guidePath)) {
+if (guidePath) {
   try {
     marked.setOptions({ gfm: true, breaks: false });
     guideHtml = marked.parse(readFileSync(guidePath, 'utf8'), { async: false }) as string;

@@ -596,25 +596,32 @@ a:hover {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.5rem;
   margin-top: 1rem;
+  align-items: stretch;
 }
 
 .screenshots-grid figure {
   margin: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
+  height: 100%;
 }
 
 .screenshot-trigger {
   display: block;
   width: 100%;
+  aspect-ratio: 1 / 1;
   padding: 0;
   margin: 0;
   border: none;
-  background: none;
+  background: var(--bg);
   cursor: pointer;
   text-align: left;
+  overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .screenshot-trigger:focus {
@@ -624,9 +631,10 @@ a:hover {
 
 .screenshots-grid img {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
-  vertical-align: top;
+  object-fit: cover;
+  object-position: top center;
 }
 
 /* Lightbox */
@@ -668,9 +676,14 @@ a:hover {
 
 .screenshots-grid figcaption {
   font-size: 0.875rem;
+  line-height: 1.35;
   color: var(--text-muted);
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border);
+  margin-top: auto;
+  min-height: 3.25rem;
+  display: flex;
+  align-items: center;
 }
 
 /* Features grid */
