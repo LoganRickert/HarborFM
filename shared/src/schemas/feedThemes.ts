@@ -33,19 +33,58 @@ export const feedThemePagePublicPathSchema = z
     error: 'Page path must be a lowercase .html filename (e.g. about.html)',
   });
 
+/**
+ * Optional gallery/card preview path inside the package.
+ * Must be a single file under images/ with an allowed image extension.
+ */
+export const feedThemePreviewPathSchema = z
+  .string()
+  .min(1)
+  .max(120)
+  .regex(/^images\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(png|jpe?g|gif|webp)$/i, {
+    error:
+      'preview must be a single images/ file with extension .png, .jpg, .jpeg, .gif, or .webp',
+  });
+
 export const feedThemeManifestSchema = z.object({
   id: feedThemePackageIdSchema,
   name: z.string().min(1).max(120),
   version: z.string().min(1).max(64),
+  /**
+   * Short blurb for Themes UI cards and similar surfaces.
+   * Plain text; keep it to one or two sentences.
+   */
+  description: z.string().trim().min(1).max(280).optional(),
   /** Template basename used for feed home. Default: podcast. */
   index: feedThemeTemplateBasenameSchema.optional(),
+  /**
+   * Template basename for unknown theme .html URLs (themed 404).
+   * Not published as a public page. Typical value: `not_found`.
+   */
+  not_found: feedThemeTemplateBasenameSchema.optional(),
   /**
    * Optional public-path overrides for extra templates.
    * Keys are template basenames; values are public .html filenames.
    */
   pages: z.record(feedThemeTemplateBasenameSchema, feedThemePagePublicPathSchema).optional(),
   /**
-   * When false, Harbor will not replace this server theme from the shipped image on upgrade.
+   * Optional path to a preview image inside the package (e.g. images/preview.webp).
+   * Used by the docs gallery and similar surfaces; omit when unused.
+   */
+  preview: feedThemePreviewPathSchema.optional(),
+  /**
+   * Optional public homepage for the theme (docs gallery, credit links in footers).
+   * Must be an https URL. Typical gallery URL: https://harborfm.com/themes/{id}/
+   */
+  homepage: z
+    .string()
+    .max(500)
+    .regex(/^https:\/\/[^\s]+$/i, {
+      error: 'homepage must be an https URL with no spaces',
+    })
+    .optional(),
+  /**
+   * When false, HarborFM will not replace this server theme from the shipped image on upgrade.
    * Omitted / true means shipped upgrades may overwrite (server themes only). Set to false
    * automatically when an admin edits the theme.
    */
@@ -77,6 +116,8 @@ export const feedBuiltinThemeListItemSchema = z.object({
   name: z.string(),
   version: z.string(),
   description: z.string(),
+  /** Optional live preview / docs URL from theme.json `homepage`. */
+  homepage: z.string().optional(),
 });
 
 export type FeedBuiltinThemeListItem = z.infer<typeof feedBuiltinThemeListItemSchema>;
@@ -107,6 +148,7 @@ export const feedThemeDetailSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   index: feedThemeTemplateBasenameSchema,
+  notFound: feedThemeTemplateBasenameSchema.nullable(),
   pages: z.record(feedThemeTemplateBasenameSchema, feedThemePagePublicPathSchema),
   templates: z.array(feedThemeTemplateBasenameSchema),
   files: z.array(feedThemeFileInfoSchema),
@@ -119,6 +161,7 @@ export const feedThemePatchSchema = z
     name: z.string().min(1).max(120).optional(),
     version: z.string().min(1).max(64).optional(),
     index: feedThemeTemplateBasenameSchema.optional(),
+    not_found: feedThemeTemplateBasenameSchema.nullable().optional(),
     pages: z
       .record(feedThemeTemplateBasenameSchema, feedThemePagePublicPathSchema)
       .nullable()

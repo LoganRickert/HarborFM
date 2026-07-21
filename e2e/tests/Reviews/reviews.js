@@ -93,6 +93,7 @@ export async function run({ runOne }) {
       }
       const data = await res.json();
       if (!Array.isArray(data.reviews)) throw new Error('Expected reviews array');
+      if (typeof data.hasMore !== 'boolean') throw new Error('Expected hasMore boolean');
     })
   );
 

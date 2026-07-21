@@ -150,3 +150,373 @@
 [data-harborfm-block="search"] {
   margin-bottom: 1rem;
 }
+
+/* Reviews: full-bleed band treatment for mounted ReviewsCard */
+.fluid-theme [data-harborfm-block="reviews"] > * {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.fluid-theme [data-harborfm-block="reviews"] > *::before {
+  display: none !important;
+}
+.fluid-theme [data-harborfm-block="reviews"] h2 {
+  font-size: 0.6875rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  color: var(--accent) !important;
+  margin: 0 !important;
+}
+.fluid-theme [data-harborfm-block="reviews"] > * > div:first-child {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.75rem !important;
+  margin-bottom: 1.15rem !important;
+}
+.fluid-theme [data-harborfm-block="reviews"] ul {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+}
+.fluid-theme [data-harborfm-block="reviews"] li {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #2a2f3d) 70%, transparent) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 1.15rem 0 !important;
+}
+.fluid-theme [data-harborfm-block="reviews"] li:first-child {
+  border-top: 1px solid color-mix(in srgb, var(--border, #2a2f3d) 70%, transparent) !important;
+}
+.fluid-theme [data-harborfm-block="reviews"] li p {
+  font-size: 1rem !important;
+  line-height: 1.6 !important;
+  color: color-mix(in srgb, var(--text, #e8eaef) 92%, transparent) !important;
+}
+.fluid-theme [data-harborfm-reviews-write],
+.fluid-theme [data-harborfm-reviews-load-more] {
+  border-radius: 2px !important;
+  font-size: 0.6875rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+.fluid-theme [data-harborfm-reviews-write] {
+  background: var(--accent) !important;
+  color: var(--accent-fg, #141414) !important;
+  border: none !important;
+  padding: 0.55rem 0.95rem !important;
+}
+.fluid-theme [data-harborfm-reviews-load-more] {
+  background: transparent !important;
+  color: var(--accent) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent) !important;
+  padding: 0.55rem 0.95rem !important;
+}
+.fluid-theme [data-harborfm-review-expand] {
+  border-radius: 2px !important;
+  font-size: 0.6875rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--accent) !important;
+}
+
+/* Liquid hero owns art + title; React strip is a deck control rail. */
+.fluid-theme .fluid-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted, #9aa3b5);
+}
+
+.fluid-theme .fluid-crumbs a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.fluid-theme .fluid-crumbs a:hover {
+  text-decoration: underline;
+}
+
+.fluid-theme [data-harborfm-episode-artwork],
+.fluid-theme [data-harborfm-episode-title] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.fluid-theme [data-harborfm-episode-card] {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.fluid-theme [data-harborfm-episode-header] {
+  margin: 0 0 0.85rem !important;
+  padding: 0 !important;
+  border: 0 !important;
+  gap: 0 !important;
+}
+
+.fluid-theme [data-harborfm-episode-row] {
+  display: block !important;
+  border-left: 3px solid var(--accent) !important;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%),
+    color-mix(in srgb, var(--bg-elevated, #151922) 92%, black) !important;
+  padding: 0.85rem 1rem !important;
+}
+
+.fluid-theme [data-harborfm-episode-body] {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.75rem 1rem !important;
+  min-width: 0 !important;
+}
+
+.fluid-theme [data-harborfm-episode-meta] {
+  margin: 0 !important;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-muted, #9aa3b5)) !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700 !important;
+}
+
+.fluid-theme [data-harborfm-episode-actions] {
+  margin: 0 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.4rem !important;
+}
+
+.fluid-theme [data-harborfm-episode-actions] > div {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.4rem !important;
+}
+
+.fluid-theme [data-harborfm-episode-actions] button {
+  border-radius: 0 !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border, #2a2f3d)) !important;
+  background: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+  color: var(--text, #e8eaef) !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.7rem !important;
+}
+
+.fluid-theme [data-harborfm-episode-actions] button:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+}
+
+.fluid-theme [data-harborfm-episode-card] > *:not([data-harborfm-episode-header]) {
+  border-top: 1px solid color-mix(in srgb, var(--border, #2a2f3d) 80%, transparent);
+  padding-top: 0.85rem;
+}
+
+.fluid-theme .fluid-show--episode {
+  margin-bottom: 0.5rem;
+}
+
+/* harborfm-themed-dialogs: refined from the first Fluid console pass */
+.fluid-theme [data-harborfm-dialog="feedback"],
+.fluid-theme [data-harborfm-dialog="alerts"],
+.fluid-theme [data-harborfm-dialog="share"],
+.fluid-theme [data-harborfm-dialog="subscription"],
+.fluid-theme [data-harborfm-dialog="review"] {
+  --bg: #0c0e12;
+  --bg-elevated: #14171e;
+  --bg-muted: #1a1f2a;
+  --text: #e8eaef;
+  --text-muted: #9aa3b5;
+  --border: #2a2f3d;
+  --radius: 2px;
+  font-family: "DM Sans", system-ui, sans-serif !important;
+  color: var(--text) !important;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-left: 3px solid var(--accent) !important;
+  border-radius: 2px !important;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.5) !important;
+  padding: 1.35rem 1.4rem 1.3rem !important;
+}
+
+.fluid-theme [data-harborfm-dialog-overlay="feedback"],
+.fluid-theme [data-harborfm-dialog-overlay="alerts"],
+.fluid-theme [data-harborfm-dialog-overlay="share"],
+.fluid-theme [data-harborfm-dialog-overlay="subscription"],
+.fluid-theme [data-harborfm-dialog-overlay="review"] {
+  background: rgba(6, 8, 12, 0.72) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.fluid-theme [data-harborfm-dialog] h2,
+.fluid-theme [data-harborfm-dialog] h3,
+.fluid-theme [data-harborfm-dialog] [class*="title"] {
+  font-family: "DM Sans", system-ui, sans-serif !important;
+  font-size: 1.15rem !important;
+  font-weight: 650 !important;
+  letter-spacing: -0.02em !important;
+  text-transform: none !important;
+  color: var(--text) !important;
+  margin: 0 !important;
+}
+
+.fluid-theme [data-harborfm-dialog] p,
+.fluid-theme [data-harborfm-dialog] label,
+.fluid-theme [data-harborfm-dialog] [class*="sub"],
+.fluid-theme [data-harborfm-dialog] [class*="hint"],
+.fluid-theme [data-harborfm-dialog] [class*="desc"] {
+  color: var(--text-muted) !important;
+  font-size: 0.9rem !important;
+  line-height: 1.5 !important;
+}
+
+.fluid-theme [data-harborfm-dialog] input,
+.fluid-theme [data-harborfm-dialog] textarea,
+.fluid-theme [data-harborfm-dialog] select {
+  background: color-mix(in srgb, var(--bg) 75%, #000) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 2px !important;
+  color: var(--text) !important;
+  font-family: inherit !important;
+  box-shadow: none !important;
+}
+
+.fluid-theme [data-harborfm-dialog] input:focus,
+.fluid-theme [data-harborfm-dialog] textarea:focus,
+.fluid-theme [data-harborfm-dialog] select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent) !important;
+  outline: none !important;
+}
+
+.fluid-theme [data-harborfm-dialog] input::placeholder,
+.fluid-theme [data-harborfm-dialog] textarea::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 80%, transparent) !important;
+}
+
+.fluid-theme [data-harborfm-dialog] button {
+  border-radius: 2px !important;
+  font-family: inherit !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+}
+
+.fluid-theme [data-harborfm-dialog] button[type="submit"],
+.fluid-theme [data-harborfm-dialog="subscription"] button:not([aria-label="Close"]):not([data-harborfm-plan-card]),
+.fluid-theme [data-harborfm-dialog="share"] button:not([aria-label="Close"]),
+.fluid-theme [data-harborfm-dialog="alerts"] button:not([aria-label="Close"]),
+.fluid-theme [data-harborfm-dialog="feedback"] button:not([aria-label="Close"]),
+.fluid-theme [data-harborfm-dialog="review"] button:not([aria-label="Close"]):not([data-harborfm-review-expand]) {
+  background: var(--accent) !important;
+  color: var(--accent-fg, #141414) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.fluid-theme [data-harborfm-dialog] button[type="submit"]:hover,
+.fluid-theme [data-harborfm-dialog="subscription"] button:not([aria-label="Close"]):not([data-harborfm-plan-card]):hover,
+.fluid-theme [data-harborfm-dialog="share"] button:not([aria-label="Close"]):hover,
+.fluid-theme [data-harborfm-dialog="alerts"] button:not([aria-label="Close"]):hover,
+.fluid-theme [data-harborfm-dialog="feedback"] button:not([aria-label="Close"]):hover,
+.fluid-theme [data-harborfm-dialog="review"] button:not([aria-label="Close"]):not([data-harborfm-review-expand]):hover {
+  background: var(--accent-dim, var(--accent)) !important;
+}
+
+.fluid-theme [data-harborfm-dialog] button[aria-label="Close"] {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.fluid-theme [data-harborfm-dialog] button[aria-label="Close"]:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 10%, transparent) !important;
+}
+
+.fluid-theme [data-harborfm-dialog="subscription"] [data-harborfm-plan-card] {
+  border-radius: 2px !important;
+  background: color-mix(in srgb, var(--bg) 60%, transparent) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  letter-spacing: -0.01em !important;
+  font-size: 0.95rem !important;
+}
+
+.fluid-theme [data-harborfm-dialog="subscription"] [data-harborfm-plan-card]:hover,
+.fluid-theme [data-harborfm-dialog="subscription"] [data-harborfm-plan-card][aria-pressed="true"],
+.fluid-theme [data-harborfm-dialog="subscription"] [data-harborfm-plan-card][data-selected="true"] {
+  border-color: var(--accent) !important;
+  background: color-mix(in srgb, var(--accent) 10%, transparent) !important;
+}
+
+.fluid-theme [data-harborfm-dialog="review"] [aria-label$="out of 5 stars"] button {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0.15rem !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.fluid-theme-credit {
+  margin-top: 2rem;
+  padding: 1.25rem 0 2rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  letter-spacing: -0.01em;
+}
+
+.fluid-theme-credit a {
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.fluid-theme-credit a:hover {
+  text-decoration: underline;
+}

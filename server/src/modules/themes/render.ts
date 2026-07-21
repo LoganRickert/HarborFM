@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { Liquid } from "liquidjs";
 import { FEED_DEFAULT_THEME } from "@harborfm/shared";
@@ -122,6 +122,14 @@ function expandHarborfmRenders(source: string): string {
 
 export type LiquidPodcastContext = {
   podcast: Record<string, unknown>;
+  cast?: {
+    hosts: Array<Record<string, unknown>>;
+    guests: Array<Record<string, unknown>>;
+  };
+  funding_links?: Array<Record<string, unknown>>;
+  links?: Array<Record<string, unknown>>;
+  podroll?: Array<Record<string, unknown>>;
+  reviews?: Array<Record<string, unknown>>;
   episodes?: Array<Record<string, unknown>>;
   episode?: Record<string, unknown>;
   accentId: string | null | undefined;
@@ -162,10 +170,44 @@ export async function renderLiquidPage(
   let source = readFileSync(templatePath, "utf8");
   source = sanitizeThemeText(expandHarborfmRenders(source));
 
+  let cacheBust = "";
+  const theme = {
+    id: "",
+    name: "",
+    version: "",
+    homepage: "",
+  };
+  try {
+    const manifestPath = join(themeRoot, "theme.json");
+    if (existsSync(manifestPath)) {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        id?: string;
+        name?: string;
+        version?: string;
+        homepage?: string;
+      };
+      theme.id = String(manifest.id || "");
+      theme.name = String(manifest.name || "");
+      theme.version = String(manifest.version || "");
+      theme.homepage =
+        typeof manifest.homepage === "string" ? manifest.homepage.trim() : "";
+      if (theme.version) {
+        cacheBust = `?v=${encodeURIComponent(theme.version)}`;
+      }
+    }
+  } catch {
+    // ignore invalid theme.json for cache busting / theme meta
+  }
+
   const accent = resolveAccent(ctx.accentId);
   const engine = createEngine(themeRoot);
   const html = await engine.parseAndRender(source, {
     podcast: ctx.podcast,
+    cast: ctx.cast ?? { hosts: [], guests: [] },
+    funding_links: ctx.funding_links ?? [],
+    links: ctx.links ?? [],
+    podroll: ctx.podroll ?? [],
+    reviews: ctx.reviews ?? [],
     episodes: ctx.episodes ?? [],
     episode: ctx.episode ?? null,
     accent,
@@ -177,30 +219,26 @@ export async function renderLiquidPage(
     },
     site: ctx.site,
     page: ctx.page,
+    theme,
   });
-
-  let cacheBust = "";
-  try {
-    const manifestPath = join(themeRoot, "theme.json");
-    if (existsSync(manifestPath)) {
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-        version?: string;
-      };
-      if (manifest.version) {
-        cacheBust = `?v=${encodeURIComponent(String(manifest.version))}`;
-      }
-    }
-  } catch {
-    // ignore invalid theme.json for cache busting
-  }
 
   const cssDir = join(themeRoot, "css");
   const cssHrefs: string[] = [];
   if (existsSync(cssDir)) {
     for (const name of readdirSync(cssDir).sort()) {
       if (name.toLowerCase().endsWith(".css")) {
+        // Include file mtime so CSS edits bust browser cache without a version bump.
+        let assetBust = cacheBust;
+        try {
+          const mtime = Math.floor(statSync(join(cssDir, name)).mtimeMs);
+          assetBust = cacheBust
+            ? `${cacheBust}&t=${mtime}`
+            : `?t=${mtime}`;
+        } catch {
+          // keep version-only bust
+        }
         cssHrefs.push(
-          `${ctx.urls.theme_asset_base}/css/${encodeURIComponent(name)}${cacheBust}`,
+          `${ctx.urls.theme_asset_base}/css/${encodeURIComponent(name)}${assetBust}`,
         );
       }
     }

@@ -21,7 +21,10 @@ export function FeedEpisodesList({
 
   return (
     <>
-      <ul className={plain ? `${styles.list} ${styles.listPlain}` : styles.list}>
+      <ul
+        className={plain ? `${styles.list} ${styles.listPlain}` : styles.list}
+        data-harborfm-episodes-list
+      >
         {episodes.map((ep) => (
           <FeedEpisodeCard
             key={ep.id}
@@ -46,6 +49,7 @@ export function FeedEpisodesList({
             disabled={isFetchingNextPage}
             className={plain ? `${styles.loadMoreBtn} ${styles.loadMoreBtnFluid}` : styles.loadMoreBtn}
             aria-label="Load More Episodes"
+            data-harborfm-episodes-load-more
           >
             {isFetchingNextPage ? 'Loading...' : 'Load More Episodes'}
           </button>

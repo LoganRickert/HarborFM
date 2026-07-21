@@ -20,7 +20,7 @@ import { drizzleDb } from "../../db/drizzle.js";
 import { isServerWidePackageId } from "./builtins.js";
 import { sanitizeThemeText, textContainsBlockedConstructs } from "./sanitize.js";
 import { userThemeDir, userThemeDirPath } from "./paths.js";
-import { assertThemePagesValid } from "./themePages.js";
+import { assertThemePagesValid, assertThemePreviewValid } from "./themePages.js";
 import { clearThemeZipCacheForId } from "./themeZip.js";
 import * as repo from "./repo.js";
 
@@ -50,6 +50,8 @@ const ALLOWED_EXT = new Set([
   ".gif",
   ".webp",
 ]);
+
+const FONT_EXT = new Set([".woff2", ".ttf"]);
 
 const TEXT_EXT = new Set([".liquid", ".css", ".json"]);
 
@@ -84,6 +86,10 @@ function isJunkZipPath(name: string): boolean {
 function isAllowedThemePath(name: string): boolean {
   if (name === "theme.json") return true;
   const ext = extname(name).toLowerCase();
+  if (name.startsWith("fonts/")) {
+    const rest = name.slice("fonts/".length);
+    return FONT_EXT.has(ext) && !!rest && !rest.endsWith("/") && !rest.includes("/");
+  }
   if (!ALLOWED_EXT.has(ext)) return false;
   if (name.startsWith("css/") || name.startsWith("images/")) {
     const rest = name.includes("/") ? name.slice(name.indexOf("/") + 1) : "";
@@ -221,6 +227,11 @@ export function importThemeZip(userId: string, zipBuffer: Buffer): {
     assertThemePagesValid(manifest, templateBasenames);
   } catch (err) {
     throw new ThemeImportError(typeof err === "string" ? err : "Invalid theme pages");
+  }
+  try {
+    assertThemePreviewValid(manifest, (rel) => files.has(rel));
+  } catch (err) {
+    throw new ThemeImportError(typeof err === "string" ? err : "Invalid theme preview");
   }
 
   // Sanitize text files and reject dangerous constructs

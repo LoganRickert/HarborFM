@@ -31,8 +31,12 @@ import {
   ReviewsCard,
   FeedPodrollCard,
   FeedFundingSupport,
+  SubscriptionInfoDialog,
 } from '../components/Feed';
 import { LiquidFeedPage, type LiquidFeedBlocks } from '../components/Feed/LiquidFeedPage';
+import type { HarborfmActionHandlers } from '../components/Feed/harborfmActions';
+import { ShareDialog } from '../components/ShareDialog';
+import { ReviewSubmitModal } from '../components/Feed/ReviewSubmitModal';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import { feedAccentCssVars } from '../utils/feedAccent';
 import sharedStyles from '../styles/shared.module.css';
@@ -53,6 +57,9 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [writeReviewOpen, setWriteReviewOpen] = useState(false);
 
   // Cancel any active import polling when on feed pages
   useEffect(() => {
@@ -181,6 +188,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   }, [allEpisodes, sortNewestFirst, featuredTrailer?.id]);
 
   const siteName = getSiteDisplayName(publicConfig?.whiteLabel);
+  const pageTitle = podcast ? `${podcast.title} | ${siteName}` : undefined;
   const podcastArtwork = podcast ? getPublicPodcastArtworkUrl(podcast) : null;
   const pageUrl =
     typeof window !== 'undefined'
@@ -190,7 +198,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   // Update meta tags
   const isCustomDomain = !!publicConfig?.customFeedSlug;
   useMeta({
-    title: podcast ? `${podcast.title} | ${siteName}` : undefined,
+    title: pageTitle,
     siteName: podcast ? siteName : undefined,
     description: podcast?.description?.trim() || undefined,
     image: podcastArtwork ?? undefined,
@@ -202,6 +210,42 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     podcast && (!podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug));
   const canShowMessage =
     podcast && (!podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug));
+  const hasSubscriberFeatures = Boolean(podcast?.subscriberOnlyFeedEnabled);
+  const shareUrl =
+    podcast?.canonicalFeedUrl ??
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}`
+      : undefined);
+  const rssUrl = podcast
+    ? `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/rss`
+    : null;
+
+  const liquidActions = useMemo((): HarborfmActionHandlers | undefined => {
+    if (!podcast || !useLiquidLayout) return undefined;
+    return {
+      message: canShowMessage ? () => setFeedbackOpen(true) : undefined,
+      alerts: alertsInfo?.emailSignupAvailable ? () => setAlertsOpen(true) : undefined,
+      share: shareUrl ? () => setShareOpen(true) : undefined,
+      subscribe: hasSubscriberFeatures ? () => setSubscribeOpen(true) : undefined,
+      feedHref: rssUrl,
+      writeReview:
+        publicConfig?.reviewsEnabled === true &&
+        podcast.feedShowReviewsPodcast !== false &&
+        canWriteReview
+          ? () => setWriteReviewOpen(true)
+          : undefined,
+    };
+  }, [
+    podcast,
+    useLiquidLayout,
+    canShowMessage,
+    alertsInfo?.emailSignupAvailable,
+    shareUrl,
+    hasSubscriberFeatures,
+    rssUrl,
+    publicConfig?.reviewsEnabled,
+    canWriteReview,
+  ]);
 
   const liquidBlocks = useMemo((): LiquidFeedBlocks => {
     if (!useLiquidLayout || !podcast) return {};
@@ -222,7 +266,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
               ? `${window.location.origin}${window.location.pathname}`
               : undefined)
           }
-          shareTitle={`${podcast.title} - HarborFM`}
+          shareTitle={pageTitle}
         />
       ),
       search: (
@@ -292,6 +336,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
   }, [
     useLiquidLayout,
     podcast,
+    pageTitle,
     searchQuery,
     sortNewestFirst,
     episodesLoading,
@@ -365,20 +410,44 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
         podcastTitle={podcast.title}
         accent={podcast.feedAccent}
       />
+      {shareUrl != null && (
+        <ShareDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          url={shareUrl}
+          title={pageTitle ?? podcast.title}
+        />
+      )}
+      {hasSubscriberFeatures && (
+        <SubscriptionInfoDialog
+          open={subscribeOpen}
+          onClose={() => setSubscribeOpen(false)}
+          isSubscriberOnly={Boolean(
+            podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled,
+          )}
+          podcastSlug={podcastSlug}
+        />
+      )}
+      {canWriteReview && (
+        <ReviewSubmitModal
+          open={writeReviewOpen}
+          onClose={() => setWriteReviewOpen(false)}
+          podcastSlug={podcastSlug}
+        />
+      )}
     </>
   );
 
   if (useLiquidLayout && themeRender) {
     return (
-      <>
-        <LiquidFeedPage
-          html={themeRender.html}
-          cssHrefs={themeRender.cssHrefs}
-          accent={podcast.feedAccent}
-          blocks={liquidBlocks}
-        />
-        {modals}
-      </>
+      <LiquidFeedPage
+        html={themeRender.html}
+        cssHrefs={themeRender.cssHrefs}
+        accent={podcast.feedAccent}
+        blocks={liquidBlocks}
+        actions={liquidActions}
+        dialogs={modals}
+      />
     );
   }
 
@@ -399,7 +468,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
                 podcast?.canonicalFeedUrl ??
                 (typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined)
               }
-              shareTitle={podcast ? `${podcast.title} - HarborFM` : undefined}
+              shareTitle={pageTitle}
             />
           </div>
 

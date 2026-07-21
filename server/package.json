@@ -10,6 +10,7 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "echo \"No tests yet\"",
+    "themes:sync": "tsx src/scripts/sync-gallery-themes.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seedSetup": "tsx src/scripts/seed-setup.ts",
     "send-seed-admin-welcome": "tsx src/scripts/send-seed-admin-welcome.ts",

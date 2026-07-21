@@ -1,0 +1,59 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { marked } from 'marked';
+import { ArrowLeft, FileDown } from '@lucide/astro';
+
+const guidePath = join(dirname(fileURLToPath(import.meta.url)), '../content/theme-guide.md');
+
+let guideHtml = '<p>Theme guide not found.</p>';
+if (existsSync(guidePath)) {
+  try {
+    marked.setOptions({ gfm: true, breaks: false });
+    guideHtml = marked.parse(readFileSync(guidePath, 'utf8'), { async: false }) as string;
+  } catch {
+    guideHtml = '<p>Failed to load the theme guide.</p>';
+  }
+}
+---
+
+<Layout
+  title="Theme Authoring Guide - HarborFM"
+  description="Guide to building importable HarborFM Liquid theme packages."
+>
+  <Header />
+
+  <main class="theme-guide-page">
+    <div class="theme-guide-inner">
+      <header class="theme-guide-hero">
+        <p class="theme-guide-eyebrow">Page themes</p>
+        <h1>Theme Authoring Guide</h1>
+        <p class="theme-guide-lead">
+          Create an importable Liquid theme for your public podcast pages. Covers package
+          layout, templates, mounts, and how to check your zip before you import it.
+        </p>
+        <div class="theme-guide-hero-actions">
+          <a class="theme-guide-action" href="/themes/">
+            <ArrowLeft size={16} stroke-width={2.25} aria-hidden="true" />
+            Themes gallery
+          </a>
+          <a class="theme-guide-action theme-guide-action-secondary" href="/web/public/theme-SKILL.md">
+            <FileDown size={16} stroke-width={2.25} aria-hidden="true" />
+            theme-SKILL.md
+          </a>
+        </div>
+      </header>
+
+      <article class="theme-guide-panel">
+        <div class="theme-guide-body" set:html={guideHtml} />
+      </article>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p><a href="/">← Home</a></p>
+  </footer>
+</Layout>

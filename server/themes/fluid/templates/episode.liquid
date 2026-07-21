@@ -23,7 +23,11 @@
             <img class="fluid-show__art fluid-show__art--sm" src="{{ podcast.artwork_url }}" alt="" width="112" height="112" />
           {% endif %}
           <div class="fluid-show__text">
-            {% render 'harborfm/breadcrumbs' %}
+            <nav class="fluid-crumbs" aria-label="Breadcrumb">
+              <a href="{{ urls.home }}">Feed</a><span aria-hidden="true">/</span>
+              <a href="{{ urls.pages.podcast }}">Show</a><span aria-hidden="true">/</span>
+              <span>Playing</span>
+            </nav>
             <h1 class="fluid-show__title">{{ episode.title }}</h1>
             {% if show.author %}
               {% if podcast.author_name != "" %}
@@ -86,5 +90,6 @@
       </section>
     {% endif %}
   </div>
+  {% render '_footer', theme: theme %}
 </body>
 </html>

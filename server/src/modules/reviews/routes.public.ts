@@ -488,13 +488,15 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
       const rows = listPublicReviews({
         podcastId,
         episodeId,
-        limit,
+        limit: limit + 1,
         offset,
         publishNonVerified,
         allowUnapprovedReviews,
       });
+      const hasMore = rows.length > limit;
+      const pageRows = hasMore ? rows.slice(0, limit) : rows;
       const auth = await optionalAuth(request);
-      const reviewsList = rows.map((r) => ({
+      const reviewsList = pageRows.map((r) => ({
         id: r.id,
         name: r.name,
         rating: r.rating,
@@ -509,7 +511,7 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
             (r.userId === auth.userId || auth.role === "admin"),
         ),
       }));
-      return reply.send({ reviews: reviewsList });
+      return reply.send({ reviews: reviewsList, hasMore });
     },
   );
 

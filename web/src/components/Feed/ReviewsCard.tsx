@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { MessageSquare, X } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPublicReviews, deleteReview, type PublicReviewDto } from '../../api/reviews';
 import { formatDateTime } from '../../utils/format';
 import { ReviewStars } from './ReviewStars';
 import { ReviewSubmitModal } from './ReviewSubmitModal';
 import styles from './ReviewsCard.module.css';
+
+const PAGE_SIZE = 10;
 
 export interface ReviewsCardProps {
   podcastSlug: string;
@@ -29,9 +31,20 @@ export function ReviewsCard({
   const [modalOpen, setModalOpen] = useState(false);
   const [reviewIdToDelete, setReviewIdToDelete] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['public-reviews', podcastSlug, episodeSlug],
-    queryFn: () => getPublicReviews(podcastSlug, { episodeSlug, limit: 10, offset: 0 }),
+    queryFn: ({ pageParam }) =>
+      getPublicReviews(podcastSlug, {
+        episodeSlug,
+        limit: PAGE_SIZE,
+        offset: pageParam,
+      }),
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage.hasMore) return undefined;
+      const loaded = allPages.reduce((sum, p) => sum + p.reviews.length, 0);
+      return loaded;
+    },
+    initialPageParam: 0,
     enabled: enabled && !!podcastSlug,
     staleTime: 60 * 1000,
   });
@@ -54,7 +67,7 @@ export function ReviewsCard({
     }
   }
 
-  const reviews = data?.reviews ?? [];
+  const reviews = data?.pages.flatMap((p) => p.reviews) ?? [];
 
   if (!enabled) return null;
 
@@ -62,11 +75,13 @@ export function ReviewsCard({
     <section
       className={plain ? `${styles.card} ${styles.cardPlain}` : styles.card}
       aria-labelledby="reviews-card-title"
+      data-harborfm-reviews
     >
       <div className={styles.header}>
         <h2
           id="reviews-card-title"
           className={plain ? `${styles.title} ${styles.titleFluid}` : styles.title}
+          data-harborfm-reviews-title
         >
           {episodeSlug ? 'Episode Reviews' : 'Reviews'}
         </h2>
@@ -76,6 +91,7 @@ export function ReviewsCard({
             className={plain ? `${styles.writeBtn} ${styles.writeBtnFluid}` : styles.writeBtn}
             onClick={() => setModalOpen(true)}
             aria-label="Write a review"
+            data-harborfm-reviews-write
           >
             <MessageSquare size={16} strokeWidth={2} aria-hidden />
             Write A Review
@@ -85,16 +101,34 @@ export function ReviewsCard({
       {isLoading ? (
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>Loading reviews…</p>
       ) : reviews.length > 0 ? (
-        <ul className={styles.list}>
-          {reviews.map((r) => (
-            <ReviewItem
-              key={r.id}
-              review={r}
-              onDelete={r.canDelete ? () => handleDeleteClick(r.id) : undefined}
-              isDeleting={deleteMutation.isPending && deleteMutation.variables === r.id}
-            />
-          ))}
-        </ul>
+        <>
+          <ul className={styles.list} data-harborfm-reviews-list>
+            {reviews.map((r) => (
+              <ReviewItem
+                key={r.id}
+                review={r}
+                onDelete={r.canDelete ? () => handleDeleteClick(r.id) : undefined}
+                isDeleting={deleteMutation.isPending && deleteMutation.variables === r.id}
+              />
+            ))}
+          </ul>
+          {hasNextPage && (
+            <div className={plain ? `${styles.loadMore} ${styles.loadMoreFluid}` : styles.loadMore}>
+              <button
+                type="button"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className={
+                  plain ? `${styles.loadMoreBtn} ${styles.loadMoreBtnFluid}` : styles.loadMoreBtn
+                }
+                aria-label="Load more reviews"
+                data-harborfm-reviews-load-more
+              >
+                {isFetchingNextPage ? 'Loading...' : 'Load More Reviews'}
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>
           No reviews yet. Be the first to leave one.
@@ -174,33 +208,36 @@ function ReviewItem({ review: r, onDelete, isDeleting }: ReviewItemProps) {
   const showToggle = showAsOverflow || expanded;
 
   return (
-    <li className={styles.reviewItem}>
-      <div className={styles.reviewNameRow}>
-        <span className={styles.reviewName} title={r.name}>
+    <li className={styles.reviewItem} data-harborfm-review data-verified={r.verified ? 'true' : undefined}>
+      <div className={styles.reviewNameRow} data-harborfm-review-header>
+        <span className={styles.reviewName} title={r.name} data-harborfm-review-name>
           {r.name}
         </span>
-        <span className={styles.reviewStars}>
+        <span className={styles.reviewStars} data-harborfm-review-rating>
           <ReviewStars rating={r.rating} size={16} />
         </span>
       </div>
-      <div className={styles.reviewMeta}>
-        <time className={styles.reviewDate} dateTime={r.createdAt}>
+      <div className={styles.reviewMeta} data-harborfm-review-meta>
+        <time className={styles.reviewDate} dateTime={r.createdAt} data-harborfm-review-date>
           {formatDateTime(r.createdAt)}
         </time>
         {r.verified ? (
-          <span className={styles.reviewVerified} title="Verified reviewer">
+          <span className={styles.reviewVerified} title="Verified reviewer" data-harborfm-review-verified>
             Verified
           </span>
         ) : (
-          <span className={styles.reviewNotVerified}>Not verified</span>
+          <span className={styles.reviewNotVerified} data-harborfm-review-unverified>
+            Not verified
+          </span>
         )}
       </div>
-      <div>
+      <div data-harborfm-review-body-wrap>
         <p
           ref={bodyRef}
           className={
             expanded ? styles.reviewBody : `${styles.reviewBody} ${styles.reviewBodyClamped}`
           }
+          data-harborfm-review-body
         >
           {body}
         </p>
@@ -211,6 +248,7 @@ function ReviewItem({ review: r, onDelete, isDeleting }: ReviewItemProps) {
               className={styles.viewMoreBtn}
               onClick={() => setExpanded((e) => !e)}
               aria-expanded={expanded}
+              data-harborfm-review-expand
             >
               {expanded ? 'Show less' : 'Show more'}
             </button>
@@ -225,6 +263,7 @@ function ReviewItem({ review: r, onDelete, isDeleting }: ReviewItemProps) {
             onClick={onDelete}
             disabled={isDeleting}
             aria-label="Delete review"
+            data-harborfm-review-delete
           >
             {isDeleting ? 'Deleting…' : 'Delete'}
           </button>

@@ -115,6 +115,7 @@ Max zip size: **10 MB**.
   "id": "mytheme",
   "name": "My Theme",
   "version": "1.0.0",
+  "description": "Short blurb for Themes UI cards and the docs gallery.",
   "index": "podcast",
   "pages": {
     "about": "about.html"
@@ -127,6 +128,7 @@ Max zip size: **10 MB**.
 | `id` | yes | Package id. `^[a-z0-9][a-z0-9_-]*$`, max 64. Same id updates the user's copy on re-import. |
 | `name` | yes | Display name, 1–120 chars. |
 | `version` | yes | String, 1–64 chars. Also used as CSS cache-bust (`?v=`). |
+| `description` | no | Plain-text blurb for Themes UI / gallery cards, 1–280 chars. |
 | `index` | no | Home template basename. Default `podcast`. |
 | `pages` | no | Extra template → public `.html` filename overrides. |
 | `allowOverride` | no | Harbor-managed for server themes. Omitted/true: image upgrades may replace the data copy when `version` changes. `false`: skip seed overwrite (set automatically after admin edits or promote). Do not set this in author zips. |
@@ -141,7 +143,7 @@ Multi-page example:
 {
   "id": "folio",
   "name": "Folio",
-  "version": "1.1.12",
+  "version": "1.0.0",
   "index": "home",
   "pages": {
     "podcast": "episodes.html",

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  {% render '_head', accent: accent %}
+  <title>Page not found | {{ podcast.title }}</title>
+</head>
+<body class="folio-theme">
+  <div class="folio-shell">
+    {% render '_nav', urls: urls, podcast: podcast, site: site, page: page %}
+
+    <main class="folio-main">
+      <header class="folio-hero folio-hero--split">
+        {% if podcast.artwork_url %}
+          <img class="folio-hero__art" src="{{ podcast.artwork_url }}" alt="" width="136" height="136" />
+        {% endif %}
+        <div>
+          <p class="folio-hero__eyebrow">404</p>
+          <h1 class="folio-hero__title">This page is not in the issue</h1>
+          <p class="folio-hero__lede">The link may be outdated, or the page was never part of this show site.</p>
+        </div>
+      </header>
+
+      <section class="folio-section folio-section--wide">
+        <div class="folio-panel">
+          <p class="folio-prose">
+            Head back to
+            <a href="{{ urls.home }}">{{ podcast.title }}</a>
+            {% if urls.pages.podcast %}
+              or browse
+              <a href="{{ urls.pages.podcast }}">episodes</a>.
+            {% else %}
+              .
+            {% endif %}
+          </p>
+        </div>
+      </section>
+    </main>
+
+    {% render '_footer', urls: urls, podcast: podcast, site: site, theme: theme %}
+  </div>
+</body>
+</html>

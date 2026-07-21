@@ -1,7 +1,16 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
-import { CircleAlert, CircleCheck, Download, FileUp, Settings2, Trash2 } from 'lucide-react';
+import {
+  CircleAlert,
+  CircleCheck,
+  Download,
+  ExternalLink,
+  FileUp,
+  Settings2,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { me } from '../api/auth';
 import {
   listThemes,
@@ -11,6 +20,7 @@ import {
   importTheme,
   deleteTheme,
   deleteServerTheme,
+  themeAssetPreviewUrl,
   FEED_THEME_ZIP_MAX_BYTES,
   type BuiltinThemeListItem,
   type ThemeListItem,
@@ -40,6 +50,8 @@ export function Themes() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [themeToDelete, setThemeToDelete] = useState<DeleteTarget | null>(null);
   const [editorThemeId, setEditorThemeId] = useState<string | null>(null);
+  const [brokenPreviews, setBrokenPreviews] = useState<Record<string, true>>({});
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   const { data: meData, isLoading: meLoading } = useQuery({
     queryKey: ['me'],
@@ -307,8 +319,43 @@ export function Themes() {
           <ul className={styles.builtinList}>
             {builtins.map((theme) => {
               const hasCopy = ownedServerPackageIds.has(theme.id);
+              const previewBroken = Boolean(brokenPreviews[theme.id]);
+              const previewSrc = previewBroken
+                ? null
+                : themeAssetPreviewUrl(theme.id, 'server', 'images/preview.jpg');
               return (
                 <li key={theme.id} className={styles.builtinItem}>
+                  {previewSrc ? (
+                    <button
+                      type="button"
+                      className={`${styles.builtinThumb} ${styles.builtinThumbButton}`}
+                      onClick={() =>
+                        setLightbox({
+                          src: previewSrc,
+                          alt: `${theme.name} theme preview`,
+                        })
+                      }
+                      aria-label={`View ${theme.name} preview`}
+                    >
+                      <img
+                        src={previewSrc}
+                        alt=""
+                        loading="lazy"
+                        className={styles.builtinThumbImage}
+                        onError={() =>
+                          setBrokenPreviews((prev) =>
+                            prev[theme.id] ? prev : { ...prev, [theme.id]: true },
+                          )
+                        }
+                      />
+                    </button>
+                  ) : (
+                    <div className={styles.builtinThumb} aria-hidden>
+                      <span className={styles.builtinThumbFallback}>
+                        {theme.name.slice(0, 1)}
+                      </span>
+                    </div>
+                  )}
                   <div className={styles.builtinMeta}>
                     <div className={styles.builtinTitleRow}>
                       <h3 className={styles.builtinName}>{theme.name}</h3>
@@ -318,18 +365,32 @@ export function Themes() {
                     <p className={styles.builtinDescription}>{theme.description}</p>
                   </div>
                   <div className={styles.rowActions}>
-                    <button
-                      type="button"
-                      className={styles.downloadBtn}
-                      onClick={() => void handleDownloadBuiltin(theme.id)}
-                      disabled={downloadingId === `server:${theme.id}`}
-                      aria-label={`Download ${theme.name} theme zip`}
-                    >
-                      <Download size={16} strokeWidth={2} aria-hidden />
-                      {downloadingId === `server:${theme.id}` ? 'Preparing…' : 'Download'}
-                    </button>
-                    {isAdmin && (
-                      <>
+                    <div className={styles.rowActionsPrimary}>
+                      {theme.homepage ? (
+                        <a
+                          className={styles.previewBtn}
+                          href={theme.homepage}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open ${theme.name} live preview`}
+                        >
+                          <ExternalLink size={16} strokeWidth={2} aria-hidden />
+                          Preview
+                        </a>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={styles.downloadBtn}
+                        onClick={() => void handleDownloadBuiltin(theme.id)}
+                        disabled={downloadingId === `server:${theme.id}`}
+                        aria-label={`Download ${theme.name} theme zip`}
+                      >
+                        <Download size={16} strokeWidth={2} aria-hidden />
+                        {downloadingId === `server:${theme.id}` ? 'Preparing…' : 'Download'}
+                      </button>
+                    </div>
+                    {isAdmin ? (
+                      <div className={styles.rowActionsAdmin}>
                         <button
                           type="button"
                           className={styles.iconActionBtn}
@@ -347,8 +408,8 @@ export function Themes() {
                         >
                           <Trash2 size={16} strokeWidth={2} aria-hidden />
                         </button>
-                      </>
-                    )}
+                      </div>
+                    ) : null}
                   </div>
                 </li>
               );
@@ -435,6 +496,35 @@ export function Themes() {
           </table>
         )}
       </div>
+
+      <Dialog.Root
+        open={!!lightbox}
+        onOpenChange={(open) => {
+          if (!open) setLightbox(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className={styles.lightboxOverlay} />
+          <Dialog.Content className={styles.lightboxContent} aria-describedby={undefined}>
+            <Dialog.Title className={styles.srOnly}>
+              {lightbox?.alt?.trim() || 'Theme preview'}
+            </Dialog.Title>
+            <Dialog.Close asChild>
+              <button type="button" className={styles.lightboxClose} aria-label="Close preview">
+                <X size={18} />
+              </button>
+            </Dialog.Close>
+            {lightbox ? (
+              <img
+                src={lightbox.src}
+                alt={lightbox.alt}
+                className={styles.lightboxImg}
+                onClick={() => setLightbox(null)}
+              />
+            ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <Dialog.Root
         open={!!themeToDelete}

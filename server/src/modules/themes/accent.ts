@@ -5,9 +5,22 @@ export type AccentColors = {
   color: string;
   dim: string;
   glow: string;
+  fg: string;
 };
 
-const PALETTE: Record<string, Omit<AccentColors, "id">> = {
+function accentForeground(hex: string): string {
+  const raw = hex.replace("#", "").trim();
+  if (raw.length !== 6) return "#ffffff";
+  const r = Number.parseInt(raw.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(raw.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(raw.slice(4, 6), 16) / 255;
+  const lin = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return luminance > 0.45 ? "#141414" : "#ffffff";
+}
+
+const PALETTE: Record<string, Omit<AccentColors, "id" | "fg">> = {
   green: {
     color: "#00d4aa",
     dim: "#00a884",
@@ -63,5 +76,6 @@ const PALETTE: Record<string, Omit<AccentColors, "id">> = {
 export function resolveAccent(accentId: string | null | undefined): AccentColors {
   const id = (accentId?.trim() || "green").toLowerCase();
   const colors = PALETTE[id] ?? PALETTE.green!;
-  return { id: PALETTE[id] ? id : "green", ...colors };
+  const resolvedId = PALETTE[id] ? id : "green";
+  return { id: resolvedId, ...colors, fg: accentForeground(colors.color) };
 }

@@ -13,7 +13,11 @@
     <main class="folio-main">
       <header class="folio-hero">
         <div>
-          {% render 'harborfm/breadcrumbs' %}
+          <nav class="folio-crumbs" aria-label="Breadcrumb">
+            <a href="{{ urls.home }}">Home</a><span aria-hidden="true">/</span>
+            <a href="{{ urls.pages.podcast }}">Episodes</a><span aria-hidden="true">/</span>
+            <span>Listening</span>
+          </nav>
           <p class="folio-hero__eyebrow">Episode</p>
           <h1 class="folio-hero__title">{{ episode.title }}</h1>
           {% if show.author %}
@@ -60,7 +64,7 @@
       {% endif %}
     </main>
 
-    {% render '_footer', urls: urls, podcast: podcast, site: site %}
+    {% render '_footer', urls: urls, podcast: podcast, site: site, theme: theme %}
   </div>
 </body>
 </html>

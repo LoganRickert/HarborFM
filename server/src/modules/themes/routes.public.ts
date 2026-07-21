@@ -11,10 +11,10 @@ import {
   isLiquidFeedTheme,
   renderLiquidPage,
   resolveThemePackage,
-  type LiquidPodcastContext,
   type ThemeResolveResult,
 } from "./render.js";
 import { resolveThemePages, themePageUrls } from "./themePages.js";
+import { buildLiquidThemeContext } from "./liquidContext.js";
 import * as publicRepo from "../public/repo.js";
 import { readSettings } from "../settings/repo.js";
 
@@ -25,12 +25,9 @@ const MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
 };
-
-function asBool(v: unknown, fallback: boolean): boolean {
-  if (v === undefined || v === null) return fallback;
-  return v === true || v === 1 || v === "1";
-}
 
 function stripHtml(s: string): string {
   return s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -45,7 +42,9 @@ async function serveThemeAsset(
   if (
     !cleaned ||
     cleaned.includes("..") ||
-    (!cleaned.startsWith("css/") && !cleaned.startsWith("images/"))
+    (!cleaned.startsWith("css/") &&
+      !cleaned.startsWith("images/") &&
+      !cleaned.startsWith("fonts/"))
   ) {
     return reply.status(404).send({ error: "Not found" });
   }
@@ -66,42 +65,6 @@ async function serveThemeAsset(
   reply.header("Content-Type", type);
   reply.header("Cache-Control", "public, max-age=3600");
   return reply.send(createReadStream(full));
-}
-
-const PODCAST_LINK_KEYS = [
-  "applePodcastsUrl",
-  "spotifyUrl",
-  "amazonMusicUrl",
-  "podcastIndexUrl",
-  "listenNotesUrl",
-  "castboxUrl",
-  "xUrl",
-  "facebookUrl",
-  "instagramUrl",
-  "tiktokUrl",
-  "youtubeUrl",
-  "discordUrl",
-] as const;
-
-function podcastHasLinks(row: Record<string, unknown>): boolean {
-  return PODCAST_LINK_KEYS.some((key) => {
-    const url = row[key];
-    return typeof url === "string" && url.trim().length > 0;
-  });
-}
-
-function podcastShowFlags(row: Record<string, unknown>) {
-  return {
-    author: asBool(row.feedShowAuthor, true),
-    podcast_description: asBool(row.feedShowPodcastDescription, true),
-    episode_description: asBool(row.feedShowEpisodeDescription, true),
-    funding: asBool(row.feedShowFunding, true),
-    reviews_podcast: asBool(row.feedShowReviewsPodcast, true),
-    reviews_episode: asBool(row.feedShowReviewsEpisode, true),
-    podroll: asBool(row.feedShowPodroll, true),
-    cast: asBool(row.feedShowCast, true),
-    links: podcastHasLinks(row),
-  };
 }
 
 function requestHost(request: FastifyRequest): string {
@@ -127,41 +90,6 @@ function siteNameFromSettings(): string {
   return typeof settings.white_label === "string" && settings.white_label.trim()
     ? settings.white_label.trim()
     : "HarborFM";
-}
-
-function podcastArtworkUrl(podcast: {
-  id: string;
-  artworkUrl?: string | null;
-  artworkPath?: string | null;
-}): string | null {
-  if (podcast.artworkUrl) return podcast.artworkUrl;
-  if (podcast.artworkPath) {
-    return `/${API_PREFIX}/public/artwork/${podcast.id}/${encodeURIComponent(
-      podcast.artworkPath.split(/[/\\]/).pop() || "artwork",
-    )}`;
-  }
-  return null;
-}
-
-function buildPodcastLiquidFields(
-  podcast: {
-    id: string;
-    title?: string | null;
-    description?: string | null;
-    authorName?: string | null;
-    artworkUrl?: string | null;
-    artworkPath?: string | null;
-  },
-  slug: string,
-) {
-  return {
-    title: String(podcast.title || ""),
-    description: stripHtml(String(podcast.description || "")),
-    author_name: String(podcast.authorName || ""),
-    artwork_url: podcastArtworkUrl(podcast),
-    rss_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(slug)}/rss`,
-    slug,
-  };
 }
 
 function buildUrlContext(
@@ -199,7 +127,7 @@ export async function themePublicRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["Public"],
-        summary: "Serve builtin theme static assets (css/images)",
+        summary: "Serve builtin theme static assets (css/images/fonts)",
         hide: true,
       },
     },
@@ -218,7 +146,7 @@ export async function themePublicRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["Public"],
-        summary: "Serve custom theme static assets (css/images)",
+        summary: "Serve custom theme static assets (css/images/fonts)",
         hide: true,
       },
     },
@@ -275,36 +203,14 @@ export async function themePublicRoutes(app: FastifyInstance) {
         customDomain,
       );
       const indexTemplate = pagesResolved.indexTemplate;
-
-      const { rows: episodeRows } = publicRepo.listPublishedEpisodes(podcast.id, {
-        limit: 50,
-        offset: 0,
-        sort: "newest",
-        searchPattern: null,
-        includeSubscriberOnly: false,
-        includeScheduledEpisodes: false,
-      });
-
-      const episodes = episodeRows.map((ep) => ({
-        id: ep.id,
-        title: String(ep.title || ""),
-        description: stripHtml(String(ep.description || "")),
-        slug: String(ep.slug || ""),
-        publish_at: ep.publishAt ?? null,
-        artwork_url: ep.artworkUrl ?? null,
-        duration_seconds: ep.audioDurationSec ?? null,
-      }));
-
-      const show = podcastShowFlags(podcast as unknown as Record<string, unknown>);
-      const ctx: LiquidPodcastContext = {
-        podcast: buildPodcastLiquidFields(podcast, slug),
-        episodes,
-        accentId: podcast.feedAccent,
-        show,
-        urls,
-        site: { name: siteNameFromSettings() },
+      const ctx = buildLiquidThemeContext({
+        podcast: podcast as Parameters<typeof buildLiquidThemeContext>[0]["podcast"],
+        slug,
         page: indexTemplate === "podcast" ? "podcast" : indexTemplate,
-      };
+        urls,
+        siteName: siteNameFromSettings(),
+        includeEpisodes: true,
+      });
 
       try {
         const rendered = await renderLiquidPage(resolved.root, indexTemplate, ctx);
@@ -370,9 +276,14 @@ export async function themePublicRoutes(app: FastifyInstance) {
         episodeSlug,
       );
 
-      const show = podcastShowFlags(podcast as unknown as Record<string, unknown>);
-      const ctx: LiquidPodcastContext = {
-        podcast: buildPodcastLiquidFields(podcast, slug),
+      const ctx = buildLiquidThemeContext({
+        podcast: podcast as Parameters<typeof buildLiquidThemeContext>[0]["podcast"],
+        slug,
+        page: "episode",
+        urls,
+        siteName: siteNameFromSettings(),
+        includeEpisodes: false,
+        reviewsEpisodeId: episode.id,
         episode: {
           id: episode.id,
           title: String(episode.title || ""),
@@ -382,12 +293,7 @@ export async function themePublicRoutes(app: FastifyInstance) {
           artwork_url: episode.artworkUrl ?? null,
           duration_seconds: episode.audioDurationSec ?? null,
         },
-        accentId: podcast.feedAccent,
-        show,
-        urls,
-        site: { name: siteNameFromSettings() },
-        page: "episode",
-      };
+      });
 
       try {
         const rendered = await renderLiquidPage(resolved.root, "episode", ctx);
@@ -455,38 +361,47 @@ export async function themePublicRoutes(app: FastifyInstance) {
       );
       const templateBasename = pagesResolved.templateByPublicPath[pageFile];
       if (!templateBasename) {
-        return reply.status(404).send({ error: "Not found" });
+        const notFoundTemplate = pagesResolved.notFoundTemplate;
+        if (!notFoundTemplate) {
+          return reply.status(404).send({ error: "Not found" });
+        }
+        const ctx = buildLiquidThemeContext({
+          podcast: podcast as Parameters<typeof buildLiquidThemeContext>[0]["podcast"],
+          slug,
+          page: notFoundTemplate,
+          urls,
+          siteName: siteNameFromSettings(),
+          includeEpisodes: true,
+        });
+        try {
+          const rendered = await renderLiquidPage(
+            resolved.root,
+            notFoundTemplate,
+            ctx,
+          );
+          return reply.status(404).send({
+            themeId: resolved.id,
+            html: rendered.html,
+            cssHrefs: rendered.cssHrefs,
+            accent: podcast.feedAccent || "green",
+            page: pageFile,
+            template: notFoundTemplate,
+            notFound: true,
+          });
+        } catch (err) {
+          request.log.error({ err }, "theme-render not_found failed");
+          return reply.status(404).send({ error: "Not found" });
+        }
       }
 
-      const { rows: episodeRows } = publicRepo.listPublishedEpisodes(podcast.id, {
-        limit: 50,
-        offset: 0,
-        sort: "newest",
-        searchPattern: null,
-        includeSubscriberOnly: false,
-        includeScheduledEpisodes: false,
-      });
-
-      const episodes = episodeRows.map((ep) => ({
-        id: ep.id,
-        title: String(ep.title || ""),
-        description: stripHtml(String(ep.description || "")),
-        slug: String(ep.slug || ""),
-        publish_at: ep.publishAt ?? null,
-        artwork_url: ep.artworkUrl ?? null,
-        duration_seconds: ep.audioDurationSec ?? null,
-      }));
-
-      const show = podcastShowFlags(podcast as unknown as Record<string, unknown>);
-      const ctx: LiquidPodcastContext = {
-        podcast: buildPodcastLiquidFields(podcast, slug),
-        episodes,
-        accentId: podcast.feedAccent,
-        show,
-        urls,
-        site: { name: siteNameFromSettings() },
+      const ctx = buildLiquidThemeContext({
+        podcast: podcast as Parameters<typeof buildLiquidThemeContext>[0]["podcast"],
+        slug,
         page: templateBasename,
-      };
+        urls,
+        siteName: siteNameFromSettings(),
+        includeEpisodes: true,
+      });
 
       try {
         const rendered = await renderLiquidPage(resolved.root, templateBasename, ctx);

@@ -141,7 +141,7 @@ Multi-page example:
 {
   "id": "folio",
   "name": "Folio",
-  "version": "1.1.12",
+  "version": "1.0.0",
   "index": "home",
   "pages": {
     "podcast": "episodes.html",

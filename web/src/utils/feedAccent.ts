@@ -4,12 +4,27 @@ export type FeedAccentColors = {
   accent: string;
   accentDim: string;
   accentGlow: string;
+  accentFg: string;
 };
+
+function accentForeground(hex: string): string {
+  const raw = hex.replace('#', '').trim();
+  if (raw.length !== 6) return '#ffffff';
+  const r = Number.parseInt(raw.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(raw.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(raw.slice(4, 6), 16) / 255;
+  const lin = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return luminance > 0.45 ? '#141414' : '#ffffff';
+}
+
+type FeedAccentSwatch = Omit<FeedAccentColors, 'accentFg'>;
 
 export const FEED_ACCENT_OPTIONS: Array<{
   id: FeedAccent;
   label: string;
-  colors: FeedAccentColors;
+  colors: FeedAccentSwatch;
 }> = [
   {
     id: 'green',
@@ -104,7 +119,10 @@ export const FEED_ACCENT_OPTIONS: Array<{
 ];
 
 const BY_ID = Object.fromEntries(
-  FEED_ACCENT_OPTIONS.map((o) => [o.id, o.colors]),
+  FEED_ACCENT_OPTIONS.map((o) => [
+    o.id,
+    { ...o.colors, accentFg: accentForeground(o.colors.accent) },
+  ]),
 ) as Record<FeedAccent, FeedAccentColors>;
 
 export function resolveFeedAccent(accent: string | null | undefined): FeedAccentColors {
@@ -125,6 +143,7 @@ export function feedAccentCssVars(
     '--accent': colors.accent,
     '--accent-dim': colors.accentDim,
     '--accent-glow': colors.accentGlow,
+    '--accent-fg': colors.accentFg,
     '--success': colors.accent,
   };
 }

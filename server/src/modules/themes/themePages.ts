@@ -23,7 +23,12 @@ export type ThemePageEntry = {
 
 export type ThemePagesResolution = {
   indexTemplate: string;
-  /** Extra pages (excludes index and episode). */
+  /**
+   * Template basename for unknown .html URLs when declared in theme.json.
+   * Null when the theme has no themed 404.
+   */
+  notFoundTemplate: string | null;
+  /** Extra pages (excludes index, episode, and not_found). */
   pages: ThemePageEntry[];
   /** Map of template basename → public path for Liquid urls.pages */
   pagesByTemplate: Record<string, string>;
@@ -65,11 +70,16 @@ export function resolveThemePages(themeRoot: string): ThemePagesResolution {
   const basenameSet = new Set(basenames);
 
   const indexTemplate = manifest?.index?.trim() || "podcast";
+  const notFoundRaw = manifest?.not_found?.trim() || "";
+  const notFoundTemplate =
+    notFoundRaw && basenameSet.has(notFoundRaw) ? notFoundRaw : null;
+
   if (!basenameSet.has(indexTemplate)) {
     // Fall back to podcast if index is missing (corrupt package); caller may 404.
     const fallback = basenameSet.has("podcast") ? "podcast" : basenames[0] || "podcast";
     return {
       indexTemplate: fallback,
+      notFoundTemplate: null,
       pages: [],
       pagesByTemplate: {},
       templateByPublicPath: {},
@@ -83,6 +93,7 @@ export function resolveThemePages(themeRoot: string): ThemePagesResolution {
 
   for (const template of basenames) {
     if (template === indexTemplate) continue;
+    if (notFoundTemplate && template === notFoundTemplate) continue;
     if (RESERVED_THEME_TEMPLATES.has(template)) continue;
     if (isThemePartialTemplate(template)) continue;
 
@@ -101,7 +112,13 @@ export function resolveThemePages(themeRoot: string): ThemePagesResolution {
     templateByPublicPath[publicPath] = template;
   }
 
-  return { indexTemplate, pages, pagesByTemplate, templateByPublicPath };
+  return {
+    indexTemplate,
+    notFoundTemplate,
+    pages,
+    pagesByTemplate,
+    templateByPublicPath,
+  };
 }
 
 /**
@@ -126,6 +143,22 @@ export function assertThemePagesValid(
     throw `index cannot be a partial template "${indexTemplate}"`;
   }
 
+  const notFoundTemplate = manifest.not_found?.trim() || "";
+  if (notFoundTemplate) {
+    if (!basenameSet.has(notFoundTemplate)) {
+      throw `not_found template "${notFoundTemplate}" not found in templates/`;
+    }
+    if (RESERVED_THEME_TEMPLATES.has(notFoundTemplate)) {
+      throw `not_found cannot be "${notFoundTemplate}"`;
+    }
+    if (isThemePartialTemplate(notFoundTemplate)) {
+      throw `not_found cannot be a partial template "${notFoundTemplate}"`;
+    }
+    if (notFoundTemplate === indexTemplate) {
+      throw `not_found cannot be the same as index ("${notFoundTemplate}")`;
+    }
+  }
+
   const overrides = manifest.pages ?? {};
   for (const [template, publicPath] of Object.entries(overrides)) {
     if (!basenameSet.has(template)) {
@@ -133,6 +166,9 @@ export function assertThemePagesValid(
     }
     if (template === indexTemplate) {
       throw `pages cannot override the index template "${template}"`;
+    }
+    if (notFoundTemplate && template === notFoundTemplate) {
+      throw `pages cannot expose the not_found template "${template}"`;
     }
     if (RESERVED_THEME_TEMPLATES.has(template)) {
       throw `pages cannot expose reserved template "${template}"`;
@@ -149,6 +185,7 @@ export function assertThemePagesValid(
   const usedPublicPaths = new Set<string>();
   for (const template of basenameSet) {
     if (template === indexTemplate) continue;
+    if (notFoundTemplate && template === notFoundTemplate) continue;
     if (RESERVED_THEME_TEMPLATES.has(template)) continue;
     if (isThemePartialTemplate(template)) continue;
     const publicPath = overrides[template] ?? `${template}.html`;
@@ -156,6 +193,21 @@ export function assertThemePagesValid(
       throw `Duplicate page path "${publicPath}"`;
     }
     usedPublicPaths.add(publicPath);
+  }
+}
+
+/**
+ * Validate optional manifest.preview against files present in the package.
+ * Throws a string message on failure (for ThemeImportError).
+ */
+export function assertThemePreviewValid(
+  manifest: FeedThemeManifest,
+  fileExists: (relPath: string) => boolean,
+): void {
+  const preview = manifest.preview?.trim();
+  if (!preview) return;
+  if (!fileExists(preview)) {
+    throw `preview file not found: ${preview}`;
   }
 }
 

@@ -43,6 +43,9 @@ import {
   FeedFundingSupport,
 } from '../components/Feed';
 import { LiquidFeedPage, type LiquidFeedBlocks } from '../components/Feed/LiquidFeedPage';
+import type { HarborfmActionHandlers } from '../components/Feed/harborfmActions';
+import { ShareDialog } from '../components/ShareDialog';
+import { ReviewSubmitModal } from '../components/Feed/ReviewSubmitModal';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import { useManageSubscriptionDialog } from '../hooks/useManageSubscriptionDialog';
 import { feedAccentCssVars } from '../utils/feedAccent';
@@ -63,6 +66,8 @@ export function FeedEpisode({
   const isCustomFeed = !!(podcastSlugOverride && episodeSlugOverride);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [writeReviewOpen, setWriteReviewOpen] = useState(false);
   const [showLockInfo, setShowLockInfo] = useManageSubscriptionDialog();
   const [audioLoadFailed, setAudioLoadFailed] = useState(false);
 
@@ -208,11 +213,41 @@ export function FeedEpisode({
           ? videoUrlRaw
           : `${origin}/${videoUrlRaw}`;
 
+  const liquidActions = useMemo((): HarborfmActionHandlers | undefined => {
+    if (!useLiquidLayout || !podcast || !episode) return undefined;
+    return {
+      message: canShowMessage ? () => setFeedbackOpen(true) : undefined,
+      alerts: alertsInfo?.emailSignupAvailable ? () => setAlertsOpen(true) : undefined,
+      share: shareUrl ? () => setShareOpen(true) : undefined,
+      subscribe: podcast.subscriberOnlyFeedEnabled
+        ? () => setShowLockInfo(true)
+        : undefined,
+      feedHref: `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/rss`,
+      writeReview:
+        publicConfig?.reviewsEnabled === true &&
+        podcast.feedShowReviewsEpisode !== false &&
+        canWriteReview
+          ? () => setWriteReviewOpen(true)
+          : undefined,
+    };
+  }, [
+    useLiquidLayout,
+    podcast,
+    episode,
+    canShowMessage,
+    alertsInfo?.emailSignupAvailable,
+    shareUrl,
+    podcastSlug,
+    publicConfig?.reviewsEnabled,
+    canWriteReview,
+    setShowLockInfo,
+  ]);
+
   const liquidBlocks = useMemo((): LiquidFeedBlocks => {
     if (!useLiquidLayout || !podcast || !episode) return {};
 
     const playerBlock = (
-      <div className={styles.mainCard}>
+      <div className={styles.mainCard} data-harborfm-episode-card>
         <FeedEpisodeHeader
           episode={episode}
           podcast={podcast}
@@ -499,20 +534,36 @@ export function FeedEpisode({
           podcastSlug={podcastSlug}
         />
       )}
+      {shareUrl && (
+        <ShareDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          url={shareUrl}
+          title={shareTitle}
+          embedCode={embedCode}
+        />
+      )}
+      {canWriteReview && (
+        <ReviewSubmitModal
+          open={writeReviewOpen}
+          onClose={() => setWriteReviewOpen(false)}
+          podcastSlug={podcastSlug}
+          episodeSlug={episodeSlug}
+        />
+      )}
     </>
   );
 
   if (useLiquidLayout && themeRender) {
     return (
-      <>
-        <LiquidFeedPage
-          html={themeRender.html}
-          cssHrefs={themeRender.cssHrefs}
-          accent={podcast.feedAccent}
-          blocks={liquidBlocks}
-        />
-        {modals}
-      </>
+      <LiquidFeedPage
+        html={themeRender.html}
+        cssHrefs={themeRender.cssHrefs}
+        accent={podcast.feedAccent}
+        blocks={liquidBlocks}
+        actions={liquidActions}
+        dialogs={modals}
+      />
     );
   }
 
@@ -523,7 +574,7 @@ export function FeedEpisode({
         <main>
           <FeedBreadcrumbs podcast={podcast} episode={episode} podcastSlug={podcastSlug} feedRootTo={isCustomFeed ? '/' : undefined} />
 
-          <div className={`${sharedStyles.card} ${styles.mainCard}`}>
+          <div className={`${sharedStyles.card} ${styles.mainCard}`} data-harborfm-episode-card>
             <FeedEpisodeHeader
               episode={episode}
               podcast={podcast}

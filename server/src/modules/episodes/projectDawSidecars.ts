@@ -687,7 +687,7 @@ export function buildDawLanes(clips: SegmentTrackClip[]): DawLane[] {
 }
 
 /**
- * When all unmuted faders are at or below 0 dB (typical Harbor session ducking),
+ * When all unmuted faders are at or below 0 dB (typical HarborFM session ducking),
  * scale so the loudest unmuted track is 0 dB. Preserves relative balance and
  * gives a natural Reaper fader range. Skipped if any fader is already above 0 dB.
  */

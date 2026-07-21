@@ -67,7 +67,7 @@ const RESTRICTED_KEY_PERMISSIONS = [
   {
     id: 'coupons',
     resource: 'Coupons',
-    why: 'Creates and deletes discount coupons you configure in Harbor for this show.',
+    why: 'Creates and deletes discount coupons you configure in HarborFM for this show.',
   },
   {
     id: 'customer-portal',
@@ -101,7 +101,7 @@ const RESTRICTED_KEY_PERMISSIONS = [
   },
 ] as const;
 
-/** Exact Stripe webhook events Harbor handles (select only these, not Select all). */
+/** Exact Stripe webhook events HarborFM handles (select only these, not Select all). */
 const WEBHOOK_EVENTS = [
   {
     id: 'checkout-session-completed',
@@ -146,12 +146,12 @@ const WEBHOOK_EVENTS = [
   {
     id: 'price-created',
     event: 'price.created',
-    why: 'Syncs a new Stripe price amount/currency/active state into Harbor plans when needed.',
+    why: 'Syncs a new Stripe price amount/currency/active state into HarborFM plans when needed.',
   },
   {
     id: 'price-updated',
     event: 'price.updated',
-    why: 'Syncs price amount/currency/active changes from Stripe into Harbor plans.',
+    why: 'Syncs price amount/currency/active changes from Stripe into HarborFM plans.',
   },
 ] as const;
 
@@ -997,7 +997,7 @@ export function StripePaymentsSection({
               <h3 className={styles.wizardTitle}>Verify your keys</h3>
               <p className={styles.wizardHelp}>
                 We check that Stripe accepts your restricted and publishable keys, then probe Write
-                access for each permission Harbor needs. Fake IDs are used so nothing is created in
+                access for each permission HarborFM needs. Fake IDs are used so nothing is created in
                 your Stripe account.
               </p>
               <div className={styles.verifyPanel}>

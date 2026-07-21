@@ -31,6 +31,7 @@ export type PublicReviewDto = {
 
 export type ReviewsListResponse = {
   reviews: PublicReviewDto[];
+  hasMore: boolean;
 };
 
 export type AdminReviewDto = {

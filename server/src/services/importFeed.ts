@@ -595,7 +595,6 @@ function parseTranscriptUrl(
     const url = attrString(rec, "@_url");
     if (!url) continue;
     const type = attrString(rec, "@_type").toLowerCase();
-    // Prefer SRT (Harbor emit); accept any if only one
     if (!type || type.includes("srt") || type.includes("text/plain")) {
       return normalizeUrl(baseUrl, url);
     }
@@ -1096,7 +1095,7 @@ function itemToEpisode(
     textOfAny(item["updated"]) ||
     null;
   const pubDate = normalizeDateString(pubDateRaw);
-  // Prefer podcast:season / podcast:episode when present (Harbor emits both).
+  // Prefer podcast:season / podcast:episode when present (HarborFM emits both).
   const seasonRaw =
     textOfAny(item["podcast:season"] ?? item["season"]) ||
     textOfAny(item["itunes:season"]) ||
@@ -1337,7 +1336,7 @@ export async function fetchImportTextUrl(
 }
 
 /**
- * Parse Podcast 2.0 chapters JSON into Harbor final_markers shape.
+ * Parse Podcast 2.0 chapters JSON into HarborFM final_markers shape.
  */
 export function parsePodcastChaptersJson(
   body: string,

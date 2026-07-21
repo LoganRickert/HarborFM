@@ -20,7 +20,7 @@
   --folio-pad: 1.25rem;
   --folio-sans: "Outfit", "Segoe UI", "Helvetica Neue", sans-serif;
 
-  /* Remap Harbor tokens for light chrome */
+  /* Remap HarborFM tokens for light chrome */
   --bg: var(--folio-bg);
   --bg-elevated: var(--folio-surface);
   --bg-muted: var(--folio-surface-2);
@@ -90,10 +90,120 @@
   margin: 0 auto;
   padding: 0.8rem max(var(--folio-pad), env(safe-area-inset-left, 0px));
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.85rem 1.5rem;
   align-items: center;
   justify-content: space-between;
+}
+
+.folio-nav-menu {
+  margin: 0;
+  min-width: 0;
+}
+
+.folio-nav-menu__toggle {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--folio-line);
+  background: var(--folio-surface);
+  color: var(--folio-ink);
+}
+
+.folio-nav-menu__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.folio-nav-menu__icon,
+.folio-nav-menu__icon::before,
+.folio-nav-menu__icon::after {
+  display: block;
+  width: 1.1rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  position: relative;
+}
+
+.folio-nav-menu__icon::before,
+.folio-nav-menu__icon::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+
+.folio-nav-menu__icon::before { top: -6px; }
+.folio-nav-menu__icon::after { top: 6px; }
+
+.folio-nav-menu[open] .folio-nav-menu__toggle {
+  background: color-mix(in srgb, var(--accent) 14%, white);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--folio-line));
+}
+
+.folio-nav-menu nav {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 25;
+  padding: 0.75rem max(var(--folio-pad), env(safe-area-inset-left, 0px)) 1rem;
+  background: color-mix(in srgb, var(--folio-surface) 96%, transparent);
+  border-bottom: 1px solid var(--folio-line);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: var(--folio-shadow);
+}
+
+.folio-nav-menu .folio-nav {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+}
+
+.folio-nav-menu .folio-nav a {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+@media (min-width: 760px) {
+  .folio-nav-menu {
+    position: static;
+  }
+
+  .folio-nav-menu__toggle {
+    display: none;
+  }
+
+  /* Closed <details> stays hidden via ::details-content in Chromium; force open on desktop. */
+  .folio-nav-menu::details-content {
+    display: contents;
+    content-visibility: visible;
+    height: auto;
+    overflow: visible;
+  }
+
+  .folio-nav-menu nav {
+    position: static;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    display: block !important;
+  }
+
+  .folio-nav-menu .folio-nav {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .folio-nav-menu .folio-nav a {
+    width: auto;
+  }
 }
 
 .folio-brand {
@@ -381,10 +491,33 @@
   align-items: center;
 }
 
+.folio-footer__brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
 .folio-footer__brand {
   font-weight: 700;
   color: var(--folio-ink);
   letter-spacing: -0.02em;
+}
+
+.folio-footer__theme {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--folio-soft);
+}
+
+.folio-footer__theme a {
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.folio-footer__theme a:hover {
+  text-decoration: underline;
 }
 
 .folio-footer__nav {
@@ -403,7 +536,7 @@
   color: var(--accent);
 }
 
-/* ── Harbor mounts ───────────────────────────────────────── */
+/* ── HarborFM mounts ───────────────────────────────────────── */
 
 [data-harborfm-block] {
   display: block;
@@ -415,7 +548,7 @@
   margin-bottom: 1rem;
 }
 
-/* Hide Harbor site header; Folio has its own top nav */
+/* Hide HarborFM site header; Folio has its own top nav */
 .folio-theme [data-harborfm-block="site_header"] {
   display: none !important;
 }
@@ -501,8 +634,8 @@
   box-shadow: none !important;
 }
 
-/* Episodes list */
-.folio-theme [data-harborfm-block="episodes"] ul {
+/* episodes list skin */
+.folio-theme [data-harborfm-episodes-list] {
   list-style: none !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -512,7 +645,8 @@
   border: none !important;
 }
 
-.folio-theme [data-harborfm-block="episodes"] li {
+.folio-theme [data-harborfm-episode-item] {
+  min-width: 0 !important;
   background: var(--folio-surface) !important;
   border: 1px solid var(--folio-line) !important;
   border-radius: var(--folio-radius) !important;
@@ -521,35 +655,81 @@
   transition: border-color 140ms ease, box-shadow 140ms ease !important;
 }
 
-.folio-theme [data-harborfm-block="episodes"] li:hover {
+.folio-theme [data-harborfm-episode-item]:hover {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--folio-line)) !important;
   box-shadow: var(--folio-shadow-hover) !important;
   background: var(--folio-surface) !important;
+  transform: none !important;
 }
 
-.folio-theme [data-harborfm-block="episodes"] h3 {
+.folio-theme [data-harborfm-episode-item-header] {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 0.85rem !important;
+  min-width: 0 !important;
+}
+
+.folio-theme [data-harborfm-episode-item-title] {
+  min-width: 0 !important;
   color: var(--folio-ink) !important;
+  font-family: var(--folio-sans) !important;
   font-size: 1.05rem !important;
   font-weight: 700 !important;
   letter-spacing: -0.02em !important;
+  margin: 0 !important;
+  line-height: 1.3 !important;
 }
 
-.folio-theme [data-harborfm-block="episodes"] a {
+.folio-theme [data-harborfm-episode-item-meta] {
+  color: var(--folio-muted) !important;
+  font-size: 0.8rem !important;
+}
+
+.folio-theme [data-harborfm-episode-item-link] {
+  flex: 0 0 auto !important;
   border-radius: 999px !important;
   font-family: var(--folio-sans) !important;
   text-transform: none !important;
   letter-spacing: -0.01em !important;
   font-weight: 650 !important;
+  background: var(--accent) !important;
+  color: var(--accent-fg, #fff) !important;
+  border: none !important;
+  padding: 0.4rem 0.85rem !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
 }
 
-.folio-theme [data-harborfm-block="episodes"] button {
+.folio-theme [data-harborfm-episode-item-link]:hover {
+  filter: brightness(1.05) !important;
+}
+
+.folio-theme [data-harborfm-episode-item-description] {
+  min-width: 0 !important;
+  color: var(--folio-muted) !important;
+  margin: 0.6rem 0 0 !important;
+  line-height: 1.55 !important;
+  overflow-wrap: anywhere !important;
+}
+
+.folio-theme [data-harborfm-episode-item-type] {
+  border-radius: 999px !important;
+  font-family: var(--folio-sans) !important;
+  background: color-mix(in srgb, var(--accent) 12%, #fff) !important;
+  color: var(--accent) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--folio-line)) !important;
+}
+
+.folio-theme [data-harborfm-episodes-load-more] {
   border-radius: 999px !important;
   font-family: var(--folio-sans) !important;
   text-transform: none !important;
   letter-spacing: -0.01em !important;
-  background: var(--accent) !important;
-  color: #fff !important;
-  border: none !important;
+  font-weight: 650 !important;
+  background: var(--folio-surface) !important;
+  color: var(--folio-ink) !important;
+  border: 1px solid var(--folio-line) !important;
   box-shadow: none !important;
 }
 
@@ -598,7 +778,7 @@
 
 .folio-theme [data-harborfm-block="links"] a:hover {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--accent-fg, #fff) !important;
   box-shadow: none !important;
   text-decoration: none !important;
 }
@@ -712,7 +892,7 @@
 .folio-theme [data-harborfm-block="cast"] button {
   border-radius: 999px !important;
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--accent-fg, #fff) !important;
   border: none !important;
   font-family: var(--folio-sans) !important;
   font-size: 0.8125rem !important;
@@ -723,24 +903,109 @@
   box-shadow: none !important;
 }
 
-/* Podroll / reviews / funding */
-.folio-theme [data-harborfm-block="podroll"] h2,
-.folio-theme [data-harborfm-block="reviews"] h2 {
+/* Podroll / funding */
+.folio-theme [data-harborfm-block="podroll"] h2 {
   display: none;
 }
 
 .folio-theme [data-harborfm-block="podroll"] a,
-.folio-theme [data-harborfm-block="reviews"] li,
 .folio-theme [data-harborfm-block="funding"] {
   border-radius: var(--folio-radius) !important;
 }
 
-.folio-theme [data-harborfm-block="reviews"] button,
 .folio-theme [data-harborfm-block="funding"] a {
   border-radius: 999px !important;
   font-family: var(--folio-sans) !important;
   text-transform: none !important;
   letter-spacing: -0.01em !important;
+}
+
+/* Reviews: listener letters (mounted ReviewsCard) */
+.folio-theme [data-harborfm-block="reviews"] > * {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.folio-theme [data-harborfm-block="reviews"] > *::before {
+  display: none !important;
+}
+.folio-theme [data-harborfm-block="reviews"] h2 {
+  display: none !important;
+}
+.folio-theme [data-harborfm-block="reviews"] > * > div:first-child {
+  display: flex !important;
+  justify-content: flex-end !important;
+  margin-bottom: 1rem !important;
+}
+.folio-theme [data-harborfm-block="reviews"] ul {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  gap: 1rem !important;
+}
+.folio-theme [data-harborfm-block="reviews"] li {
+  background: var(--folio-surface) !important;
+  border: 1px solid var(--folio-line) !important;
+  border-radius: var(--folio-radius) !important;
+  box-shadow: var(--folio-shadow) !important;
+  padding: 1.25rem 1.35rem 1.15rem !important;
+  position: relative !important;
+}
+.folio-theme [data-harborfm-block="reviews"] li::before {
+  content: "“" !important;
+  position: absolute !important;
+  top: 0.55rem !important;
+  left: 0.85rem !important;
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-size: 2.75rem !important;
+  line-height: 1 !important;
+  color: color-mix(in srgb, var(--accent) 55%, var(--folio-soft)) !important;
+  pointer-events: none !important;
+}
+.folio-theme [data-harborfm-block="reviews"] li > div:first-child {
+  padding-left: 1.5rem !important;
+}
+.folio-theme [data-harborfm-block="reviews"] li p {
+  font-family: Georgia, "Times New Roman", serif !important;
+  font-size: 1.05rem !important;
+  line-height: 1.55 !important;
+  color: var(--folio-ink) !important;
+}
+/* Write-review CTA only. Do not restyle star / expand / load-more as the same CTA. */
+.folio-theme [data-harborfm-reviews-write] {
+  border-radius: 999px !important;
+  font-family: var(--folio-sans) !important;
+  text-transform: none !important;
+  letter-spacing: -0.01em !important;
+  background: var(--accent) !important;
+  color: var(--accent-fg, #fff) !important;
+  border: none !important;
+  font-weight: 650 !important;
+  padding: 0.55rem 1.1rem !important;
+}
+.folio-theme [data-harborfm-reviews-load-more] {
+  border-radius: 999px !important;
+  font-family: var(--folio-sans) !important;
+  text-transform: none !important;
+  letter-spacing: -0.01em !important;
+  font-weight: 650 !important;
+  background: var(--folio-surface) !important;
+  color: var(--folio-ink) !important;
+  border: 1px solid var(--folio-line) !important;
+  box-shadow: none !important;
+}
+.folio-theme [data-harborfm-block="reviews"] [aria-label$="out of 5 stars"] button,
+.folio-theme [data-harborfm-review-expand] {
+  background: transparent !important;
+  border: none !important;
+  padding: 0.25rem 0.5rem !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  color: var(--accent) !important;
 }
 
 .folio-theme [data-harborfm-block="funding"] p {
@@ -753,26 +1018,151 @@
 }
 
 .folio-theme [data-harborfm-block="player"] {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* Liquid hero owns the episode title; player is a bookplate control strip. */
+.folio-theme .folio-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin: 0 0 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--folio-muted);
+}
+
+.folio-theme .folio-crumbs a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.folio-theme .folio-crumbs a:hover {
+  text-decoration: underline;
+}
+
+.folio-theme [data-harborfm-episode-title] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.folio-theme [data-harborfm-episode-card] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.folio-theme [data-harborfm-episode-header] {
+  margin: 0 0 1rem !important;
+  padding: 0 !important;
+  border: 0 !important;
+  gap: 0 !important;
+}
+
+.folio-theme [data-harborfm-episode-row] {
+  display: grid !important;
+  grid-template-columns: 7.5rem 1fr !important;
+  gap: 0 !important;
+  align-items: stretch !important;
+  border: 1px solid var(--folio-line) !important;
+  border-radius: 0 !important;
+  overflow: hidden;
   background: var(--folio-surface);
-  border: 1px solid var(--folio-line);
-  border-radius: var(--folio-radius);
   box-shadow: var(--folio-shadow);
-  padding: 1.25rem;
 }
 
-.folio-theme [data-harborfm-block="breadcrumbs"] {
-  margin-bottom: 0.65rem;
+.folio-theme [data-harborfm-episode-artwork] {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 7.5rem;
+  border-radius: 0 !important;
+  border: 0 !important;
+  border-right: 1px solid var(--folio-line) !important;
+  box-shadow: none !important;
+  object-fit: cover !important;
 }
 
-.folio-theme [data-harborfm-block="breadcrumbs"] a {
-  color: var(--accent) !important;
-  font-weight: 600 !important;
-  text-decoration: none !important;
+.folio-theme [data-harborfm-episode-body] {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 0.65rem !important;
+  padding: 1rem 1.15rem !important;
+  min-width: 0 !important;
+}
+
+.folio-theme [data-harborfm-episode-meta] {
+  margin: 0 !important;
+  color: var(--folio-muted) !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.folio-theme [data-harborfm-episode-actions] {
+  margin: 0 !important;
+  gap: 0.45rem !important;
+}
+
+.folio-theme [data-harborfm-episode-actions] > div {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.4rem !important;
+}
+
+.folio-theme [data-harborfm-episode-actions] button {
+  border-radius: 0 !important;
+  border: 1px solid var(--folio-line) !important;
+  background: color-mix(in srgb, var(--accent) 8%, white) !important;
+  color: var(--folio-ink) !important;
+  font-weight: 650 !important;
+  font-size: 0.78rem !important;
+  letter-spacing: 0.02em;
+  padding: 0.45rem 0.75rem !important;
+}
+
+.folio-theme [data-harborfm-episode-actions] button:hover {
+  background: color-mix(in srgb, var(--accent) 16%, white) !important;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--folio-line)) !important;
+}
+
+.folio-theme [data-harborfm-episode-card] > *:not([data-harborfm-episode-header]) {
+  border: 1px solid var(--folio-line);
+  border-top: 0;
+  padding: 1rem 1.15rem;
+  background: var(--folio-surface);
+}
+
+@media (max-width: 640px) {
+  .folio-theme [data-harborfm-episode-row] {
+    grid-template-columns: 1fr !important;
+  }
+  .folio-theme [data-harborfm-episode-artwork] {
+    min-height: 10rem;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--folio-line) !important;
+  }
 }
 
 /*
- * Harbor dialogs (Message / Get Alerts) portal to document.body, so they do not
- * inherit .folio-theme tokens. Theme CSS can target [data-harborfm-dialog="…"].
+ * HarborFM dialogs (Message / Get Alerts). Prefer .folio-theme […] once dialogs
+ * render under the themed dialog host; keep unscoped rules for older clients.
  */
 [data-harborfm-dialog="feedback"],
 [data-harborfm-dialog="alerts"] {
@@ -827,7 +1217,7 @@
 [data-harborfm-dialog="feedback"] button[aria-label="Send message"],
 [data-harborfm-dialog="alerts"] button[aria-label="Send message"] {
   background: var(--accent) !important;
-  color: #fff !important;
+  color: var(--accent-fg, #fff) !important;
   border: none !important;
   font-weight: 650 !important;
 }
@@ -844,4 +1234,13 @@
   background: color-mix(in srgb, var(--accent) 12%, white) !important;
   border-color: color-mix(in srgb, var(--accent) 35%, #e2e8f0) !important;
   color: #0f172a !important;
+}
+
+/* Stripe plan cards stay rectangular; do not inherit pill CTAs */
+.folio-theme [data-harborfm-dialog="subscription"] [data-harborfm-plan-card] {
+  border-radius: 10px !important;
+  background: var(--bg, transparent) !important;
+  color: var(--text, inherit) !important;
+  border: 1px solid var(--border, currentColor) !important;
+  font-weight: inherit !important;
 }

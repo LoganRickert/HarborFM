@@ -2,7 +2,7 @@ import http from 'http';
 
 /**
  * Tiny local HTTP server that records inbound POSTs (for email webhooks / alert destinations).
- * Always responds 200 so Harbor treats deliveries as successful.
+ * Always responds 200 so HarborFM treats deliveries as successful.
  *
  * @returns {Promise<{
  *   baseUrl: string,

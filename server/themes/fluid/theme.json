@@ -1,6 +1,10 @@
 {
   "id": "fluid",
   "name": "Fluid",
-  "version": "1.0.5",
-  "index": "podcast"
+  "version": "1.0.0",
+  "description": "Full-bleed single-page feed with a strong accent strip.",
+  "index": "podcast",
+  "preview": "images/preview.jpg",
+  "homepage": "https://app.harborfm.com/feed/preview-fluid",
+  "not_found": "not_found"
 }

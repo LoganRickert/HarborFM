@@ -557,6 +557,7 @@ export interface ThemeRenderResponse {
   indexTemplate?: string;
   page?: string;
   template?: string;
+  notFound?: boolean;
 }
 
 export function getPodcastThemeRender(slug: string): Promise<ThemeRenderResponse> {
@@ -572,11 +573,36 @@ export function getEpisodeThemeRender(
   );
 }
 
-export function getThemePageRender(
+/**
+ * Fetch a theme extra page. Unknown pages may still resolve when the theme
+ * declares `not_found`: HTTP 404 with a themed HTML body (`notFound: true`).
+ */
+export async function getThemePageRender(
   slug: string,
   pageFile: string,
 ): Promise<ThemeRenderResponse> {
-  return apiGet<ThemeRenderResponse>(
-    `/public/podcasts/${encodeURIComponent(slug)}/theme-render/pages/${encodeURIComponent(pageFile)}`,
-  );
+  const path = `/public/podcasts/${encodeURIComponent(slug)}/theme-render/pages/${encodeURIComponent(pageFile)}`;
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, { method: 'GET', credentials: 'include' });
+  } catch {
+    throw Object.assign(new Error('Network error'), { status: 0 });
+  }
+  if (res.status === 404) {
+    const body = (await res.json().catch(() => null)) as
+      | (ThemeRenderResponse & { error?: string })
+      | null;
+    if (body && typeof body.html === 'string' && body.notFound) {
+      return body;
+    }
+    throw Object.assign(new Error(body?.error || 'Not found'), { status: 404 });
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    throw Object.assign(
+      new Error(err.error || err.message || res.statusText || 'Something went wrong'),
+      { status: res.status },
+    );
+  }
+  return res.json() as Promise<ThemeRenderResponse>;
 }

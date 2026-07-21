@@ -1,0 +1,10 @@
+<footer class="fluid-theme-credit" aria-label="Theme">
+  <div class="fluid-inner">
+    {% if theme.homepage != "" %}
+      <a href="{{ theme.homepage | escape }}" rel="noopener noreferrer">{{ theme.name | escape }}</a>
+      theme for HarborFM
+    {% else %}
+      {{ theme.name | escape }} theme for HarborFM
+    {% endif %}
+  </div>
+</footer>

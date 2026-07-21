@@ -1,6 +1,16 @@
 <footer class="folio-footer">
   <div class="folio-footer__inner">
-    <span class="folio-footer__brand">{{ podcast.title }}</span>
+    <div class="folio-footer__brand-block">
+      <span class="folio-footer__brand">{{ podcast.title }}</span>
+      {% if theme.homepage != "" %}
+        <p class="folio-footer__theme">
+          <a href="{{ theme.homepage | escape }}" rel="noopener noreferrer">{{ theme.name | escape }}</a>
+          theme
+        </p>
+      {% else %}
+        <p class="folio-footer__theme">{{ theme.name | escape }} theme</p>
+      {% endif %}
+    </div>
     <nav class="folio-footer__nav" aria-label="Footer">
       <a href="{{ urls.home }}">Home</a>
       <a href="{{ urls.pages.podcast }}">Episodes</a>

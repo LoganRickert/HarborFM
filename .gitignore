@@ -32,3 +32,5 @@ docker-compose.override.yml
 *.tsbuildinfo
 wiki/
 HarborFM.wiki/
+harborfm-themes/
+.stock-photos/

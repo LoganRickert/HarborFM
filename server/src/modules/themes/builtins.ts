@@ -133,6 +133,22 @@ export function syncServerThemesFromDisk(): { upserted: number; removed: number 
   return { upserted: disk.length, removed };
 }
 
+function descriptionForThemeId(themeId: string): string {
+  const fromDisk = readThemeManifest(getServerThemeDir(themeId))?.description?.trim();
+  if (fromDisk) return fromDisk;
+  const shipped = readThemeManifest(join(getShippedThemesRoot(), themeId))?.description?.trim();
+  if (shipped) return shipped;
+  return BUILTIN_BLURBS[themeId] ?? "Server page theme.";
+}
+
+function homepageForThemeId(themeId: string): string | undefined {
+  const fromDisk = readThemeManifest(getServerThemeDir(themeId))?.homepage?.trim();
+  if (fromDisk) return fromDisk;
+  const shipped = readThemeManifest(join(getShippedThemesRoot(), themeId))?.homepage?.trim();
+  if (shipped) return shipped;
+  return undefined;
+}
+
 export function listBuiltinThemes(): FeedBuiltinThemeListItem[] {
   // Prefer DB (source of truth after sync); fall back to disk if sync has not run yet.
   const fromDb = repo.listServerThemes();
@@ -141,14 +157,16 @@ export function listBuiltinThemes(): FeedBuiltinThemeListItem[] {
       id: theme.id,
       name: theme.name,
       version: theme.version,
-      description: BUILTIN_BLURBS[theme.id] ?? "Server page theme.",
+      description: descriptionForThemeId(theme.id),
+      homepage: homepageForThemeId(theme.id),
     }));
   }
   return listDiskBuiltinThemes().map((theme) => ({
     id: theme.id,
     name: theme.name,
     version: theme.version,
-    description: BUILTIN_BLURBS[theme.id] ?? "Server page theme.",
+    description: descriptionForThemeId(theme.id),
+    homepage: homepageForThemeId(theme.id),
   }));
 }
 

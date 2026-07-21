@@ -8,6 +8,11 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { feedAccentCssVars } from '../../utils/feedAccent';
+import {
+  bindHarborfmActions,
+  type HarborfmActionHandlers,
+} from './harborfmActions';
+import { LiquidThemeChromeProvider } from './LiquidThemeChrome';
 import styles from './LiquidFeedPage.module.css';
 
 export type HarborfmBlockName =
@@ -39,19 +44,45 @@ const HARBORFM_BLOCK_NAMES: HarborfmBlockName[] = [
 
 export type LiquidFeedBlocks = Partial<Record<HarborfmBlockName, ReactNode>>;
 
+type ThemeHeadLink = {
+  rel: string;
+  href: string;
+  crossOrigin: string | null;
+};
+
 function parseThemeDocument(fullHtml: string): {
   bodyHtml: string;
   bodyClassName: string;
   inlineStyles: string[];
+  headLinks: ThemeHeadLink[];
 } {
   const doc = new DOMParser().parseFromString(fullHtml, 'text/html');
   const inlineStyles = Array.from(doc.head.querySelectorAll('style'))
     .map((el) => el.textContent ?? '')
     .filter(Boolean);
+  const headLinks: ThemeHeadLink[] = [];
+  for (const el of Array.from(doc.head.querySelectorAll('link[href]'))) {
+    const rel = (el.getAttribute('rel') || '').trim().toLowerCase();
+    const href = (el.getAttribute('href') || '').trim();
+    if (!href) continue;
+    if (
+      rel === 'stylesheet' ||
+      rel === 'preconnect' ||
+      rel === 'dns-prefetch' ||
+      rel.split(/\s+/).includes('stylesheet')
+    ) {
+      headLinks.push({
+        rel: el.getAttribute('rel') || 'stylesheet',
+        href,
+        crossOrigin: el.getAttribute('crossorigin'),
+      });
+    }
+  }
   return {
     bodyHtml: doc.body.innerHTML,
     bodyClassName: doc.body.className || '',
     inlineStyles,
+    headLinks,
   };
 }
 
@@ -60,22 +91,41 @@ export interface LiquidFeedPageProps {
   cssHrefs: string[];
   accent?: string | null;
   blocks: LiquidFeedBlocks;
+  /** Handlers for `[data-harborfm-action]` controls in theme HTML. */
+  actions?: HarborfmActionHandlers;
+  /**
+   * Share / Subscribe / Message / Alerts / Review dialogs.
+   * Rendered under a themed host (outside the Liquid body wipe) so theme CSS
+   * can style `[data-harborfm-dialog]` with remapped tokens.
+   */
+  dialogs?: ReactNode;
 }
 
-export function LiquidFeedPage({ html, cssHrefs, accent, blocks }: LiquidFeedPageProps) {
+export function LiquidFeedPage({
+  html,
+  cssHrefs,
+  accent,
+  blocks,
+  actions,
+  dialogs,
+}: LiquidFeedPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mountNodes, setMountNodes] = useState<
     Partial<Record<HarborfmBlockName, Element>>
   >({});
+  const [domReady, setDomReady] = useState(0);
   const parsed = useMemo(() => parseThemeDocument(html), [html]);
   const inlineStylesKey = parsed.inlineStyles.join('\n');
+  const headLinksKey = parsed.headLinks
+    .map((l) => `${l.rel}|${l.href}|${l.crossOrigin ?? ''}`)
+    .join('\n');
+  const accentStyle = feedAccentCssVars(accent);
 
   useEffect(() => {
     const links: HTMLLinkElement[] = [];
-    for (const href of cssHrefs) {
+    const appendStylesheet = (href: string) => {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      // Root-relative: "api/..." must become "/api/..." or the browser resolves under /feed/...
       const normalized =
         href.startsWith('http://') || href.startsWith('https://') || href.startsWith('/')
           ? href
@@ -83,11 +133,26 @@ export function LiquidFeedPage({ html, cssHrefs, accent, blocks }: LiquidFeedPag
       link.href = normalized;
       document.head.appendChild(link);
       links.push(link);
+    };
+
+    for (const headLink of parsed.headLinks) {
+      const link = document.createElement('link');
+      link.rel = headLink.rel;
+      link.href = headLink.href;
+      if (headLink.crossOrigin != null) {
+        link.crossOrigin = headLink.crossOrigin === '' ? 'anonymous' : headLink.crossOrigin;
+      }
+      document.head.appendChild(link);
+      links.push(link);
+    }
+
+    for (const href of cssHrefs) {
+      appendStylesheet(href);
     }
     return () => {
       for (const link of links) link.remove();
     };
-  }, [cssHrefs]);
+  }, [cssHrefs, headLinksKey, parsed.headLinks]);
 
   useEffect(() => {
     const styleEls: HTMLStyleElement[] = [];
@@ -114,7 +179,14 @@ export function LiquidFeedPage({ html, cssHrefs, accent, blocks }: LiquidFeedPag
       if (mountEl) next[blockName] = mountEl;
     }
     setMountNodes(next);
+    setDomReady((n) => n + 1);
   }, [parsed.bodyHtml]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !actions) return;
+    return bindHarborfmActions(container, actions);
+  }, [actions, domReady, parsed.bodyHtml]);
 
   const portals = HARBORFM_BLOCK_NAMES.map((blockName) => {
     const el = mountNodes[blockName];
@@ -123,14 +195,26 @@ export function LiquidFeedPage({ html, cssHrefs, accent, blocks }: LiquidFeedPag
     return createPortal(node, el, blockName);
   });
 
+  const themeClass = parsed.bodyClassName;
+
   return (
-    <>
+    <LiquidThemeChromeProvider themeClassName={themeClass}>
       <div
-        className={[styles.liquidFeed, parsed.bodyClassName].filter(Boolean).join(' ')}
-        style={feedAccentCssVars(accent)}
-        ref={containerRef}
-      />
-      {portals}
-    </>
+        className={[styles.liquidFeed, themeClass].filter(Boolean).join(' ')}
+        style={accentStyle}
+      >
+        <div className={styles.liquidBody} ref={containerRef} />
+        {portals}
+      </div>
+      {dialogs != null ? (
+        <div
+          className={[styles.dialogRoot, themeClass].filter(Boolean).join(' ')}
+          style={accentStyle}
+          data-harborfm-dialog-root=""
+        >
+          {dialogs}
+        </div>
+      ) : null}
+    </LiquidThemeChromeProvider>
   );
 }

@@ -1,7 +1,12 @@
-import type { PublicReviewDto, AdminReviewDto, AdminReviewsListResponse } from '@harborfm/shared';
+import type {
+  PublicReviewDto,
+  AdminReviewDto,
+  AdminReviewsListResponse,
+  ReviewsListResponse,
+} from '@harborfm/shared';
 import { apiGet, apiPost, apiPatch, apiDelete } from './client';
 
-export type { PublicReviewDto, AdminReviewDto, AdminReviewsListResponse };
+export type { PublicReviewDto, AdminReviewDto, AdminReviewsListResponse, ReviewsListResponse };
 
 export interface SubmitReviewBody {
   podcastSlug: string;
@@ -13,10 +18,6 @@ export interface SubmitReviewBody {
   captchaToken?: string;
 }
 
-export interface PublicReviewsResponse {
-  reviews: PublicReviewDto[];
-}
-
 export function submitReview(body: SubmitReviewBody) {
   return apiPost<{ ok: boolean; id?: string; verificationRequired?: boolean }>('/public/reviews', body);
 }
@@ -24,13 +25,13 @@ export function submitReview(body: SubmitReviewBody) {
 export function getPublicReviews(
   podcastSlug: string,
   options?: { episodeSlug?: string; limit?: number; offset?: number }
-): Promise<PublicReviewsResponse> {
+): Promise<ReviewsListResponse> {
   const params = new URLSearchParams();
   if (options?.episodeSlug) params.set('episodeSlug', options.episodeSlug);
   if (options?.limit != null) params.set('limit', String(options.limit));
   if (options?.offset != null) params.set('offset', String(options.offset));
   const q = params.toString();
-  return apiGet<PublicReviewsResponse>(
+  return apiGet<ReviewsListResponse>(
     `/public/podcasts/${encodeURIComponent(podcastSlug)}/reviews${q ? `?${q}` : ''}`
   );
 }

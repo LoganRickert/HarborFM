@@ -28,8 +28,12 @@ import {
   ReviewsCard,
   FeedPodrollCard,
   FeedFundingSupport,
+  SubscriptionInfoDialog,
 } from '../components/Feed';
 import { LiquidFeedPage, type LiquidFeedBlocks } from '../components/Feed/LiquidFeedPage';
+import type { HarborfmActionHandlers } from '../components/Feed/harborfmActions';
+import { ShareDialog } from '../components/ShareDialog';
+import { ReviewSubmitModal } from '../components/Feed/ReviewSubmitModal';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import sharedStyles from '../styles/shared.module.css';
@@ -55,6 +59,9 @@ export function FeedThemePage({
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
+  const [writeReviewOpen, setWriteReviewOpen] = useState(false);
 
   useEffect(() => {
     queryClient.cancelQueries({ queryKey: ['activeImport'] });
@@ -152,6 +159,7 @@ export function FeedThemePage({
   }, []);
 
   const siteName = getSiteDisplayName(publicConfig?.whiteLabel);
+  const pageTitle = podcast ? `${podcast.title} | ${siteName}` : undefined;
   const podcastArtwork = podcast ? getPublicPodcastArtworkUrl(podcast) : null;
   const pageUrl =
     typeof window !== 'undefined'
@@ -160,7 +168,7 @@ export function FeedThemePage({
   const isCustomDomain = !!publicConfig?.customFeedSlug;
 
   useMeta({
-    title: podcast ? `${podcast.title} | ${siteName}` : undefined,
+    title: pageTitle,
     siteName: podcast ? siteName : undefined,
     description: podcast?.description?.trim() || undefined,
     image: podcastArtwork ?? undefined,
@@ -172,6 +180,44 @@ export function FeedThemePage({
     podcast && (!podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug));
   const canShowMessage =
     podcast && (!podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug));
+  const hasSubscriberFeatures = Boolean(podcast?.subscriberOnlyFeedEnabled);
+  const isSubscriberOnly = Boolean(
+    podcast?.subscriberOnlyFeedEnabled && podcast?.publicFeedDisabled,
+  );
+  const shareUrl =
+    podcast?.canonicalFeedUrl ??
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}`
+      : undefined);
+  const rssUrl = podcast
+    ? `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/rss`
+    : null;
+
+  const liquidActions = useMemo((): HarborfmActionHandlers | undefined => {
+    if (!podcast) return undefined;
+    return {
+      message: canShowMessage ? () => setFeedbackOpen(true) : undefined,
+      alerts: alertsInfo?.emailSignupAvailable ? () => setAlertsOpen(true) : undefined,
+      share: shareUrl ? () => setShareOpen(true) : undefined,
+      subscribe: hasSubscriberFeatures ? () => setSubscribeOpen(true) : undefined,
+      feedHref: rssUrl,
+      writeReview:
+        publicConfig?.reviewsEnabled === true &&
+        podcast.feedShowReviewsPodcast !== false &&
+        canWriteReview
+          ? () => setWriteReviewOpen(true)
+          : undefined,
+    };
+  }, [
+    podcast,
+    canShowMessage,
+    alertsInfo?.emailSignupAvailable,
+    shareUrl,
+    hasSubscriberFeatures,
+    rssUrl,
+    publicConfig?.reviewsEnabled,
+    canWriteReview,
+  ]);
 
   const liquidBlocks = useMemo((): LiquidFeedBlocks => {
     if (!podcast || !themeRender) return {};
@@ -192,7 +238,7 @@ export function FeedThemePage({
               ? `${window.location.origin}${window.location.pathname}`
               : undefined)
           }
-          shareTitle={`${podcast.title} - HarborFM`}
+          shareTitle={pageTitle}
         />
       ),
       search: (
@@ -257,6 +303,7 @@ export function FeedThemePage({
     };
   }, [
     podcast,
+    pageTitle,
     themeRender,
     podcastSlug,
     searchQuery,
@@ -351,26 +398,52 @@ export function FeedThemePage({
   }
 
   return (
-    <>
-      <LiquidFeedPage
-        html={themeRender.html}
-        cssHrefs={themeRender.cssHrefs}
-        accent={podcast.feedAccent}
-        blocks={liquidBlocks}
-      />
-      <FeedbackModal
-        open={feedbackOpen}
-        onOpenChange={setFeedbackOpen}
-        context={{ podcastSlug, podcastTitle: podcast.title }}
-        accent={podcast.feedAccent}
-      />
-      <GetAlertsModal
-        open={alertsOpen}
-        onOpenChange={setAlertsOpen}
-        podcastSlug={podcastSlug}
-        podcastTitle={podcast.title}
-        accent={podcast.feedAccent}
-      />
-    </>
+    <LiquidFeedPage
+      html={themeRender.html}
+      cssHrefs={themeRender.cssHrefs}
+      accent={podcast.feedAccent}
+      blocks={liquidBlocks}
+      actions={liquidActions}
+      dialogs={
+        <>
+          <FeedbackModal
+            open={feedbackOpen}
+            onOpenChange={setFeedbackOpen}
+            context={{ podcastSlug, podcastTitle: podcast.title }}
+            accent={podcast.feedAccent}
+          />
+          <GetAlertsModal
+            open={alertsOpen}
+            onOpenChange={setAlertsOpen}
+            podcastSlug={podcastSlug}
+            podcastTitle={podcast.title}
+            accent={podcast.feedAccent}
+          />
+          {shareUrl != null && (
+            <ShareDialog
+              open={shareOpen}
+              onOpenChange={setShareOpen}
+              url={shareUrl}
+              title={pageTitle ?? podcast.title}
+            />
+          )}
+          {hasSubscriberFeatures && (
+            <SubscriptionInfoDialog
+              open={subscribeOpen}
+              onClose={() => setSubscribeOpen(false)}
+              isSubscriberOnly={isSubscriberOnly}
+              podcastSlug={podcastSlug}
+            />
+          )}
+          {canWriteReview && (
+            <ReviewSubmitModal
+              open={writeReviewOpen}
+              onClose={() => setWriteReviewOpen(false)}
+              podcastSlug={podcastSlug}
+            />
+          )}
+        </>
+      }
+    />
   );
 }

@@ -77,8 +77,19 @@ export function ShareDialog({
   };
 
   return (
-    <div className={styles.overlay} onClick={() => onOpenChange(false)}>
-      <div className={styles.dialog} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+    <div
+      className={styles.overlay}
+      data-harborfm-dialog-overlay="share"
+      onClick={() => onOpenChange(false)}
+    >
+      <div
+        className={styles.dialog}
+        data-harborfm-dialog="share"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-dialog-title"
+      >
         <div className={styles.header}>
           <h3 id="share-dialog-title" className={styles.title}>
             {showEmbed ? 'Embed' : 'Share'}

@@ -47,7 +47,7 @@ Options:
 | tiny &lt;1k | Response body under 1 KB (metadata probes / 304 / abort) |
 | unique downloads | Distinct `(day, episode, IP, UA)` with response size ≥ 250 KB |
 
-Harbor’s in-app **listens** use requested Range length ≥ 250 KB plus daily client dedup (IP+UA+Accept-Language). The log approximation uses **delivered** bytes ≥ 250 KB, so totals are close but not identical.
+HarborFM’s in-app **listens** use requested Range length ≥ 250 KB plus daily client dedup (IP+UA+Accept-Language). The log approximation uses **delivered** bytes ≥ 250 KB, so totals are close but not identical.
 
 ## Typical findings
 

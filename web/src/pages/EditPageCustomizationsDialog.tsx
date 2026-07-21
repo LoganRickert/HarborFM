@@ -1,16 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { getPodcast, updatePodcast } from '../api/podcasts';
-import { listBuiltinThemes, listThemes } from '../api/themes';
+import { listBuiltinThemes, listThemes, themeAssetPreviewUrl } from '../api/themes';
 import type { FeedAccent, PodcastUpdate } from '@harborfm/shared';
+import { FEED_DEFAULT_THEME } from '@harborfm/shared';
 import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
 import { useBaselineDirty, snapshotForDirty } from '../hooks/useBaselineDirty';
 import { FEED_ACCENT_OPTIONS, isFeedAccent } from '../utils/feedAccent';
 import styles from '../components/PodcastDetail/shared.module.css';
 import localStyles from './EditPageCustomizationsDialog.module.css';
+
+type ThemePickerOption = {
+  id: string;
+  name: string;
+  subtitle?: string;
+  scope: 'default' | 'server' | 'user';
+  /** Live preview URL from theme.json `homepage` (server themes only). */
+  homepage?: string;
+};
 
 export interface EditPageCustomizationsDialogProps {
   open: boolean;
@@ -75,8 +85,51 @@ export function EditPageCustomizationsDialog({
     staleTime: 60_000,
   });
 
+  const themeOptions = useMemo<ThemePickerOption[]>(() => {
+    const builtins = (builtinsData?.builtins ?? []).map((theme) => ({
+      id: theme.id,
+      name: theme.name,
+      scope: 'server' as const,
+      homepage: theme.homepage,
+    }));
+    const userThemes = (themesData?.themes ?? []).map((theme) => ({
+      id: theme.id,
+      name: theme.name,
+      subtitle: `v${theme.version}`,
+      scope: 'user' as const,
+    }));
+    return [
+      { id: FEED_DEFAULT_THEME, name: 'Default HarborFM', scope: 'default' as const },
+      ...builtins,
+      ...userThemes,
+    ];
+  }, [builtinsData?.builtins, themesData?.themes]);
+
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [formBaseline, setFormBaseline] = useState<string | null>(null);
+  const [brokenPreviews, setBrokenPreviews] = useState<Record<string, true>>({});
+  const [themesExpanded, setThemesExpanded] = useState(false);
+
+  const pinnedThemes = useMemo(() => {
+    const defaultTheme =
+      themeOptions.find((theme) => theme.id === FEED_DEFAULT_THEME) ??
+      ({ id: FEED_DEFAULT_THEME, name: 'Default HarborFM', scope: 'default' } as ThemePickerOption);
+    const selected =
+      form.feedTheme !== FEED_DEFAULT_THEME
+        ? themeOptions.find((theme) => theme.id === form.feedTheme) ?? {
+            id: form.feedTheme,
+            name: form.feedTheme,
+            subtitle: 'Selected',
+            scope: 'user' as const,
+          }
+        : null;
+    return selected ? [defaultTheme, selected] : [defaultTheme];
+  }, [form.feedTheme, themeOptions]);
+
+  const moreThemes = useMemo(
+    () => themeOptions.filter((theme) => theme.id !== FEED_DEFAULT_THEME),
+    [themeOptions],
+  );
 
   useEffect(() => {
     if (open && podcast) {
@@ -84,7 +137,7 @@ export function EditPageCustomizationsDialog({
       const themeRaw =
         typeof podcast.feedTheme === 'string' && podcast.feedTheme.trim()
           ? podcast.feedTheme.trim()
-          : 'default';
+          : FEED_DEFAULT_THEME;
       const initial: FormState = {
         feedTheme: themeRaw,
         feedAccent: isFeedAccent(accentRaw) ? accentRaw : 'green',
@@ -99,6 +152,8 @@ export function EditPageCustomizationsDialog({
       };
       setForm(initial);
       setFormBaseline(snapshotForDirty(initial));
+      setBrokenPreviews({});
+      setThemesExpanded(false);
     }
   }, [open, podcast]);
 
@@ -147,7 +202,7 @@ export function EditPageCustomizationsDialog({
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
         <Dialog.Content
-          className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable}`}
+          className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentScrollable} ${localStyles.dialogWider}`}
           onPointerDownOutside={(e) => {
             e.preventDefault();
             dialogContentProps.onPointerDownOutside(e);
@@ -185,28 +240,71 @@ export function EditPageCustomizationsDialog({
                 className={localStyles.form}
               >
                 <h3 className={localStyles.sectionTitle}>Appearance</h3>
-                <div className={localStyles.selectField}>
-                  <label className={localStyles.selectLabel} htmlFor="feed-theme-select">
+                <div className={localStyles.themeField}>
+                  <span className={localStyles.themeLabel} id="page-theme-label">
                     Page Theme
-                  </label>
-                  <select
-                    id="feed-theme-select"
-                    className={localStyles.select}
-                    value={form.feedTheme}
-                    onChange={(e) => setForm((f) => ({ ...f, feedTheme: e.target.value }))}
-                  >
-                    <option value="default">Default HarborFM</option>
-                    {(builtinsData?.builtins ?? []).map((theme) => (
-                      <option key={theme.id} value={theme.id}>
-                        {theme.name}
-                      </option>
-                    ))}
-                    {(themesData?.themes ?? []).map((theme) => (
-                      <option key={theme.id} value={theme.id}>
-                        {theme.name} (v{theme.version})
-                      </option>
-                    ))}
-                    </select>
+                  </span>
+                  <div role="radiogroup" aria-labelledby="page-theme-label">
+                    <div className={localStyles.themeGrid}>
+                      {pinnedThemes.map((theme) => (
+                        <ThemeOptionCard
+                          key={`pinned:${theme.scope}:${theme.id}`}
+                          theme={theme}
+                          selected={form.feedTheme === theme.id}
+                          previewBroken={Boolean(brokenPreviews[theme.id])}
+                          onSelect={() => setForm((f) => ({ ...f, feedTheme: theme.id }))}
+                          onPreviewError={() =>
+                            setBrokenPreviews((prev) =>
+                              prev[theme.id] ? prev : { ...prev, [theme.id]: true },
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                    {moreThemes.length > 0 ? (
+                      <div className={localStyles.themeMore}>
+                        <button
+                          type="button"
+                          className={localStyles.themeExpand}
+                          aria-expanded={themesExpanded}
+                          aria-controls="page-theme-more"
+                          onClick={() => setThemesExpanded((wasExpanded) => !wasExpanded)}
+                        >
+                          <span>
+                            {themesExpanded
+                              ? 'Hide more themes'
+                              : `Show ${moreThemes.length} more theme${moreThemes.length === 1 ? '' : 's'}`}
+                          </span>
+                          <ChevronDown
+                            size={16}
+                            strokeWidth={2}
+                            className={`${localStyles.themeExpandIcon}${
+                              themesExpanded ? ` ${localStyles.themeExpandIconOpen}` : ''
+                            }`}
+                            aria-hidden
+                          />
+                        </button>
+                        {themesExpanded ? (
+                          <div id="page-theme-more" className={localStyles.themeGrid}>
+                            {moreThemes.map((theme) => (
+                              <ThemeOptionCard
+                                key={`more:${theme.scope}:${theme.id}`}
+                                theme={theme}
+                                selected={form.feedTheme === theme.id}
+                                previewBroken={Boolean(brokenPreviews[theme.id])}
+                                onSelect={() => setForm((f) => ({ ...f, feedTheme: theme.id }))}
+                                onPreviewError={() =>
+                                  setBrokenPreviews((prev) =>
+                                    prev[theme.id] ? prev : { ...prev, [theme.id]: true },
+                                  )
+                                }
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <div className={localStyles.accentField}>
                   <span className={localStyles.accentLabel} id="primary-color-label">
@@ -325,6 +423,88 @@ export function EditPageCustomizationsDialog({
         onDiscard={handleDiscard}
       />
     </Dialog.Root>
+  );
+}
+
+function ThemeOptionCard({
+  theme,
+  selected,
+  previewBroken,
+  onSelect,
+  onPreviewError,
+}: {
+  theme: ThemePickerOption;
+  selected: boolean;
+  previewBroken: boolean;
+  onSelect: () => void;
+  onPreviewError: () => void;
+}) {
+  const previewSrc =
+    theme.scope === 'default' || previewBroken
+      ? null
+      : themeAssetPreviewUrl(
+          theme.id,
+          theme.scope === 'server' ? 'server' : 'user',
+          'images/preview.jpg',
+        );
+  const livePreviewUrl = theme.homepage?.trim() || null;
+  const label = theme.subtitle ? `${theme.name} ${theme.subtitle}` : theme.name;
+
+  return (
+    <div
+      role="radio"
+      tabIndex={0}
+      aria-checked={selected}
+      aria-label={label}
+      className={`${localStyles.themeOption}${
+        selected ? ` ${localStyles.themeOptionSelected}` : ''
+      }`}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+    >
+      {selected ? (
+        <span className={localStyles.themeCheck} aria-hidden>
+          <Check size={14} strokeWidth={3} />
+        </span>
+      ) : null}
+      <span className={localStyles.themeThumb}>
+        {previewSrc ? (
+          <img
+            src={previewSrc}
+            alt=""
+            loading="lazy"
+            className={localStyles.themeImage}
+            onError={onPreviewError}
+          />
+        ) : (
+          <span className={localStyles.themeFallback} aria-hidden>
+            {theme.scope === 'default' ? 'HarborFM' : theme.name.slice(0, 1)}
+          </span>
+        )}
+        {livePreviewUrl ? (
+          <a
+            href={livePreviewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={localStyles.themePreviewBtn}
+            aria-label={`Open ${theme.name} live preview`}
+            title="Open live preview"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <ExternalLink size={12} strokeWidth={2.5} aria-hidden />
+            Preview
+          </a>
+        ) : null}
+      </span>
+      <span className={localStyles.themeName}>{theme.name}</span>
+      {theme.subtitle ? <span className={localStyles.themeMeta}>{theme.subtitle}</span> : null}
+    </div>
   );
 }
 

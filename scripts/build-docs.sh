@@ -66,6 +66,16 @@ cat > docs-dist/sitemap.xml <<EOF
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>${DOCS_BASE_URL}/themes/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${DOCS_BASE_URL}/theme-guide/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
     <loc>${DOCS_BASE_URL}/updates/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

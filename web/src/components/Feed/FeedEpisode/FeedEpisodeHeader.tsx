@@ -67,9 +67,20 @@ export function FeedEpisodeHeader({
   const hasTranscript = Boolean(transcriptUrl?.trim());
   const episodeType = String(episode.episodeType ?? '').toLowerCase();
 
+  const artworkSrc = episode.artworkUrl
+    ? episode.artworkUrl
+    : episode.artworkFilename
+      ? `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`
+      : podcast.artworkUrl
+        ? podcast.artworkUrl
+        : podcast.artworkFilename
+          ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`
+          : '';
+  const artworkAlt = episode.artworkUrl || episode.artworkFilename ? episode.title : podcast.title;
+
   return (
-    <div className={styles.header}>
-      <div className={styles.headerTop}>
+    <div className={styles.header} data-harborfm-episode-header>
+      <div className={styles.headerTop} data-harborfm-episode-row>
         {(episodeType === 'trailer' || episodeType === 'bonus') && (
           <span
             className={`${styles.typePill} ${
@@ -79,24 +90,17 @@ export function FeedEpisodeHeader({
             {episodeType === 'trailer' ? 'Trailer' : 'Bonus'}
           </span>
         )}
-        {episode.artworkUrl ? (
-          <img src={episode.artworkUrl} alt={episode.title} className={styles.artwork} />
-        ) : episode.artworkFilename ? (
+        {artworkSrc ? (
           <img
-            src={`/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`}
-            alt={episode.title}
+            src={artworkSrc}
+            alt={artworkAlt}
             className={styles.artwork}
-          />
-        ) : podcast.artworkUrl || podcast.artworkFilename ? (
-          <img
-            src={podcast.artworkUrl ?? (podcast.artworkFilename ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}` : '')}
-            alt={podcast.title}
-            className={styles.artwork}
+            data-harborfm-episode-artwork
           />
         ) : null}
-        <div className={styles.content}>
+        <div className={styles.content} data-harborfm-episode-body>
           {(episode.seasonNumber != null || episode.episodeNumber != null || episode.audioDurationSec) ? (
-            <div className={styles.badgeWrap}>
+            <div className={styles.badgeWrap} data-harborfm-episode-meta>
               {(episode.seasonNumber != null || episode.episodeNumber != null) && (
                 <span className={styles.seasonEpisode}>
                   {formatSeasonEpisode(episode.seasonNumber, episode.episodeNumber)}
@@ -114,8 +118,13 @@ export function FeedEpisodeHeader({
               )}
             </div>
           ) : null}
-          <h1 className={styles.title}>{episode.title}</h1>
-          <div className={plain ? `${styles.actions} ${styles.actionsFluid}` : styles.actions}>
+          <h1 className={styles.title} data-harborfm-episode-title>
+            {episode.title}
+          </h1>
+          <div
+            className={plain ? `${styles.actions} ${styles.actionsFluid}` : styles.actions}
+            data-harborfm-episode-actions
+          >
             <div className={plain ? `${styles.subRow} ${styles.subRowFluid}` : styles.subRow}>
               {onMessageClick && (
                 <button
@@ -206,7 +215,7 @@ export function FeedEpisodeHeader({
               currentTime={currentTime}
             />
           )}
-          <div className={styles.metaRow}>
+          <div className={styles.metaRow} data-harborfm-episode-meta>
             {episode.publishAt && (
               <span className={styles.date}>{formatDate(episode.publishAt)}</span>
             )}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Page not found | {{ podcast.title }}</title>
+  <style>
+    :root {
+      --accent: {{ accent.color }};
+      --accent-dim: {{ accent.dim }};
+      --accent-glow: {{ accent.glow }};
+      --accent-fg: {{ accent.fg }};
+    }
+  </style>
+</head>
+<body class="fluid-theme">
+  {% render 'harborfm/site_header' %}
+
+  <div class="fluid-page">
+    <header class="fluid-band fluid-band--hero">
+      <div class="fluid-inner">
+        <p class="fluid-show__meta">404</p>
+        <h1 class="fluid-show__title">Page not found</h1>
+        <p class="fluid-show__desc">
+          That page is not part of {{ podcast.title }}.
+          Head back home to keep listening.
+        </p>
+        <p class="fluid-show__funding">
+          <a href="{{ urls.home }}">Back to {{ podcast.title }}</a>
+        </p>
+      </div>
+    </header>
+  </div>
+  {% render '_footer', theme: theme %}
+</body>
+</html>

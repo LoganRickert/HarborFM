@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.15.0 - 2026-07-20
+
+- **Theme packages:** `theme.json` supports optional `description`, `preview` (`images/…`), `homepage` (https live-preview URL), and `not_found` (themed 404 that is not a public page). Themes may ship `fonts/` (`.woff2` / `.ttf`). Import and the editor validate preview paths.
+- **Built-ins:** Fluid and Folio ship preview images, homepage links, `not_found` templates, theme credit footers, and CSS/layout polish (Folio adds a compact nav menu). Package descriptions replace hardcoded blurbs.
+- **Themes studio / picker:** Server theme cards show preview thumbnails (lightbox), description, and a Preview link from `homepage`. Page Customizations uses a visual theme picker with previews and live Preview when `homepage` is set.
+- **Liquid themes:** Richer render context (cast, funding, links, podroll, reviews), `theme` object in templates, `--accent-fg` for readable text on accent, CSS cache-bust includes file mtime, and `[data-harborfm-action]` controls for message / alerts / share / subscribe / feed / write-review. Dialogs render under themed chrome so theme CSS can style them. Unknown theme `.html` routes return themed 404 HTML when `not_found` is set.
+- **Public feed:** Share titles use the white-label site name (`Show | {siteName}`) instead of a hardcoded HarborFM suffix.
+- **Reviews:** Public reviews list returns `hasMore` and the Reviews card can load more pages.
+- **Docs:** New [Themes](https://harborfm.com/themes/) gallery (catalog from `harborfm-themes` releases) and [Theme Authoring Guide](https://harborfm.com/theme-guide/).
+
 ## v1.14.1 - 2026-07-20
 
 - **Page themes:** Server themes live under `{DATA_DIR}/themes/server` so Docker image updates do not wipe promoted or edited packages. Shipped Fluid/Folio still seed on boot; upgrades refresh a data copy only when `theme.json` allows override and the shipped `version` differs. Admin edits and promote set `allowOverride: false` so customized server themes are preserved.

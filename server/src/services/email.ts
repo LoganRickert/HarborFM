@@ -696,7 +696,7 @@ export function buildWelcomeVerifiedEmail(dashboardUrl: string): {
 }
 
 /**
- * Build invite-to-platform email (someone invited you to join Harbor).
+ * Build invite-to-platform email (someone invited you to join HarborFM).
  */
 export function buildInviteToPlatformEmail(signupUrl: string): {
   subject: string;

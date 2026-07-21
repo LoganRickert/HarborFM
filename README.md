@@ -14,6 +14,10 @@ The app has PWA, so you can add it to your home screen and connect to your serve
 
 **Demo Site:** [https://app.harborfm.com/](https://app.harborfm.com)
 
+**Themes gallery:** [https://harborfm.com/themes/](https://harborfm.com/themes/)
+
+**Theme authoring guide:** [https://harborfm.com/theme-guide/](https://harborfm.com/theme-guide/)
+
 **Swagger API Docs:** [https://harborfm.com/server/](https://harborfm.com/server/)
 
 **Overview on Noted.lol** [https://noted.lol/harborfm/](https://noted.lol/harborfm/)
@@ -59,7 +63,7 @@ HarborFM lets you assemble podcast episodes from building blocks. Create a show,
 
 ### Quick Start
 
-The app expects two writable directories: `/data` (SQLite DB, uploads, processed audio, RSS, artwork, library) and `/secrets` (JWT and encryption keys). You do not need to mount `/secrets` if you pass the secrets in through environment variables.
+The app expects two writable directories: `/data` (SQLite DB, uploads, processed audio, RSS, artwork, library, page themes) and `/secrets` (JWT and encryption keys). You do not need to mount `/secrets` if you pass the secrets in through environment variables.
 
 ```bash
 HARBORFM_SECRETS_KEY=$(openssl rand -base64 32)
@@ -347,7 +351,7 @@ pnpm run docker:build
 
 ### Run
 
-The app expects two writable directories: `/data` (SQLite DB, uploads, processed audio, RSS, artwork, library) and `/secrets` (JWT and encryption keys). Mount them independently:
+The app expects two writable directories: `/data` (SQLite DB, uploads, processed audio, RSS, artwork, library, page themes) and `/secrets` (JWT and encryption keys). Mount them independently:
 
 ```bash
 docker run -d \
@@ -374,7 +378,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | `API_PREFIX` | `api` | API path segment; routes live under `/${API_PREFIX}/` |
 | `CORS_ORIGIN` | (auto) | `true`/`1` to allow request origin; in production default is false |
 | **Paths** | | |
-| `DATA_DIR` | `./data` | Directory for DB, uploads, processed audio, RSS, artwork, library (Docker: often `/data`) |
+| `DATA_DIR` | `./data` | Directory for DB, uploads, processed audio, RSS, artwork, library, page themes (Docker: often `/data`) |
 | `SECRETS_DIR` | `./secrets` | Directory for jwt-secret.txt and secrets-key.txt (Docker: often `/secrets`) |
 | `PUBLIC_DIR` | `./public` | Directory to serve static web app from |
 | `DB_FILENAME` | (from APP_NAME) | SQLite filename under DATA_DIR (e.g. `harborfm.db`) |
@@ -544,9 +548,9 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Stripe payments (BYOK).** Show owners connect their own Stripe account, publish monthly/yearly/one-time plans, and sell access. Listeners pay via Checkout and receive a private RSS token. Coupons, Customer Portal, refund requests, and webhooks are supported. See [Stripe payments](#stripe-payments).
 
-- **Episode Alerts.** When a show publishes (or a scheduled episode becomes live), Harbor can email listeners and post to communities. Destinations include built-in or BYO email, Discord, Slack, Telegram, Mastodon, Matrix, Lemmy, Bluesky, and JSON webhooks. See [Episode Alerts](#episode-alerts).
+- **Episode Alerts.** When a show publishes (or a scheduled episode becomes live), HarborFM can email listeners and post to communities. Destinations include built-in or BYO email, Discord, Slack, Telegram, Mastodon, Matrix, Lemmy, Bluesky, and JSON webhooks. See [Episode Alerts](#episode-alerts).
 
-- **Page themes.** Replace the default public SPA feed with a packaged Liquid theme (built-in Fluid / Folio, or a zip you import). Multi-page themes expose routes such as about and crew; those pages appear in the podcast sitemap. See [Page themes](#page-themes).
+- **Page themes.** Replace the default public SPA feed with a packaged Liquid theme (built-in Fluid / Folio, an imported zip, or a gallery theme). Multi-page themes expose routes such as about and crew; those pages appear in the podcast sitemap. Browse previews on the docs [Themes](https://harborfm.com/themes/) page. See [Page themes](#page-themes).
 
 ## Stripe payments
 
@@ -606,7 +610,7 @@ Recurring plans support **auto-renew by default**. Deleting a recurring plan can
 
 ### Checkout and access tokens
 
-Listeners subscribe from the public feed. Checkout creates a Stripe session; after payment, Harbor fulfills via webhook (`checkout.session.completed`) and/or the success page claim.
+Listeners subscribe from the public feed. Checkout creates a Stripe session; after payment, HarborFM fulfills via webhook (`checkout.session.completed`) and/or the success page claim.
 
 - Success URL reveals the **access token** and **private RSS** URL once (`/feed/{slug}/subscribe/success?session_id=…`).
 - Private feed: `/api/public/podcasts/{slug}/private/{token}/rss` (token prefix from `SUBSCRIBER_TOKEN_PREFIX`, default `hfm_sub_`).
@@ -636,7 +640,7 @@ Per show and mode: create percent or fixed-amount coupons with duration once, re
 
 When creating the Stripe endpoint, select **only** these events (do not use Select all). The credential wizard lists the same set.
 
-Harbor handles these event types:
+HarborFM handles these event types:
 
 | Event | Effect |
 |-------|--------|
@@ -700,12 +704,21 @@ Alerts run when an episode becomes released (publish from the editor, or the ~15
 
 ## Page themes
 
-Public shows use the default React SPA feed unless you pick a **page theme** under Edit Page Customizations. Packaged themes are Liquid templates with CSS (and optional images). Harbor injects interactive blocks via `{% render 'harborfm/…' %}` mounts (for example episodes, player, cast).
+Public shows use the default React SPA feed unless you pick a **page theme** under Edit Page Customizations. Packaged themes are Liquid templates with CSS, optional images/fonts, and HarborFM mount points (`{% render 'harborfm/…' %}`) for interactive blocks (episodes, player, cast, reviews, and so on). Themes can also wire native controls with `data-harborfm-action` (message, alerts, share, subscribe, feed, write-review). Dialogs open under themed chrome so theme CSS can style them.
+
+Page Customizations uses a visual theme picker with package preview images. When a theme sets `homepage` in `theme.json`, Preview opens that live URL.
 
 ### Built-ins and custom themes
 
-- **Fluid** and **Folio** ship with the app and are seeded into `{DATA_DIR}/themes/server` on first boot. On upgrade, Harbor replaces a data copy only when its `theme.json` still allows override (default) and the shipped `version` differs. Any admin edit (or promote) sets `allowOverride: false` so customized server themes are never overwritten. Folio is a multi-page theme (home plus about, crew, support, connect, episodes).
-- Eligible users open **Themes** to download a built-in as a zip, import their own zip, or edit an imported copy.
+- **Fluid** and **Folio** ship with the app and are seeded into `{DATA_DIR}/themes/server` on first boot. On upgrade, HarborFM replaces a data copy only when its `theme.json` still allows override (default) and the shipped `version` differs. Any admin edit (or promote) sets `allowOverride: false` so customized server themes are never overwritten. Folio is a multi-page theme (home plus about, crew, support, connect, episodes). Both include preview images, homepage demo links, and optional `not_found` templates for unknown theme `.html` routes.
+- Extra community/gallery themes (with previews) are published from the separate [`harborfm-themes`](https://github.com/LoganRickert/harborfm-themes) repo and listed on the docs [Themes](https://harborfm.com/themes/) page. To author them next to this tree, clone into `harborfm-themes/` (gitignored; not part of the HarborFM image), then sync into your local data dir:
+
+  ```bash
+  git clone https://github.com/LoganRickert/harborfm-themes.git harborfm-themes
+  pnpm themes:sync
+  ```
+
+- Eligible users open **Themes** to download a built-in as a zip, import their own zip, or edit an imported copy. Server theme cards show preview thumbnails, description, and a live Preview link when `homepage` is set.
 - Admins can promote a personal theme to a **server-wide** theme (stored under the data directory, available to every show) or demote it back, and can delete server themes.
 
 ### Who can use it
@@ -715,9 +728,16 @@ Public shows use the default React SPA feed unless you pick a **page theme** und
 
 ### Theme editor and authoring
 
-The Themes page opens a near-fullscreen editor for name, version, home template, page routes, and files (Liquid, CSS, images). Required files (`theme.json`, podcast and episode templates) cannot be deleted.
+The Themes page opens a near-fullscreen editor for name, version, home template, page routes, and files (Liquid, CSS, images, fonts). Required files (`theme.json`, podcast and episode templates) cannot be deleted.
 
-Authoring guide: [theme-SKILL.md](theme-SKILL.md) in the repo (also downloadable as **SKILL.md** from the Themes page at `/theme-SKILL.md`). Theme zip import is rate limited to 2 per minute per user.
+`theme.json` may include optional `description`, `preview` (path under `images/`), `homepage` (https live-preview URL), and `not_found` (themed 404 template that is not published as a public page). Themes may ship `fonts/` (`.woff2` / `.ttf`).
+
+Authoring guides:
+
+- Docs: [Theme Authoring Guide](https://harborfm.com/theme-guide/)
+- Repo / AI skill: [theme-SKILL.md](theme-SKILL.md) (also downloadable as **SKILL.md** from the Themes page at `/theme-SKILL.md`)
+
+Theme zip import is rate limited to 2 per minute per user.
 
 ## Embed
 
@@ -763,6 +783,7 @@ Check `e.origin` against your HarborFM origin in production if you want to restr
 harborfm/
 ├── server/           # API and app entry
 ├── web/              # React frontend
+├── docs/             # Marketing / docs site (Astro)
 ├── webrtc-service/   # WebRTC/mediasoup for group calls
 ├── shared/           # Shared schemas and types
 ├── Dockerfile        # Multi-stage build, Node + ffmpeg
@@ -782,6 +803,7 @@ From the repo root:
 | `pnpm run build` | Build shared, then server, then web |
 | `pnpm run db:migrate` | Run database migrations |
 | `pnpm --filter server run db:seedSetup` | Automated initial setup from env (ADMIN_EMAIL, ADMIN_PASSWORD, etc.) |
+| `pnpm themes:sync` | Copy local `harborfm-themes/` gallery packages into `{DATA_DIR}/themes/server` (dev) |
 | `pnpm run deploy:pm2` | Deploy to PM2 (install, build, start/reload); see [Deploy with PM2](#deploy-with-pm2) |
 | `pnpm run reset-password` | Reset the first user’s password (server) |
 | `pnpm run db:clear-ip-bans` | Clear the IP ban and login-attempt tables (server) |
@@ -803,7 +825,7 @@ Each podcast has an **owner** (the user who created it) and optional **collabora
 | **manager** | Everything in editor, plus: create/update episodes and episode artwork, **Import Project** (new draft from episode zip), edit show details, configure **Podcast Delivery** (exports), manage collaborators (invite, change role, remove). |
 | **owner** | Full control. Only the owner can delete the podcast or transfer ownership. |
 
-- **Collaborators** are managed per show in **Settings > Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on Harbor yet, the UI can send them an “invite to the platform” email (rate-limited).
+- **Collaborators** are managed per show in **Settings > Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on HarborFM yet, the UI can send them an “invite to the platform” email (rate-limited).
 - **Storage** for a show (recorded segments, episode source audio) counts against the **podcast owner’s** storage limit, not the collaborator’s. If the owner is at or near their limit, “Record new section” is disabled for everyone on that show.
 - **New episode** is only available to **managers** and the **owner**; view and editor roles see it disabled.
 - **Stripe (`canStripe` / `defaultCanStripe`)** is an account flag, not a show role. It gates whether the user can use Stripe Payments at all. See [Stripe payments](#stripe-payments).
@@ -1120,7 +1142,7 @@ networks:
 
 ## Backup and upgrading
 
-Before upgrading, back up **DATA_DIR** (SQLite database, uploads, processed audio, RSS files, artwork, library). Optionally back up **SECRETS_DIR** if you rely on the persisted JWT or secrets key files. Migrations run automatically on server start; no separate migration step is required for upgrades.
+Before upgrading, back up **DATA_DIR** (SQLite database, uploads, processed audio, RSS files, artwork, library, page themes under `themes/`). Optionally back up **SECRETS_DIR** if you rely on the persisted JWT or secrets key files. Migrations run automatically on server start; no separate migration step is required for upgrades. Server theme packages live under `{DATA_DIR}/themes/server` so image upgrades do not wipe promoted or edited themes (see [Page themes](#page-themes)).
 
 ## Single Sign-On (SSO)
 

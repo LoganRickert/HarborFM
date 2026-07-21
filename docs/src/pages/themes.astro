@@ -1,0 +1,298 @@
+---
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { BookOpen, Sparkles } from '@lucide/astro';
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+
+type CatalogTheme = {
+  id: string;
+  name: string;
+  version: string;
+  downloadUrl: string;
+  homepage?: string;
+  preview?: string;
+  previewUrl?: string;
+  byteSize?: number;
+};
+
+type Catalog = {
+  generatedAt?: string;
+  releaseTag?: string | null;
+  themes: CatalogTheme[];
+};
+
+const DEFAULT_CATALOG_URL =
+  'https://github.com/LoganRickert/harborfm-themes/releases/latest/download/catalog.json';
+const LOCAL_GALLERY_BASE = '/theme-gallery';
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../..');
+const localCatalogPath = join(repoRoot, 'harborfm-themes/dist/catalog.json');
+
+const catalogUrl = process.env.THEMES_CATALOG_URL || DEFAULT_CATALOG_URL;
+const requireCatalog = process.env.THEMES_CATALOG_REQUIRED === '1';
+const forceRemote = process.env.THEMES_CATALOG_REMOTE === '1';
+
+function assetBasename(url: string): string {
+  try {
+    const pathPart = new URL(url).pathname;
+    return decodeURIComponent(pathPart.split('/').filter(Boolean).pop() || '');
+  } catch {
+    return url.split('/').filter(Boolean).pop() || url;
+  }
+}
+
+function withLocalAssets(list: CatalogTheme[], base: string): CatalogTheme[] {
+  const prefix = base.replace(/\/$/, '');
+  return list.map((theme) => ({
+    ...theme,
+    downloadUrl: `${prefix}/${assetBasename(theme.downloadUrl)}`,
+    previewUrl: theme.previewUrl
+      ? `${prefix}/${assetBasename(theme.previewUrl)}`
+      : undefined,
+  }));
+}
+
+let themes: CatalogTheme[] = [];
+let catalogError: string | null = null;
+let catalogSource: 'local' | 'remote' = 'remote';
+
+try {
+  const useLocal =
+    !forceRemote &&
+    !process.env.THEMES_CATALOG_URL &&
+    import.meta.env.DEV &&
+    existsSync(localCatalogPath);
+
+  if (useLocal) {
+    const data = JSON.parse(readFileSync(localCatalogPath, 'utf8')) as Catalog;
+    themes = withLocalAssets(Array.isArray(data.themes) ? data.themes : [], LOCAL_GALLERY_BASE);
+    catalogSource = 'local';
+  } else {
+    const res = await fetch(catalogUrl, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = (await res.json()) as Catalog;
+    themes = Array.isArray(data.themes) ? data.themes : [];
+    catalogSource = 'remote';
+  }
+} catch (err) {
+  const message = err instanceof Error ? err.message : 'Unknown error';
+  if (requireCatalog) {
+    throw new Error(`Failed to load themes catalog: ${message}`);
+  }
+  catalogError = message;
+  themes = [];
+}
+---
+
+<Layout
+  title="Themes - HarborFM"
+  description="Download HarborFM page theme zips. Import them in Themes on your instance, or use built-in Fluid and Folio."
+>
+  <Header />
+
+  <main class="themes-page">
+    <div class="themes-page-inner">
+      <header class="themes-page-hero">
+        <p class="themes-page-eyebrow">Page themes</p>
+        <h1>Themes</h1>
+        <p class="themes-page-lead">
+          Give every show its own look. Gallery packages are ready-to-import Liquid themes for your
+          public podcast pages: download a zip, import it in HarborFM, then assign it under Page
+          Customizations. Built-in <strong>Fluid</strong> and <strong>Folio</strong> already ship
+          with HarborFM.
+        </p>
+        <div class="themes-page-steps-card">
+          <ol class="themes-page-steps">
+            <li>
+              <span class="themes-page-step-num" aria-hidden="true">01</span>
+              <span class="themes-page-step-label">Download</span>
+              <span class="themes-page-step-text">Pick a gallery theme and save the zip.</span>
+            </li>
+            <li>
+              <span class="themes-page-step-num" aria-hidden="true">02</span>
+              <span class="themes-page-step-label">Import</span>
+              <span class="themes-page-step-text">Open Themes in your HarborFM instance and upload it.</span>
+            </li>
+            <li>
+              <span class="themes-page-step-num" aria-hidden="true">03</span>
+              <span class="themes-page-step-label">Assign</span>
+              <span class="themes-page-step-text">Choose it on a show under Page Customizations.</span>
+            </li>
+          </ol>
+        </div>
+        <div class="themes-page-aside-card themes-page-aside-split">
+          <div class="themes-page-aside-panel">
+            <p class="themes-page-aside-kicker">Craft your own</p>
+            <p class="themes-page-aside">
+              Step-by-step help for building a theme yourself, from the files you need to how pages and players fit together.
+            </p>
+            <a class="themes-page-aside-link themes-page-aside-link-secondary" href="/theme-guide/">
+              <BookOpen size={18} stroke-width={2.25} aria-hidden="true" />
+              Theme Authoring Guide
+            </a>
+          </div>
+          <div class="themes-page-aside-panel">
+            <p class="themes-page-aside-kicker">AI skill</p>
+            <p class="themes-page-aside">
+              Drop this into Cursor, Claude, or another coding agent when you want a theme generated for you.
+            </p>
+            <a class="themes-page-aside-link themes-page-aside-link-secondary" href="/web/public/theme-SKILL.md">
+              <Sparkles size={18} stroke-width={2.25} aria-hidden="true" />
+              theme-SKILL.md
+            </a>
+          </div>
+        </div>
+        {
+          catalogSource === 'local' && (
+            <p class="themes-local-banner" role="status">
+              Showing local gallery from <code>harborfm-themes/dist</code> (dev).
+            </p>
+          )
+        }
+      </header>
+
+      {
+        catalogError && (
+          <p class="themes-empty" role="status">
+            Gallery themes are not published yet (or the catalog could not be loaded). Check
+            <a href="https://github.com/LoganRickert/harborfm-themes/releases"
+              >harborfm-themes releases</a
+            >
+            later.
+          </p>
+        )
+      }
+
+      {
+        !catalogError && themes.length === 0 && (
+          <p class="themes-empty" role="status">
+            No gallery themes in the catalog yet. Built-ins are available inside HarborFM.
+          </p>
+        )
+      }
+
+      {
+        themes.length > 0 && (
+          <ul class="themes-grid">
+            {
+              themes.map((theme) => (
+                <li class="theme-card">
+                  <div class="theme-card-preview">
+                    {theme.previewUrl ? (
+                      <button
+                        type="button"
+                        class="theme-card-preview-trigger"
+                        data-src={theme.previewUrl}
+                        aria-label={`Open ${theme.name} preview image`}
+                      >
+                        <img
+                          src={theme.previewUrl}
+                          alt=""
+                          loading="lazy"
+                          width="640"
+                          height="360"
+                        />
+                      </button>
+                    ) : (
+                      <div class="theme-card-placeholder" aria-hidden="true">
+                        <span>{theme.name.slice(0, 1)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div class="theme-card-body">
+                    <h2 class="theme-card-name">{theme.name}</h2>
+                    <p class="theme-card-meta">
+                      {theme.id}
+                      {theme.version ? ` · v${theme.version}` : ''}
+                    </p>
+                    {theme.description && (
+                      <p class="theme-card-description">{theme.description}</p>
+                    )}
+                    <div class="theme-card-actions">
+                      {theme.homepage?.trim() ? (
+                        <a
+                          class="theme-card-preview-link"
+                          href={theme.homepage.trim()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Preview Theme
+                        </a>
+                      ) : null}
+                      <a class="theme-card-download" href={theme.downloadUrl} download>
+                        Download Theme
+                      </a>
+                    </div>
+                  </div>
+                </li>
+              ))
+            }
+          </ul>
+        )
+      }
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p><a href="/">← Home</a></p>
+  </footer>
+
+  <div
+    id="theme-preview-lightbox"
+    class="lightbox"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Theme preview full size"
+    hidden
+  >
+    <button type="button" class="lightbox-backdrop" aria-label="Close lightbox"></button>
+    <img src="" alt="" class="lightbox-img" />
+  </div>
+
+  <script>
+    (function () {
+      const lightbox = document.getElementById('theme-preview-lightbox');
+      const lightboxImg = lightbox?.querySelector('.lightbox-img');
+      const lightboxBackdrop = lightbox?.querySelector('.lightbox-backdrop');
+
+      function closeLightbox() {
+        if (!lightbox) return;
+        lightbox.hidden = true;
+        if (lightboxImg) {
+          lightboxImg.removeAttribute('src');
+          lightboxImg.alt = '';
+        }
+        document.body.style.overflow = '';
+      }
+
+      function openLightbox(src, alt) {
+        if (!lightbox || !lightboxImg) return;
+        lightboxImg.src = src;
+        lightboxImg.alt = alt || 'Theme preview';
+        lightbox.hidden = false;
+        document.body.style.overflow = 'hidden';
+      }
+
+      document.querySelectorAll('.theme-card-preview-trigger').forEach((el) => {
+        el.addEventListener('click', () => {
+          const src = el.getAttribute('data-src');
+          if (!src) return;
+          const label = el.getAttribute('aria-label') || 'Theme preview';
+          openLightbox(src, label);
+        });
+      });
+
+      lightboxBackdrop?.addEventListener('click', closeLightbox);
+      lightboxImg?.addEventListener('click', closeLightbox);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && lightbox && !lightbox.hidden) closeLightbox();
+      });
+    })();
+  </script>
+</Layout>

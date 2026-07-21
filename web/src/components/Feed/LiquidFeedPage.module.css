@@ -4,6 +4,39 @@
   box-sizing: border-box;
 }
 
+.liquidBody {
+  min-height: inherit;
+  width: 100%;
+}
+
+/* Host for themed dialogs: outside Liquid body (survives innerHTML) and outside
+   theme overflow/clip, but still carries the theme class + CSS variables.
+   Theme body classes (e.g. .fluid-theme) set min-height/background and can load
+   after this module; !important keeps the host a zero-box that does not paint. */
+.dialogRoot {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+  background: none !important;
+  background-image: none !important;
+  background-color: transparent !important;
+  background-attachment: scroll !important;
+  box-shadow: none !important;
+}
+
+.dialogRoot > * {
+  pointer-events: auto;
+}
+
 /* Full-bleed bands; only the inner rail is capped. */
 .liquidFeed :global(.fluid-page) {
   width: 100%;

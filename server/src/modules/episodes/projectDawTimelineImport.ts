@@ -378,14 +378,14 @@ function findPriorManifestEntry(
   return null;
 }
 
-/** Harbor export participant lanes look like Host_0 / Logan_1. */
+/** HarborFM export participant lanes look like Host_0 / Logan_1. */
 function isHarborParticipantLaneName(trackName: string): boolean {
   return /^.+_\d+$/.test(trackName.trim());
 }
 
 /**
  * Classify a Reaper track: keep known participant/soundboard identity from the
- * prior manifest or Harbor lane names; treat newly added Reaper tracks (music,
+ * prior manifest or HarborFM lane names; treat newly added Reaper tracks (music,
  * etc.) as library/soundboard so they sort under host lanes on re-export.
  */
 function classifyReaperTrack(
@@ -440,7 +440,7 @@ function classifyReaperTrack(
     };
   }
 
-  // New track added in Reaper (not a Harbor host lane): library-style.
+  // New track added in Reaper (not a HarborFM host lane): library-style.
   return {
     source: "soundboard",
     soundboardAssetId: trackName.trim() || mediaStem(mediaBasename),

@@ -242,7 +242,6 @@
 }
 
 .descriptionFluid {
-  max-width: 42rem;
   text-align: left;
   color: color-mix(in srgb, var(--text) 88%, transparent);
 }

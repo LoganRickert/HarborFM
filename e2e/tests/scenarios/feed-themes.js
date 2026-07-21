@@ -38,12 +38,14 @@ function buildThemeZip({
   css,
   injectScript,
   index,
+  not_found,
   pages,
   extraTemplates,
 }) {
   const zip = new AdmZip();
   const manifest = { id, name, version };
   if (index) manifest.index = index;
+  if (not_found) manifest.not_found = not_found;
   if (pages) manifest.pages = pages;
   zip.addFile('theme.json', Buffer.from(JSON.stringify(manifest), 'utf8'));
   let podcast = podcastBody ?? `<div class="t">{{ podcast.title }}{% render 'harborfm/episodes' %}</div>`;
@@ -344,11 +346,13 @@ export async function run({ runOne }) {
         name: 'E2E Pages',
         version: '1.0.0',
         index: 'home',
+        not_found: 'not_found',
         pages: { about: 'about-us.html' },
         podcastBody: `<div class="podcast-tpl">podcast-index</div>`,
         extraTemplates: {
           home: `<div class="home-tpl">HOME-{{ podcast.title }} <a href="{{ urls.pages.about }}">About</a></div>`,
           about: `<div class="about-tpl">ABOUT-{{ podcast.title }} link={{ urls.pages.about }}</div>`,
+          not_found: `<div class="nf-tpl">NOT-FOUND-{{ podcast.title }} <a href="{{ urls.home }}">Home</a></div>`,
         },
       });
       const res = await importThemeZip(jar, zip);
@@ -411,6 +415,25 @@ export async function run({ runOne }) {
       );
       if (missing.status !== 404) {
         throw new Error(`Expected 404 for unknown page, got ${missing.status}`);
+      }
+      const missingBody = await missing.json();
+      if (!missingBody.notFound || !String(missingBody.html).includes('NOT-FOUND-E2E Feed Themes')) {
+        throw new Error(`Expected themed not_found HTML on 404, got ${JSON.stringify(missingBody)}`);
+      }
+      if (missingBody.template !== 'not_found') {
+        throw new Error(`Expected template not_found, got ${missingBody.template}`);
+      }
+
+      // not_found must not be published as a public .html page
+      const nfAsPage = await fetch(
+        `${baseURL}/public/podcasts/${encodeURIComponent(slug)}/theme-render/pages/not_found.html`,
+      );
+      if (nfAsPage.status !== 404) {
+        throw new Error(`not_found.html should not be a public page, got ${nfAsPage.status}`);
+      }
+      const nfAsPageBody = await nfAsPage.json();
+      if (!nfAsPageBody.notFound) {
+        throw new Error('Requesting not_found.html should still use the themed 404 handler');
       }
     }),
   );

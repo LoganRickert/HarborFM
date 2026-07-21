@@ -4,6 +4,10 @@
   gap: 0.75rem;
 }
 
+.dialogWider {
+  max-width: min(720px, 94vw);
+}
+
 .sectionTitle {
   margin: 0;
   padding-bottom: 0.35rem;
@@ -22,27 +26,218 @@
   border-bottom: 1px solid var(--border);
 }
 
-.selectField {
+.themeField {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
 }
 
-.selectLabel {
+.themeLabel {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text);
 }
 
-.select {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.themeOption {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.4rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elevated, var(--surface));
+  border-radius: 12px;
+  background: var(--surface, transparent);
   color: var(--text);
-  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.themeOption:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--surface-elevated, var(--bg)) 80%, transparent);
+}
+
+.themeOption:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.themeOptionSelected {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 8px 18px color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.themeCheck {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.themeThumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--accent) 18%, var(--bg-muted, var(--bg))),
+      var(--bg-muted, var(--bg))
+    );
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.themeImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.themeFallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.themeName {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.themeMeta {
+  margin-top: -0.15rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.1;
+}
+
+.themePreviewBtn {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.4rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 1.85rem;
+  height: 1.85rem;
+  padding: 0 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 999px;
+  background: var(--surface-elevated, var(--bg));
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  opacity: 1;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #fff 55%, transparent) inset,
+    0 3px 12px color-mix(in srgb, #000 22%, transparent);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.themePreviewBtn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  text-decoration: none;
+  opacity: 1;
+}
+
+.themePreviewBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.themeMore {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+
+.themeExpand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  align-self: stretch;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px dashed color-mix(in srgb, var(--border) 85%, var(--text-muted));
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.themeExpand:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.themeExpand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.themeExpandIcon {
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.themeExpandIconOpen {
+  transform: rotate(180deg);
 }
 
 .fieldHint {
@@ -133,5 +328,9 @@
 @media (max-width: 520px) {
   .accentGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .themeGrid {
+    grid-template-columns: 1fr;
   }
 }

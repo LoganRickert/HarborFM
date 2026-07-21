@@ -1,7 +1,7 @@
 {
   "name": "harborfm",
   "private": true,
-  "version": "1.14.1",
+  "version": "1.15.0",
   "description": "Open source podcast creator.",
   "scripts": {
     "dev": "pnpm run dev:server & pnpm run dev:web",
@@ -9,6 +9,7 @@
     "dev:server": "pnpm --filter server run dev",
     "dev:web": "pnpm --filter web run dev",
     "dev:iframe-test": "npx serve dev -p 5199",
+    "themes:sync": "pnpm --filter server run themes:sync",
     "db:migrate": "pnpm --filter server run db:migrate",
     "db:clear-ip-bans": "pnpm --filter server run db:clear-ip-bans",
     "db:seed-analytics": "pnpm --filter server run db:seed-analytics",

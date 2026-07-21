@@ -18,7 +18,7 @@
   border: none;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 0;
-  padding: 1.35rem 0 1.35rem 0.85rem;
+  padding: 1.35rem 0.5rem 1.35rem 0.85rem;
   box-shadow: inset 3px 0 0 transparent;
   transition: box-shadow 0.15s ease, border-bottom-color 0.15s ease, background 0.15s ease;
 }

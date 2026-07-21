@@ -108,8 +108,12 @@ export function ReviewSubmitModal({
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
-      <Dialog.Overlay className={styles.overlay} />
-      <Dialog.Content className={styles.dialog} aria-describedby={undefined}>
+      <Dialog.Overlay className={styles.overlay} data-harborfm-dialog-overlay="review" />
+      <Dialog.Content
+        className={styles.dialog}
+        aria-describedby={undefined}
+        data-harborfm-dialog="review"
+      >
         <div className={styles.dialogHeader}>
           <Dialog.Title className={styles.title}>Write a review</Dialog.Title>
           <Dialog.Close asChild>

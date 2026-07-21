@@ -533,6 +533,7 @@ export function SubscriptionInfoDialog({
                   <li key={plan.id}>
                     <button
                       type="button"
+                      data-harborfm-plan-card=""
                       className={styles.stripePlanCard}
                       disabled={busy}
                       onClick={() => void handleSubscribe(plan.id)}

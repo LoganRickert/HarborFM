@@ -27,7 +27,7 @@ import {
   userThemeDir,
   userThemeDirPath,
 } from "./paths.js";
-import { assertThemePagesValid, listTemplateBasenames, readThemeManifest } from "./themePages.js";
+import { assertThemePagesValid, assertThemePreviewValid, listTemplateBasenames, readThemeManifest } from "./themePages.js";
 import { sanitizeThemeText, textContainsBlockedConstructs } from "./sanitize.js";
 import { clearThemeZipCacheForId } from "./themeZip.js";
 import { ThemeImportError } from "./importTheme.js";
@@ -43,6 +43,8 @@ const ALLOWED_EXT = new Set([
   ".gif",
   ".webp",
 ]);
+
+const FONT_EXT = new Set([".woff2", ".ttf"]);
 
 const TEXT_EXT = new Set([".liquid", ".css", ".json"]);
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
@@ -87,6 +89,10 @@ export function normalizeThemeRelPath(raw: string): string | null {
 export function isAllowedThemePath(name: string): boolean {
   if (name === "theme.json") return true;
   const ext = extname(name).toLowerCase();
+  if (name.startsWith("fonts/")) {
+    const rest = name.slice("fonts/".length);
+    return FONT_EXT.has(ext) && !!rest && !rest.endsWith("/") && !rest.includes("/");
+  }
   if (!ALLOWED_EXT.has(ext)) return false;
   if (name.startsWith("css/") || name.startsWith("images/")) {
     const rest = name.includes("/") ? name.slice(name.indexOf("/") + 1) : "";
@@ -276,6 +282,7 @@ export function getThemeDetail(access: ThemeAccess): {
   createdAt: string;
   updatedAt: string;
   index: string;
+  notFound: string | null;
   pages: Record<string, string>;
   templates: string[];
   files: ThemeFileInfo[];
@@ -283,6 +290,7 @@ export function getThemeDetail(access: ThemeAccess): {
   const manifest = readThemeManifest(access.root);
   const templates = listTemplateBasenames(access.root);
   const files = listThemeFiles(access.root);
+  const notFound = manifest?.not_found?.trim() || "";
   return {
     id: access.row.id,
     packageId: access.row.packageId,
@@ -293,6 +301,7 @@ export function getThemeDetail(access: ThemeAccess): {
     createdAt: access.row.createdAt,
     updatedAt: access.row.updatedAt,
     index: manifest?.index?.trim() || "podcast",
+    notFound: notFound || null,
     pages: manifest?.pages ?? {},
     templates,
     files,
@@ -410,6 +419,13 @@ export function deleteThemeFile(access: ThemeAccess, relRaw: string): void {
   if (isRequiredThemePath(rel)) {
     throw new ThemeImportError("This file is required and cannot be deleted", 400);
   }
+  const manifest = readThemeManifest(access.root);
+  if (manifest?.preview === rel) {
+    throw new ThemeImportError(
+      "This file is the theme preview; clear preview in theme.json first",
+      400,
+    );
+  }
   const full = safeAssetPath(access.root, rel);
   if (!existsSync(full) || !statSync(full).isFile()) {
     throw new ThemeImportError("File not found", 404);
@@ -432,6 +448,11 @@ function validateManifestAgainstDisk(root: string): void {
   } catch (err) {
     throw new ThemeImportError(typeof err === "string" ? err : "Invalid theme pages");
   }
+  try {
+    assertThemePreviewValid(manifest, (rel) => existsSync(join(root, rel)));
+  } catch (err) {
+    throw new ThemeImportError(typeof err === "string" ? err : "Invalid theme preview");
+  }
 }
 
 export function patchThemeMetadata(
@@ -440,6 +461,7 @@ export function patchThemeMetadata(
     name?: string;
     version?: string;
     index?: string;
+    not_found?: string | null;
     pages?: Record<string, string> | null;
   },
 ): FeedThemeManifest {
@@ -448,17 +470,27 @@ export function patchThemeMetadata(
     throw new ThemeImportError("theme.json is missing or invalid", 400);
   }
 
+  let nextNotFound: string | undefined = current.not_found;
+  if (patch.not_found === null) {
+    nextNotFound = undefined;
+  } else if (patch.not_found !== undefined) {
+    nextNotFound = patch.not_found.trim();
+  }
+
   const next: FeedThemeManifest = {
     id: current.id,
     name: patch.name !== undefined ? patch.name.trim() : current.name,
     version: patch.version !== undefined ? patch.version.trim() : current.version,
     index: patch.index !== undefined ? patch.index.trim() : current.index,
+    not_found: nextNotFound,
     pages:
       patch.pages === null
         ? undefined
         : patch.pages !== undefined
           ? patch.pages
           : current.pages,
+    preview: current.preview,
+    homepage: current.homepage,
     allowOverride:
       access.row.scope === "server" ? false : current.allowOverride,
   };
@@ -468,6 +500,9 @@ export function patchThemeMetadata(
 
   if (next.pages && Object.keys(next.pages).length === 0) {
     delete next.pages;
+  }
+  if (!next.not_found) {
+    delete next.not_found;
   }
   if (next.allowOverride === undefined) {
     delete next.allowOverride;
@@ -482,6 +517,11 @@ export function patchThemeMetadata(
     assertThemePagesValid(parsed.data, listTemplateBasenames(access.root));
   } catch (err) {
     throw new ThemeImportError(typeof err === "string" ? err : "Invalid theme pages");
+  }
+  try {
+    assertThemePreviewValid(parsed.data, (rel) => existsSync(join(access.root, rel)));
+  } catch (err) {
+    throw new ThemeImportError(typeof err === "string" ? err : "Invalid theme preview");
   }
 
   // Validate any explicit page path values
