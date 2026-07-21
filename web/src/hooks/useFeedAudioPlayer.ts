@@ -36,7 +36,18 @@ export function useFeedAudioPlayer({
   persistPlaybackPosition = false,
   isActive = true,
 }: UseFeedAudioPlayerParams) {
-  const audioRef = useRef<HTMLAudioElement>(null);
+  /** Mutable ref for play/seek helpers; kept in sync by the callback ref below. */
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  /**
+   * Liquid themes portal the player after the first paint. A plain ref + useEffect
+   * can run while the <audio> is not mounted yet and never re-attach listeners.
+   * Track the element in state so timeupdate/play handlers bind when it appears.
+   */
+  const [audioEl, setAudioEl] = useState<HTMLAudioElement | null>(null);
+  const setAudioRef = useCallback((el: HTMLAudioElement | null) => {
+    audioRef.current = el;
+    setAudioEl((prev) => (prev === el ? prev : el));
+  }, []);
   const restoredPositionRef = useRef(false);
   const pendingSeekRef = useRef<number | null>(null);
   const wasActiveRef = useRef(isActive);
@@ -101,14 +112,14 @@ export function useFeedAudioPlayer({
   // Pause when another feed episode becomes active (only on active to inactive transition).
   useEffect(() => {
     if (wasActiveRef.current && !isActive) {
-      const el = audioRef.current;
+      const el = audioEl ?? audioRef.current;
       if (el && !el.paused) {
         el.pause();
         setIsPlaying(false);
       }
     }
     wasActiveRef.current = isActive;
-  }, [isActive]);
+  }, [isActive, audioEl]);
 
   // Fetch waveform data
   useEffect(() => {
@@ -151,9 +162,10 @@ export function useFeedAudioPlayer({
     }
   }, []);
 
-  // Set up audio event listeners
+  // Set up audio event listeners (must re-run when the <audio> element mounts,
+  // e.g. after LiquidFeedPage portals the player block).
   useEffect(() => {
-    const el = audioRef.current;
+    const el = audioEl;
     if (!el || !audioUrl) return;
 
     const onPlayEvt = () => {
@@ -221,6 +233,7 @@ export function useFeedAudioPlayer({
       el.removeEventListener('canplay', onCanPlay);
     };
   }, [
+    audioEl,
     audioUrl,
     onPlay,
     onPause,
@@ -234,11 +247,10 @@ export function useFeedAudioPlayer({
   ]);
 
   useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    applyPlaybackSettings(el);
-    restorePlaybackPosition(el);
-  }, [applyPlaybackSettings, restorePlaybackPosition, audioUrl, hasWaveform]);
+    if (!audioEl) return;
+    applyPlaybackSettings(audioEl);
+    restorePlaybackPosition(audioEl);
+  }, [audioEl, applyPlaybackSettings, restorePlaybackPosition, audioUrl, hasWaveform]);
 
   useEffect(() => {
     if (!persistPlaybackPosition || !isPlaying || !podcastSlug || !episodeSlug) return;
@@ -397,7 +409,7 @@ export function useFeedAudioPlayer({
   );
 
   return {
-    audioRef,
+    audioRef: setAudioRef,
     waveformData,
     currentTime,
     isPlaying,

@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.15.2 - 2026-07-21
+
+Fixed episode player not updating in custom themes.
+
 ## v1.15.1 - 2026-07-21
 
 Fixed not being able to scroll after leaving a review on default theme.
