@@ -12,6 +12,11 @@ import styles from './ReviewSubmitModal.module.css';
 
 const BODY_MIN_HEIGHT = 80;
 
+function reviewDialogPortalContainer(): HTMLElement | undefined {
+  if (typeof document === 'undefined') return undefined;
+  return document.querySelector<HTMLElement>('[data-harborfm-dialog-root]') ?? undefined;
+}
+
 export interface ReviewSubmitModalProps {
   open: boolean;
   onClose: () => void;
@@ -35,6 +40,7 @@ export function ReviewSubmitModal({
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const captchaRef = useRef<CaptchaHandle>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
+  const refreshReviewsOnCloseRef = useRef(false);
 
   useAutoResizeTextarea(bodyRef, body, { minHeight: BODY_MIN_HEIGHT });
 
@@ -77,8 +83,9 @@ export function ReviewSubmitModal({
     },
     onSuccess: () => {
       onSuccess?.();
-      queryClient.invalidateQueries({ queryKey: ['public-reviews', podcastSlug, episodeSlug] });
-      // Keep modal open so user sees success message (and verification reminder if applicable)
+      // Refresh the list after close. Invalidating while this dialog is still open
+      // (nested in ReviewsCard) can leave Radix body scroll-lock stuck.
+      refreshReviewsOnCloseRef.current = true;
     },
   });
 
@@ -89,7 +96,12 @@ export function ReviewSubmitModal({
   }, [mutation.isError]);
 
   function handleClose() {
+    const shouldRefresh = refreshReviewsOnCloseRef.current;
+    refreshReviewsOnCloseRef.current = false;
     onClose();
+    if (shouldRefresh) {
+      queryClient.invalidateQueries({ queryKey: ['public-reviews', podcastSlug, episodeSlug] });
+    }
     mutation.reset();
     setName('');
     setEmail('');
@@ -108,113 +120,115 @@ export function ReviewSubmitModal({
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange} modal>
-      <Dialog.Overlay className={styles.overlay} data-harborfm-dialog-overlay="review" />
-      <Dialog.Content
-        className={styles.dialog}
-        aria-describedby={undefined}
-        data-harborfm-dialog="review"
-      >
-        <div className={styles.dialogHeader}>
-          <Dialog.Title className={styles.title}>Write a review</Dialog.Title>
-          <Dialog.Close asChild>
-            <button type="button" className={styles.close} aria-label="Close">
-              <X size={20} strokeWidth={2} />
-            </button>
-          </Dialog.Close>
-        </div>
-        <div ref={bodyScrollRef} className={styles.bodyScroll}>
-          {mutation.isSuccess ? (
-            <div className={styles.success}>
-              <p className={styles.successText}>
-                {mutation.data?.verificationRequired
-                  ? 'Thanks for submitting! Please check your email to verify your email before your review is posted.'
-                  : 'Thanks for your review. It may appear after it’s approved.'}
-              </p>
-            </div>
-          ) : (
-            <form id="review-submit-form" onSubmit={handleSubmit} className={styles.form}>
-              {mutation.isError && (
-                <div className={styles.error}>
-                  <p className={styles.errorText}>{mutation.error?.message}</p>
-                </div>
-              )}
-              <label className={styles.label}>
-                Name
-                <input
-                  type="text"
-                  autoComplete="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className={styles.input}
-                  required
-                  maxLength={200}
-                />
-              </label>
-              {!isLoggedIn && (
+      <Dialog.Portal container={reviewDialogPortalContainer()}>
+        <Dialog.Overlay className={styles.overlay} data-harborfm-dialog-overlay="review" />
+        <Dialog.Content
+          className={styles.dialog}
+          aria-describedby={undefined}
+          data-harborfm-dialog="review"
+        >
+          <div className={styles.dialogHeader}>
+            <Dialog.Title className={styles.title}>Write a review</Dialog.Title>
+            <Dialog.Close asChild>
+              <button type="button" className={styles.close} aria-label="Close">
+                <X size={20} strokeWidth={2} />
+              </button>
+            </Dialog.Close>
+          </div>
+          <div ref={bodyScrollRef} className={styles.bodyScroll}>
+            {mutation.isSuccess ? (
+              <div className={styles.success}>
+                <p className={styles.successText}>
+                  {mutation.data?.verificationRequired
+                    ? 'Thanks for submitting! Please check your email to verify your email before your review is posted.'
+                    : "Thanks for your review. It may appear after it's approved."}
+                </p>
+              </div>
+            ) : (
+              <form id="review-submit-form" onSubmit={handleSubmit} className={styles.form}>
+                {mutation.isError && (
+                  <div className={styles.error}>
+                    <p className={styles.errorText}>{mutation.error?.message}</p>
+                  </div>
+                )}
                 <label className={styles.label}>
-                  Email
+                  Name
                   <input
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    type="text"
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     className={styles.input}
                     required
-                    maxLength={320}
+                    maxLength={200}
                   />
                 </label>
-              )}
-              <div className={styles.label}>
-                <span>Rating</span>
-                <ReviewStars rating={rating} onChange={setRating} size={28} />
-              </div>
-              <label className={styles.label}>
-                Your review
-                <textarea
-                  ref={bodyRef}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  className={styles.input}
-                  required
-                  rows={2}
-                  maxLength={5000}
-                  style={{ resize: 'none', overflow: 'hidden' }}
-                  placeholder="At least 10 characters"
-                />
-              </label>
-              {setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey && (
-                <Captcha
-                  ref={captchaRef}
-                  provider={setup.captchaProvider}
-                  siteKey={setup.captchaSiteKey}
-                  action="review"
-                />
-              )}
-            </form>
-          )}
-        </div>
-        <div className={styles.dialogFooter}>
-          {mutation.isSuccess ? (
-            <button type="button" className={styles.submit} onClick={handleClose}>
-              Close
-            </button>
-          ) : (
-            <>
-              <button type="button" className={styles.cancel} onClick={handleClose} aria-label="Cancel">
-                Cancel
+                {!isLoggedIn && (
+                  <label className={styles.label}>
+                    Email
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className={styles.input}
+                      required
+                      maxLength={320}
+                    />
+                  </label>
+                )}
+                <div className={styles.label}>
+                  <span>Rating</span>
+                  <ReviewStars rating={rating} onChange={setRating} size={28} />
+                </div>
+                <label className={styles.label}>
+                  Your review
+                  <textarea
+                    ref={bodyRef}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    className={styles.input}
+                    required
+                    rows={2}
+                    maxLength={5000}
+                    style={{ resize: 'none', overflow: 'hidden' }}
+                    placeholder="At least 10 characters"
+                  />
+                </label>
+                {setup?.captchaProvider && setup.captchaProvider !== 'none' && setup.captchaSiteKey && (
+                  <Captcha
+                    ref={captchaRef}
+                    provider={setup.captchaProvider}
+                    siteKey={setup.captchaSiteKey}
+                    action="review"
+                  />
+                )}
+              </form>
+            )}
+          </div>
+          <div className={styles.dialogFooter}>
+            {mutation.isSuccess ? (
+              <button type="button" className={styles.submit} onClick={handleClose}>
+                Close
               </button>
-              <button
-                type="submit"
-                form="review-submit-form"
-                className={styles.submit}
-                disabled={mutation.isPending}
-              >
-                {mutation.isPending ? 'Submitting...' : 'Submit review'}
-              </button>
-            </>
-          )}
-        </div>
-      </Dialog.Content>
+            ) : (
+              <>
+                <button type="button" className={styles.cancel} onClick={handleClose} aria-label="Cancel">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="review-submit-form"
+                  className={styles.submit}
+                  disabled={mutation.isPending}
+                >
+                  {mutation.isPending ? 'Submitting...' : 'Submit review'}
+                </button>
+              </>
+            )}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
     </Dialog.Root>
   );
 }

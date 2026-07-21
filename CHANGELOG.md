@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.15.1 - 2026-07-21
+
+Fixed not being able to scroll after leaving a review on default theme.
+
 ## v1.15.0 - 2026-07-20
 
 - **Theme packages:** `theme.json` supports optional `description`, `preview` (`images/…`), `homepage` (https live-preview URL), and `not_found` (themed 404 that is not a public page). Themes may ship `fonts/` (`.woff2` / `.ttf`). Import and the editor validate preview paths.
