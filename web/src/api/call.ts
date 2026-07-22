@@ -5,6 +5,8 @@ export interface CallStartResponse {
   sessionId: string;
   joinUrl: string;
   joinCode?: string;
+  dialInEnabled?: boolean;
+  dialInPhoneNumber?: string | null;
   webrtcUrl?: string;
   roomId?: string;
   /** Host token for host-only WebRTC actions (soundboard). Only for host. */
@@ -19,6 +21,9 @@ export interface CallJoinInfo {
   hostName?: string;
   passwordRequired?: boolean;
   artworkUrl?: string | null;
+  dialInEnabled?: boolean;
+  dialInPhoneNumber?: string | null;
+  joinCode?: string;
 }
 
 export interface CallSessionResponse {
@@ -26,6 +31,8 @@ export interface CallSessionResponse {
   token: string;
   joinUrl: string;
   joinCode?: string;
+  dialInEnabled?: boolean;
+  dialInPhoneNumber?: string | null;
   webrtcUrl?: string;
   roomId?: string;
   hostToken?: string;

@@ -27,7 +27,7 @@ A single unified script handles all OS and deploy-type combinations:
 | Ubuntu 24 | ✓ | ✓ | ✓ |
 | CentOS 9  | ✓ | ✓ | ✓ |
 
-- **nginx / caddy:** Install Docker and Docker Compose, download HarborFM compose and configs from GitHub, then run `docker compose --profile nginx` or `--profile caddy` (includes app, reverse proxy, Whisper, Fail2Ban). When running as root, the script creates a non-root user (`harborfm` by default, overridable via `NEW_USER`), copies SSH keys, and re-execs. UFW is installed and configured to allow SSH (22), HTTP (80), HTTPS (443), WebRTC HTTP (3002), and WebRTC RTC ports (41000–41100/udp). After startup, `INSTALL_DIR/setup.txt` is written with the setup URL for user reference.
+- **nginx / caddy:** Install Docker and Docker Compose, download HarborFM compose and configs from GitHub, then run `docker compose --profile nginx` or `--profile caddy` (includes app, reverse proxy, Whisper, Fail2Ban). When running as root, the script creates a non-root user (`harborfm` by default, overridable via `NEW_USER`), copies SSH keys, and re-execs. UFW is installed and configured to allow SSH (22), HTTP (80), HTTPS (443), and WebRTC RTC ports (41000–41100/udp). WebRTC HTTP (3002) stays on localhost and is reached via the reverse proxy `/webrtc-ws/` path; do not open 3002 publicly. After startup, `INSTALL_DIR/setup.txt` is written with the setup URL for user reference.
 - **pm2:** Install Node 22, pnpm, PM2; clone the repo, build, and run under PM2. Includes nginx or Caddy as reverse proxy. UFW and fail2ban are configured.
 
 ## Environment variables

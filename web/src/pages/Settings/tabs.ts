@@ -93,7 +93,18 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
   {
     id: 'webrtc',
     label: 'WebRTC',
-    searchTerms: ['WebRTC', 'Group Calls', 'Recording', 'mediasoup', 'callback'],
+    searchTerms: [
+      'WebRTC',
+      'Group Calls',
+      'Recording',
+      'mediasoup',
+      'callback',
+      'dial-in',
+      'phone',
+      'Telnyx',
+      'Public Key',
+      'HarborFM',
+    ],
   },
   {
     id: 'email',

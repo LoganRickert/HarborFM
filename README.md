@@ -145,7 +145,9 @@ Group calls use a separate **webrtc-service** (mediasoup). The main app talks to
 **Enabling:**
 
 - Set `WEBRTC_ENABLED=1` (or `true`) on the main app.
-- Configure `WEBRTC_SERVICE_URL` (internal, e.g. `http://webrtc:3002`) and `WEBRTC_PUBLIC_WS_URL` (public, e.g. `wss://example.com/webrtc-ws`). Nginx/Caddy proxy `/webrtc-ws/` to the webrtc service.
+- Configure `WEBRTC_SERVICE_URL` (internal HTTP to the webrtc process) and `WEBRTC_PUBLIC_WS_URL` (public, e.g. `wss://example.com/webrtc-ws`). Nginx/Caddy proxy `/webrtc-ws/` to the webrtc service; browsers and Telnyx should use that proxied path, not port 3002. Phone dial-in media uses the same public base (`…/webrtc-ws/dial-in/media`); Telnyx must be able to open that WSS URL. For live Telnyx dial-in, also set the Telnyx public key under Settings, WebRTC so webhooks can be signature-verified.
+  - **Docker Compose:** `WEBRTC_SERVICE_URL` is typically `http://webrtc:3002` (Compose service DNS). Compose also publishes webrtc HTTP as `127.0.0.1:3002` on the host only (not `0.0.0.0`), so it is reachable from the host/reverse proxy but not exposed on all interfaces.
+  - **PM2 / bare metal:** The webrtc process listens on `0.0.0.0:3002` by default; set `WEBRTC_SERVICE_URL` to something the main app can reach (usually `http://127.0.0.1:3002` when both run on the same machine). Keep port 3002 firewalled from the public internet and terminate public WebSocket traffic on the reverse proxy.
 
 **Docker Compose:** WebRTC runs under profile `webrtc`. Start with:
 

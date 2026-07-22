@@ -25,6 +25,7 @@ const MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".svg": "image/svg+xml; charset=utf-8",
   ".woff2": "font/woff2",
   ".ttf": "font/ttf",
 };
@@ -64,6 +65,14 @@ async function serveThemeAsset(
   }
   reply.header("Content-Type", type);
   reply.header("Cache-Control", "public, max-age=3600");
+  reply.header("X-Content-Type-Options", "nosniff");
+  if (ext === ".svg") {
+    // Prefer <img>/CSS use; block script execution if opened as a document.
+    reply.header(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'; img-src * data:; sandbox",
+    );
+  }
   return reply.send(createReadStream(full));
 }
 

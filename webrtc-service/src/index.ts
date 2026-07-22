@@ -22,6 +22,7 @@ import {
   WEBRTC_RATE_LIMIT_TIME_WINDOW,
   IS_PRODUCTION,
 } from "./config.js";
+import { timingSafeEqualStrings } from "./utils/secretCompare.js";
 import {
   getRoom,
   recordingByRoom,
@@ -99,12 +100,21 @@ app.get("/health", async (_request, reply) => reply.send({ ok: true }));
 
 app.addHook("preHandler", async (request, reply) => {
   const path = request.url.split("?")[0] ?? "";
-  const protectedPaths = ["/room", "/start-recording", "/stop-recording"];
+  const protectedPaths = [
+    "/room",
+    "/start-recording",
+    "/stop-recording",
+    "/dial-in/fake/join",
+    "/dial-in/fake/leave",
+    "/dial-in/fake/mute",
+    "/dial-in/live/leave",
+    "/dial-in/live/mute",
+  ];
   if (!protectedPaths.includes(path)) return;
   if (!WEBRTC_SERVICE_SECRET) return;
   const header = request.headers["x-webrtc-service-secret"];
   const secret = typeof header === "string" ? header.trim() : "";
-  if (secret !== WEBRTC_SERVICE_SECRET) {
+  if (!timingSafeEqualStrings(secret, WEBRTC_SERVICE_SECRET)) {
     return reply.status(401).send({ error: "Unauthorized" });
   }
 });

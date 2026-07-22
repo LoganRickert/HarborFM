@@ -159,6 +159,8 @@ export function EpisodeEditorContent({
         token: activeSession.token,
         joinUrl: activeSession.joinUrl,
         joinCode: activeSession.joinCode,
+        dialInEnabled: activeSession.dialInEnabled,
+        dialInPhoneNumber: activeSession.dialInPhoneNumber,
         webrtcUrl: activeSession.webrtcUrl,
         roomId: activeSession.roomId,
         hostToken: activeSession.hostToken,
@@ -241,6 +243,8 @@ export function EpisodeEditorContent({
             token: res.token,
             joinUrl: res.joinUrl ?? `${origin}/call/join/${res.token}`,
             joinCode: res.joinCode,
+            dialInEnabled: res.dialInEnabled,
+            dialInPhoneNumber: res.dialInPhoneNumber,
             webrtcUrl: res.webrtcUrl,
             roomId: res.roomId,
             hostToken: res.hostToken,
@@ -915,6 +919,8 @@ export function EpisodeEditorContent({
           sessionId={activeCall.sessionId}
           joinUrl={activeCall.joinUrl}
           joinCode={activeCall.joinCode}
+          dialInEnabled={activeCall.dialInEnabled}
+          dialInPhoneNumber={activeCall.dialInPhoneNumber}
           webrtcUrl={activeCall.webrtcUrl}
           roomId={activeCall.roomId}
           hostToken={activeCall.hostToken}

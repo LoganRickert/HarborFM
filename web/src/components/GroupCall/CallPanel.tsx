@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
-import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, Settings, X } from 'lucide-react';
+import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, Settings, X, Phone } from 'lucide-react';
 import { callWebSocketUrl, getActiveSession } from '../../api/call';
 import { DEVICE_ID_KEY, getAgcKey, getMicVolumeKey } from '../../constants/micSettings';
 import { formatDurationHMS } from '../../utils/format';
@@ -21,6 +21,7 @@ export interface CallParticipant {
   muted?: boolean;
   /** When true, host muted this participant; host can unmute. When false, participant muted themselves; host cannot unmute. */
   mutedByHost?: boolean;
+  source?: "phone";
 }
 
 export interface CallPanelProps {
@@ -28,6 +29,9 @@ export interface CallPanelProps {
   joinUrl: string;
   /** 4-digit code for quick join from Dashboard. */
   joinCode?: string;
+  /** When set with dial-in enabled, show phone number + code for PSTN guests. */
+  dialInPhoneNumber?: string | null;
+  dialInEnabled?: boolean;
   webrtcUrl?: string;
   roomId?: string;
   /** Host token for host-only WebRTC actions (soundboard). Only for host. */
@@ -75,7 +79,7 @@ function normalizeParticipants(list: CallParticipant[]): CallParticipant[] {
   return list.filter((p) => p.id !== '__pending_host__');
 }
 
-export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hostToken, initialParticipants, episodeId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onRecordingStateChange, onEndRequest, onRegisterEndCall, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
+export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dialInEnabled, webrtcUrl, roomId, hostToken, initialParticipants, episodeId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onRecordingStateChange, onEndRequest, onRegisterEndCall, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
   const [displayName, setDisplayName] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
@@ -198,7 +202,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
       .catch(() => {});
   }, [effectiveWebrtcUrl, effectiveRoomId, refreshDevices]);
 
-  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, soundboardVolumeFromRoom, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume, leaveRoom } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, micBackgroundNotice, livePublisherIds, publishersTracked, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, soundboardVolumeFromRoom, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume, leaveRoom } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     deviceId || undefined,
@@ -750,6 +754,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           {soundboardError && <p className={styles.errorCardMessage}>{soundboardError}</p>}
         </div>
       )}
+      {!minimized && micBackgroundNotice && (
+        <p className={styles.micBackgroundNotice} role="status" aria-live="polite">
+          {micBackgroundNotice}
+        </p>
+      )}
       {!minimized && !showChatView && !showSoundboardView && !showSettingsView && (
       <>
       <div className={styles.joinRow}>
@@ -777,6 +786,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
           <span className={styles.joinCodeValue} data-testid="call-join-code-value">{joinCode}</span>
         </div>
       )}
+      {dialInEnabled && dialInPhoneNumber && joinCode && (
+        <div className={styles.dialInCard} data-testid="call-dial-in-card">
+          <span className={styles.joinCodeLabel}>Phone dial-in</span>
+          <span className={styles.dialInNumber} data-testid="call-dial-in-number">
+            {dialInPhoneNumber}
+          </span>
+        </div>
+      )}
       <div className={styles.participants}>
         <span className={styles.participantsLabel}>
           Participants ({participants.length})
@@ -787,10 +804,16 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
         <ul className={styles.participantsList}>
           {[...participants]
             .sort((a, b) => (a.isHost === b.isHost ? 0 : a.isHost ? -1 : 1))
-            .map((p) => (
-            <li key={p.id} className={styles.participantCard} data-host={p.isHost || undefined}>
+            .map((p) => {
+              const showMuted =
+                Boolean(p.muted) ||
+                (publishersTracked &&
+                  Boolean(effectiveWebrtcUrl) &&
+                  !livePublisherIds.has(p.id));
+              return (
+            <li key={p.id} className={styles.participantCard} data-host={p.isHost || undefined} data-source={p.source || undefined} data-testid={p.source === 'phone' ? 'call-participant-phone' : undefined}>
               <span className={styles.participantRoleIcon} aria-hidden>
-                {p.isHost ? <Crown size={14} /> : <User size={14} />}
+                {p.isHost ? <Crown size={14} /> : p.source === 'phone' ? <Phone size={14} /> : <User size={14} />}
               </span>
               <span className={styles.participantInfo}>
                 {p.isHost ? (
@@ -839,7 +862,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
                       </span>
                     ) : (
                       <span className={styles.participantNameBlock}>
-                        {p.muted && (
+                        {showMuted && (
                           <span className={styles.mutedBadge}>
                             <MicOff size={10} />
                             Muted
@@ -853,7 +876,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
                   </>
                 ) : (
                   <span className={styles.participantNameBlock}>
-                    {p.muted && (
+                    {showMuted && (
                       <span className={styles.mutedBadge}>
                         <MicOff size={10} />
                         Muted
@@ -898,10 +921,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, webrtcUrl, roomId, hos
                 </button>
               </span>
               <div className={styles.participantMicLevel} role="img" aria-label="Microphone level">
-                <div className={styles.micLevelBar} style={{ width: `${p.muted ? 0 : (p.isHost ? micLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
+                <div className={styles.micLevelBar} style={{ width: `${showMuted ? 0 : (p.isHost ? micLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
               </div>
             </li>
-          ))}
+              );
+          })}
         </ul>
         )}
       </div>

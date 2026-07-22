@@ -4,15 +4,32 @@ import {
   FEED_THEME_ZIP_MAX_BYTES,
   feedThemePatchSchema,
   feedThemeScopeBodySchema,
+  themeCatalogDestinationCreateBodySchema,
+  themeCatalogInstallBodySchema,
 } from "@harborfm/shared";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import {
+  THEME_CATALOG_RATE_LIMIT_MAX,
+  THEME_CATALOG_RATE_LIMIT_WINDOW_MS,
+  THEME_DOWNLOAD_RATE_LIMIT_MAX,
+  THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS,
   THEME_IMPORT_RATE_LIMIT_MAX,
   THEME_IMPORT_RATE_LIMIT_WINDOW_MS,
 } from "../../config.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
+import { drizzleDb } from "../../db/index.js";
+import { users } from "../../db/schema.js";
+import { eq } from "drizzle-orm";
 import { getUserCanImportTheme } from "./canImportTheme.js";
 import { isServerWideThemeId, listBuiltinThemes, listDiskBuiltinThemes } from "./builtins.js";
+import {
+  addDestinationFromUrl,
+  browseDestinationCatalog,
+  deleteDestination,
+  installThemeFromCatalog,
+  listDestinationsForApi,
+  updateServerThemeFromCatalog,
+} from "./catalogInstall.js";
 import { deleteThemeForUser, importThemeZip, ThemeImportError } from "./importTheme.js";
 import {
   createEmptyThemeFile,
@@ -30,13 +47,15 @@ import {
   getOrBuildServerThemeZip,
   getOrBuildUserThemeZip,
 } from "./themeZip.js";
+import { userThemeDirPath } from "./paths.js";
+import { readThemeManifest } from "./themePages.js";
 import * as repo from "./repo.js";
 
-/** Cap theme zip downloads: 2 per minute per user. */
+/** Cap theme zip downloads (defaults 2/min; configurable via env). */
 const THEME_DOWNLOAD_RATE_LIMIT = {
   bucket: "theme-download",
-  windowMs: 60_000,
-  max: 2,
+  windowMs: THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS,
+  max: THEME_DOWNLOAD_RATE_LIMIT_MAX,
 };
 
 /** Cap theme ZIP imports (defaults 2/min; e2e shortens the window via env). */
@@ -46,7 +65,30 @@ const THEME_IMPORT_RATE_LIMIT = {
   max: THEME_IMPORT_RATE_LIMIT_MAX,
 };
 
+/** Cap catalog fetches / browses (defaults 10/min; configurable via env). */
+const THEME_CATALOG_RATE_LIMIT = {
+  bucket: "theme-catalog",
+  windowMs: THEME_CATALOG_RATE_LIMIT_WINDOW_MS,
+  max: THEME_CATALOG_RATE_LIMIT_MAX,
+};
+
 const THEME_FILE_MAX_BYTES = 2 * 1024 * 1024;
+
+function isAdminUser(userId: string): boolean {
+  const row = drizzleDb
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+    .get();
+  return row?.role === "admin";
+}
+
+function requireAdmin(userId: string): void {
+  if (!isAdminUser(userId)) {
+    throw new ThemeImportError("Admin access required", 403);
+  }
+}
 
 async function readMultipartZip(
   request: { file: () => Promise<{ file: NodeJS.ReadableStream; filename: string } | undefined> },
@@ -133,15 +175,21 @@ export async function themesRoutes(app: FastifyInstance) {
       },
     },
     async (request) => {
-      const themes = repo.listThemesForUser(request.userId as string).map((t) => ({
-        id: t.id,
-        packageId: t.packageId,
-        name: t.name,
-        version: t.version,
-        byteSize: t.byteSize,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-      }));
+      const userId = request.userId as string;
+      const themes = repo.listThemesForUser(userId).map((t) => {
+        const description =
+          readThemeManifest(userThemeDirPath(userId, t.id))?.description?.trim() ?? "";
+        return {
+          id: t.id,
+          packageId: t.packageId,
+          name: t.name,
+          version: t.version,
+          description,
+          byteSize: t.byteSize,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        };
+      });
       return { themes };
     },
   );
@@ -159,6 +207,189 @@ export async function themesRoutes(app: FastifyInstance) {
   );
 
   app.get(
+    "/themes/destinations",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Themes"],
+        summary: "List theme catalog destinations for this instance",
+      },
+    },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      try {
+        requireThemeImport(userId);
+        return listDestinationsForApi();
+      } catch (err) {
+        return sendThemeError(reply, err);
+      }
+    },
+  );
+
+  app.post(
+    "/themes/destinations",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler(THEME_CATALOG_RATE_LIMIT),
+      ],
+      schema: {
+        tags: ["Themes"],
+        summary: "Add a theme catalog destination (admin)",
+      },
+    },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      try {
+        requireThemeImport(userId);
+        requireAdmin(userId);
+        const body = themeCatalogDestinationCreateBodySchema.parse(request.body);
+        const destination = await addDestinationFromUrl({
+          name: body.name,
+          url: body.url,
+        });
+        return reply.status(201).send({ destination });
+      } catch (err) {
+        if (err instanceof ThemeImportError) {
+          return sendThemeError(reply, err);
+        }
+        if (err instanceof Error && "issues" in err) {
+          return reply.status(400).send({ error: "Invalid request body" });
+        }
+        if (err instanceof Error) {
+          return reply.status(400).send({ error: err.message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.delete(
+    "/themes/destinations/:destinationId",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Themes"],
+        summary: "Remove a theme catalog destination (admin)",
+        params: {
+          type: "object",
+          required: ["destinationId"],
+          properties: { destinationId: { type: "string" } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      try {
+        requireThemeImport(userId);
+        requireAdmin(userId);
+        const { destinationId } = request.params as { destinationId: string };
+        deleteDestination(destinationId);
+        return reply.status(204).send();
+      } catch (err) {
+        return sendThemeError(reply, err);
+      }
+    },
+  );
+
+  app.get(
+    "/themes/destinations/:destinationId/catalog",
+    {
+      preHandler: [
+        requireAuth,
+        userRateLimitPreHandler(THEME_CATALOG_RATE_LIMIT),
+      ],
+      schema: {
+        tags: ["Themes"],
+        summary: "Fetch a destination catalog via the server (SSRF-safe proxy)",
+        params: {
+          type: "object",
+          required: ["destinationId"],
+          properties: { destinationId: { type: "string" } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      try {
+        requireThemeImport(userId);
+        const { destinationId } = request.params as { destinationId: string };
+        return await browseDestinationCatalog(destinationId);
+      } catch (err) {
+        return sendThemeError(reply, err);
+      }
+    },
+  );
+
+  app.post(
+    "/themes/catalog/install",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler(THEME_IMPORT_RATE_LIMIT),
+      ],
+      schema: {
+        tags: ["Themes"],
+        summary: "Install a theme from a catalog destination",
+      },
+    },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      try {
+        requireThemeImport(userId);
+        const body = themeCatalogInstallBodySchema.parse(request.body);
+        if (body.scope === "server") {
+          requireAdmin(userId);
+        }
+        const result = await installThemeFromCatalog(userId, body);
+        return reply.status(result.updated ? 200 : 201).send(result);
+      } catch (err) {
+        if (err instanceof ThemeImportError) {
+          return sendThemeError(reply, err);
+        }
+        if (err instanceof Error && "issues" in err) {
+          return reply.status(400).send({ error: "Invalid request body" });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.post(
+    "/themes/builtins/:builtinId/update",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler(THEME_IMPORT_RATE_LIMIT),
+      ],
+      schema: {
+        tags: ["Themes"],
+        summary: "Update a server theme from its catalog URL (admin)",
+        params: {
+          type: "object",
+          required: ["builtinId"],
+          properties: { builtinId: { type: "string" } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.userId as string;
+      try {
+        requireThemeImport(userId);
+        requireAdmin(userId);
+        const { builtinId } = request.params as { builtinId: string };
+        const result = await updateServerThemeFromCatalog(userId, builtinId);
+        return result;
+      } catch (err) {
+        return sendThemeError(reply, err);
+      }
+    },
+  );
+
+  app.get(
     "/themes/builtins/:builtinId/download",
     {
       preHandler: [
@@ -168,7 +399,8 @@ export async function themesRoutes(app: FastifyInstance) {
       schema: {
         tags: ["Themes"],
         summary: "Download a built-in theme as a zip",
-        description: "Rate limited to 2 downloads per minute per user.",
+        description:
+          "Rate limited per user (THEME_DOWNLOAD_RATE_LIMIT_MAX / THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS).",
         params: {
           type: "object",
           required: ["builtinId"],
@@ -243,7 +475,8 @@ export async function themesRoutes(app: FastifyInstance) {
       schema: {
         tags: ["Themes"],
         summary: "Download one of your imported themes as a zip",
-        description: "Rate limited to 2 downloads per minute per user.",
+        description:
+          "Rate limited per user (THEME_DOWNLOAD_RATE_LIMIT_MAX / THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS).",
         params: {
           type: "object",
           required: ["themeId"],

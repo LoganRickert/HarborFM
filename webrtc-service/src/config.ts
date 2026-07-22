@@ -41,6 +41,11 @@ export const MAX_PRODUCERS_PER_ROOM = Number(process.env.MAX_PRODUCERS_PER_ROOM)
 export const FINALIZE_RTP_FLUSH_MS =
   Number(process.env.FINALIZE_RTP_FLUSH_MS) || 1200;
 
+/** When 1, enable FakeDialIn HTTP endpoints (local/e2e only). Env: DIAL_IN_FAKE. */
+export const DIAL_IN_FAKE =
+  process.env.DIAL_IN_FAKE?.trim() === "1" ||
+  process.env.DIAL_IN_FAKE?.trim() === "true";
+
 /** Format current local time as YYYYMMDD_HHMMSS for recording folder names (matches segments format). */
 export function formatDateTimeForFolder(): string {
   const d = new Date();

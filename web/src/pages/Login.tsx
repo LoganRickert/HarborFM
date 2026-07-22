@@ -89,6 +89,8 @@ export function Login() {
       }
     },
     onError: (err: Error) => {
+      // Token is single-use; clear so the user must solve CAPTCHA again.
+      captchaRef.current?.reset();
       console.error('[Login] submit failed', { message: err.message, name: err.name });
     },
   });

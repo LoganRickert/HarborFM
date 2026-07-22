@@ -642,6 +642,46 @@
   background: var(--accent-dim);
 }
 
+.dialInHintNote {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.dialInSettingsList {
+  margin: 0.35rem 0 0;
+  padding: 0;
+}
+
+.dialInSettingsRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+
+.dialInSettingsRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dialInSettingsRow dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dialInSettingsRow dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .ssoButtonAppearanceFieldset {
   margin: 0;
   padding: 0;

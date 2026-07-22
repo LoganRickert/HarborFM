@@ -24,6 +24,7 @@ import {
   formatDateTimeForFolder,
 } from "../config.js";
 import { assertSafeId, assertSafeFilePathRelative } from "../validation.js";
+import { timingSafeEqualStrings } from "../utils/secretCompare.js";
 
 /** In-flight start-recording per room, so stop-recording waits for setup to finish (race fix). */
 const startRecordingByRoom = new Map<string, { resolve: () => void; promise: Promise<void> }>();
@@ -285,7 +286,11 @@ export function registerRecordingRoutes(
 
     const envSecret = process.env.RECORDING_CALLBACK_SECRET?.trim() || null;
     const bodySecret = recordingCallbackSecret?.trim() || null;
-    if (bodySecret && envSecret && bodySecret !== envSecret) {
+    if (
+      bodySecret &&
+      envSecret &&
+      !timingSafeEqualStrings(bodySecret, envSecret)
+    ) {
       request.log.warn({ roomId }, "start-recording rejected: recordingCallbackSecret does not match webrtc RECORDING_CALLBACK_SECRET");
       releaseLock!();
       startRecordingLockByRoom.delete(roomId);

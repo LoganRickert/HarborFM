@@ -1223,3 +1223,12 @@ export const feedThemes = sqliteTable(
     index("idx_feed_themes_scope").on(table.scope),
   ],
 );
+
+/** Instance-wide theme catalog destinations (admin-managed catalog.json URLs). */
+export const themeCatalogDestinations = sqliteTable("theme_catalog_destinations", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull().unique(),
+  createdAt: text("created_at").notNull().default(sqlNow()),
+  updatedAt: text("updated_at").notNull().default(sqlNow()),
+});

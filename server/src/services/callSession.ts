@@ -16,6 +16,8 @@ export interface CallParticipant {
   mutedByHost?: boolean;
   /** True when host's socket disconnected (e.g. tab closed). Call continues for grace period. */
   disconnected?: boolean;
+  /** How the participant joined. Phone dial-in (incl. FakeDialIn) uses "phone". */
+  source?: "phone";
 }
 
 export interface RecordingEvent {
@@ -200,6 +202,7 @@ export function addParticipant(
   sessionId: string,
   participantId: string,
   name: string,
+  opts?: { source?: "phone" },
 ): CallParticipant | null {
   const session = sessionsById.get(sessionId);
   if (!session || session.ended) return null;
@@ -208,6 +211,7 @@ export function addParticipant(
     name: name || "Guest",
     isHost: false,
     joinedAt: Date.now(),
+    ...(opts?.source === "phone" ? { source: "phone" as const } : {}),
   };
   session.participants.push(p);
   return p;
@@ -330,6 +334,15 @@ export function getSessionByCode(code: string): CallSession | undefined {
   if (normalized.length !== 4 || !/^\d{4}$/.test(normalized)) return undefined;
   const s = sessionsByCode.get(normalized);
   return s && !s.ended ? s : undefined;
+}
+
+/** Find active session that still has this participant id. */
+export function findSessionByParticipantId(participantId: string): CallSession | undefined {
+  for (const session of sessionsById.values()) {
+    if (session.ended) continue;
+    if (session.participants.some((p) => p.id === participantId)) return session;
+  }
+  return undefined;
 }
 
 /** For debugging: count of active (non-ended) sessions. */

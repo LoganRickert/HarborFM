@@ -15,6 +15,7 @@ const CONTENT_TYPES = {
   '.png': 'image/png',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
+  '.svg': 'image/svg+xml; charset=utf-8',
   '.zip': 'application/zip',
 };
 

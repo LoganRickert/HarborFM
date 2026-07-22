@@ -30,12 +30,22 @@ import {
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { getRequestOrigin, getPublicWsUrl, broadcastToSession, CALL_JOIN_CONTEXT, sessionSockets } from "./shared.js";
 import { WEBRTC_ENABLED } from "../../config.js";
+import { hangUpFakeDialInsForRoom } from "./routes.dialIn.js";
+import { getDialInPublicConfig } from "./dialIn/config.js";
 import {
   callStartBodySchema,
   callSessionCodeParamSchema,
   callSessionTokenParamSchema,
   callSessionQuerySchema,
 } from "@harborfm/shared";
+
+function dialInPayloadFields(): { dialInEnabled: boolean; dialInPhoneNumber: string | null } {
+  const cfg = getDialInPublicConfig();
+  return {
+    dialInEnabled: cfg.enabled,
+    dialInPhoneNumber: cfg.enabled ? cfg.phoneNumber : null,
+  };
+}
 
 export async function registerLifecycleRoutes(app: FastifyInstance): Promise<void> {
   app.post(
@@ -64,6 +74,8 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
               sessionId: { type: "string" },
               joinUrl: { type: "string" },
               joinCode: { type: "string", description: "4-digit code for quick join from Dashboard" },
+              dialInEnabled: { type: "boolean" },
+              dialInPhoneNumber: { type: "string", nullable: true },
               webrtcUrl: { type: "string", nullable: true },
               roomId: { type: "string", nullable: true },
               hostToken: { type: "string", nullable: true },
@@ -115,6 +127,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
           sessionId: existing.sessionId,
           joinUrl,
           joinCode: existing.joinCode,
+          ...dialInPayloadFields(),
         };
         const webrtcCfg = getWebRtcConfig();
         if (WEBRTC_ENABLED && existing.roomId && webrtcCfg.publicWsUrl) {
@@ -168,6 +181,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
           broadcastToSession(endedSession.sessionId, { type: "callEnded" });
           broadcastToEpisode(endedSession.episodeId, { type: "callEnded" });
           sessionSockets.delete(endedSession.sessionId);
+          void hangUpFakeDialInsForRoom(endedSession.roomId);
         },
       );
       let webrtcUrl: string | null = null;
@@ -223,6 +237,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         sessionId: session.sessionId,
         joinUrl,
         joinCode: session.joinCode,
+        ...dialInPayloadFields(),
       };
       if (webrtcUrl && roomId) {
         payload.webrtcUrl = webrtcUrl;
@@ -352,6 +367,9 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
               hostName: { type: "string", description: "Current host display name" },
               passwordRequired: { type: "boolean", description: "True when host set a password" },
               artworkUrl: { type: "string", nullable: true, description: "Podcast or episode cover URL" },
+              dialInEnabled: { type: "boolean" },
+              dialInPhoneNumber: { type: "string", nullable: true },
+              joinCode: { type: "string", description: "4-digit join code for phone dial-in" },
             },
           },
           404: { description: "Invalid or ended session" },
@@ -410,6 +428,8 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         hostName,
         passwordRequired,
         artworkUrl,
+        ...dialInPayloadFields(),
+        joinCode: session.joinCode,
       });
     },
   );
@@ -438,6 +458,8 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
               token: { type: "string" },
               joinUrl: { type: "string" },
               joinCode: { type: "string", description: "4-digit code for quick join from Dashboard" },
+              dialInEnabled: { type: "boolean" },
+              dialInPhoneNumber: { type: "string", nullable: true },
               webrtcUrl: { type: "string", nullable: true },
               roomId: { type: "string", nullable: true },
               hostToken: { type: "string", nullable: true },
@@ -479,6 +501,7 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
         token: session.token,
         joinUrl,
         joinCode: session.joinCode,
+        ...dialInPayloadFields(),
       };
       const publicWs = getPublicWsUrl(
         request.headers["origin"] as string | undefined,

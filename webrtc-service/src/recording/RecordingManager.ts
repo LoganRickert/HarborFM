@@ -302,7 +302,7 @@ export class RecordingManager {
     mkdirSync(dirname(finalPath), { recursive: true });
 
     const segmentsOut = allSegments.map((s) => {
-      const source = this.deps.getProducerSource?.(s.producerId);
+      const source = s.source ?? this.deps.getProducerSource?.(s.producerId);
       const participant = this.deps.getProducerParticipant?.(s.producerId);
       const soundboardAssetId = this.deps.getProducerSoundboardAsset?.(s.producerId);
       const seg: Record<string, unknown> = {
@@ -315,7 +315,7 @@ export class RecordingManager {
         codec: "libmp3lame",
       };
       if (participant?.participantName) seg.participantName = participant.participantName;
-      if (source === "soundboard") seg.source = "soundboard";
+      if (source === "soundboard" || source === "phone") seg.source = source;
       if (source === "soundboard" && soundboardAssetId) seg.soundboardAssetId = soundboardAssetId;
       if (s.volume != null && s.volume !== 1) seg.volume = s.volume;
       return seg;

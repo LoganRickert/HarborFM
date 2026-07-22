@@ -1,22 +1,31 @@
 import {
   FEED_THEME_ZIP_MAX_BYTES,
+  HARBORFM_OFFICIAL_THEME_CATALOG_URL,
   type FeedBuiltinThemeListItem,
   type FeedBuiltinThemesListResponse,
   type FeedThemeDetail,
   type FeedThemeListItem,
   type FeedThemePatch,
   type FeedThemesListResponse,
+  type ThemeBuiltinUpdateResponse,
+  type ThemeCatalogBrowseResponse,
+  type ThemeCatalogDestination,
+  type ThemeCatalogDestinationsResponse,
+  type ThemeCatalogInstallResponse,
+  type ThemeCatalogThemeEntry,
 } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
 
-export { FEED_THEME_ZIP_MAX_BYTES };
+export { FEED_THEME_ZIP_MAX_BYTES, HARBORFM_OFFICIAL_THEME_CATALOG_URL };
 
 export type ThemeListItem = FeedThemeListItem;
 export type BuiltinThemeListItem = FeedBuiltinThemeListItem;
 export type ThemeDetail = FeedThemeDetail;
 export type ThemePatch = FeedThemePatch;
+export type ThemeDestination = ThemeCatalogDestination;
+export type ThemeCatalogEntry = ThemeCatalogThemeEntry;
 
 function toThemeListItem(r: Record<string, unknown>): ThemeListItem {
   return {
@@ -24,6 +33,7 @@ function toThemeListItem(r: Record<string, unknown>): ThemeListItem {
     packageId: String(r.packageId ?? r.package_id ?? ''),
     name: String(r.name ?? ''),
     version: String(r.version ?? ''),
+    description: String(r.description ?? ''),
     byteSize: Number(r.byteSize ?? r.byte_size ?? 0),
     createdAt: String(r.createdAt ?? r.created_at ?? ''),
     updatedAt: String(r.updatedAt ?? r.updated_at ?? ''),
@@ -291,4 +301,84 @@ export function themeAssetPreviewUrl(
     return `${BASE}/public/themes/builtin/${encodeURIComponent(themeId)}/assets/${encoded}`;
   }
   return `${BASE}/public/themes/${encodeURIComponent(themeId)}/assets/${encoded}`;
+}
+
+export function listThemeDestinations(): Promise<ThemeCatalogDestinationsResponse> {
+  return fetch(`${BASE}/themes/destinations`, {
+    method: 'GET',
+    credentials: 'include',
+  }).then((r) => {
+    if (!r.ok) return parseJsonError(r);
+    return r.json();
+  });
+}
+
+export function addThemeDestination(input: {
+  name: string;
+  url: string;
+}): Promise<{ destination: ThemeDestination }> {
+  return fetch(`${BASE}/themes/destinations`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { ...csrfHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  }).then((r) => {
+    if (!r.ok) return parseJsonError(r);
+    return r.json();
+  });
+}
+
+export function deleteThemeDestination(destinationId: string): Promise<void> {
+  return fetch(`${BASE}/themes/destinations/${encodeURIComponent(destinationId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: csrfHeaders(),
+  }).then((r) => {
+    if (!r.ok) return parseJsonError(r);
+    return undefined;
+  });
+}
+
+export function browseThemeDestinationCatalog(
+  destinationId: string,
+): Promise<ThemeCatalogBrowseResponse> {
+  return fetch(
+    `${BASE}/themes/destinations/${encodeURIComponent(destinationId)}/catalog`,
+    {
+      method: 'GET',
+      credentials: 'include',
+    },
+  ).then((r) => {
+    if (!r.ok) return parseJsonError(r);
+    return r.json();
+  });
+}
+
+export function installThemeFromCatalog(input: {
+  destinationId: string;
+  packageId: string;
+  scope: 'user' | 'server';
+}): Promise<ThemeCatalogInstallResponse> {
+  return fetch(`${BASE}/themes/catalog/install`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { ...csrfHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  }).then((r) => {
+    if (!r.ok) return parseJsonError(r);
+    return r.json();
+  });
+}
+
+export function updateServerThemeFromCatalog(
+  builtinId: string,
+): Promise<ThemeBuiltinUpdateResponse> {
+  return fetch(`${BASE}/themes/builtins/${encodeURIComponent(builtinId)}/update`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+  }).then((r) => {
+    if (!r.ok) return parseJsonError(r);
+    return r.json();
+  });
 }

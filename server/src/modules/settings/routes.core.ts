@@ -586,6 +586,36 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         const v = String(body.recordingCallbackSecret).trim();
         recording_callback_secret = v === "(set)" ? current.recording_callback_secret : v;
       }
+      const dial_in_enabled =
+        body.dialInEnabled !== undefined
+          ? Boolean(body.dialInEnabled)
+          : current.dial_in_enabled;
+      const dial_in_phone_number =
+        body.dialInPhoneNumber !== undefined
+          ? String(body.dialInPhoneNumber).trim()
+          : current.dial_in_phone_number;
+      const dial_in_consent_prompt =
+        body.dialInConsentPrompt !== undefined
+          ? String(body.dialInConsentPrompt)
+          : current.dial_in_consent_prompt;
+      const dial_in_hd_voice =
+        body.dialInHdVoice !== undefined
+          ? Boolean(body.dialInHdVoice)
+          : current.dial_in_hd_voice;
+      let telnyx_api_key = current.telnyx_api_key;
+      if (body.telnyxApiKey !== undefined) {
+        const v = String(body.telnyxApiKey).trim();
+        telnyx_api_key = v === "(set)" ? current.telnyx_api_key : v;
+      }
+      let telnyx_public_key = current.telnyx_public_key;
+      if (body.telnyxPublicKey !== undefined) {
+        const v = String(body.telnyxPublicKey).trim();
+        telnyx_public_key = v === "(set)" ? current.telnyx_public_key : v;
+      }
+      const telnyx_connection_id =
+        body.telnyxConnectionId !== undefined
+          ? String(body.telnyxConnectionId).trim()
+          : current.telnyx_connection_id;
       const two_factor_enabled =
         body.twoFactorEnabled !== undefined
           ? Boolean(body.twoFactorEnabled)
@@ -681,6 +711,13 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         webrtc_service_url,
         webrtc_public_ws_url,
         recording_callback_secret,
+        dial_in_enabled,
+        dial_in_phone_number,
+        dial_in_consent_prompt,
+        dial_in_hd_voice,
+        telnyx_api_key,
+        telnyx_public_key,
+        telnyx_connection_id,
         two_factor_enabled,
         two_factor_methods,
         two_factor_enforced,

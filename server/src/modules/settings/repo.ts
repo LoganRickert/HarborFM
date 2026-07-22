@@ -241,6 +241,13 @@ export function writeSettings(settings: AppSettings): void {
   upsert("webrtc_service_url", settings.webrtc_service_url ?? "");
   upsert("webrtc_public_ws_url", settings.webrtc_public_ws_url ?? "");
   upsert("recording_callback_secret", settings.recording_callback_secret ?? "");
+  upsert("dial_in_enabled", String(settings.dial_in_enabled ?? false));
+  upsert("dial_in_phone_number", settings.dial_in_phone_number ?? "");
+  upsert("dial_in_consent_prompt", settings.dial_in_consent_prompt ?? "");
+  upsert("dial_in_hd_voice", String(settings.dial_in_hd_voice ?? true));
+  upsert("telnyx_api_key", settings.telnyx_api_key ?? "");
+  upsert("telnyx_public_key", settings.telnyx_public_key ?? "");
+  upsert("telnyx_connection_id", settings.telnyx_connection_id ?? "");
   upsert("two_factor_enabled", String(settings.two_factor_enabled));
   upsert("two_factor_methods", settings.two_factor_methods ?? DEFAULTS.two_factor_methods);
   upsert("two_factor_enforced", String(settings.two_factor_enforced));

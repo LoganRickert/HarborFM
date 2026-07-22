@@ -4,6 +4,8 @@ export type CaptchaProvider = 'recaptcha_v2' | 'recaptcha_v3' | 'hcaptcha';
 
 export interface CaptchaHandle {
   getToken: () => Promise<string>;
+  /** Clear a solved visible captcha so the user must complete it again. */
+  reset: () => void;
 }
 
 declare global {
@@ -12,6 +14,7 @@ declare global {
       ready: (cb: () => void) => void;
       execute: (siteKey: string, options: { action: string }) => Promise<string>;
       getResponse: (widgetId?: number) => string;
+      reset: (widgetId?: number) => void;
       render: (
         container: string | HTMLElement,
         options: {
@@ -33,6 +36,7 @@ declare global {
         },
       ) => number;
       getResponse: (widgetId?: number) => string;
+      reset: (widgetId?: number) => void;
     };
     onRecaptchaLoad?: () => void;
     onHcaptchaLoad?: () => void;
@@ -95,6 +99,22 @@ export const Captcha = forwardRef<CaptchaHandle, CaptchaProps>(function Captcha(
           return Promise.resolve(token || '');
         }
         return Promise.resolve('');
+      },
+      reset: () => {
+        // v3 issues a fresh token on each execute(); nothing to clear.
+        if (provider === 'recaptcha_v3') return;
+        const wid = widgetIdRef.current;
+        if (wid == null) return;
+        try {
+          if (provider === 'recaptcha_v2' && window.grecaptcha) {
+            window.grecaptcha.reset(wid);
+          } else if (provider === 'hcaptcha' && window.hcaptcha) {
+            window.hcaptcha.reset(wid);
+          }
+        } catch {
+          // Widget may already be gone
+        }
+        onSolvedChangeRef.current?.(false);
       },
     }),
     [provider, siteKey, actionProp]

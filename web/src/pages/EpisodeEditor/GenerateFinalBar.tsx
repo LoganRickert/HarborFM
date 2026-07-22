@@ -298,6 +298,7 @@ export function GenerateFinalBar({
       onOpenTranscript();
       return;
     }
+    if (readOnly) return;
     if (onGenerateTranscript && canGenerateTranscript) {
       setIsGeneratingTranscript(true);
       try {
@@ -448,12 +449,17 @@ export function GenerateFinalBar({
             onClick={handleTranscriptClick}
             disabled={
               isBuilding ||
-              (!hasTranscript && !!onGenerateTranscript && (isGeneratingTranscript || !canGenerateTranscript))
+              (!hasTranscript &&
+                (readOnly ||
+                  (!!onGenerateTranscript &&
+                    (isGeneratingTranscript || !canGenerateTranscript))))
             }
             infoText={
-              onGenerateTranscript
-                ? 'Generate a transcript from your final audio, or upload your own SRT file.'
-                : 'Upload an SRT transcript for your episode.'
+              !hasTranscript && readOnly
+                ? 'Read-only accounts cannot generate or upload transcripts.'
+                : onGenerateTranscript
+                  ? 'Generate a transcript from your final audio, or upload your own SRT file.'
+                  : 'Upload an SRT transcript for your episode.'
             }
           />
         )}

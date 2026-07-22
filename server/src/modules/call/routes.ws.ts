@@ -14,6 +14,7 @@ import {
 } from "../../services/callSession.js";
 import { getWebRtcConfig, webrtcRequestHeaders } from "../../services/webrtcConfig.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
+import { hangUpFakeDialInsForRoom, setPhoneDialInMuted, kickPhoneDialIn } from "./routes.dialIn.js";
 import {
   broadcastToSession,
   removeSocketFromSession,
@@ -207,13 +208,19 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
           }
           if (!isHost) return;
           if (!setParticipantMutedByHost(sid, targetParticipantId, muted)) return;
-          const sockets = sessionSockets.get(sid);
-          if (sockets) {
-            for (const s of sockets) {
-              const info = socketToParticipant.get(s as unknown as WebSocket);
-              if (info?.participantId === targetParticipantId) {
-                s.send(JSON.stringify({ type: "setMute", muted, mutedByHost: muted }));
-                break;
+          const sessionAfterMute = getSessionById(sid);
+          const target = sessionAfterMute?.participants.find((p) => p.id === targetParticipantId);
+          if (target?.source === "phone") {
+            void setPhoneDialInMuted(targetParticipantId, muted);
+          } else {
+            const sockets = sessionSockets.get(sid);
+            if (sockets) {
+              for (const s of sockets) {
+                const info = socketToParticipant.get(s as unknown as WebSocket);
+                if (info?.participantId === targetParticipantId) {
+                  s.send(JSON.stringify({ type: "setMute", muted, mutedByHost: muted }));
+                  break;
+                }
               }
             }
           }
@@ -228,6 +235,10 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
           const sid = sessionId;
           const targetParticipantId = (msg as { participantId?: string }).participantId;
           if (!targetParticipantId || targetParticipantId === participantId) return;
+          const sessionForKick = getSessionById(sid);
+          const kickTarget = sessionForKick?.participants.find((p) => p.id === targetParticipantId);
+          if (!kickTarget) return;
+
           const sockets = sessionSockets.get(sid);
           let targetSocket: WebSocket | null = null;
           if (sockets) {
@@ -239,17 +250,29 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
               }
             }
           }
-          if (targetSocket) {
-            removeParticipant(sid, targetParticipantId);
-            socketToParticipant.delete(targetSocket);
-            sockets?.delete(targetSocket as unknown as WebSocket);
-            targetSocket.send(JSON.stringify({ type: "disconnected" }));
-            targetSocket.close();
-            broadcastToSession(sid, {
-              type: "participants",
-              participants: getSessionById(sid)?.participants ?? [],
+
+          // Phone dial-in (or any guest with no call WS): tear down media + roster.
+          if (kickTarget.source === "phone" || !targetSocket) {
+            void kickPhoneDialIn(sid, targetParticipantId).then((ok) => {
+              if (!ok) {
+                req.log.warn(
+                  { participantId: targetParticipantId, source: kickTarget.source },
+                  "Dial-in/orphan kick failed",
+                );
+              }
             });
+            return;
           }
+
+          removeParticipant(sid, targetParticipantId);
+          socketToParticipant.delete(targetSocket);
+          sockets?.delete(targetSocket as unknown as WebSocket);
+          targetSocket.send(JSON.stringify({ type: "disconnected" }));
+          targetSocket.close();
+          broadcastToSession(sid, {
+            type: "participants",
+            participants: getSessionById(sid)?.participants ?? [],
+          });
           return;
         }
 
@@ -273,6 +296,7 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
               broadcastToSession(sessionId, { type: "callEnded" });
               broadcastToEpisode(endedSession.episodeId, { type: "callEnded" });
               sessionSockets.delete(sessionId);
+              void hangUpFakeDialInsForRoom(endedSession.roomId);
             }
             removeSocketFromSession(sessionId, socket);
           })();

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.16.0 - 7-21-2026
+
+- **Sign-in:** After a failed login (or register / forgot-password), CAPTCHA resets so you solve a fresh one. Expired or reused CAPTCHA tokens show a plain-language error instead of a provider code.
+- **Transcripts:** Read-only accounts see Generate Transcript disabled, with a short tip, instead of an error after clicking.
+- **Phone dial-in:** Guests can call a HarborFM number, enter the 4-digit join code, and join the group call by phone. Turn it on under Settings, WebRTC (number, consent prompt, Telnyx). Hosts see the dial-in details on the call panel; the join page offers "Call in instead." Callers hear a short welcome, enter the code, and (when consent is configured) hear that before they are bridged into the room. Ending the call hangs up phone legs. Wrong PINs are limited; if no call is live, inbound dial-in is rejected before answer (no welcome TTS, so Telnyx does not bill an answered leg). Optional Prefer HD Voice (on by default) uses higher-quality phone audio when the carrier supports it.
+- **Group calls on mobile:** Locking the phone or switching apps no longer drops your mic just because the tab hid. HarborFM checks the connection when you come back and reconnects if needed. You only hear the local "Muted" cue if the OS actually stopped the mic. If someone stops publishing audio, others see them as muted until they are live again.
+
 ## v1.15.2 - 2026-07-21
 
 Fixed episode player not updating in custom themes.

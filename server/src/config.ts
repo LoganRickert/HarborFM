@@ -139,6 +139,68 @@ export const RECORDING_CALLBACK_SECRET =
 export const WEBRTC_SERVICE_SECRET =
   process.env.WEBRTC_SERVICE_SECRET?.trim() || null;
 
+/** When 1/true, enable FakeDialIn (local/e2e phone join without Telnyx). Env: DIAL_IN_FAKE. */
+export const DIAL_IN_FAKE =
+  process.env.DIAL_IN_FAKE?.trim() === "1" ||
+  process.env.DIAL_IN_FAKE?.trim() === "true";
+
+/**
+ * Spoken brand name in dial-in IVR welcome prompts (e.g. "Welcome to ...").
+ * Env: DIAL_IN_IVR_NAME. Default: APP_NAME.
+ */
+export const DIAL_IN_IVR_NAME =
+  process.env.DIAL_IN_IVR_NAME?.trim() || `${APP_NAME} Podcasting`;
+
+/**
+ * Per-IP max requests per minute on the public dial-in webhook.
+ * Env: DIAL_IN_WEBHOOK_RATE_LIMIT_MAX. Default 30.
+ */
+export const DIAL_IN_WEBHOOK_RATE_LIMIT_MAX =
+  Number(process.env.DIAL_IN_WEBHOOK_RATE_LIMIT_MAX) || 30;
+
+/**
+ * Telnyx TTS voice for dial-in gather/speak prompts.
+ * Env: DIAL_IN_TTS_VOICE. Default "female".
+ */
+export const DIAL_IN_TTS_VOICE =
+  process.env.DIAL_IN_TTS_VOICE?.trim() || "female";
+
+/**
+ * Telnyx Call Control API base URL (no trailing slash).
+ * Env: TELNYX_API_BASE. Default https://api.telnyx.com/v2.
+ */
+export const TELNYX_API_BASE =
+  process.env.TELNYX_API_BASE?.trim().replace(/\/+$/, "") ||
+  "https://api.telnyx.com/v2";
+
+/**
+ * Failed PIN guesses (wrong/timeout/no-call) per caller per 10-minute window.
+ * Env: DIAL_IN_MAX_PIN_FAILURES. Default 10.
+ */
+export const DIAL_IN_MAX_PIN_FAILURES =
+  Number(process.env.DIAL_IN_MAX_PIN_FAILURES) || 10;
+
+/**
+ * Answered inbound dial-in attempts per caller per 10-minute window.
+ * Env: DIAL_IN_MAX_INBOUND_PER_CALLER. Default 8.
+ */
+export const DIAL_IN_MAX_INBOUND_PER_CALLER =
+  Number(process.env.DIAL_IN_MAX_INBOUND_PER_CALLER) || 8;
+
+/**
+ * Non-ended IVR legs for one caller at once.
+ * Env: DIAL_IN_MAX_CONCURRENT_LEGS_PER_CALLER. Default 2.
+ */
+export const DIAL_IN_MAX_CONCURRENT_LEGS_PER_CALLER =
+  Number(process.env.DIAL_IN_MAX_CONCURRENT_LEGS_PER_CALLER) || 2;
+
+/**
+ * Non-ended IVR legs instance-wide.
+ * Env: DIAL_IN_MAX_CONCURRENT_LEGS_GLOBAL. Default 20.
+ */
+export const DIAL_IN_MAX_CONCURRENT_LEGS_GLOBAL =
+  Number(process.env.DIAL_IN_MAX_CONCURRENT_LEGS_GLOBAL) || 20;
+
 /** Host-away grace period (ms) when no guests. Env: HOST_AWAY_GRACE_NO_GUESTS_MS. Default 60000 (1 min). */
 export const HOST_AWAY_GRACE_NO_GUESTS_MS =
   Number(process.env.HOST_AWAY_GRACE_NO_GUESTS_MS) || 60_000;
@@ -271,6 +333,55 @@ export const THEME_IMPORT_RATE_LIMIT_WINDOW_MS =
 /** Theme ZIP import rate limit max requests per window. Env: THEME_IMPORT_RATE_LIMIT_MAX. Default 2. */
 export const THEME_IMPORT_RATE_LIMIT_MAX =
   Number(process.env.THEME_IMPORT_RATE_LIMIT_MAX) || 2;
+
+/** Theme zip download rate limit window (ms). 0 = no limit. Env: THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS. Default 60000. */
+export const THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS =
+  process.env.THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS)
+    : 60_000;
+
+/** Theme zip download rate limit max requests per window. Env: THEME_DOWNLOAD_RATE_LIMIT_MAX. Default 2. */
+export const THEME_DOWNLOAD_RATE_LIMIT_MAX =
+  Number(process.env.THEME_DOWNLOAD_RATE_LIMIT_MAX) || 2;
+
+/** Theme catalog browse/fetch rate limit window (ms). 0 = no limit. Env: THEME_CATALOG_RATE_LIMIT_WINDOW_MS. Default 60000. */
+export const THEME_CATALOG_RATE_LIMIT_WINDOW_MS =
+  process.env.THEME_CATALOG_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.THEME_CATALOG_RATE_LIMIT_WINDOW_MS)
+    : 60_000;
+
+/** Theme catalog browse/fetch rate limit max requests per window. Env: THEME_CATALOG_RATE_LIMIT_MAX. Default 10. */
+export const THEME_CATALOG_RATE_LIMIT_MAX =
+  Number(process.env.THEME_CATALOG_RATE_LIMIT_MAX) || 10;
+
+/**
+ * Max bytes when fetching a theme catalog.json.
+ * Env: THEME_CATALOG_MAX_BYTES. Default 1048576 (1 MB).
+ */
+export const THEME_CATALOG_MAX_BYTES =
+  Number(process.env.THEME_CATALOG_MAX_BYTES) || 1 * 1024 * 1024;
+
+/**
+ * Timeout (ms) for theme catalog and theme zip HTTP fetches.
+ * Env: THEME_CATALOG_FETCH_TIMEOUT_MS. Default 20000.
+ */
+export const THEME_CATALOG_FETCH_TIMEOUT_MS =
+  Number(process.env.THEME_CATALOG_FETCH_TIMEOUT_MS) || 20_000;
+
+/**
+ * In-memory cache TTL (ms) for fetched theme catalogs.
+ * Env: THEME_CATALOG_CACHE_TTL_MS. Default 60000.
+ */
+export const THEME_CATALOG_CACHE_TTL_MS =
+  Number(process.env.THEME_CATALOG_CACHE_TTL_MS) || 60_000;
+
+/**
+ * User-Agent for theme catalog and theme zip HTTP fetches.
+ * Env: THEME_CATALOG_USER_AGENT. Default "${APP_NAME}-ThemeCatalog/1.0".
+ */
+export const THEME_CATALOG_USER_AGENT =
+  process.env.THEME_CATALOG_USER_AGENT?.trim() ||
+  `${APP_NAME}-ThemeCatalog/1.0`;
 
 /** Forgot-password request cooldown (minutes). Env: FORGOT_PASSWORD_RATE_MINUTES. Default 5. */
 export const FORGOT_PASSWORD_RATE_MINUTES =

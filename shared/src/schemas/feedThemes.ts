@@ -3,6 +3,31 @@ import { z } from 'zod';
 /** Max theme zip size (client and server). */
 export const FEED_THEME_ZIP_MAX_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Official HarborFM theme catalog index.
+ * Served from a long-lived GitHub release tag named `catalog` (asset overwritten on each publish).
+ */
+export const HARBORFM_OFFICIAL_THEME_CATALOG_URL =
+  'https://github.com/LoganRickert/harborfm-themes/releases/download/catalog/catalog.json';
+
+/** https URL with no spaces (homepage / catalog pointers). */
+const httpsUrlSchema = z
+  .string()
+  .max(500)
+  .regex(/^https:\/\/[^\s]+$/i, {
+    error: 'must be an https URL with no spaces',
+  });
+
+/** http(s) URL for admin-pasted catalog destinations. */
+export const themeCatalogDestinationUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .regex(/^https?:\/\/[^\s]+$/i, {
+    error: 'must be an http(s) URL with no spaces',
+  });
+
 export const feedThemePackageIdSchema = z
   .string()
   .min(1)
@@ -41,9 +66,9 @@ export const feedThemePreviewPathSchema = z
   .string()
   .min(1)
   .max(120)
-  .regex(/^images\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(png|jpe?g|gif|webp)$/i, {
+  .regex(/^images\/[a-zA-Z0-9][a-zA-Z0-9._-]*\.(png|jpe?g|gif|webp|svg)$/i, {
     error:
-      'preview must be a single images/ file with extension .png, .jpg, .jpeg, .gif, or .webp',
+      'preview must be a single images/ file with extension .png, .jpg, .jpeg, .gif, .webp, or .svg',
   });
 
 export const feedThemeManifestSchema = z.object({
@@ -76,13 +101,12 @@ export const feedThemeManifestSchema = z.object({
    * Optional public homepage for the theme (docs gallery, credit links in footers).
    * Must be an https URL. Typical gallery URL: https://harborfm.com/themes/{id}/
    */
-  homepage: z
-    .string()
-    .max(500)
-    .regex(/^https:\/\/[^\s]+$/i, {
-      error: 'homepage must be an https URL with no spaces',
-    })
-    .optional(),
+  homepage: httpsUrlSchema.optional(),
+  /**
+   * Optional URL of the catalog.json this package was installed from.
+   * HarborFM sets this on catalog install so Server Themes can check for updates.
+   */
+  catalog: themeCatalogDestinationUrlSchema.optional(),
   /**
    * When false, HarborFM will not replace this server theme from the shipped image on upgrade.
    * Omitted / true means shipped upgrades may overwrite (server themes only). Set to false
@@ -98,6 +122,7 @@ export const feedThemeListItemSchema = z.object({
   packageId: z.string(),
   name: z.string(),
   version: z.string(),
+  description: z.string(),
   byteSize: z.number().int().nonnegative(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -118,6 +143,8 @@ export const feedBuiltinThemeListItemSchema = z.object({
   description: z.string(),
   /** Optional live preview / docs URL from theme.json `homepage`. */
   homepage: z.string().optional(),
+  /** Optional catalog.json URL from theme.json `catalog` (enables Update). */
+  catalog: z.string().optional(),
 });
 
 export type FeedBuiltinThemeListItem = z.infer<typeof feedBuiltinThemeListItemSchema>;
@@ -176,3 +203,92 @@ export const feedThemeScopeBodySchema = z.object({
 });
 
 export type FeedThemeScopeBody = z.infer<typeof feedThemeScopeBodySchema>;
+
+export const themeCatalogDestinationSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(120),
+  url: themeCatalogDestinationUrlSchema,
+});
+
+export type ThemeCatalogDestination = z.infer<typeof themeCatalogDestinationSchema>;
+
+export const themeCatalogDestinationsResponseSchema = z.object({
+  destinations: z.array(themeCatalogDestinationSchema),
+  officialCatalogUrl: z.string(),
+  hasOfficial: z.boolean(),
+});
+
+export type ThemeCatalogDestinationsResponse = z.infer<
+  typeof themeCatalogDestinationsResponseSchema
+>;
+
+export const themeCatalogDestinationCreateBodySchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  url: themeCatalogDestinationUrlSchema,
+});
+
+export type ThemeCatalogDestinationCreateBody = z.infer<
+  typeof themeCatalogDestinationCreateBodySchema
+>;
+
+export const themeCatalogThemeEntrySchema = z.object({
+  id: feedThemePackageIdSchema,
+  name: z.string().min(1).max(120),
+  version: z.string().min(1).max(64),
+  downloadUrl: z.string().min(1).max(1000),
+  byteSize: z.number().int().nonnegative().optional(),
+  sha256: z.string().min(1).max(128).optional(),
+  description: z.string().max(280).optional(),
+  homepage: z.string().optional(),
+  preview: z.string().optional(),
+  previewUrl: z.string().optional(),
+});
+
+export type ThemeCatalogThemeEntry = z.infer<typeof themeCatalogThemeEntrySchema>;
+
+export const themeCatalogDocumentSchema = z.object({
+  name: z.string().min(1).max(120),
+  generatedAt: z.string().optional(),
+  releaseTag: z.string().nullable().optional(),
+  themes: z.array(themeCatalogThemeEntrySchema).min(1),
+});
+
+export type ThemeCatalogDocument = z.infer<typeof themeCatalogDocumentSchema>;
+
+export const themeCatalogBrowseResponseSchema = z.object({
+  name: z.string(),
+  themes: z.array(themeCatalogThemeEntrySchema),
+});
+
+export type ThemeCatalogBrowseResponse = z.infer<typeof themeCatalogBrowseResponseSchema>;
+
+export const themeCatalogInstallBodySchema = z.object({
+  destinationId: z.string().min(1),
+  packageId: feedThemePackageIdSchema,
+  scope: z.enum(['user', 'server']),
+});
+
+export type ThemeCatalogInstallBody = z.infer<typeof themeCatalogInstallBodySchema>;
+
+export const themeCatalogInstallResponseSchema = z.object({
+  id: z.string(),
+  packageId: z.string(),
+  name: z.string(),
+  version: z.string(),
+  scope: z.enum(['user', 'server']),
+  updated: z.boolean(),
+});
+
+export type ThemeCatalogInstallResponse = z.infer<typeof themeCatalogInstallResponseSchema>;
+
+export const themeBuiltinUpdateResponseSchema = z.object({
+  id: z.string(),
+  packageId: z.string(),
+  name: z.string(),
+  version: z.string(),
+  updated: z.boolean(),
+  /** Present when catalog was checked but no newer version was available. */
+  message: z.string().optional(),
+});
+
+export type ThemeBuiltinUpdateResponse = z.infer<typeof themeBuiltinUpdateResponseSchema>;

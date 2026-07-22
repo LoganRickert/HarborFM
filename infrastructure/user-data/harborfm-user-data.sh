@@ -631,7 +631,7 @@ if [ "$DEPLOY_TYPE" != "pm2" ]; then
     sudo iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
     sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
     sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
-    sudo iptables -I INPUT -p tcp --dport 3002 -j ACCEPT 2>/dev/null || true
+    # WebRTC HTTP (3002) stays on localhost; do not open it publicly.
     sudo iptables -I INPUT -p udp --dport 41000:41100 -j ACCEPT 2>/dev/null || true
   elif $IS_DEB; then
     sudo ufw default deny incoming
@@ -639,14 +639,14 @@ if [ "$DEPLOY_TYPE" != "pm2" ]; then
     sudo ufw allow 22/tcp
     sudo ufw allow 80/tcp
     sudo ufw allow 443/tcp
-    sudo ufw allow 3002/tcp
+    # WebRTC HTTP (3002) is bound to localhost and proxied via /webrtc-ws/; do not expose it.
     sudo ufw allow 41000:41100/udp
     sudo ufw --force enable
   else
     sudo firewall-cmd --permanent --add-service=ssh
     sudo firewall-cmd --permanent --add-service=http
     sudo firewall-cmd --permanent --add-service=https
-    sudo firewall-cmd --permanent --add-port=3002/tcp
+    # WebRTC HTTP (3002) is bound to localhost and proxied via /webrtc-ws/; do not expose it.
     sudo firewall-cmd --permanent --add-port=41000-41100/udp
     sudo systemctl enable --now firewalld
     sudo firewall-cmd --reload

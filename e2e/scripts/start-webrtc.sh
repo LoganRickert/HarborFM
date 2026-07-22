@@ -12,6 +12,7 @@ export PORT="$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="${RECORDING_CALLBACK_SECRET_WEBRTC:-${RECORDING_CALLBACK_SECRET:-e2e-secret}}"
 export WEBRTC_SERVICE_SECRET="${WEBRTC_SERVICE_SECRET:-}"
 export WEBRTC_INSECURE_SKIP_AUTH="${WEBRTC_INSECURE_SKIP_AUTH:-1}"
+export DIAL_IN_FAKE="${DIAL_IN_FAKE:-1}"
 # Avoid 429 rate limit during e2e (server + webrtc both on localhost, many POST /room calls)
 export WEBRTC_RATE_LIMIT_MAX="${WEBRTC_RATE_LIMIT_MAX:-500}"
 # Wider UDP port range to avoid "no more available ports" (default 40000-40100 exhausted)

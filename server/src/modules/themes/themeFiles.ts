@@ -42,12 +42,13 @@ const ALLOWED_EXT = new Set([
   ".jpeg",
   ".gif",
   ".webp",
+  ".svg",
 ]);
 
 const FONT_EXT = new Set([".woff2", ".ttf"]);
 
-const TEXT_EXT = new Set([".liquid", ".css", ".json"]);
-const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+const TEXT_EXT = new Set([".liquid", ".css", ".json", ".svg"]);
+const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
 
 const REQUIRED_PATHS = new Set([
   "theme.json",
@@ -317,8 +318,9 @@ export function listThemeFiles(root: string): ThemeFileInfo[] {
     const full = join(root, ...path.split("/"));
     const st = existsSync(full) ? statSync(full) : null;
     let kind: ThemeFileInfo["kind"] = "other";
-    if (isTextThemePath(path)) kind = "text";
-    else if (isImageThemePath(path)) kind = "image";
+    // Prefer image for .svg so the editor keeps a preview; write path still sanitizes as text.
+    if (isImageThemePath(path)) kind = "image";
+    else if (isTextThemePath(path)) kind = "text";
     return {
       path,
       byteSize: st?.size ?? 0,

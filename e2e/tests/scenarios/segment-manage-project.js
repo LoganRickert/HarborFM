@@ -1,6 +1,6 @@
 import { createRequire } from 'module';
 import { createHash } from 'crypto';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, mkdtempSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
@@ -824,16 +824,13 @@ export async function run({ runOne }) {
         ['-y', '-ss', '3', '-t', '2', '-i', mixWav, '-c:a', 'pcm_s16le', midWav],
         { stdio: 'ignore' },
       );
-      let volOut = '';
-      try {
-        volOut = execFileSync(
-          'bash',
-          ['-c', `ffmpeg -i ${JSON.stringify(midWav)} -af volumedetect -f null - 2>&1`],
-          { encoding: 'utf8' },
-        );
-      } catch (err) {
-        volOut = `${err.stdout || ''}${err.stderr || ''}${err.message || ''}`;
-      }
+      // argv form (no shell): volumedetect prints mean_volume on stderr.
+      const volRun = spawnSync(
+        'ffmpeg',
+        ['-i', midWav, '-af', 'volumedetect', '-f', 'null', '-'],
+        { encoding: 'utf8' },
+      );
+      const volOut = `${volRun.stdout || ''}${volRun.stderr || ''}${volRun.error?.message || ''}`;
       const meanMatch = /mean_volume:\s*([-\d.]+)\s*dB/.exec(volOut);
       if (!meanMatch) {
         throw new Error(`volumedetect missing mean_volume in: ${volOut.slice(0, 400)}`);

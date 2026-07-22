@@ -139,6 +139,16 @@
   margin: 0;
 }
 
+.micBackgroundNotice {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: rgba(0, 212, 170, 0.1);
+  border: 1px solid rgba(0, 212, 170, 0.35);
+  border-radius: 6px;
+}
+
 .joinRow {
   display: flex;
   gap: 0.5rem;
@@ -199,6 +209,27 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.2em;
   color: var(--accent, #00d4aa);
+}
+
+.dialInCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: var(--radius, 8px);
+  text-align: center;
+}
+
+.dialInNumber {
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--text, #e8eaed);
 }
 
 .displayNameEditRow {

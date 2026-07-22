@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { registerRoomRoutes } from "./room.js";
 import { registerRecordingRoutes } from "./recording.js";
+import { registerDialInRoutes } from "./dialIn.js";
 import type { RecordingManager } from "../recording/RecordingManager.js";
 
 export async function registerRoutes(
@@ -16,4 +17,5 @@ export async function registerRoutes(
 ): Promise<void> {
   await registerRoomRoutes(app);
   registerRecordingRoutes(app, recordingManager, finalizeProducerStream);
+  await registerDialInRoutes(app);
 }

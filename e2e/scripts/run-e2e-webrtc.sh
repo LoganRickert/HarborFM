@@ -21,6 +21,8 @@ export WEBRTC_ENABLED="1"
 export WEBRTC_SERVICE_URL="http://127.0.0.1:$WEBRTC_PORT"
 export WEBRTC_PUBLIC_WS_URL="ws://127.0.0.1:$WEBRTC_PORT"
 export RECORDING_CALLBACK_SECRET="e2e-secret"
+# FakeDialIn for phone dial-in e2e (no Telnyx)
+export DIAL_IN_FAKE="1"
 # When E2E_SECRET_MISMATCH=1, webrtc uses a different secret to simulate recording/soundboard failures
 if [ "${E2E_SECRET_MISMATCH:-}" = "1" ]; then
   export RECORDING_CALLBACK_SECRET_WEBRTC="mismatched-e2e-secret"

@@ -230,6 +230,15 @@ export function Settings() {
         webrtcPublicWsUrl: form.webrtcPublicWsUrl?.trim() ?? '',
         recordingCallbackSecret:
           form.recordingCallbackSecret === '(set)' ? undefined : form.recordingCallbackSecret,
+        dialInEnabled: form.dialInEnabled,
+        dialInPhoneNumber: form.dialInPhoneNumber?.trim() ?? '',
+        dialInConsentPrompt: form.dialInConsentPrompt ?? '',
+        dialInHdVoice: form.dialInHdVoice,
+        telnyxApiKey:
+          form.telnyxApiKey === '(set)' ? undefined : form.telnyxApiKey,
+        telnyxPublicKey:
+          form.telnyxPublicKey === '(set)' ? undefined : form.telnyxPublicKey,
+        telnyxConnectionId: form.telnyxConnectionId?.trim() ?? '',
         twoFactorEnabled: form.twoFactorEnabled,
         twoFactorMethods: form.twoFactorMethods,
         twoFactorEnforced: form.twoFactorEnforced,

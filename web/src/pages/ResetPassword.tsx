@@ -49,6 +49,10 @@ export function ResetPassword() {
       }
       return forgotPassword(email, captchaToken);
     },
+    onError: () => {
+      // Token is single-use; clear so the user must solve CAPTCHA again.
+      captchaRef.current?.reset();
+    },
   });
 
   const resetMutation = useMutation({

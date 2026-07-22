@@ -9,6 +9,7 @@ export interface StripeConfirmDialogProps {
   confirmLabel?: string;
   pendingLabel?: string;
   pending?: boolean;
+  elevated?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }
@@ -20,14 +21,19 @@ export function StripeConfirmDialog({
   confirmLabel = 'Delete',
   pendingLabel = 'Deleting…',
   pending = false,
+  elevated = false,
   onOpenChange,
   onConfirm,
 }: StripeConfirmDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && !pending && onOpenChange(false)}>
       <Dialog.Portal>
-        <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content className={styles.dialogContent}>
+        <Dialog.Overlay
+          className={`${styles.dialogOverlay} ${elevated ? styles.dialogOverlayOnModal : ''}`}
+        />
+        <Dialog.Content
+          className={`${styles.dialogContent} ${elevated ? styles.dialogContentOnModal : ''}`}
+        >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>{title}</Dialog.Title>
             <Dialog.Close asChild>

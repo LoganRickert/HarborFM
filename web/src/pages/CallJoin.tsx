@@ -19,6 +19,7 @@ import type { CallJoinInfo } from '../api/call';
 import { createAudioLevelProcessor } from '../utils/audioLevel';
 import { formatDurationHMS } from '../utils/format';
 import { getSiteDisplayName } from '../utils/siteBranding';
+import { dialInTelHref } from '../utils/dialInTel';
 import styles from './CallJoin.module.css';
 
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
@@ -108,7 +109,16 @@ export function CallJoin() {
   myParticipantIdRef.current = myParticipantId;
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
-  const { remoteTracks, remoteMicLevels, soundboardVolumeFromRoom, setMuted, micLevel: sendMicLevel } = useMediasoupRoom(
+  const {
+    remoteTracks,
+    remoteMicLevels,
+    soundboardVolumeFromRoom,
+    setMuted,
+    micLevel: sendMicLevel,
+    micBackgroundNotice,
+    livePublisherIds,
+    publishersTracked,
+  } = useMediasoupRoom(
     webrtcUrl,
     webrtcRoomId,
     deviceId || undefined,
@@ -629,6 +639,11 @@ export function CallJoin() {
               You were muted by the host. Ask them to unmute you.
             </p>
           )}
+          {micBackgroundNotice && (
+            <p className={styles.micBackgroundNotice} role="status" aria-live="polite">
+              {micBackgroundNotice}
+            </p>
+          )}
           {hostDisconnected && (
             <p className={styles.hostAwayBanner} role="status">
               Host has left. Call will end in {hostAwayCountdown != null ? `${Math.floor(hostAwayCountdown / 60)}:${String(hostAwayCountdown % 60).padStart(2, '0')}` : '-'} unless they return.
@@ -682,7 +697,13 @@ export function CallJoin() {
           <ul className={styles.participantsList}>
             {[...participants]
               .sort((a, b) => (a.isHost === b.isHost ? 0 : a.isHost ? -1 : 1))
-              .map((p) => (
+              .map((p) => {
+                const showMuted =
+                  (p.id === myParticipantId ? muted : Boolean(p.muted)) ||
+                  (publishersTracked &&
+                    Boolean(webrtcUrl) &&
+                    !livePublisherIds.has(p.id));
+                return (
               <li
                 key={p.id}
                 className={styles.participantCard}
@@ -724,7 +745,7 @@ export function CallJoin() {
                         </span>
                       ) : (
                         <span className={styles.participantNameBlock}>
-                          {muted && (
+                          {showMuted && (
                             <span className={styles.mutedBadge} aria-label="Muted">
                               <MicOff size={10} />
                               Muted
@@ -748,7 +769,7 @@ export function CallJoin() {
                     </>
                   ) : (
                     <span className={styles.participantNameBlock}>
-                      {p.muted && (
+                      {showMuted && (
                         <span className={styles.mutedBadge} aria-label="Muted">
                           <MicOff size={10} />
                           Muted
@@ -770,10 +791,11 @@ export function CallJoin() {
                   aria-label="Microphone level"
                   title={p.id === myParticipantId ? 'Click if the bar doesn\'t move' : undefined}
                 >
-                  <div className={styles.micLevelBar} style={{ width: `${p.muted ? 0 : (p.id === myParticipantId ? displayMicLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
+                  <div className={styles.micLevelBar} style={{ width: `${showMuted ? 0 : (p.id === myParticipantId ? displayMicLevel : (remoteMicLevels.get(p.id) ?? 0))}%` }} />
                 </div>
               </li>
-            ))}
+                );
+            })}
           </ul>
           {Array.from(remoteTracks.entries()).map(([id, info]) => (
             <RemoteAudio
@@ -823,6 +845,12 @@ export function CallJoin() {
           <h1 className={styles.cardTitle}>Join Group Call</h1>
           {joinInfo.hostName && (
             <p className={styles.hostName}>Host: {joinInfo.hostName}</p>
+          )}
+          {joinInfo.dialInEnabled && joinInfo.dialInPhoneNumber && joinInfo.joinCode && (
+            <DialInAltLink
+              phoneNumber={joinInfo.dialInPhoneNumber}
+              joinCode={joinInfo.joinCode}
+            />
           )}
           <div className={styles.form}>
             <label className={styles.label} htmlFor="call-join-name">
@@ -1008,5 +1036,36 @@ export function CallJoin() {
         </div>
       )}
     </>
+  );
+}
+
+function DialInAltLink({
+  phoneNumber,
+  joinCode,
+}: {
+  phoneNumber: string;
+  joinCode: string;
+}) {
+  const telHref = dialInTelHref(phoneNumber, joinCode);
+  return (
+    <div className={styles.dialInAlt} data-testid="call-join-dial-in-alt">
+      <p className={styles.dialInAltTitle}>Call in instead</p>
+      <p className={styles.dialInAltBody}>
+        Dial{' '}
+        {telHref ? (
+          <a
+            className={styles.dialInAltNumber}
+            href={telHref}
+            data-testid="call-join-dial-in-number"
+          >
+            {phoneNumber}
+          </a>
+        ) : (
+          <span data-testid="call-join-dial-in-number">{phoneNumber}</span>
+        )}{' '}
+        then enter code{' '}
+        <span data-testid="call-join-dial-in-code">{joinCode}</span>
+      </p>
+    </div>
   );
 }

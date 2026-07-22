@@ -21,6 +21,7 @@ import {
   MAX_PRODUCERS_PER_ROOM,
 } from "../config.js";
 import { assertSafeId, sanitizeParticipantName } from "../validation.js";
+import { setSocketRoom, deleteSocketRoom, forEachSocketInRoom } from "./roomBroadcast.js";
 
 function getClientIpFromRequest(req: { socket?: { remoteAddress?: string }; headers?: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers?.["x-forwarded-for"];
@@ -51,7 +52,6 @@ const WS_MAX_MESSAGE_BYTES = 256 * 1024;
 
 type WebRtcTransport = mediasoup.types.WebRtcTransport;
 
-const socketRooms = new Map<unknown, string>();
 /** Each socket owns send + recv transports; must track all or send leaks on disconnect. */
 const socketTransports = new Map<unknown, Map<string, WebRtcTransport>>();
 const socketToIsHost = new Map<unknown, boolean>();
@@ -107,7 +107,7 @@ export const wsHandler = async (socket: any, req: any) => {
     return;
   }
 
-  socketRooms.set(socket, roomId);
+  setSocketRoom(socket, roomId);
 
   socket.on("message", async (raw: Buffer | ArrayBuffer | Buffer[]) => {
     const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer);
@@ -220,11 +220,11 @@ export const wsHandler = async (socket: any, req: any) => {
           producerVolumeByProducerId.delete(producer.id);
         });
         socket.send(JSON.stringify({ type: "produced", id: producer.id, kind: producer.kind }));
-        for (const [s, r] of socketRooms.entries()) {
-          if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
+        forEachSocketInRoom(roomId, (s) => {
+          if (s !== socket && (s as { readyState?: number }).readyState === 1) {
             (s as { send: (d: string) => void }).send(JSON.stringify({ type: "newProducer", producerId: producer.id }));
           }
-        }
+        });
         return;
       }
 
@@ -273,11 +273,11 @@ export const wsHandler = async (socket: any, req: any) => {
         if (typeof volume === "number") {
           const v = Math.max(0, Math.min(1, volume));
           soundboardVolumeByRoomRef.set(roomId, v);
-          for (const [s, r] of socketRooms.entries()) {
-            if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
+          forEachSocketInRoom(roomId, (s) => {
+            if (s !== socket && (s as { readyState?: number }).readyState === 1) {
               (s as { send: (d: string) => void }).send(JSON.stringify({ type: "soundboardVolume", volume: v }));
             }
-          }
+          });
         }
         return;
       }
@@ -308,8 +308,8 @@ export const wsHandler = async (socket: any, req: any) => {
         if (!producer) return;
         const safeName = sanitizeParticipantName(participantName);
         producerParticipantMapRef.set(producerId, { participantId, participantName: safeName });
-        for (const [s, r] of socketRooms.entries()) {
-          if (r === roomId && s !== socket && (s as { readyState?: number }).readyState === 1) {
+        forEachSocketInRoom(roomId, (s) => {
+          if (s !== socket && (s as { readyState?: number }).readyState === 1) {
             (s as { send: (d: string) => void }).send(
               JSON.stringify({
                 type: "producerParticipant",
@@ -319,7 +319,7 @@ export const wsHandler = async (socket: any, req: any) => {
               })
             );
           }
-        }
+        });
         return;
       }
 
@@ -469,11 +469,11 @@ export const wsHandler = async (socket: any, req: any) => {
                   if (existsSync(entry.tempPath)) unlinkSync(entry.tempPath);
                 } catch { /* ignore */ }
                 soundboardByRoom.delete(roomId);
-                for (const [s, r] of socketRooms.entries()) {
-                  if (r === roomId && (s as { readyState?: number }).readyState === 1) {
+                forEachSocketInRoom(roomId, (s) => {
+                  if ((s as { readyState?: number }).readyState === 1) {
                     (s as { send: (d: string) => void }).send(JSON.stringify({ type: "soundboardStopped" }));
                   }
-                }
+                });
               } else {
                 try {
                   if (existsSync(tempPath)) unlinkSync(tempPath);
@@ -487,11 +487,11 @@ export const wsHandler = async (socket: any, req: any) => {
               soundboardByRoom.delete(roomId);
             });
             socket.send(JSON.stringify({ type: "soundboardPlaying", producerId: producer.id }));
-            for (const [s, r] of socketRooms.entries()) {
-              if (r === roomId && (s as { readyState?: number }).readyState === 1) {
+            forEachSocketInRoom(roomId, (s) => {
+              if ((s as { readyState?: number }).readyState === 1) {
                 (s as { send: (d: string) => void }).send(JSON.stringify({ type: "newProducer", producerId: producer.id }));
               }
-            }
+            });
           } catch (err) {
             console.warn("[webrtc] playSoundboard failed:", err);
             socket.send(JSON.stringify({ type: "soundboardError", error: "Soundboard playback failed" }));
@@ -559,7 +559,7 @@ export const wsHandler = async (socket: any, req: any) => {
       }
     }
     socketTransports.delete(socket);
-    socketRooms.delete(socket);
+    deleteSocketRoom(socket);
     socketToIsHost.delete(socket);
   });
 };

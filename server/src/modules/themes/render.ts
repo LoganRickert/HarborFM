@@ -101,6 +101,9 @@ function createEngine(themeRoot: string): Liquid {
     strictFilters: false,
     strictVariables: false,
     ownPropertyOnly: true,
+    // Escape {{ }} output by default so podcast/episode titles cannot inject HTML.
+    // Theme sanitize blocks | raw; HarborFM mounts use {% render %} expanded pre-parse.
+    outputEscape: "escape",
   });
 
   // Optional Liquid filters (themes should prefer {% render 'harborfm/…' %}).

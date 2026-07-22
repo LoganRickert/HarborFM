@@ -165,7 +165,7 @@ Import keeps only:
 - `templates/*.liquid` (one segment under `templates/`)
 - `css/*` and `images/*` with allowed extensions
 
-Extensions: `.liquid` `.css` `.json` `.png` `.jpg` `.jpeg` `.gif` `.webp`
+Extensions: `.liquid` `.css` `.json` `.png` `.jpg` `.jpeg` `.gif` `.webp` `.svg`
 
 Junk (`__MACOSX`, `.DS_Store`, `._*`) is ignored.
 
@@ -175,7 +175,7 @@ Junk (`__MACOSX`, `.DS_Store`, `._*`) is ignored.
 
 ### Rejected on import (hard fail)
 
-These strings in text files (`.liquid`, `.css`, `.json`) cause import to fail:
+These strings in text files (`.liquid`, `.css`, `.json`) and `.svg` files cause import to fail:
 
 | Construct | Error idea |
 |-----------|------------|
@@ -473,7 +473,7 @@ Treat any failure as a blocker and report the completed checks in the final resp
 2. **Manifest:** Parse `theme.json`; confirm `id`, `name`, and `version` meet their length and format rules.
 3. **Routing:** Confirm an `index`, if set, has a matching template and is not `episode` or a partial. Confirm every `pages` key has a template, every page output is a valid `.html` filename, and no output filenames duplicate.
 4. **Files:** Confirm every retained path and extension is allowed, and every template basename matches the required pattern.
-5. **Security:** Scan every `.liquid`, `.css`, and `.json` file for:
+5. **Security:** Scan every `.liquid`, `.css`, `.json`, and `.svg` file for:
    - `<script`
    - `| raw` (with optional spaces around `|`)
    - `javascript:`

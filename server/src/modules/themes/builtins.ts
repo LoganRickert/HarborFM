@@ -149,6 +149,14 @@ function homepageForThemeId(themeId: string): string | undefined {
   return undefined;
 }
 
+function catalogForThemeId(themeId: string): string | undefined {
+  const fromDisk = readThemeManifest(getServerThemeDir(themeId))?.catalog?.trim();
+  if (fromDisk) return fromDisk;
+  const shipped = readThemeManifest(join(getShippedThemesRoot(), themeId))?.catalog?.trim();
+  if (shipped) return shipped;
+  return undefined;
+}
+
 export function listBuiltinThemes(): FeedBuiltinThemeListItem[] {
   // Prefer DB (source of truth after sync); fall back to disk if sync has not run yet.
   const fromDb = repo.listServerThemes();
@@ -159,6 +167,7 @@ export function listBuiltinThemes(): FeedBuiltinThemeListItem[] {
       version: theme.version,
       description: descriptionForThemeId(theme.id),
       homepage: homepageForThemeId(theme.id),
+      catalog: catalogForThemeId(theme.id),
     }));
   }
   return listDiskBuiltinThemes().map((theme) => ({
@@ -167,6 +176,7 @@ export function listBuiltinThemes(): FeedBuiltinThemeListItem[] {
     version: theme.version,
     description: descriptionForThemeId(theme.id),
     homepage: homepageForThemeId(theme.id),
+    catalog: catalogForThemeId(theme.id),
   }));
 }
 

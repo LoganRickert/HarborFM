@@ -13,6 +13,7 @@ export PORT
 [ -n "${WEBRTC_PUBLIC_WS_URL:-}" ] && export WEBRTC_PUBLIC_WS_URL
 [ -n "${RECORDING_CALLBACK_SECRET:-}" ] && export RECORDING_CALLBACK_SECRET
 [ -n "${MAIN_APP_BASE_URL:-}" ] && export MAIN_APP_BASE_URL
+[ -n "${DIAL_IN_FAKE:-}" ] && export DIAL_IN_FAKE
 export NODE_ENV="${NODE_ENV:-development}"
 export RATE_LIMIT_MAX="${RATE_LIMIT_MAX:-2000}"
 export RATE_LIMIT_TIME_WINDOW="${RATE_LIMIT_TIME_WINDOW:-1 minute}"

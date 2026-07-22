@@ -11,6 +11,32 @@ export interface VerifyCaptchaResult {
   error?: string;
 }
 
+/** Map provider error-codes to user-facing messages. */
+function formatCaptchaErrorCodes(codes: string[]): string {
+  const normalized = codes.map((c) => c.trim().toLowerCase()).filter(Boolean);
+  if (
+    normalized.some(
+      (c) =>
+        c === "already-seen-response" ||
+        c === "timeout-or-duplicate" ||
+        c.includes("already-seen") ||
+        c.includes("duplicate"),
+    )
+  ) {
+    return "CAPTCHA expired or already used. Please complete the challenge again.";
+  }
+  if (normalized.some((c) => c === "missing-input-response" || c === "missing-input-secret")) {
+    return "CAPTCHA is required. Please complete the challenge.";
+  }
+  if (normalized.some((c) => c === "invalid-input-response" || c === "invalid-or-already-seen-response")) {
+    return "CAPTCHA expired or invalid. Please complete the challenge again.";
+  }
+  if (normalized.length) {
+    return "CAPTCHA verification failed. Please try again.";
+  }
+  return "CAPTCHA verification failed";
+}
+
 /**
  * Verify a CAPTCHA response token with the configured provider.
  */
@@ -61,8 +87,7 @@ export async function verifyCaptcha(
 
   if (!data.success) {
     const codes = data["error-codes"] ?? [];
-    const msg = codes.length ? codes.join(", ") : "Verification failed";
-    return { ok: false, error: msg };
+    return { ok: false, error: formatCaptchaErrorCodes(codes) };
   }
 
   // reCAPTCHA v3: optionally enforce a minimum score (e.g. 0.5). For now we accept any success.

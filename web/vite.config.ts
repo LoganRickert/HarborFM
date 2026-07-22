@@ -31,6 +31,17 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           ws: true,
         },
+        // Match production nginx: /webrtc-ws/ → webrtc service root (strip prefix).
+        // Required so Telnyx can reach dial-in media WSS through the same tunnel as the app.
+        '/webrtc-ws': {
+          target: 'http://localhost:3002',
+          changeOrigin: true,
+          ws: true,
+          rewrite: (path: string) => {
+            const stripped = path.replace(/^\/webrtc-ws/, '') || '/';
+            return stripped;
+          },
+        },
       },
     },
   };

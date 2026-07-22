@@ -42,6 +42,10 @@ export function Register() {
         navigate('/');
       }
     },
+    onError: () => {
+      // Token is single-use; clear so the user must solve CAPTCHA again.
+      captchaRef.current?.reset();
+    },
   });
 
   async function handleSubmit(e: React.FormEvent) {

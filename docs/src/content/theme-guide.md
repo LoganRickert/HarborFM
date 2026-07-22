@@ -52,7 +52,7 @@ Import keeps only:
 - `css/*` and `images/*` with allowed image extensions
 - `fonts/*` with `.woff2` or `.ttf`
 
-Allowed extensions: `.liquid`, `.css`, `.json`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.woff2`, `.ttf`
+Allowed extensions: `.liquid`, `.css`, `.json`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.woff2`, `.ttf`
 
 ---
 
@@ -257,13 +257,13 @@ Only link page keys that exist in your theme.
 
 ## Security Rules
 
-Import **rejects** the zip if text files contain:
+Import **rejects** the zip if text files or SVGs contain:
 
 - `<script`
 - `| raw`
 - `javascript:`
 
-Even after a successful import, HarborFM strips or rewrites other unsafe patterns (inline event handlers, dangerous URLs, path traversal in includes). Write clean HTML and CSS, and rely on mounts for interactivity.
+Even after a successful import, HarborFM strips or rewrites other unsafe patterns (inline event handlers, dangerous URLs, path traversal in includes). Prefer SVGs via `<img>` or CSS `url()`. Write clean HTML and CSS, and rely on mounts for interactivity.
 
 ---
 
@@ -275,7 +275,7 @@ Even after a successful import, HarborFM strips or rewrites other unsafe pattern
 - [ ] Every `pages` key has a matching template and a valid `.html` output name
 - [ ] Exactly one page includes `{% render 'harborfm/episodes' %}`
 - [ ] Episode template includes `{% render 'harborfm/player' %}`
-- [ ] No `<script`, `| raw`, or `javascript:` strings in theme text files
+- [ ] No `<script`, `| raw`, or `javascript:` strings in theme text files or SVGs
 - [ ] Accent-filled buttons set an explicit contrasting text color
 - [ ] Zip is under 10 MB, with `theme.json` at the root or one folder deep
 

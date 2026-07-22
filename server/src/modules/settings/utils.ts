@@ -155,6 +155,26 @@ export interface AppSettings {
   reviews_llm_spam_check: boolean;
   /** When true and email configured, send review verification email to unauthenticated submitters. */
   email_enable_review_verification: boolean;
+  /** When true and dial_in_phone_number is set, show dial-in UI and allow phone admissions. */
+  dial_in_enabled: boolean;
+  /** Public dial-in phone number (E.164 or display form), shown to hosts/guests. */
+  dial_in_phone_number: string;
+  /** Spoken before bridging a phone caller. Empty uses a default HarborFM consent prompt. */
+  dial_in_consent_prompt: string;
+  /**
+   * When true, request L16 @ 16 kHz for Telnyx bidirectional media streaming (HD/wideband).
+   * When false, use PCMU @ 8 kHz. Actual wire format still follows Telnyx start.media_format.
+   */
+  dial_in_hd_voice: boolean;
+  /** Telnyx API key (redacted as "(set)" in API responses). Used when real PSTN is configured. */
+  telnyx_api_key: string;
+  /**
+   * Telnyx account Ed25519 public key (base64), used to verify dial-in webhooks.
+   * Redacted as "(set)" in API responses. Required when a Telnyx API key is set.
+   */
+  telnyx_public_key: string;
+  /** Telnyx Call Control connection / application id. */
+  telnyx_connection_id: string;
 }
 
 export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -240,6 +260,13 @@ export const DEFAULTS: AppSettings = {
   reviews_publish_non_verified: false,
   reviews_llm_spam_check: false,
   email_enable_review_verification: true,
+  dial_in_enabled: false,
+  dial_in_phone_number: "",
+  dial_in_consent_prompt: "",
+  dial_in_hd_voice: true,
+  telnyx_api_key: "",
+  telnyx_public_key: "",
+  telnyx_connection_id: "",
 };
 
 export const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -439,6 +466,20 @@ export function buildAppSettingsFromRows(
       (settings as Partial<AppSettings>).webrtc_service_url = row.value;
     else if (row.key === "webrtc_public_ws_url")
       (settings as Partial<AppSettings>).webrtc_public_ws_url = row.value;
+    else if (row.key === "dial_in_enabled")
+      (settings as Partial<AppSettings>).dial_in_enabled = row.value === "true";
+    else if (row.key === "dial_in_phone_number")
+      (settings as Partial<AppSettings>).dial_in_phone_number = row.value;
+    else if (row.key === "dial_in_consent_prompt")
+      (settings as Partial<AppSettings>).dial_in_consent_prompt = row.value;
+    else if (row.key === "dial_in_hd_voice")
+      (settings as Partial<AppSettings>).dial_in_hd_voice = row.value === "true";
+    else if (row.key === "telnyx_api_key")
+      (settings as Partial<AppSettings>).telnyx_api_key = row.value;
+    else if (row.key === "telnyx_public_key")
+      (settings as Partial<AppSettings>).telnyx_public_key = row.value;
+    else if (row.key === "telnyx_connection_id")
+      (settings as Partial<AppSettings>).telnyx_connection_id = row.value;
     else if (row.key === "recording_callback_secret")
       (settings as Partial<AppSettings>).recording_callback_secret = row.value;
     else if (row.key === "two_factor_enabled")
@@ -591,6 +632,25 @@ export function buildAppSettingsFromRows(
     webrtc_public_ws_url:
       (settings as Partial<AppSettings>).webrtc_public_ws_url ??
       DEFAULTS.webrtc_public_ws_url,
+    dial_in_enabled:
+      (settings as Partial<AppSettings>).dial_in_enabled ?? DEFAULTS.dial_in_enabled,
+    dial_in_phone_number:
+      (settings as Partial<AppSettings>).dial_in_phone_number ??
+      DEFAULTS.dial_in_phone_number,
+    dial_in_consent_prompt:
+      (settings as Partial<AppSettings>).dial_in_consent_prompt ??
+      DEFAULTS.dial_in_consent_prompt,
+    dial_in_hd_voice:
+      (settings as Partial<AppSettings>).dial_in_hd_voice ??
+      DEFAULTS.dial_in_hd_voice,
+    telnyx_api_key:
+      (settings as Partial<AppSettings>).telnyx_api_key ?? DEFAULTS.telnyx_api_key,
+    telnyx_public_key:
+      (settings as Partial<AppSettings>).telnyx_public_key ??
+      DEFAULTS.telnyx_public_key,
+    telnyx_connection_id:
+      (settings as Partial<AppSettings>).telnyx_connection_id ??
+      DEFAULTS.telnyx_connection_id,
     recording_callback_secret:
       (settings as Partial<AppSettings>).recording_callback_secret ??
       DEFAULTS.recording_callback_secret,
@@ -733,6 +793,13 @@ export function settingsToApiResponse(
     webrtcServiceUrl: settings.webrtc_service_url,
     webrtcPublicWsUrl: settings.webrtc_public_ws_url,
     recordingCallbackSecret: settings.recording_callback_secret ? "(set)" : "",
+    dialInEnabled: settings.dial_in_enabled,
+    dialInPhoneNumber: settings.dial_in_phone_number,
+    dialInConsentPrompt: settings.dial_in_consent_prompt,
+    dialInHdVoice: settings.dial_in_hd_voice,
+    telnyxApiKey: settings.telnyx_api_key ? "(set)" : "",
+    telnyxPublicKey: settings.telnyx_public_key ? "(set)" : "",
+    telnyxConnectionId: settings.telnyx_connection_id,
     twoFactorEnabled: settings.two_factor_enabled,
     twoFactorMethods: settings.two_factor_methods,
     twoFactorEnforced: settings.two_factor_enforced,

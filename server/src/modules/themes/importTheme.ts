@@ -14,15 +14,32 @@ import {
   FEED_THEME_ZIP_MAX_BYTES,
   feedThemeManifestSchema,
   feedThemeTemplateBasenameSchema,
+  type FeedThemeManifest,
 } from "@harborfm/shared";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { drizzleDb } from "../../db/drizzle.js";
 import { isServerWidePackageId } from "./builtins.js";
 import { sanitizeThemeText, textContainsBlockedConstructs } from "./sanitize.js";
-import { userThemeDir, userThemeDirPath } from "./paths.js";
-import { assertThemePagesValid, assertThemePreviewValid } from "./themePages.js";
+import { getServerThemeDir, userThemeDir, userThemeDirPath } from "./paths.js";
+import {
+  assertThemePagesValid,
+  assertThemePreviewValid,
+  readThemeManifest,
+} from "./themePages.js";
 import { clearThemeZipCacheForId } from "./themeZip.js";
 import * as repo from "./repo.js";
+
+export type ImportThemeZipOptions = {
+  /** Default `user`. Server scope is for admin catalog installs / updates. */
+  scope?: "user" | "server";
+  /** Written into theme.json so Server Themes can check for updates. */
+  catalogUrl?: string;
+  /**
+   * When scope is server and the package already exists, overwrite disk + DB.
+   * Rejected when existing theme.json has `allowOverride: false`.
+   */
+  allowServerOverwrite?: boolean;
+};
 
 /** Server-wide package ids become a personal copy; keep a clear display name. */
 function personalThemeName(packageId: string, name: string): string {
@@ -49,11 +66,12 @@ const ALLOWED_EXT = new Set([
   ".jpeg",
   ".gif",
   ".webp",
+  ".svg",
 ]);
 
 const FONT_EXT = new Set([".woff2", ".ttf"]);
 
-const TEXT_EXT = new Set([".liquid", ".css", ".json"]);
+const TEXT_EXT = new Set([".liquid", ".css", ".json", ".svg"]);
 
 function normalizeZipEntryName(name: string): string | null {
   const n = name.replace(/\\/g, "/");
@@ -146,10 +164,30 @@ function writeTree(destRoot: string, files: Map<string, Buffer>): void {
   }
 }
 
+function applyCatalogToManifest(
+  manifest: FeedThemeManifest,
+  catalogUrl: string | undefined,
+): FeedThemeManifest {
+  if (!catalogUrl?.trim()) return manifest;
+  const next = { ...manifest, catalog: catalogUrl.trim() };
+  const parsed = feedThemeManifestSchema.safeParse(next);
+  if (!parsed.success) {
+    throw new ThemeImportError(
+      parsed.error.issues[0]?.message ?? "Invalid catalog URL for theme.json",
+    );
+  }
+  return parsed.data;
+}
+
 /**
- * Import or upsert a theme zip for the given user. Returns the theme row id.
+ * Import or upsert a theme zip. Default scope is the user's personal themes.
+ * Pass `scope: "server"` for admin catalog installs (package id = folder id).
  */
-export function importThemeZip(userId: string, zipBuffer: Buffer): {
+export function importThemeZip(
+  userId: string,
+  zipBuffer: Buffer,
+  options: ImportThemeZipOptions = {},
+): {
   id: string;
   packageId: string;
   name: string;
@@ -157,7 +195,9 @@ export function importThemeZip(userId: string, zipBuffer: Buffer): {
   byteSize: number;
   updated: boolean;
   fromBuiltin: boolean;
+  scope: "user" | "server";
 } {
+  const scope = options.scope ?? "user";
   if (zipBuffer.byteLength > FEED_THEME_ZIP_MAX_BYTES) {
     throw new ThemeImportError(
       `Theme zip must be at most ${FEED_THEME_ZIP_MAX_BYTES / (1024 * 1024)} MB`,
@@ -208,7 +248,7 @@ export function importThemeZip(userId: string, zipBuffer: Buffer): {
       parsed.error.issues[0]?.message ?? "Invalid theme.json",
     );
   }
-  const manifest = parsed.data;
+  const manifest = applyCatalogToManifest(parsed.data, options.catalogUrl);
 
   const templateBasenames: string[] = [];
   for (const key of files.keys()) {
@@ -248,6 +288,17 @@ export function importThemeZip(userId: string, zipBuffer: Buffer): {
     } else {
       sanitized.set(name, buf);
     }
+  }
+  // Ensure written theme.json includes catalog (and any other manifest edits).
+  sanitized.set(
+    "theme.json",
+    Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
+  );
+
+  if (scope === "server") {
+    return importServerThemeZip(manifest, sanitized, {
+      allowOverwrite: options.allowServerOverwrite === true,
+    });
   }
 
   const existing = repo.getThemeByOwnerAndPackage(userId, manifest.id);
@@ -291,6 +342,7 @@ export function importThemeZip(userId: string, zipBuffer: Buffer): {
       });
     }
 
+    clearThemeZipCacheForId(themeId);
     return {
       id: themeId,
       packageId: manifest.id,
@@ -299,7 +351,82 @@ export function importThemeZip(userId: string, zipBuffer: Buffer): {
       byteSize: newBytes,
       updated: !!existing,
       fromBuiltin: isServerWidePackageId(manifest.id),
+      scope: "user",
     };
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+function importServerThemeZip(
+  manifest: FeedThemeManifest,
+  sanitized: Map<string, Buffer>,
+  opts: { allowOverwrite: boolean },
+): {
+  id: string;
+  packageId: string;
+  name: string;
+  version: string;
+  byteSize: number;
+  updated: boolean;
+  fromBuiltin: boolean;
+  scope: "server";
+} {
+  const packageId = manifest.id;
+  const dest = getServerThemeDir(packageId);
+  const existingRow =
+    repo.getServerThemeById(packageId) ?? repo.getServerThemeByPackageId(packageId);
+  const destExists = existsSync(dest);
+
+  if ((existingRow || destExists) && !opts.allowOverwrite) {
+    throw new ThemeImportError(
+      `Server theme already exists: ${packageId}`,
+      409,
+    );
+  }
+
+  if (opts.allowOverwrite && destExists) {
+    const existingManifest = readThemeManifest(dest);
+    if (existingManifest?.allowOverride === false) {
+      throw new ThemeImportError(
+        "This server theme was edited and cannot be overwritten from a catalog. Set allowOverride or replace it manually.",
+        409,
+      );
+    }
+  }
+
+  const staging = join(tmpdir(), `hfm-theme-server-${nanoid()}`);
+  mkdirSync(staging, { recursive: true });
+  try {
+    writeTree(staging, sanitized);
+    const newBytes = dirByteSize(staging);
+    rmSync(dest, { recursive: true, force: true });
+    mkdirSync(dest, { recursive: true });
+    writeTree(dest, sanitized);
+
+    repo.upsertServerTheme({
+      id: packageId,
+      packageId,
+      name: manifest.name,
+      version: manifest.version,
+    });
+    clearThemeZipCacheForId(packageId);
+
+    return {
+      id: packageId,
+      packageId,
+      name: manifest.name,
+      version: manifest.version,
+      byteSize: newBytes,
+      updated: Boolean(existingRow || destExists),
+      fromBuiltin: false,
+      scope: "server",
+    };
+  } catch (err) {
+    if (!opts.allowOverwrite) {
+      rmSync(dest, { recursive: true, force: true });
+    }
+    throw err;
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }

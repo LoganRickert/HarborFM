@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FileUp,
+  RefreshCw,
   Settings2,
   Trash2,
   X,
@@ -21,18 +22,21 @@ import {
   deleteTheme,
   deleteServerTheme,
   themeAssetPreviewUrl,
+  updateServerThemeFromCatalog,
   FEED_THEME_ZIP_MAX_BYTES,
   type BuiltinThemeListItem,
   type ThemeListItem,
 } from '../api/themes';
+import {
+  ExploreThemesCta,
+  ExploreThemesDialog,
+} from '../components/ExploreThemesDialog';
 import { ThemeEditorDialog } from '../components/ThemeEditorDialog';
-import { formatDateShort } from '../utils/format';
 import styles from './Themes.module.css';
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+/** Strip import-time personal-copy suffix for display. */
+function displayThemeName(name: string): string {
+  return name.replace(/\s*\(yours\)\s*$/i, '').trim() || name;
 }
 
 type DeleteTarget =
@@ -52,6 +56,8 @@ export function Themes() {
   const [editorThemeId, setEditorThemeId] = useState<string | null>(null);
   const [brokenPreviews, setBrokenPreviews] = useState<Record<string, true>>({});
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [exploreOpen, setExploreOpen] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const { data: meData, isLoading: meLoading } = useQuery({
     queryKey: ['me'],
@@ -169,6 +175,25 @@ export function Themes() {
     }
   }
 
+  async function handleUpdateServerTheme(builtinId: string) {
+    setDownloadError(null);
+    setImportNotice(null);
+    setUpdatingId(builtinId);
+    try {
+      const result = await updateServerThemeFromCatalog(builtinId);
+      queryClient.invalidateQueries({ queryKey: ['themes', 'builtins'] });
+      if (result.updated) {
+        setImportNotice(`Updated ${result.name} to v${result.version}.`);
+      } else {
+        setImportNotice(result.message || `${result.name} is already up to date.`);
+      }
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : 'Update failed');
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   if (meLoading) {
     return (
       <div className={styles.page}>
@@ -213,70 +238,73 @@ export function Themes() {
 
       <div className={styles.importCard}>
         <h2 className={styles.importTitle}>Import theme</h2>
-        <div
-          className={`${styles.dropZone} ${dropActive ? styles.dropZoneActive : ''} ${
-            importMutation.isPending ? styles.dropZoneBusy : ''
-          }`}
-          onDragEnter={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (importMutation.isPending) return;
-            dragDepthRef.current += 1;
-            setDropActive(true);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onDragLeave={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-            if (dragDepthRef.current === 0) setDropActive(false);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dragDepthRef.current = 0;
-            setDropActive(false);
-            if (importMutation.isPending) return;
-            submitThemeFile(e.dataTransfer.files?.[0]);
-          }}
-          onClick={openFilePicker}
-          role="button"
-          tabIndex={importMutation.isPending ? -1 : 0}
-          aria-disabled={importMutation.isPending}
-          aria-label="Add a theme zip. Drag and drop, or choose a file"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+        <div className={styles.importSplit}>
+          <div
+            className={`${styles.dropZone} ${dropActive ? styles.dropZoneActive : ''} ${
+              importMutation.isPending ? styles.dropZoneBusy : ''
+            }`}
+            onDragEnter={(e) => {
               e.preventDefault();
-              openFilePicker();
-            }
-          }}
-        >
-          <span className={styles.dropZoneIcon} aria-hidden>
-            <FileUp size={26} strokeWidth={2} />
-          </span>
-          <p className={styles.dropZoneText}>
-            {importMutation.isPending ? 'Importing…' : 'Add A Theme Zip'}
-          </p>
-          <p className={styles.dropZoneHint}>
-            Drag and drop, or choose a file (.zip,{' '}
-            {FEED_THEME_ZIP_MAX_BYTES / (1024 * 1024)} MB max)
-          </p>
-          {!importMutation.isPending && (
-            <span className={styles.dropZoneAction}>Choose file</span>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".zip,application/zip,application/x-zip-compressed,application/x-compressed"
-            className={styles.fileInput}
-            disabled={importMutation.isPending}
-            onChange={handleFileChange}
-            tabIndex={-1}
-            aria-hidden
-          />
+              e.stopPropagation();
+              if (importMutation.isPending) return;
+              dragDepthRef.current += 1;
+              setDropActive(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+              if (dragDepthRef.current === 0) setDropActive(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              dragDepthRef.current = 0;
+              setDropActive(false);
+              if (importMutation.isPending) return;
+              submitThemeFile(e.dataTransfer.files?.[0]);
+            }}
+            onClick={openFilePicker}
+            role="button"
+            tabIndex={importMutation.isPending ? -1 : 0}
+            aria-disabled={importMutation.isPending}
+            aria-label="Add a theme zip. Drag and drop, or choose a file"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openFilePicker();
+              }
+            }}
+          >
+            <span className={styles.dropZoneIcon} aria-hidden>
+              <FileUp size={26} strokeWidth={2} />
+            </span>
+            <p className={styles.dropZoneText}>
+              {importMutation.isPending ? 'Importing...' : 'Add A Theme Zip'}
+            </p>
+            <p className={styles.dropZoneHint}>
+              Drag and drop, or choose a file (.zip,{' '}
+              {FEED_THEME_ZIP_MAX_BYTES / (1024 * 1024)} MB max)
+            </p>
+            {!importMutation.isPending && (
+              <span className={styles.dropZoneAction}>Choose file</span>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip,application/zip,application/x-zip-compressed,application/x-compressed"
+              className={styles.fileInput}
+              disabled={importMutation.isPending}
+              onChange={handleFileChange}
+              tabIndex={-1}
+              aria-hidden
+            />
+          </div>
+          <ExploreThemesCta onClick={() => setExploreOpen(true)} />
         </div>
         {importError && (
           <div className={styles.errorCard} role="alert">
@@ -311,7 +339,7 @@ export function Themes() {
             creates your copy; uploading again with the same package id updates it.
           </p>
         </div>
-        {builtinsLoading && <p className={styles.empty}>Loading server themes…</p>}
+        {builtinsLoading && <p className={styles.empty}>Loading server themes...</p>}
         {!builtinsLoading && builtins.length === 0 && (
           <p className={styles.empty}>No server themes available.</p>
         )}
@@ -386,8 +414,20 @@ export function Themes() {
                         aria-label={`Download ${theme.name} theme zip`}
                       >
                         <Download size={16} strokeWidth={2} aria-hidden />
-                        {downloadingId === `server:${theme.id}` ? 'Preparing…' : 'Download'}
+                        {downloadingId === `server:${theme.id}` ? 'Preparing...' : 'Download'}
                       </button>
+                      {isAdmin && theme.catalog ? (
+                        <button
+                          type="button"
+                          className={styles.downloadBtn}
+                          onClick={() => void handleUpdateServerTheme(theme.id)}
+                          disabled={updatingId === theme.id}
+                          aria-label={`Update ${theme.name} from catalog`}
+                        >
+                          <RefreshCw size={16} strokeWidth={2} aria-hidden />
+                          {updatingId === theme.id ? 'Checking...' : 'Update'}
+                        </button>
+                      ) : null}
                     </div>
                     {isAdmin ? (
                       <div className={styles.rowActionsAdmin}>
@@ -424,9 +464,11 @@ export function Themes() {
         )}
       </div>
 
-      <div className={styles.tableWrap}>
-        <div className={styles.tableHeader}>
-          <h2 className={styles.tableTitle}>Your themes</h2>
+      <div className={styles.builtinCard}>
+        <div className={styles.builtinHeader}>
+          <div className={styles.builtinHeaderTop}>
+            <h2 className={styles.importTitle}>Your themes</h2>
+          </div>
         </div>
         {isLoading && <p className={styles.empty}>Loading themes...</p>}
         {isError && <p className={styles.empty}>Failed to load themes.</p>}
@@ -434,48 +476,76 @@ export function Themes() {
           <p className={styles.empty}>No imported themes yet.</p>
         )}
         {!isLoading && !isError && themes.length > 0 && (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Version</th>
-                <th>Size</th>
-                <th>Updated</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {themes.map((theme) => (
-                <tr key={theme.id}>
-                  <td className={styles.nameCell}>
-                    {theme.name}
-                    <span className={styles.metaMuted}>
-                      Package id: {theme.packageId}
-                      {serverPackageIds.has(theme.packageId)
-                        ? ' (personal copy of server theme)'
-                        : ''}
-                    </span>
-                  </td>
-                  <td>{theme.version}</td>
-                  <td>{formatBytes(theme.byteSize)}</td>
-                  <td>{formatDateShort(theme.updatedAt)}</td>
-                  <td>
-                    <div className={styles.rowActions}>
+          <ul className={styles.builtinList}>
+            {themes.map((theme) => {
+              const label = displayThemeName(theme.name);
+              const previewBroken = Boolean(brokenPreviews[`user:${theme.id}`]);
+              const previewSrc = previewBroken
+                ? null
+                : themeAssetPreviewUrl(theme.id, 'user', 'images/preview.jpg');
+              return (
+                <li key={theme.id} className={styles.builtinItem}>
+                  {previewSrc ? (
+                    <button
+                      type="button"
+                      className={`${styles.builtinThumb} ${styles.builtinThumbButton}`}
+                      onClick={() =>
+                        setLightbox({
+                          src: previewSrc,
+                          alt: `${label} theme preview`,
+                        })
+                      }
+                      aria-label={`View ${label} preview`}
+                    >
+                      <img
+                        src={previewSrc}
+                        alt=""
+                        loading="lazy"
+                        className={styles.builtinThumbImage}
+                        onError={() =>
+                          setBrokenPreviews((prev) =>
+                            prev[`user:${theme.id}`]
+                              ? prev
+                              : { ...prev, [`user:${theme.id}`]: true },
+                          )
+                        }
+                      />
+                    </button>
+                  ) : (
+                    <div className={styles.builtinThumb} aria-hidden>
+                      <span className={styles.builtinThumbFallback}>
+                        {label.slice(0, 1)}
+                      </span>
+                    </div>
+                  )}
+                  <div className={styles.builtinMeta}>
+                    <div className={styles.builtinTitleRow}>
+                      <h3 className={styles.builtinName}>{label}</h3>
+                      <span className={styles.builtinVersion}>v{theme.version}</span>
+                    </div>
+                    {theme.description ? (
+                      <p className={styles.builtinDescription}>{theme.description}</p>
+                    ) : null}
+                  </div>
+                  <div className={styles.rowActions}>
+                    <div className={styles.rowActionsPrimary}>
                       <button
                         type="button"
                         className={styles.downloadBtn}
                         onClick={() => void handleDownloadUserTheme(theme.id)}
                         disabled={downloadingId === `user:${theme.id}`}
-                        aria-label={`Download ${theme.name} theme zip`}
+                        aria-label={`Download ${label} theme zip`}
                       >
                         <Download size={16} strokeWidth={2} aria-hidden />
-                        {downloadingId === `user:${theme.id}` ? 'Preparing…' : 'Download'}
+                        {downloadingId === `user:${theme.id}` ? 'Preparing...' : 'Download'}
                       </button>
+                    </div>
+                    <div className={styles.rowActionsAdmin}>
                       <button
                         type="button"
                         className={styles.iconActionBtn}
                         onClick={() => setEditorThemeId(theme.id)}
-                        aria-label={`Edit theme ${theme.name}`}
+                        aria-label={`Edit theme ${label}`}
                       >
                         <Settings2 size={16} strokeWidth={2} aria-hidden />
                       </button>
@@ -484,16 +554,16 @@ export function Themes() {
                         className={styles.deleteBtn}
                         onClick={() => setThemeToDelete({ kind: 'user', theme })}
                         disabled={deleteMutation.isPending}
-                        aria-label={`Delete theme ${theme.name}`}
+                        aria-label={`Delete theme ${label}`}
                       >
                         <Trash2 size={16} strokeWidth={2} aria-hidden />
                       </button>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 
@@ -540,7 +610,7 @@ export function Themes() {
               {themeToDelete
                 ? themeToDelete.kind === 'server'
                   ? `This will permanently delete the server theme "${themeToDelete.theme.name}" from disk. Podcasts using it will revert to the default layout.`
-                  : `This will permanently delete "${themeToDelete.theme.name}". Podcasts using this theme will revert to the default layout.`
+                  : `This will permanently delete "${displayThemeName(themeToDelete.theme.name)}". Podcasts using this theme will revert to the default layout.`
                 : 'This will permanently delete this theme.'}
             </Dialog.Description>
             <div className={styles.dialogActions}>
@@ -562,6 +632,18 @@ export function Themes() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <ExploreThemesDialog
+        open={exploreOpen}
+        isAdmin={isAdmin}
+        serverPackageIds={serverPackageIds}
+        onOpenChange={setExploreOpen}
+        onInstalled={(message) => {
+          setImportError(null);
+          setImportNotice(message);
+          setExploreOpen(false);
+        }}
+      />
 
       <ThemeEditorDialog
         open={!!editorThemeId}
