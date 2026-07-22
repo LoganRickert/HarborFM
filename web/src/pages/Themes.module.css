@@ -127,6 +127,7 @@
 .dropZoneBusy {
   cursor: progress;
   opacity: 0.75;
+  pointer-events: none;
 }
 
 .dropZoneIcon {
@@ -168,10 +169,6 @@
   color: var(--text);
   font-size: 0.8125rem;
   font-weight: 650;
-}
-
-.fileInput {
-  display: none;
 }
 
 .errorCard {

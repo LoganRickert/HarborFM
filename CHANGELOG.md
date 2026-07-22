@@ -2,7 +2,8 @@
 
 ## v1.16.1 - 7-21-2026
 
-Updated the timeout for updating themes.
+- Updated the timeout for updating themes.
+- Fixed podroll and support show still showing when empty.
 
 ## v1.16.0 - 7-21-2026
 

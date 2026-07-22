@@ -45,8 +45,8 @@ type DeleteTarget =
 
 export function Themes() {
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
+  const pickerInputRef = useRef<HTMLInputElement | null>(null);
   const [dropActive, setDropActive] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
@@ -85,7 +85,6 @@ export function Themes() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['themes'] });
       setImportError(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
       const label = result.name || result.packageId || 'theme';
       if (result.fromBuiltin) {
         setImportNotice(
@@ -135,15 +134,29 @@ export function Themes() {
     importMutation.mutate(file);
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    submitThemeFile(file);
-  }
-
+  /** Fresh input per open so a prior upload cannot leave the Mac picker in a bad state. */
   function openFilePicker() {
     if (importMutation.isPending) return;
-    fileInputRef.current?.click();
+    pickerInputRef.current?.remove();
+    pickerInputRef.current = null;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip,application/zip';
+    input.style.display = 'none';
+    const cleanup = () => {
+      if (pickerInputRef.current === input) pickerInputRef.current = null;
+      input.remove();
+    };
+    input.addEventListener('change', () => {
+      const file = input.files?.[0] ?? null;
+      cleanup();
+      submitThemeFile(file);
+    });
+    input.addEventListener('cancel', cleanup);
+    pickerInputRef.current = input;
+    document.body.appendChild(input);
+    input.click();
   }
 
   function handleDeleteConfirm() {
@@ -240,6 +253,11 @@ export function Themes() {
             className={`${styles.dropZone} ${dropActive ? styles.dropZoneActive : ''} ${
               importMutation.isPending ? styles.dropZoneBusy : ''
             }`}
+            role="button"
+            tabIndex={importMutation.isPending ? -1 : 0}
+            aria-disabled={importMutation.isPending}
+            aria-label="Add a theme zip. Drag and drop, or choose a file"
+            onClick={openFilePicker}
             onDragEnter={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -265,11 +283,6 @@ export function Themes() {
               if (importMutation.isPending) return;
               submitThemeFile(e.dataTransfer.files?.[0]);
             }}
-            onClick={openFilePicker}
-            role="button"
-            tabIndex={importMutation.isPending ? -1 : 0}
-            aria-disabled={importMutation.isPending}
-            aria-label="Add a theme zip. Drag and drop, or choose a file"
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -290,16 +303,6 @@ export function Themes() {
             {!importMutation.isPending && (
               <span className={styles.dropZoneAction}>Choose file</span>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".zip,application/zip,application/x-zip-compressed,application/x-compressed"
-              className={styles.fileInput}
-              disabled={importMutation.isPending}
-              onChange={handleFileChange}
-              tabIndex={-1}
-              aria-hidden
-            />
           </div>
           <ExploreThemesCta onClick={() => setExploreOpen(true)} />
         </div>

@@ -39,15 +39,55 @@ function podcastHasLinks(row: Record<string, unknown>): boolean {
   });
 }
 
+function podcastHasFundingLinks(row: Record<string, unknown>): boolean {
+  const raw = row.fundingLinks;
+  if (typeof raw !== "string" || !raw.trim()) return false;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return false;
+    return parsed.some((item) => {
+      if (typeof item !== "object" || item == null) return false;
+      const url = (item as { url?: unknown }).url;
+      return typeof url === "string" && url.trim().length > 0;
+    });
+  } catch {
+    return false;
+  }
+}
+
+function podcastHasPodrollItems(row: Record<string, unknown>): boolean {
+  const raw = row.podroll;
+  if (typeof raw !== "string" || !raw.trim()) return false;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return false;
+    return parsed.some((item) => {
+      if (typeof item !== "object" || item == null) return false;
+      const home = (item as { homeUrl?: unknown }).homeUrl;
+      const feed = (item as { feedUrl?: unknown }).feedUrl;
+      return (
+        (typeof home === "string" && home.trim().length > 0) ||
+        (typeof feed === "string" && feed.trim().length > 0)
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Liquid `show.*` gates. Content mounts (`funding`, `podroll`, `links`) are true
+ * only when the Page Customizations toggle is on and the show has items to render.
+ */
 export function podcastShowFlags(row: Record<string, unknown>) {
   return {
     author: asBool(row.feedShowAuthor, true),
     podcast_description: asBool(row.feedShowPodcastDescription, true),
     episode_description: asBool(row.feedShowEpisodeDescription, true),
-    funding: asBool(row.feedShowFunding, true),
+    funding: asBool(row.feedShowFunding, true) && podcastHasFundingLinks(row),
     reviews_podcast: asBool(row.feedShowReviewsPodcast, true),
     reviews_episode: asBool(row.feedShowReviewsEpisode, true),
-    podroll: asBool(row.feedShowPodroll, true),
+    podroll: asBool(row.feedShowPodroll, true) && podcastHasPodrollItems(row),
     cast: asBool(row.feedShowCast, true),
     links: podcastHasLinks(row),
   };
