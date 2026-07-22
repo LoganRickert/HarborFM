@@ -220,9 +220,6 @@ export function Themes() {
   const themes = data?.themes ?? [];
   const builtins = builtinsData?.builtins ?? [];
   const serverPackageIds = new Set(builtins.map((t) => t.id));
-  const ownedServerPackageIds = new Set(
-    themes.filter((t) => serverPackageIds.has(t.packageId)).map((t) => t.packageId),
-  );
 
   return (
     <div className={styles.page}>
@@ -346,7 +343,6 @@ export function Themes() {
         {!builtinsLoading && builtins.length > 0 && (
           <ul className={styles.builtinList}>
             {builtins.map((theme) => {
-              const hasCopy = ownedServerPackageIds.has(theme.id);
               const previewBroken = Boolean(brokenPreviews[theme.id]);
               const previewSrc = previewBroken
                 ? null
@@ -388,7 +384,6 @@ export function Themes() {
                     <div className={styles.builtinTitleRow}>
                       <h3 className={styles.builtinName}>{theme.name}</h3>
                       <span className={styles.builtinVersion}>v{theme.version}</span>
-                      {hasCopy && <span className={styles.builtinCopyBadge}>Your copy</span>}
                     </div>
                     <p className={styles.builtinDescription}>{theme.description}</p>
                   </div>
@@ -467,7 +462,7 @@ export function Themes() {
       <div className={styles.builtinCard}>
         <div className={styles.builtinHeader}>
           <div className={styles.builtinHeaderTop}>
-            <h2 className={styles.importTitle}>Your themes</h2>
+            <h2 className={styles.importTitle}>Your Themes</h2>
           </div>
         </div>
         {isLoading && <p className={styles.empty}>Loading themes...</p>}

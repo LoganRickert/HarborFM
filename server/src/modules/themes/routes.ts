@@ -15,6 +15,8 @@ import {
   THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS,
   THEME_IMPORT_RATE_LIMIT_MAX,
   THEME_IMPORT_RATE_LIMIT_WINDOW_MS,
+  THEME_UPDATE_RATE_LIMIT_MAX,
+  THEME_UPDATE_RATE_LIMIT_WINDOW_MS,
 } from "../../config.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { drizzleDb } from "../../db/index.js";
@@ -58,11 +60,18 @@ const THEME_DOWNLOAD_RATE_LIMIT = {
   max: THEME_DOWNLOAD_RATE_LIMIT_MAX,
 };
 
-/** Cap theme ZIP imports (defaults 2/min; e2e shortens the window via env). */
+/** Cap theme ZIP / catalog installs (defaults 40/min; e2e tightens via env). */
 const THEME_IMPORT_RATE_LIMIT = {
   bucket: "theme-import",
   windowMs: THEME_IMPORT_RATE_LIMIT_WINDOW_MS,
   max: THEME_IMPORT_RATE_LIMIT_MAX,
+};
+
+/** Cap server theme catalog updates (defaults 40/min; separate from zip import). */
+const THEME_UPDATE_RATE_LIMIT = {
+  bucket: "theme-update",
+  windowMs: THEME_UPDATE_RATE_LIMIT_WINDOW_MS,
+  max: THEME_UPDATE_RATE_LIMIT_MAX,
 };
 
 /** Cap catalog fetches / browses (defaults 10/min; configurable via env). */
@@ -363,7 +372,7 @@ export async function themesRoutes(app: FastifyInstance) {
       preHandler: [
         requireAuth,
         requireNotReadOnly,
-        userRateLimitPreHandler(THEME_IMPORT_RATE_LIMIT),
+        userRateLimitPreHandler(THEME_UPDATE_RATE_LIMIT),
       ],
       schema: {
         tags: ["Themes"],

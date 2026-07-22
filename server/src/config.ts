@@ -330,9 +330,28 @@ export const THEME_IMPORT_RATE_LIMIT_WINDOW_MS =
     ? Number(process.env.THEME_IMPORT_RATE_LIMIT_WINDOW_MS)
     : 60_000;
 
-/** Theme ZIP import rate limit max requests per window. Env: THEME_IMPORT_RATE_LIMIT_MAX. Default 2. */
+/**
+ * Theme ZIP / catalog install rate limit max requests per window.
+ * Env: THEME_IMPORT_RATE_LIMIT_MAX. Default 40 (enough for installing several themes in a row).
+ */
 export const THEME_IMPORT_RATE_LIMIT_MAX =
-  Number(process.env.THEME_IMPORT_RATE_LIMIT_MAX) || 2;
+  Number(process.env.THEME_IMPORT_RATE_LIMIT_MAX) || 40;
+
+/**
+ * Server theme catalog-update rate limit window (ms). 0 = no limit.
+ * Env: THEME_UPDATE_RATE_LIMIT_WINDOW_MS. Default 60000.
+ */
+export const THEME_UPDATE_RATE_LIMIT_WINDOW_MS =
+  process.env.THEME_UPDATE_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.THEME_UPDATE_RATE_LIMIT_WINDOW_MS)
+    : 60_000;
+
+/**
+ * Server theme catalog-update rate limit max requests per window.
+ * Env: THEME_UPDATE_RATE_LIMIT_MAX. Default 40 (enough for bulk Update clicks).
+ */
+export const THEME_UPDATE_RATE_LIMIT_MAX =
+  Number(process.env.THEME_UPDATE_RATE_LIMIT_MAX) || 40;
 
 /** Theme zip download rate limit window (ms). 0 = no limit. Env: THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS. Default 60000. */
 export const THEME_DOWNLOAD_RATE_LIMIT_WINDOW_MS =

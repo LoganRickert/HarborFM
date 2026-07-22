@@ -453,19 +453,6 @@
   color: var(--text-muted);
 }
 
-.builtinCopyBadge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
 .builtinDescription {
   margin: 0;
   font-size: 0.875rem;

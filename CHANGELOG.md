@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.16.1 - 7-21-2026
+
+Updated the timeout for updating themes.
+
 ## v1.16.0 - 7-21-2026
 
 - **Sign-in:** After a failed login (or register / forgot-password), CAPTCHA resets so you solve a fresh one. Expired or reused CAPTCHA tokens show a plain-language error instead of a provider code.
