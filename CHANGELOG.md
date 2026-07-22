@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.16.2 - 7-22-2026
+
+- **Analytics:** Export the last two weeks of show analytics as Excel, CSV, or JSON from a new Export card on the Analytics page.
+
 ## v1.16.1 - 7-21-2026
 
 - Updated the timeout for updating themes.

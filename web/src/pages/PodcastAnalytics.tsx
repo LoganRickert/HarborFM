@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Rss, LayoutGrid, ListMusic, Ear, MapPinned, Smartphone } from 'lucide-react';
+import { BarChart3, Rss, LayoutGrid, ListMusic, Ear, MapPinned, Smartphone, FileSpreadsheet, FileText, FileJson, Download } from 'lucide-react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -22,6 +22,12 @@ import {
 import { getPodcast, getPodcastAnalytics, type PodcastAnalytics } from '../api/podcasts';
 import { FullPageLoading } from '../components/Loading';
 import { Breadcrumb } from '../components/Breadcrumb';
+import {
+  downloadAnalyticsCsv,
+  downloadAnalyticsExcel,
+  downloadAnalyticsJson,
+  resolveAnalyticsDateRange,
+} from '../utils/podcastAnalyticsExport';
 import styles from './PodcastAnalytics.module.css';
 
 const COLORS = {
@@ -164,6 +170,7 @@ export function PodcastAnalytics() {
   const [locationsView, setLocationsView] = useState<LocationsViewType>('pie');
   const [sourceView, setSourceView] = useState<SourceViewType>('pie');
   const [narrow, setNarrow] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 480px)');
@@ -393,6 +400,70 @@ export function PodcastAnalytics() {
         <p className={styles.sectionSub}>
           See how your show is doing over the last 2 weeks: feed check-ins, episode plays, and where listeners are from.
         </p>
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.exportActions}>
+          <h2 id="analytics-export-heading" className={styles.sectionTitle}>
+            <Download size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+            Export
+          </h2>
+          <div className={styles.exportGroup} role="group" aria-labelledby="analytics-export-heading">
+            <button
+              type="button"
+              className={styles.exportBtn}
+              disabled={!analytics || exportingExcel}
+              aria-label={exportingExcel ? 'Preparing Excel download' : 'Download Excel spreadsheet'}
+              aria-busy={exportingExcel || undefined}
+              onClick={() => {
+                if (!analytics) return;
+                setExportingExcel(true);
+                void downloadAnalyticsExcel(
+                  { id: podcast.id, title: podcast.title, slug: podcast.slug },
+                  analytics,
+                  resolveAnalyticsDateRange(analytics),
+                ).finally(() => setExportingExcel(false));
+              }}
+            >
+              <FileSpreadsheet size={15} strokeWidth={2} aria-hidden />
+              {exportingExcel ? 'Preparing...' : 'Excel'}
+            </button>
+            <button
+              type="button"
+              className={styles.exportBtn}
+              disabled={!analytics || exportingExcel}
+              aria-label="Download CSV spreadsheet"
+              onClick={() => {
+                if (!analytics) return;
+                downloadAnalyticsCsv(
+                  { id: podcast.id, title: podcast.title, slug: podcast.slug },
+                  analytics,
+                  resolveAnalyticsDateRange(analytics),
+                );
+              }}
+            >
+              <FileText size={15} strokeWidth={2} aria-hidden />
+              CSV
+            </button>
+            <button
+              type="button"
+              className={styles.exportBtn}
+              disabled={!analytics || exportingExcel}
+              aria-label="Download JSON data"
+              onClick={() => {
+                if (!analytics) return;
+                downloadAnalyticsJson(
+                  { id: podcast.id, title: podcast.title, slug: podcast.slug },
+                  analytics,
+                  resolveAnalyticsDateRange(analytics),
+                );
+              }}
+            >
+              <FileJson size={15} strokeWidth={2} aria-hidden />
+              JSON
+            </button>
+          </div>
+        </div>
       </div>
 
       {!hasAnyData && (
