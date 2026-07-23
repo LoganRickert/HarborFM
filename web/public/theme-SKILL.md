@@ -225,6 +225,14 @@ You do **not** need `<link>` tags for files under `css/`. Critical accent vars m
 
 Images: `{{ urls.theme_asset_base }}/images/your.png`.
 
+### iOS / PWA safe area
+
+HarborFM mounts Liquid themes inside the SPA shell (`viewport-fit=cover`, translucent status bar). The host applies `padding-top: env(safe-area-inset-top)` on the theme root so content clears the notch.
+
+- Do **not** rely on theme `<meta name="viewport">` for this; those tags are not applied in the SPA.
+- Sticky or fixed top chrome that uses `top: 0` will still slide under the notch when stuck. Prefer `top: env(safe-area-inset-top, 0px)`, or add `data-harborfm-safe-top` on that element so the host sets the offset.
+- Left / right / bottom insets are still your responsibility when needed (`env(safe-area-inset-*)`).
+
 ---
 
 ## Harbor blocks

@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.17.1 - 7.23-2026
+
+- **Liquid theme PWAs:** Feed themes installed to the home screen clear the iPhone notch / Dynamic Island (host safe-area padding plus sticky top chrome offsets).
+
 ## v1.17.0 - 7-22-2026
 
 - **Scheduled group call meetings:** From the episode editor, pick a start time and HarborFM gives you a join link and code (plus dial-in when phone calling is enabled). Invite people by name or email, share the link, reschedule or cancel anytime, then start the call when you are ready. Guests who arrive early or late get a clear status on the join page (waiting for host, too early, or expired). Invite emails include a calendar invite and a Google Calendar link, and guests get an update if you change the time or cancel. You can keep up to 50 scheduled meetings active at once.

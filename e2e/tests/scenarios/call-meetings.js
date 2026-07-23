@@ -707,6 +707,17 @@ export async function run({ runOne }) {
       }),
     );
   } finally {
+    // Leave email disabled so later suites' createUser + login are not blocked by
+    // registration verification (default on when an email provider is configured).
+    await apiFetch(
+      '/settings',
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailProvider: 'none' }),
+      },
+      jar,
+    ).catch(() => {});
     await catcher.close();
   }
 

@@ -77,7 +77,7 @@
 
 .folio-top {
   position: sticky;
-  top: 0;
+  top: env(safe-area-inset-top, 0px);
   z-index: 20;
   border-bottom: 1px solid var(--folio-line);
   background: color-mix(in srgb, var(--folio-surface) 86%, transparent);

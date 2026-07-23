@@ -21,6 +21,7 @@ export function FeedSiteHeader({ flush = false }: { flush?: boolean } = {}) {
 
   return (
     <header
+      data-harborfm-feed-header=""
       className={`${styles.siteHeader}${flush ? ` ${styles.siteHeaderFlush}` : ''}`}
     >
       <div

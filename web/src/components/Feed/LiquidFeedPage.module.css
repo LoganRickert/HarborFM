@@ -2,11 +2,20 @@
   min-height: 100vh;
   width: 100%;
   box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .liquidBody {
   min-height: inherit;
   width: 100%;
+}
+
+.liquidFeed :global([data-harborfm-feed-header]) {
+  margin-top: calc(-1 * env(safe-area-inset-top, 0px));
+}
+
+.liquidFeed :global([data-harborfm-safe-top]) {
+  top: env(safe-area-inset-top, 0px);
 }
 
 /* Host for themed dialogs: outside Liquid body (survives innerHTML) and outside
