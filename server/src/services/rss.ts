@@ -128,6 +128,41 @@ function sanitizeHttpUrl(input: unknown): string {
   }
 }
 
+/** Origin only (no trailing slash), or empty if invalid. */
+function httpOrigin(input: unknown): string {
+  const sanitized = sanitizeHttpUrl(input);
+  if (!sanitized) return "";
+  try {
+    return new URL(sanitized).origin;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * If url is on the app hostname, rewrite it onto the canonical managed/linked origin.
+ * Leaves third-party / CDN URLs unchanged.
+ */
+function rewriteAppHostUrl(
+  url: string,
+  appOrigin: string,
+  canonicalOrigin: string,
+): string {
+  if (!url || !appOrigin || !canonicalOrigin || appOrigin === canonicalOrigin) {
+    return url;
+  }
+  try {
+    const u = new URL(url);
+    if (u.origin !== appOrigin) return url;
+    const canon = new URL(canonicalOrigin);
+    u.protocol = canon.protocol;
+    u.host = canon.host;
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 function getSetting(key: string): string | null {
   const row = drizzleDb
     .select({ value: settings.value })
@@ -193,9 +228,11 @@ export function generateRss(
     .get();
   if (!podcast) throw new Error("Podcast not found");
 
-  // If no publicBaseUrl provided, try to get one from exports or hostname setting
+  // If no publicBaseUrl provided, try exports, then managed/linked domain, then hostname
   let publicBase = sanitizeHttpUrl(publicBaseUrl);
   let exportPrefix: string | null = null;
+  /** True when media/page URLs use the podcast's linked/managed domain (not export/token/app host). */
+  let useCustomDomain = false;
   if (!publicBase) {
     const exportWithUrl = drizzleDb
       .select()
@@ -212,9 +249,16 @@ export function generateRss(
       publicBase = sanitizeHttpUrl(exportWithUrl.publicBaseUrl);
       exportPrefix = getExportPathPrefix(exportWithUrl);
     } else {
-      const hostnameVal = getSetting("hostname");
-      if (hostnameVal?.trim()) {
-        publicBase = sanitizeHttpUrl(hostnameVal);
+      const canonical = getCanonicalFeedUrl(podcast, readSettings());
+      if (canonical) {
+        publicBase = sanitizeHttpUrl(canonical);
+        useCustomDomain = Boolean(publicBase);
+      }
+      if (!publicBase) {
+        const hostnameVal = getSetting("hostname");
+        if (hostnameVal?.trim()) {
+          publicBase = sanitizeHttpUrl(hostnameVal);
+        }
       }
     }
   } else {
@@ -235,6 +279,7 @@ export function generateRss(
     const hostBase = hostnameVal?.trim() ? sanitizeHttpUrl(hostnameVal.trim()) : "";
     if (hostBase) publicBase = hostBase;
     exportPrefix = null; // token feed URLs are app paths only
+    useCustomDomain = false;
   }
 
   const keepExpiredForSubscribers =
@@ -322,12 +367,15 @@ export function generateRss(
 
   const publicBaseNoSlash = publicBase ? publicBase.replace(/\/$/, "") : "";
 
-  // Base URL for app feed pages (channel link and episode links when site_url / episode_link not set)
-  const feedBaseHostname = getSetting("hostname");
-  const feedBaseUrlRaw = feedBaseHostname?.trim()
-    ? sanitizeHttpUrl(feedBaseHostname.trim())
-    : "";
-  const feedBaseUrl = feedBaseUrlRaw ? feedBaseUrlRaw.replace(/\/+$/, "") : "";
+  // Base URL for feed pages (channel/episode <link> when site_url / episode_link not set)
+  const appHostnameVal = getSetting("hostname");
+  const appOrigin = httpOrigin(appHostnameVal);
+  const canonicalOrigin = useCustomDomain ? httpOrigin(publicBase) : "";
+  const feedBaseUrl = useCustomDomain
+    ? publicBaseNoSlash
+    : appHostnameVal?.trim()
+      ? (sanitizeHttpUrl(appHostnameVal.trim())?.replace(/\/+$/, "") ?? "")
+      : "";
 
   const websubDiscoveryEnabled = getSetting("websub_discovery_enabled") === "true";
   const websubHubVal = getSetting("websub_hub");
@@ -341,7 +389,11 @@ export function generateRss(
   let artworkUrl = "";
   // Prefer artworkUrl if set, otherwise use artworkPath if available
   if (podcast.artworkUrl) {
-    artworkUrl = sanitizeHttpUrl(podcast.artworkUrl);
+    artworkUrl = rewriteAppHostUrl(
+      sanitizeHttpUrl(podcast.artworkUrl),
+      appOrigin,
+      canonicalOrigin,
+    );
   } else if (podcast.artworkPath && publicBaseNoSlash) {
     if (tokenIdPlaceholder) {
       const filename = basename(podcast.artworkPath as string);
@@ -388,10 +440,12 @@ export function generateRss(
         : new Date(String(episodesList[0].updatedAt)).toUTCString()
       : nowRfc2822;
 
-  // When no podcast site_url is set, use the public feed URL (app hostname + /feed/slug)
+  // When no podcast site_url is set: custom domain uses /, else app host + /feed/slug
   const fallbackSiteUrl =
     feedBaseUrl && slugRaw
-      ? `${feedBaseUrl}/feed/${encodeURIComponent(slugRaw)}`
+      ? useCustomDomain
+        ? `${feedBaseUrl}/`
+        : `${feedBaseUrl}/feed/${encodeURIComponent(slugRaw)}`
       : "";
   const channelLink = siteUrl || fallbackSiteUrl;
 
@@ -944,7 +998,9 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
       ep.slug != null ? stripControlChars(String(ep.slug)).trim() : "";
     const fallbackEpLink =
       feedBaseUrl && slugRaw && epSlugRaw
-        ? `${feedBaseUrl}/feed/${encodeURIComponent(slugRaw)}/${encodeURIComponent(epSlugRaw)}`
+        ? useCustomDomain
+          ? `${feedBaseUrl}/${encodeURIComponent(epSlugRaw)}`
+          : `${feedBaseUrl}/feed/${encodeURIComponent(slugRaw)}/${encodeURIComponent(epSlugRaw)}`
         : channelLink;
     const itemLink = epLink || fallbackEpLink;
     const guidIsPermaLink = ep.guidIsPermalink === true;
@@ -1016,7 +1072,11 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
     }
     let epArtworkUrl = "";
     if (ep.artworkUrl) {
-      epArtworkUrl = sanitizeHttpUrl(ep.artworkUrl);
+      epArtworkUrl = rewriteAppHostUrl(
+        sanitizeHttpUrl(ep.artworkUrl),
+        appOrigin,
+        canonicalOrigin,
+      );
     } else if (ep.artworkPath && publicBaseNoSlash && ep.id) {
       if (tokenIdPlaceholder && slugRaw) {
         const filename = basename(String(ep.artworkPath));
@@ -1423,8 +1483,12 @@ export function getPublicFeedSelfUrl(
       publicBase = sanitizeHttpUrl(exportWithUrl.publicBaseUrl);
       exportPrefix = getExportPathPrefix(exportWithUrl);
     } else {
-      const hostnameVal = getSetting("hostname");
-      if (hostnameVal?.trim()) publicBase = sanitizeHttpUrl(hostnameVal);
+      const canonical = getCanonicalFeedUrl(podcast, readSettings());
+      if (canonical) publicBase = sanitizeHttpUrl(canonical);
+      if (!publicBase) {
+        const hostnameVal = getSetting("hostname");
+        if (hostnameVal?.trim()) publicBase = sanitizeHttpUrl(hostnameVal);
+      }
     }
   } else {
     const exportRow = drizzleDb

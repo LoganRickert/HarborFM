@@ -33,6 +33,48 @@ export function getCanonicalFeedUrl(
   return null;
 }
 
+/** Origin (no trailing slash) from getCanonicalFeedUrl, or null. */
+export function getCanonicalOrigin(
+  row: {
+    linkDomain?: string | null;
+    managedDomain?: string | null;
+    managedSubDomain?: string | null;
+  },
+  settings: AppSettings,
+): string | null {
+  const feed = getCanonicalFeedUrl(row, settings);
+  if (!feed) return null;
+  try {
+    return new URL(feed).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Public origin for subscriber-facing links: linked/managed domain when set, else fallback.
+ * Trailing slash stripped.
+ */
+export function resolvePodcastPublicOrigin(
+  podcastId: string,
+  fallbackOrigin: string,
+): string {
+  const fallback = fallbackOrigin.replace(/\/+$/, "");
+  if (!podcastId.trim()) return fallback;
+  const row = drizzleDb
+    .select({
+      linkDomain: podcasts.linkDomain,
+      managedDomain: podcasts.managedDomain,
+      managedSubDomain: podcasts.managedSubDomain,
+    })
+    .from(podcasts)
+    .where(eq(podcasts.id, podcastId.trim()))
+    .limit(1)
+    .get();
+  if (!row) return fallback;
+  return getCanonicalOrigin(row, readSettings()) ?? fallback;
+}
+
 /**
  * Resolve request host to a podcast for custom-domain redirect.
  * Compares host to link_domain and managed_domain (exact, case-insensitive).

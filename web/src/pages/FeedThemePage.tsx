@@ -174,6 +174,8 @@ export function FeedThemePage({
     image: podcastArtwork ?? undefined,
     url: podcast ? pageUrl : undefined,
     favicon: isCustomDomain ? podcastArtwork : undefined,
+    appleWebAppTitle: isCustomDomain ? podcast?.title : undefined,
+    appleTouchIcon: isCustomDomain ? podcastArtwork : undefined,
   });
 
   const canWriteReview =
@@ -433,6 +435,7 @@ export function FeedThemePage({
               onClose={() => setSubscribeOpen(false)}
               isSubscriberOnly={isSubscriberOnly}
               podcastSlug={podcastSlug}
+              canonicalFeedUrl={podcast.canonicalFeedUrl}
             />
           )}
           {canWriteReview && (

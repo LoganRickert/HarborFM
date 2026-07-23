@@ -268,6 +268,15 @@ export function resolveSpaMetaForRequest(
 
   const podcastDto = publicPodcastDto(podcastRow) as Record<string, unknown>;
   const podcastCover = podcastCoverUrl(origin, podcastDto) ?? defaultImage;
+  const isCustomDomain = Boolean(getPodcastByHost(host));
+  const podcastTitle = String(podcastRow.title ?? "").trim();
+  const appleInstall =
+    isCustomDomain && podcastTitle
+      ? {
+          appleWebAppTitle: podcastTitle,
+          appleTouchIcon: podcastCover,
+        }
+      : {};
 
   // Home and theme .html pages share podcast-level meta.
   if (!route.episodeSlug || route.themePage) {
@@ -277,6 +286,7 @@ export function resolveSpaMetaForRequest(
       siteName,
       url: pageUrl,
       image: podcastCover,
+      ...appleInstall,
     };
   }
 
@@ -307,5 +317,6 @@ export function resolveSpaMetaForRequest(
     siteName,
     url: pageUrl,
     image: episodeCover,
+    ...appleInstall,
   };
 }

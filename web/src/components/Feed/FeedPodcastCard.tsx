@@ -76,6 +76,7 @@ export function FeedPodcastCard({ podcast, showLockIcon }: FeedPodcastCardProps)
           onClose={() => setShowLockInfo(false)}
           isSubscriberOnly={isSubscriberOnly}
           podcastSlug={podcast.slug}
+          canonicalFeedUrl={podcast.canonicalFeedUrl}
         />
       )}
     </article>

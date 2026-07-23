@@ -31,6 +31,29 @@ export function extractTokenFromInput(input: string): string | null {
 }
 
 /**
+ * Absolute private RSS feed URL. Prefers managed/linked domain when canonicalFeedUrl is set.
+ */
+export function buildPrivateRssFeedUrl(
+  podcastSlug: string,
+  token: string,
+  canonicalFeedUrl?: string | null,
+): string {
+  const path = `/api/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/rss`;
+  const canonical = canonicalFeedUrl?.trim();
+  if (canonical) {
+    try {
+      return `${new URL(canonical).origin}${path}`;
+    } catch {
+      /* fall through */
+    }
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${path}`;
+  }
+  return path;
+}
+
+/**
  * Validate that a token has the correct format.
  * 
  * @param token - Token to validate

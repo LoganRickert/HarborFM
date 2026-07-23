@@ -204,6 +204,8 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
     image: podcastArtwork ?? undefined,
     url: podcast ? pageUrl : undefined,
     favicon: isCustomDomain ? podcastArtwork : undefined,
+    appleWebAppTitle: isCustomDomain ? podcast?.title : undefined,
+    appleTouchIcon: isCustomDomain ? podcastArtwork : undefined,
   });
 
   const canWriteReview =
@@ -426,6 +428,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
             podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled,
           )}
           podcastSlug={podcastSlug}
+          canonicalFeedUrl={podcast.canonicalFeedUrl}
         />
       )}
       {canWriteReview && (

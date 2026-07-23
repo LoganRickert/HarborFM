@@ -4,6 +4,10 @@ export type SpaPageMeta = {
   siteName: string;
   url: string;
   image: string;
+  /** iOS home-screen title (custom/managed domain installs). */
+  appleWebAppTitle?: string;
+  /** iOS home-screen icon URL (custom/managed domain installs). */
+  appleTouchIcon?: string;
 };
 
 export const DEFAULT_OG_IMAGE_PATH = '/og-image.svg';
@@ -49,6 +53,29 @@ function setMetaContent(
   );
 }
 
+function setLinkHref(html: string, rel: string, href: string): string {
+  const escaped = escapeHtmlAttr(href);
+  const pattern = new RegExp(
+    `(<link\\s+[^>]*rel="${rel}"[^>]*href=")[^"]*(")`,
+    'i',
+  );
+  if (pattern.test(html)) {
+    return html.replace(pattern, `$1${escaped}$2`);
+  }
+  // Also match href-before-rel ordering
+  const patternAlt = new RegExp(
+    `(<link\\s+[^>]*href=")[^"]*("[^>]*rel="${rel}"[^>]*>)`,
+    'i',
+  );
+  if (patternAlt.test(html)) {
+    return html.replace(patternAlt, `$1${escaped}$2`);
+  }
+  return html.replace(
+    '</head>',
+    `<link rel="${rel}" href="${escaped}" />\n</head>`,
+  );
+}
+
 /** Inject podcast/episode meta into the SPA index.html shell (for crawlers and view-source). */
 export function injectSpaMetaHtml(html: string, meta: SpaPageMeta): string {
   const description = truncateMetaDescription(meta.description);
@@ -68,6 +95,18 @@ export function injectSpaMetaHtml(html: string, meta: SpaPageMeta): string {
   out = setMetaContent(out, 'name', 'twitter:title', meta.title);
   out = setMetaContent(out, 'name', 'twitter:description', description);
   out = setMetaContent(out, 'name', 'twitter:image', meta.image);
+
+  if (meta.appleWebAppTitle) {
+    out = setMetaContent(
+      out,
+      'name',
+      'apple-mobile-web-app-title',
+      meta.appleWebAppTitle,
+    );
+  }
+  if (meta.appleTouchIcon) {
+    out = setLinkHref(out, 'apple-touch-icon', meta.appleTouchIcon);
+  }
 
   return out;
 }

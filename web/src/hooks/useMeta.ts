@@ -4,6 +4,7 @@ import { DEFAULT_SITE_NAME } from '../utils/siteBranding';
 
 const DEFAULT_DESCRIPTION = 'HarborFM - Create and manage your podcast with ease. Record, edit, and publish episodes all in one place.';
 const DEFAULT_TITLE = 'HarborFM';
+const DEFAULT_APPLE_TITLE = 'HarborFM';
 const OG_IMAGE = DEFAULT_OG_IMAGE_PATH;
 const DEFAULT_FAVICON = '/favicon.png';
 
@@ -35,6 +36,16 @@ function getFaviconLink(): HTMLLinkElement {
   return link;
 }
 
+function getOrCreateAppleTouchIcon(): HTMLLinkElement {
+  let link = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'apple-touch-icon';
+    document.head.appendChild(link);
+  }
+  return link;
+}
+
 function faviconTypeForUrl(url: string): string | null {
   const lower = url.toLowerCase();
   if (lower.endsWith('.png')) return 'image/png';
@@ -51,6 +62,8 @@ export function useMeta({
   siteName,
   url,
   favicon,
+  appleWebAppTitle,
+  appleTouchIcon,
 }: {
   title?: string;
   description?: string;
@@ -61,6 +74,10 @@ export function useMeta({
   url?: string;
   /** When set, updates the browser tab icon (e.g. podcast cover on a linking domain). */
   favicon?: string | null;
+  /** iOS home-screen title (custom/managed domain). */
+  appleWebAppTitle?: string | null;
+  /** iOS home-screen icon (custom/managed domain). */
+  appleTouchIcon?: string | null;
 }) {
   useEffect(() => {
     const originalTitle = document.title;
@@ -73,9 +90,16 @@ export function useMeta({
     const twitterTitle = getOrCreateMetaTag('twitter:title', 'name');
     const twitterDescription = getOrCreateMetaTag('twitter:description', 'name');
     const twitterImage = getOrCreateMetaTag('twitter:image', 'name');
+    const appleTitleMeta = appleWebAppTitle
+      ? getOrCreateMetaTag('apple-mobile-web-app-title', 'name')
+      : null;
     const faviconLink = favicon != null ? getFaviconLink() : null;
+    const appleTouchLink = appleTouchIcon ? getOrCreateAppleTouchIcon() : null;
     const originalFaviconHref = faviconLink?.getAttribute('href') ?? DEFAULT_FAVICON;
     const originalFaviconType = faviconLink?.getAttribute('type');
+    const originalAppleTitle = appleTitleMeta?.getAttribute('content') ?? DEFAULT_APPLE_TITLE;
+    const originalAppleTouchHref = appleTouchLink?.getAttribute('href') ?? null;
+    const appleTouchWasCreated = Boolean(appleTouchIcon && !originalAppleTouchHref);
     const originalSiteName = ogSiteName.getAttribute('content') ?? DEFAULT_SITE_NAME;
     const originalUrl = ogUrl.getAttribute('content') ?? '/';
 
@@ -111,6 +135,14 @@ export function useMeta({
       else faviconLink.removeAttribute('type');
     }
 
+    if (appleTitleMeta && appleWebAppTitle) {
+      appleTitleMeta.setAttribute('content', appleWebAppTitle);
+    }
+
+    if (appleTouchLink && appleTouchIcon) {
+      appleTouchLink.href = toAbsoluteUrl(appleTouchIcon);
+    }
+
     return () => {
       if (title) {
         document.title = originalTitle;
@@ -135,6 +167,16 @@ export function useMeta({
         if (originalFaviconType) faviconLink.type = originalFaviconType;
         else faviconLink.removeAttribute('type');
       }
+      if (appleTitleMeta && appleWebAppTitle) {
+        appleTitleMeta.setAttribute('content', originalAppleTitle);
+      }
+      if (appleTouchLink && appleTouchIcon) {
+        if (appleTouchWasCreated) {
+          appleTouchLink.remove();
+        } else if (originalAppleTouchHref) {
+          appleTouchLink.href = originalAppleTouchHref;
+        }
+      }
     };
-  }, [title, description, image, siteName, url, favicon]);
+  }, [title, description, image, siteName, url, favicon, appleWebAppTitle, appleTouchIcon]);
 }

@@ -161,6 +161,7 @@ export function FeedPodcastHeader({
           onClose={() => setShowLockInfo(false)}
           isSubscriberOnly={isSubscriberOnly}
           podcastSlug={podcastSlug}
+          canonicalFeedUrl={podcast.canonicalFeedUrl}
         />
       )}
       {shareUrl != null && (

@@ -38,6 +38,14 @@ import {
   callSessionTokenParamSchema,
   callSessionQuerySchema,
 } from "@harborfm/shared";
+import {
+  getActiveMeetingByJoinCode,
+  getInviteByToken,
+  getMeetingByToken,
+  joinExpiresAtMs,
+  joinOpensAtMs,
+  resolveGuestMeetingStatus,
+} from "./meetings.js";
 
 function dialInPayloadFields(): { dialInEnabled: boolean; dialInPhoneNumber: string | null } {
   const cfg = getDialInPublicConfig();
@@ -303,6 +311,10 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
       }
       const session = getSessionByCode(code);
       if (!session) {
+        const meeting = getActiveMeetingByJoinCode(code);
+        if (meeting) {
+          return reply.send({ token: meeting.token });
+        }
         const normalized = String(code ?? "").trim();
         request.log.info(
           {
@@ -370,6 +382,15 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
               dialInEnabled: { type: "boolean" },
               dialInPhoneNumber: { type: "string", nullable: true },
               joinCode: { type: "string", description: "4-digit join code for phone dial-in" },
+              meetingStatus: {
+                type: "string",
+                enum: ["too_early", "waiting_for_host", "live", "ended", "expired", "cancelled"],
+                description: "Scheduled meeting guest status when token is a meeting",
+              },
+              scheduledStartAt: { type: "string" },
+              joinOpensAt: { type: "string" },
+              joinExpiresAt: { type: "string" },
+              inviteDisplayName: { type: "string", nullable: true },
             },
           },
           404: { description: "Invalid or ended session" },
@@ -393,44 +414,90 @@ export async function registerLifecycleRoutes(app: FastifyInstance): Promise<voi
           .send({ error: "Too many failed attempts", retryAfterSec: ban.retryAfterSec });
       }
       const session = getSessionForJoinInfo(token);
-      if (!session) {
+      const meeting = !session ? getMeetingByToken(token) : undefined;
+
+      if (!session && !meeting) {
         recordFailureAndMaybeBan(ip, CALL_JOIN_CONTEXT, {
           userAgent: request.headers["user-agent"],
         });
         return reply.status(404).send({ error: "Invalid or expired link" });
       }
 
-      const podcast = getPodcastForJoinInfo(session.podcastId);
-      const episode = getEpisodeForJoinInfo(session.episodeId, session.podcastId);
+      const podcastId = session?.podcastId ?? meeting!.podcastId;
+      const episodeId = session?.episodeId ?? meeting!.episodeId;
+      const podcast = getPodcastForJoinInfo(podcastId);
+      const episode = getEpisodeForJoinInfo(episodeId, podcastId);
       if (!podcast || !episode)
         return reply.status(404).send({ error: "Show or episode not found" });
 
-      const hostP = session.participants.find((p) => p.isHost);
+      const hostP = session?.participants.find((p) => p.isHost);
       const hostName = hostP?.name ?? "Host";
-      const passwordRequired = Boolean(session.password && session.password.trim());
+      const passwordRequired = Boolean(session?.password && session.password.trim());
 
       let artworkUrl: string | null = null;
       if (episode.artworkUrl) {
         artworkUrl = episode.artworkUrl;
       } else if (episode.artworkPath) {
         const fn = episode.artworkPath.split(/[/\\]/).pop();
-        if (fn) artworkUrl = `/api/public/artwork/${session.podcastId}/episodes/${episode.id}/${encodeURIComponent(fn)}`;
+        if (fn) artworkUrl = `/api/public/artwork/${podcastId}/episodes/${episode.id}/${encodeURIComponent(fn)}`;
       }
       if (!artworkUrl && podcast.artworkUrl) artworkUrl = podcast.artworkUrl;
       if (!artworkUrl && podcast.artworkPath) {
         const fn = podcast.artworkPath.split(/[/\\]/).pop();
-        if (fn) artworkUrl = `/api/public/artwork/${session.podcastId}/${encodeURIComponent(fn)}`;
+        if (fn) artworkUrl = `/api/public/artwork/${podcastId}/${encodeURIComponent(fn)}`;
       }
 
-      return reply.send({
+      const inviteToken =
+        typeof (request.query as { invite?: string })?.invite === "string"
+          ? (request.query as { invite?: string }).invite!.trim()
+          : "";
+      let inviteDisplayName: string | null = null;
+      if (inviteToken && meeting) {
+        const invite = getInviteByToken(inviteToken);
+        if (invite && invite.meetingId === meeting.id) {
+          inviteDisplayName = invite.displayName?.trim() || null;
+        }
+      } else if (inviteToken && session) {
+        const m = getMeetingByToken(token);
+        if (m) {
+          const invite = getInviteByToken(inviteToken);
+          if (invite && invite.meetingId === m.id) {
+            inviteDisplayName = invite.displayName?.trim() || null;
+          }
+        }
+      }
+
+      const payload: Record<string, unknown> = {
         podcast: { title: podcast.title },
         episode: { id: episode.id, title: episode.title },
         hostName,
         passwordRequired,
         artworkUrl,
         ...dialInPayloadFields(),
-        joinCode: session.joinCode,
-      });
+        joinCode: session?.joinCode ?? meeting!.joinCode,
+      };
+
+      const meetingForStatus =
+        meeting ??
+        (session ? getMeetingByToken(session.token) : undefined);
+      if (meetingForStatus) {
+        const liveExists = !!getSessionForJoinInfo(meetingForStatus.token);
+        payload.meetingStatus = resolveGuestMeetingStatus(
+          meetingForStatus,
+          liveExists,
+        );
+        payload.scheduledStartAt = meetingForStatus.scheduledStartAt;
+        payload.joinOpensAt = new Date(
+          joinOpensAtMs(meetingForStatus.scheduledStartAt),
+        ).toISOString();
+        payload.joinExpiresAt = new Date(
+          joinExpiresAtMs(meetingForStatus.scheduledStartAt),
+        ).toISOString();
+      }
+
+      if (inviteDisplayName) payload.inviteDisplayName = inviteDisplayName;
+
+      return reply.send(payload);
     },
   );
 

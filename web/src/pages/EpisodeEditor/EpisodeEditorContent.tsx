@@ -53,11 +53,13 @@ import type { Podcast } from '../../api/podcasts';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
 import { getPublicConfig } from '../../api/public';
-import { startCall, getActiveSession } from '../../api/call';
+import { startCall, getActiveSession, getEpisodeMeeting, startEpisodeMeeting } from '../../api/call';
 import { CallPanel } from '../../components/GroupCall/CallPanel';
 import { useEpisodeWebSocket } from '../../hooks/useEpisodeWebSocket';
 import { useBatchedSegmentWaveforms } from '../../hooks/useBatchedSegmentWaveforms';
 import { EndCallConfirmDialog } from '../../components/GroupCall/EndCallConfirmDialog';
+import { ScheduleMeetingDialog } from './ScheduleMeetingDialog';
+import { formatMeetingSummary } from './meetingSummary';
 import type { PublishFormFields } from './EpisodePublishControls';
 
 function isPublishOnlyUpdate(variables: Record<string, unknown> | undefined): boolean {
@@ -125,6 +127,7 @@ export function EpisodeEditorContent({
   const [showGenerateVideoModal, setShowGenerateVideoModal] = useState(false);
   const [startCallError, setStartCallError] = useState<string | null>(null);
   const [endCallConfirmOpen, setEndCallConfirmOpen] = useState(false);
+  const [scheduleMeetingOpen, setScheduleMeetingOpen] = useState(false);
   const [deleteEpisodeConfirmOpen, setDeleteEpisodeConfirmOpen] = useState(false);
   /** Pending segment IDs from WebSocket; refetch overwrites cache too early so we keep this. */
   const [wsPendingSegmentIds, setWsPendingSegmentIds] = useState<string[] | null>(null);
@@ -140,6 +143,13 @@ export function EpisodeEditorContent({
     queryFn: () => getActiveSession(id!),
     enabled: !!id && !segmentReadOnly,
   });
+  const { data: meetingData } = useQuery({
+    queryKey: ['call-meeting', id],
+    queryFn: () => getEpisodeMeeting(id!),
+    enabled: !!id && webrtcEnabled && !segmentReadOnly && canEditSegments,
+    refetchInterval: 60_000,
+  });
+  const scheduledMeeting = meetingData?.meeting ?? null;
   const { data: renderStatus } = useQuery({
     queryKey: ['render-status', id],
     queryFn: () => getRenderStatus(id!),
@@ -229,6 +239,7 @@ export function EpisodeEditorContent({
     setWsRecordingActive(null);
     setCallPanelOpenInThisTab(false);
     queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+    queryClient.invalidateQueries({ queryKey: ['call-meeting', id] });
   }, [queryClient, id]);
 
   const handleStartGroupCall = useCallback(() => {
@@ -253,11 +264,41 @@ export function EpisodeEditorContent({
           setCallPanelOpenInThisTab(true);
         }
         queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+        queryClient.invalidateQueries({ queryKey: ['call-meeting', id] });
       })
       .catch((err) => {
         setStartCallError(err?.message ?? 'Failed to start call. Please try again.');
       });
   }, [id, queryClient]);
+
+  const handleStartMeeting = useCallback(() => {
+    if (!scheduledMeeting) return;
+    setStartCallError(null);
+    startEpisodeMeeting(scheduledMeeting.id)
+      .then((res) => {
+        if (res?.sessionId && res?.token) {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          queryClient.setQueryData(['call-session', id], {
+            sessionId: res.sessionId,
+            token: res.token,
+            joinUrl: res.joinUrl ?? `${origin}/call/join/${res.token}`,
+            joinCode: res.joinCode,
+            dialInEnabled: res.dialInEnabled,
+            dialInPhoneNumber: res.dialInPhoneNumber,
+            webrtcUrl: res.webrtcUrl,
+            roomId: res.roomId,
+            hostToken: res.hostToken,
+            webrtcUnavailable: res.webrtcUnavailable,
+          });
+          setCallPanelOpenInThisTab(true);
+        }
+        queryClient.invalidateQueries({ queryKey: ['call-session', id] });
+        queryClient.invalidateQueries({ queryKey: ['call-meeting', id] });
+      })
+      .catch((err) => {
+        setStartCallError(err?.message ?? 'Failed to start meeting. Please try again.');
+      });
+  }, [id, queryClient, scheduledMeeting]);
 
   const handleSegmentPlayRequest = useCallback((segmentId: string) => {
     // Pause and reset all other segments to 0
@@ -573,6 +614,50 @@ export function EpisodeEditorContent({
         callJoinUrl={
           webrtcEnabled && activeCall && !activeCall.hostToken ? activeCall.joinUrl : null
         }
+        onScheduleMeeting={
+          webrtcEnabled && !segmentReadOnly && canEditSegments
+            ? () => setScheduleMeetingOpen(true)
+            : undefined
+        }
+        scheduleMeetingDisabled={
+          !scheduledMeeting && meetingData?.atMeetingCap === true
+        }
+        scheduleMeetingDisabledMessage={
+          meetingData?.atMeetingCap
+            ? `You can have at most ${meetingData.maxActiveMeetingsPerUser} scheduled meetings at once.`
+            : undefined
+        }
+        scheduledMeetingLabel={
+          scheduledMeeting ? formatMeetingSummary(scheduledMeeting) : null
+        }
+        onStartMeeting={
+          webrtcEnabled &&
+          !segmentReadOnly &&
+          canEditSegments &&
+          scheduledMeeting &&
+          scheduledMeeting.withinJoinWindow &&
+          !activeCall &&
+          (canRecord || myRole !== 'owner')
+            ? handleStartMeeting
+            : undefined
+        }
+        startMeetingDisabled={
+          !!(scheduledMeeting && !canRecord && myRole === 'owner')
+        }
+        startMeetingDisabledMessage={
+          !canRecord && myRole === 'owner'
+            ? START_CALL_BLOCKED_STORAGE_MESSAGE
+            : undefined
+        }
+      />
+
+      <ScheduleMeetingDialog
+        open={scheduleMeetingOpen}
+        onOpenChange={setScheduleMeetingOpen}
+        episodeId={id}
+        onMeetingChanged={() => {
+          queryClient.invalidateQueries({ queryKey: ['call-meeting', id] });
+        }}
       />
 
       {startCallError && (

@@ -101,6 +101,8 @@ export function PodcastCard({
               <Link
                 to={`/feed/${podcast.slug}`}
                 className={styles.cardAction}
+                target="_blank"
+                rel="noopener noreferrer"
                 aria-label={`Public page for ${podcast.title}`}
               >
                 <Rss size={16} strokeWidth={2} aria-hidden />
@@ -111,6 +113,8 @@ export function PodcastCard({
             <a
               href={getPublicRssUrl(podcast.slug)}
               className={styles.cardAction}
+              target="_blank"
+              rel="noopener noreferrer"
               aria-label={`RSS feed XML for ${podcast.title}`}
             >
               <Rss size={16} strokeWidth={2} aria-hidden />

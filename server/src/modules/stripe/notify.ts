@@ -14,6 +14,7 @@ import {
   buildStripeSubscriberNoticeEmail,
 } from "../../services/email.js";
 import { createSubscriberClaimUrl } from "../public/subscriberClaim.js";
+import { resolvePodcastPublicOrigin } from "../../services/dns/custom-domain-resolver.js";
 import * as subs from "./subscriptions.js";
 
 type PodcastInfo = { id: string; slug: string; title: string; ownerUserId: string };
@@ -54,6 +55,10 @@ function getOwnerEmail(podcastId: string): string | null {
     .limit(1)
     .get();
   return row?.email?.trim() || null;
+}
+
+function podcastSubscriberBaseUrl(podcastId: string): string {
+  return resolvePodcastPublicOrigin(podcastId, getBaseUrl());
 }
 
 function privateRssUrl(baseUrl: string, slug: string, rawToken: string): string {
@@ -130,7 +135,7 @@ export async function notifyWelcome(opts: {
 }): Promise<void> {
   const podcast = getPodcast(opts.podcastId);
   if (!podcast || !opts.customerEmail?.trim()) return;
-  const baseUrl = getBaseUrl();
+  const baseUrl = podcastSubscriberBaseUrl(opts.podcastId);
   const content = buildStripeWelcomeEmail({
     baseUrl,
     podcastTitle: podcast.title,
@@ -183,7 +188,7 @@ export async function notifyForSubscriptionRow(
   if (!row.customerEmail?.trim()) return;
   const podcast = getPodcast(row.podcastId);
   if (!podcast) return;
-  const baseUrl = getBaseUrl();
+  const baseUrl = podcastSubscriberBaseUrl(row.podcastId);
   const periodEnd = formatDate(extras?.periodEndIso ?? row.currentPeriodEnd);
 
   let eyebrow: string;

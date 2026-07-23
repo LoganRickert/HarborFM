@@ -312,6 +312,32 @@ export const JWT_COOKIE_SIGNED =
   process.env.JWT_COOKIE_SIGNED === "true" ||
   process.env.JWT_COOKIE_SIGNED === "1";
 
+/** How long before scheduled start guests can join (ms). Env: MEETING_JOIN_OPENS_BEFORE_MS. Default 1 hour. */
+export const MEETING_JOIN_OPENS_BEFORE_MS =
+  Number(process.env.MEETING_JOIN_OPENS_BEFORE_MS) || 60 * 60 * 1000;
+
+/** How long after scheduled start the join window stays open (ms). Env: MEETING_JOIN_EXPIRES_AFTER_MS. Default 4 hours. */
+export const MEETING_JOIN_EXPIRES_AFTER_MS =
+  Number(process.env.MEETING_JOIN_EXPIRES_AFTER_MS) || 4 * 60 * 60 * 1000;
+
+/** Max scheduled/live meetings a user may have at once. Env: MAX_ACTIVE_MEETINGS_PER_USER. Default 50. */
+export const MAX_ACTIVE_MEETINGS_PER_USER =
+  Number(process.env.MAX_ACTIVE_MEETINGS_PER_USER) || 50;
+
+/** Furthest ahead a meeting may be scheduled (ms). Env: MAX_SCHEDULE_AHEAD_MS. Default 1 year. */
+export const MAX_SCHEDULE_AHEAD_MS =
+  Number(process.env.MAX_SCHEDULE_AHEAD_MS) || 365 * 24 * 60 * 60 * 1000;
+
+/** Meeting invite create rate limit window (ms). 0 = no limit. Env: MEETING_INVITE_RATE_LIMIT_WINDOW_MS. Default 300000 (5 min). */
+export const MEETING_INVITE_RATE_LIMIT_WINDOW_MS =
+  process.env.MEETING_INVITE_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.MEETING_INVITE_RATE_LIMIT_WINDOW_MS)
+    : 5 * 60_000;
+
+/** Meeting invite create rate limit max requests per window. Env: MEETING_INVITE_RATE_LIMIT_MAX. Default 5. */
+export const MEETING_INVITE_RATE_LIMIT_MAX =
+  Number(process.env.MEETING_INVITE_RATE_LIMIT_MAX) || 5;
+
 /** Render rate limit: min ms between "Make Final Episode" requests per user. 0 = no limit (e.g. for e2e). Env: RENDER_RATE_LIMIT_WINDOW_MS. Default 60000 (1 min). */
 export const RENDER_RATE_LIMIT_WINDOW_MS =
   process.env.RENDER_RATE_LIMIT_WINDOW_MS !== undefined

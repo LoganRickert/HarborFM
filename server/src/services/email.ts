@@ -38,12 +38,19 @@ function toTitleCase(s: string): string {
     .join(" ");
 }
 
+export interface SendMailAttachment {
+  filename: string;
+  content: string;
+  contentType: string;
+}
+
 export interface SendMailOptions {
   to: string;
   subject: string;
   text: string;
   html: string;
   replyTo?: string;
+  attachments?: SendMailAttachment[];
 }
 
 /**
@@ -70,6 +77,7 @@ export async function sendMail(
     .trim();
   const hostname = hostnameRaw || "localhost";
   const from = fromRaw?.trim() ? fromRaw.trim() : `noreply@${hostname}`;
+  const attachments = options.attachments?.filter((a) => a.content?.length) ?? [];
 
   if (settings.email_provider === "smtp") {
     try {
@@ -86,6 +94,11 @@ export async function sendMail(
         subject: toTitleCase(options.subject),
         text: options.text,
         html: options.html,
+        attachments: attachments.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+        })),
       });
       return { sent: true };
     } catch (err) {
@@ -113,6 +126,16 @@ export async function sendMail(
             { type: "text/plain", value: options.text },
             { type: "text/html", value: options.html },
           ],
+          ...(attachments.length > 0
+            ? {
+                attachments: attachments.map((a) => ({
+                  content: Buffer.from(a.content, "utf8").toString("base64"),
+                  filename: a.filename,
+                  type: a.contentType.split(";")[0]?.trim() || "text/calendar",
+                  disposition: "attachment",
+                })),
+              }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -146,6 +169,15 @@ export async function sendMail(
     const content = `Subject: ${toTitleCase(options.subject)}\n\n${textContent}`.trim();
     try {
       const payload: Record<string, string> = { [fieldKey]: content };
+      if (attachments.length > 0) {
+        payload.attachments_json = JSON.stringify(
+          attachments.map((a) => ({
+            filename: a.filename,
+            contentType: a.contentType,
+            contentBase64: Buffer.from(a.content, "utf8").toString("base64"),
+          })),
+        );
+      }
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1164,4 +1196,326 @@ export function buildStripeSubscriberNoticeEmail(options: {
       bodyHtml,
     }),
   };
+}
+
+export interface GroupCallMeetingEmailOptions {
+  podcastTitle: string;
+  episodeTitle: string;
+  scheduledStartAt: string;
+  /** IANA time zone from the host who scheduled (e.g. America/New_York). */
+  hostTimeZone?: string | null;
+  joinUrl: string;
+  joinCode: string;
+  dialInPhoneNumber?: string | null;
+  googleCalendarUrl?: string | null;
+  guestName?: string | null;
+  previousScheduledStartAt?: string | null;
+  /** Absolute podcast cover URL for the email header. */
+  coverArtUrl?: string | null;
+}
+
+function meetingTimeZone(timeZone?: string | null): string {
+  const tz = timeZone?.trim();
+  if (!tz) return "UTC";
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: tz }).format(new Date());
+    return tz;
+  } catch {
+    return "UTC";
+  }
+}
+
+/** Host-local date/time with AM/PM (e.g. Wed, Jul 22, 2026, 3:00 PM EDT). */
+function formatMeetingWhen(iso: string, timeZone?: string | null): string {
+  try {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return iso;
+    const tz = meetingTimeZone(timeZone);
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: tz,
+      timeZoneName: "short",
+    }).format(d);
+  } catch {
+    return iso;
+  }
+}
+
+function safeEmailBaseUrl(joinUrl: string): string {
+  try {
+    return new URL(joinUrl).origin;
+  } catch {
+    return "http://localhost";
+  }
+}
+
+function meetingDetailsText(opts: GroupCallMeetingEmailOptions): string[] {
+  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const lines = [
+    `Show: ${opts.podcastTitle}`,
+    `Episode: ${opts.episodeTitle}`,
+    `When: ${when}`,
+    "",
+    "Join on the web (recommended):",
+    opts.joinUrl,
+  ];
+  if (opts.dialInPhoneNumber) {
+    lines.push(
+      "",
+      "Can't join on the web?",
+      `Phone: ${opts.dialInPhoneNumber}`,
+      `PIN: ${opts.joinCode}`,
+    );
+  } else {
+    lines.push("", `Join code: ${opts.joinCode}`);
+  }
+  if (opts.googleCalendarUrl) {
+    lines.push("", `Add to Google Calendar: ${opts.googleCalendarUrl}`);
+  }
+  return lines;
+}
+
+function meetingDetailsHtml(opts: GroupCallMeetingEmailOptions): string {
+  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const cover = opts.coverArtUrl?.trim()
+    ? `<p style="margin: 0 0 20px; text-align: center;">
+        <img src="${escapeHtml(opts.coverArtUrl.trim())}" alt="" width="120" height="120" style="display: inline-block; width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 1px solid ${STYLE.border};" />
+      </p>`
+    : "";
+  const dialIn = opts.dialInPhoneNumber
+    ? `<div style="margin: 20px 0 0; padding: 14px 16px; border-radius: 10px; border: 1px solid ${STYLE.border}; background: ${STYLE.bg};">
+        <p style="margin: 0 0 8px; font-size: 0.8125rem; font-weight: 600; color: ${STYLE.textMuted};">Can't join on the web?</p>
+        <p style="margin: 0; font-size: 0.9375rem; color: ${STYLE.text};">Phone: <strong>${escapeHtml(opts.dialInPhoneNumber)}</strong></p>
+        <p style="margin: 4px 0 0; font-size: 0.9375rem; color: ${STYLE.text};">PIN: <strong>${escapeHtml(opts.joinCode)}</strong></p>
+      </div>`
+    : `<p style="margin: 12px 0 0; font-size: 0.9375rem; color: ${STYLE.text};">Join code: <strong>${escapeHtml(opts.joinCode)}</strong></p>`;
+  const gcal = opts.googleCalendarUrl
+    ? `<p style="margin: 16px 0 0; text-align: center; font-size: 0.8125rem;">
+        <a href="${escapeHtml(opts.googleCalendarUrl)}" style="color: ${STYLE.accent}; text-decoration: none;">Add to Google Calendar</a>
+      </p>`
+    : "";
+  return `
+      ${cover}
+      <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
+      <p style="margin: 0 0 16px; font-size: 0.9375rem; color: ${STYLE.text};">${escapeHtml(opts.episodeTitle)}</p>
+      <p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.text};">When: <strong>${escapeHtml(when)}</strong></p>
+      <p style="margin: 0 0 12px; text-align: center;">
+        <a href="${escapeHtml(opts.joinUrl)}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Join on the web</a>
+      </p>
+      <p style="margin: 0 0 4px; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">Or copy this link:</p>
+      <p style="margin: 0 0 8px; font-size: 0.8125rem; word-break: break-all; text-align: center;">
+        <a href="${escapeHtml(opts.joinUrl)}" style="color: ${STYLE.accent}; text-decoration: underline;">${escapeHtml(opts.joinUrl)}</a>
+      </p>
+      ${dialIn}
+      ${gcal}
+  `;
+}
+
+function wrapMeetingEmail(opts: {
+  baseUrl: string;
+  subject: string;
+  eyebrow: string;
+  introHtml: string;
+  detailsHtml: string;
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>${opts.subject}</title>
+</head>
+<body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
+  <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
+  <div style="max-width: 480px; margin: 0 auto; padding: 32px 24px;">
+    <div style="background: ${STYLE.bgElevated}; border: 1px solid ${STYLE.border}; border-radius: 16px; padding: 32px 28px;">
+      ${emailHeaderWithFavicon(opts.baseUrl)}
+      <p style="margin: 0 0 24px; font-size: 0.875rem; color: ${STYLE.textMuted};">${escapeHtml(opts.eyebrow)}</p>
+      ${opts.introHtml}
+      ${opts.detailsHtml}
+    </div>
+    <p style="margin: 24px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">
+      <a href="${escapeHtml(opts.baseUrl)}" style="color: inherit; text-decoration: none;">${APP_NAME}</a>
+    </p>
+  </div>
+  </div>
+</body>
+</html>`;
+}
+
+export function buildGroupCallMeetingCreatorEmail(
+  opts: GroupCallMeetingEmailOptions,
+): { subject: string; text: string; html: string } {
+  const subject = `Group call scheduled: ${opts.podcastTitle} - ${opts.episodeTitle}`;
+  const text = [
+    `Your group call meeting is scheduled.`,
+    "",
+    ...meetingDetailsText(opts),
+    "",
+    "An .ics calendar invite is attached.",
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.joinUrl);
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Meeting scheduled",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">Your group call meeting is scheduled. Share the join link or invite guests from the episode editor.</p>`,
+    detailsHtml: meetingDetailsHtml(opts),
+  });
+  return { subject, text, html };
+}
+
+export function buildGroupCallMeetingInviteEmail(
+  opts: GroupCallMeetingEmailOptions,
+): { subject: string; text: string; html: string } {
+  const greeting = opts.guestName?.trim()
+    ? `Hi ${opts.guestName.trim()},`
+    : "Hi,";
+  const subject = `You're invited: ${opts.podcastTitle} - ${opts.episodeTitle}`;
+  const text = [
+    greeting,
+    "",
+    `You're invited to a group call for ${opts.podcastTitle} - ${opts.episodeTitle}.`,
+    "",
+    ...meetingDetailsText(opts),
+    "",
+    "An .ics calendar invite is attached. Replies go to the host.",
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.joinUrl);
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Group call invite",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} You're invited to a group call.</p>`,
+    detailsHtml: meetingDetailsHtml(opts),
+  });
+  return { subject, text, html };
+}
+
+export function buildGroupCallMeetingRescheduledEmail(
+  opts: GroupCallMeetingEmailOptions,
+): { subject: string; text: string; html: string } {
+  const greeting = opts.guestName?.trim()
+    ? `Hi ${opts.guestName.trim()},`
+    : "Hi,";
+  const subject = `Meeting rescheduled: ${opts.podcastTitle} - ${opts.episodeTitle}`;
+  const prev = opts.previousScheduledStartAt
+    ? `Previously: ${formatMeetingWhen(opts.previousScheduledStartAt, opts.hostTimeZone)}`
+    : null;
+  const text = [
+    greeting,
+    "",
+    `The group call for ${opts.podcastTitle} - ${opts.episodeTitle} has been rescheduled.`,
+    prev ?? "",
+    "",
+    ...meetingDetailsText(opts),
+    "",
+    "An updated .ics calendar invite is attached.",
+    "",
+    APP_NAME,
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.joinUrl);
+  const prevHtml = prev
+    ? `<p style="margin: 0 0 16px; font-size: 0.9375rem; color: ${STYLE.textMuted};">${escapeHtml(prev)}</p>`
+    : "";
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Meeting rescheduled",
+    introHtml: `<p style="margin: 0 0 16px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} The group call has been rescheduled.</p>${prevHtml}`,
+    detailsHtml: meetingDetailsHtml(opts),
+  });
+  return { subject, text, html };
+}
+
+export function buildGroupCallMeetingCancelledEmail(
+  opts: Pick<
+    GroupCallMeetingEmailOptions,
+    | "podcastTitle"
+    | "episodeTitle"
+    | "scheduledStartAt"
+    | "hostTimeZone"
+    | "guestName"
+    | "joinUrl"
+    | "coverArtUrl"
+  >,
+): { subject: string; text: string; html: string } {
+  const greeting = opts.guestName?.trim()
+    ? `Hi ${opts.guestName.trim()},`
+    : "Hi,";
+  const subject = `Meeting cancelled: ${opts.podcastTitle} - ${opts.episodeTitle}`;
+  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const text = [
+    greeting,
+    "",
+    `The group call for ${opts.podcastTitle} - ${opts.episodeTitle} has been cancelled.`,
+    "",
+    `Show: ${opts.podcastTitle}`,
+    `Episode: ${opts.episodeTitle}`,
+    `Was scheduled for: ${when}`,
+    "",
+    "You no longer need to join. Sorry for the change.",
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.joinUrl);
+  const cover = opts.coverArtUrl?.trim()
+    ? `<p style="margin: 0 0 20px; text-align: center;">
+        <img src="${escapeHtml(opts.coverArtUrl.trim())}" alt="" width="120" height="120" style="display: inline-block; width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 1px solid ${STYLE.border};" />
+      </p>`
+    : "";
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Meeting cancelled",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} The group call has been cancelled. You no longer need to join.</p>`,
+    detailsHtml: `
+      ${cover}
+      <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
+      <p style="margin: 0 0 16px; font-size: 0.9375rem; color: ${STYLE.text};">${escapeHtml(opts.episodeTitle)}</p>
+      <p style="margin: 0; font-size: 0.9375rem; color: ${STYLE.text};">Was scheduled for: <strong>${escapeHtml(when)}</strong></p>
+    `,
+  });
+  return { subject, text, html };
+}
+
+export function buildGroupCallMeetingEpisodePublishedEmail(
+  opts: GroupCallMeetingEmailOptions,
+): { subject: string; text: string; html: string } {
+  const greeting = opts.guestName?.trim()
+    ? `Hi ${opts.guestName.trim()},`
+    : "Hi,";
+  const subject = `Episode published: ${opts.episodeTitle}`;
+  const text = [
+    greeting,
+    "",
+    `${opts.podcastTitle} just published "${opts.episodeTitle}". Your scheduled group call details are below.`,
+    "",
+    ...meetingDetailsText(opts),
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.joinUrl);
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Episode published",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} <strong>${escapeHtml(opts.podcastTitle)}</strong> just published <strong>${escapeHtml(opts.episodeTitle)}</strong>. Your scheduled group call details are below.</p>`,
+    detailsHtml: meetingDetailsHtml(opts),
+  });
+  return { subject, text, html };
 }

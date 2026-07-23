@@ -164,7 +164,6 @@ export function PodcastHero({
             icon={MessageSquare}
             iconTone="slate"
             to={`/podcasts/${podcast.id}/reviews`}
-            external
           />
         )}
         {canEdit && (

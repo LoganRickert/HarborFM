@@ -1,5 +1,4 @@
 /**
- * Drizzle schema matching migrations 001-050.
  * Used as query layer; existing migrate.ts and raw migrations remain for SQLite.
  */
 import {
@@ -1232,3 +1231,60 @@ export const themeCatalogDestinations = sqliteTable("theme_catalog_destinations"
   createdAt: text("created_at").notNull().default(sqlNow()),
   updatedAt: text("updated_at").notNull().default(sqlNow()),
 });
+
+// ---------------------------------------------------------------------------
+// Scheduled episode group-call meetings (093)
+// ---------------------------------------------------------------------------
+export const episodeGroupCallMeetings = sqliteTable(
+  "episode_group_call_meetings",
+  {
+    id: text("id").primaryKey(),
+    episodeId: text("episode_id")
+      .notNull()
+      .references(() => episodes.id, { onDelete: "cascade" }),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    scheduledStartAt: text("scheduled_start_at").notNull(),
+    /** IANA time zone from the host's browser (e.g. America/New_York). */
+    hostTimeZone: text("host_time_zone"),
+    token: text("token").notNull().unique(),
+    joinCode: text("join_code").notNull(),
+    status: text("status").notNull().default("scheduled"),
+    liveSessionId: text("live_session_id"),
+    episodePublishedNotifiedAt: text("episode_published_notified_at"),
+    icsSequence: integer("ics_sequence").notNull().default(0),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+    cancelledAt: text("cancelled_at"),
+    endedAt: text("ended_at"),
+  },
+  (table) => [
+    index("idx_egcm_episode_id").on(table.episodeId),
+    index("idx_egcm_created_by_status").on(table.createdByUserId, table.status),
+    index("idx_egcm_join_code").on(table.joinCode),
+    index("idx_egcm_token").on(table.token),
+  ],
+);
+
+export const episodeGroupCallMeetingInvites = sqliteTable(
+  "episode_group_call_meeting_invites",
+  {
+    id: text("id").primaryKey(),
+    meetingId: text("meeting_id")
+      .notNull()
+      .references(() => episodeGroupCallMeetings.id, { onDelete: "cascade" }),
+    email: text("email"),
+    displayName: text("display_name"),
+    inviteToken: text("invite_token").notNull().unique(),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    lastSentAt: text("last_sent_at"),
+  },
+  (table) => [
+    index("idx_egcmi_meeting_id").on(table.meetingId),
+    index("idx_egcmi_invite_token").on(table.inviteToken),
+  ],
+);

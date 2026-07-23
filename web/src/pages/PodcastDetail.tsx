@@ -118,6 +118,7 @@ export function PodcastDetail() {
           readOnly={readOnly}
           subscriberOnlyFeedEnabled={Boolean(podcast?.subscriberOnlyFeedEnabled)}
           effectiveMaxSubscriberTokens={podcast?.effectiveMaxSubscriberTokens ?? undefined}
+          canonicalFeedUrl={podcast.canonicalFeedUrl}
         />
       )}
 

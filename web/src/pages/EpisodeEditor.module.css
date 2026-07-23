@@ -3885,15 +3885,13 @@ a.manageSegmentAction .manageSegmentActionHint {
 .detailsSummaryCard {
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 1rem 1.25rem;
+  padding: 0.85rem 1.1rem;
   margin-bottom: 1.5rem;
   background: var(--bg-elevated);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .detailsSummaryCardSubscriberOnly {
@@ -3903,14 +3901,14 @@ a.manageSegmentAction .manageSegmentActionHint {
 .detailsSummaryRow {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.85rem;
   min-width: 0;
-  flex: 1;
+  width: 100%;
 }
 
 .detailsSummaryArtwork {
-  width: 50px;
-  height: 50px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   border-radius: var(--radius);
   object-fit: cover;
@@ -3919,9 +3917,9 @@ a.manageSegmentAction .manageSegmentActionHint {
 
 .detailsSummaryMain {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
   min-width: 0;
   flex: 1;
 }
@@ -3930,6 +3928,8 @@ a.manageSegmentAction .manageSegmentActionHint {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
 }
 
 .detailsSummaryTitleLock {
@@ -3943,23 +3943,24 @@ a.manageSegmentAction .manageSegmentActionHint {
   font-weight: 600;
   color: var(--text);
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .detailsSummaryMeta {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
   color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   flex-wrap: wrap;
 }
 
 .detailsSummaryStatusBadge {
   display: inline-block;
   margin: 0;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.7rem;
   font-weight: 600;
   border-radius: var(--radius);
   white-space: nowrap;
@@ -3983,14 +3984,140 @@ a.manageSegmentAction .manageSegmentActionHint {
   border: 1px solid rgba(0, 212, 170, 0.25);
 }
 
+.detailsSummaryActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.detailsSummaryMeetingPanel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid color-mix(in srgb, var(--accent) 70%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated));
+}
+
+.detailsSummaryMeetingPanelActive {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.detailsSummaryMeetingPanelCopy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: center;
+  gap: 0.1rem;
+}
+
+.detailsSummaryMeetingPanelEyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 45%, var(--text-muted));
+}
+
+.detailsSummaryMeetingPanelWhen {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailsSummaryMeetingPanelActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.detailsSummaryMeetingStartBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 34px;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.detailsSummaryMeetingStartBtn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.detailsSummaryMeetingStartBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.detailsSummaryMeetingStartBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.detailsSummaryMeetingManageBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.detailsSummaryMeetingManageBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.detailsSummaryMeetingManageBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .detailsSummaryEditBtn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  gap: 0.4rem;
+  min-height: 34px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--accent);
   background: rgba(0, 212, 170, 0.08);
@@ -4012,14 +4139,20 @@ a.manageSegmentAction .manageSegmentActionHint {
   outline-offset: 2px;
 }
 
+.detailsSummaryEditBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .detailsSummaryJoinCallBtn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  gap: 0.4rem;
+  min-height: 34px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: #fff;
   background: #d97706;
@@ -4030,7 +4163,7 @@ a.manageSegmentAction .manageSegmentActionHint {
   text-decoration: none;
 }
 
-.detailsSummaryJoinCallBtn:hover {
+.detailsSummaryJoinCallBtn:hover:not(:disabled) {
   background: #b45309;
   border-color: #b45309;
   color: #fff;
@@ -4041,14 +4174,20 @@ a.manageSegmentAction .manageSegmentActionHint {
   outline-offset: 2px;
 }
 
+.detailsSummaryJoinCallBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .detailsSummaryEndCallBtn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
+  gap: 0.4rem;
+  min-height: 34px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: #fff;
   background: #c53030;
@@ -4067,21 +4206,12 @@ a.manageSegmentAction .manageSegmentActionHint {
   outline-offset: 2px;
 }
 
-.detailsSummaryActions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
 .detailsSummaryShareBtn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 36px;
-  padding: 0;
+  min-height: 34px;
   color: var(--accent);
   background: rgba(0, 212, 170, 0.08);
   border: 1px solid rgba(0, 212, 170, 0.2);
@@ -4101,6 +4231,13 @@ a.manageSegmentAction .manageSegmentActionHint {
   outline-offset: 2px;
 }
 
+.detailsSummaryIconBtn {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+}
+
 /* Mobile: reduce padding so content isn’t squeezed by multiple cards */
 @media (max-width: 640px) {
   .card {
@@ -4109,14 +4246,53 @@ a.manageSegmentAction .manageSegmentActionHint {
   }
 
   .detailsSummaryCard {
-    padding: 0.875rem 2rem;
-    flex-direction: column;
-    align-items: stretch;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .detailsSummaryRow {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .detailsSummaryActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .detailsSummaryMeetingPanel {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .detailsSummaryMeetingPanelWhen {
+    white-space: normal;
+  }
+
+  .detailsSummaryMeetingPanelActions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .detailsSummaryMeetingStartBtn,
+  .detailsSummaryMeetingManageBtn {
+    flex: 1 1 auto;
+  }
+
+  .detailsSummaryEditBtn,
+  .detailsSummaryJoinCallBtn,
+  .detailsSummaryEndCallBtn {
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   .detailsSummaryStartCallBtn {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
+  }
+
+  .detailsSummaryIconBtn {
+    flex: 0 0 auto;
+    min-width: 34px;
   }
 
   .generateBar {

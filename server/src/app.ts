@@ -61,6 +61,7 @@ import { reviewsRoutes } from "./modules/reviews/index.js";
 import { pollsRoutes } from "./modules/polls/index.js";
 import { sitemapRoutes } from "./modules/sitemap/index.js";
 import { registerRobotsRoute } from "./modules/sitemap/routes.robots.js";
+import { registerPwaManifestRoute } from "./services/pwaManifest.js";
 import { bansRoutes } from "./modules/bans/index.js";
 import { callRoutes } from "./modules/call/index.js";
 import { stripeRoutes } from "./modules/stripe/index.js";
@@ -321,6 +322,9 @@ async function main() {
   // Host-aware robots.txt (linked/managed domains get their own Sitemap URL).
   // Register before static so it overrides web/public/robots.txt.
   await registerRobotsRoute(app);
+
+  // Host-aware PWA manifest (podcast name/icon on linked/managed domains).
+  await registerPwaManifestRoute(app);
 
   // In production, serve the web app from PUBLIC_DIR (e.g. Docker copies web dist here)
   const publicDir = resolve(CONFIG_PUBLIC_DIR);

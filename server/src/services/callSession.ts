@@ -5,6 +5,7 @@ import {
   HOST_AWAY_GRACE_NO_GUESTS_RECORDING_MS,
   HOST_AWAY_GRACE_WITH_GUESTS_MS,
 } from "../config.js";
+import { listReservedJoinCodes, markMeetingEndedBySessionId } from "../modules/call/meetings.js";
 
 export interface CallParticipant {
   id: string;
@@ -40,6 +41,8 @@ export interface CallSession {
   createdAt: number;
   lastHostHeartbeatAt: number;
   ended: boolean;
+  /** Scheduled meeting id when this session was started via Start Meeting. */
+  meetingId?: string;
   /** Set when WEBRTC_SERVICE_URL is configured and a mediasoup room was created. */
   roomId?: string;
   /** Host token for host-only WebRTC actions (soundboard). Set when room created. */
@@ -126,24 +129,50 @@ export function clearHostDisconnected(sessionId: string): void {
 }
 
 function generateJoinCode(): string {
-  for (let i = 0; i < 20; i++) {
+  const reserved = listReservedJoinCodes();
+  for (let i = 0; i < 40; i++) {
     const code = String(Math.floor(1000 + Math.random() * 9000));
-    if (!sessionsByCode.has(code)) return code;
+    if (sessionsByCode.has(code)) continue;
+    if (reserved.has(code)) continue;
+    return code;
   }
   return String(Math.floor(1000 + Math.random() * 9000)); // fallback, allow collision
 }
+
+/** True when a live in-memory session currently holds this join code. */
+export function isJoinCodeInUseLive(code: string): boolean {
+  const s = sessionsByCode.get(code);
+  return s != null && !s.ended;
+}
+
+export type CreateSessionOptions = {
+  password?: string | null;
+  /** Reuse a scheduled meeting's token instead of generating a new one. */
+  token?: string;
+  /** Reuse a scheduled meeting's join code instead of generating a new one. */
+  joinCode?: string;
+  /** When set, stored on session for meeting end hooks. */
+  meetingId?: string;
+};
 
 export function createSession(
   episodeId: string,
   podcastId: string,
   hostUserId: string,
   origin: string,
-  password: string | null,
+  passwordOrOpts: string | null | CreateSessionOptions,
   onSessionEnd: (session: CallSession) => void | Promise<void>,
 ): CallSession {
+  const opts: CreateSessionOptions =
+    passwordOrOpts != null &&
+    typeof passwordOrOpts === "object" &&
+    !Array.isArray(passwordOrOpts)
+      ? passwordOrOpts
+      : { password: passwordOrOpts as string | null };
+
   const sessionId = nanoid();
-  const token = nanoid(16);
-  const joinCode = generateJoinCode();
+  const token = opts.token?.trim() || nanoid(16);
+  const joinCode = opts.joinCode?.trim() || generateJoinCode();
   const now = Date.now();
   const hostParticipant: CallParticipant = {
     id: nanoid(),
@@ -158,11 +187,12 @@ export function createSession(
     hostUserId,
     token,
     joinCode,
-    password: password?.trim() || null,
+    password: opts.password?.trim() || null,
     participants: [hostParticipant],
     createdAt: now,
     lastHostHeartbeatAt: now,
     ended: false,
+    meetingId: opts.meetingId,
   };
   sessionsByToken.set(token, session);
   sessionsById.set(sessionId, session);
@@ -303,6 +333,13 @@ export function endSession(sessionId: string): CallSession | null {
   sessionsByToken.delete(session.token);
   sessionsById.delete(sessionId);
   if (session.joinCode) sessionsByCode.delete(session.joinCode);
+  if (session.meetingId) {
+    try {
+      markMeetingEndedBySessionId(session.sessionId);
+    } catch (err) {
+      console.error("[callSession] markMeetingEndedBySessionId failed:", err);
+    }
+  }
   return session;
 }
 

@@ -9,6 +9,7 @@ import {
 } from '../api/public';
 import { useSubscriberAuth } from '../hooks/useSubscriberAuth';
 import { FullPageLoading } from '../components/Loading';
+import { buildPrivateRssFeedUrl } from '../utils/subscriberToken';
 import styles from './SubscribeSuccess.module.css';
 
 /** Survives React Strict Mode remounts; cleared on full page refresh. */
@@ -95,7 +96,7 @@ export function SubscribeSuccess() {
   if (loading) return <FullPageLoading />;
 
   const privateRssUrl = token
-    ? `${window.location.origin}/api/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/rss`
+    ? buildPrivateRssFeedUrl(podcastSlug, token, podcast?.canonicalFeedUrl)
     : null;
   const artworkUrl = podcast ? getPublicPodcastArtworkUrl(podcast) : null;
   const podcastTitle = podcast?.title?.trim() || podcastSlug;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User, Settings, X, List } from 'lucide-react';
 import type { ShowNotesItem } from '@harborfm/shared';
@@ -25,13 +25,34 @@ import styles from './CallJoin.module.css';
 const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
 /** Keep guest /api/call/ws alive through proxies (Caddy/nginx idle ~10 min). Matches host CallPanel. */
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const MEETING_POLL_MS = 30_000;
+
+function formatOpensBeforeLabel(
+  joinOpensAt?: string,
+  scheduledStartAt?: string,
+): string {
+  const opens = joinOpensAt ? new Date(joinOpensAt).getTime() : NaN;
+  const start = scheduledStartAt ? new Date(scheduledStartAt).getTime() : NaN;
+  if (!Number.isFinite(opens) || !Number.isFinite(start) || start <= opens) {
+    return 'before the scheduled start';
+  }
+  const minutes = Math.max(1, Math.round((start - opens) / 60_000));
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours === 1 ? '1 hour' : `${hours} hours`} before the scheduled start`;
+  }
+  return `${minutes === 1 ? '1 minute' : `${minutes} minutes`} before the scheduled start`;
+}
 
 export function CallJoin() {
   const { token } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite');
   const navigate = useNavigate();
   const [joinInfo, setJoinInfo] = useState<CallJoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const inviteNameAppliedRef = useRef(false);
   const { data: publicConfig } = useQuery({
     queryKey: ['publicConfig', typeof window !== 'undefined' ? window.location.host : ''],
     queryFn: getPublicConfig,
@@ -190,17 +211,50 @@ export function CallJoin() {
       navigate('/call/join?error=' + encodeURIComponent('Invalid link'), { replace: true });
       return;
     }
-    getJoinInfo(token)
-      .then((info) => {
-        setJoinInfo(info);
-        setLoading(false);
-      })
-      .catch((err: Error & { status?: number }) => {
-        const msg = err?.message ?? 'Invalid or expired link';
-        setLoading(false);
-        navigate(`/call/join?error=${encodeURIComponent(msg)}`, { replace: true });
-      });
-  }, [token, navigate]);
+    let cancelled = false;
+    const load = () =>
+      getJoinInfo(token, inviteToken)
+        .then((info) => {
+          if (cancelled) return;
+          setJoinInfo(info);
+          setLoading(false);
+          if (
+            !inviteNameAppliedRef.current &&
+            info.inviteDisplayName?.trim()
+          ) {
+            inviteNameAppliedRef.current = true;
+            const n = info.inviteDisplayName.trim();
+            setName(n);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(DISPLAY_NAME_KEY, n);
+            }
+          }
+        })
+        .catch((err: Error & { status?: number }) => {
+          if (cancelled) return;
+          const msg = err?.message ?? 'Invalid or expired link';
+          setLoading(false);
+          navigate(`/call/join?error=${encodeURIComponent(msg)}`, { replace: true });
+        });
+
+    void load();
+
+    const status = joinInfo?.meetingStatus;
+    const shouldPoll =
+      status === 'waiting_for_host' || status === 'too_early';
+    if (!shouldPoll) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const interval = setInterval(() => {
+      void load();
+    }, MEETING_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [token, inviteToken, navigate, joinInfo?.meetingStatus]);
 
   const refreshDevices = useCallback(() => {
     navigator.mediaDevices
@@ -400,6 +454,15 @@ export function CallJoin() {
 
   const handleJoin = () => {
     if (!token || !name.trim()) return;
+    if (
+      joinInfo?.meetingStatus === 'waiting_for_host' ||
+      joinInfo?.meetingStatus === 'too_early' ||
+      joinInfo?.meetingStatus === 'expired' ||
+      joinInfo?.meetingStatus === 'ended' ||
+      joinInfo?.meetingStatus === 'cancelled'
+    ) {
+      return;
+    }
     setError(null);
     setJoining(true);
     // Initialize microphone for level meter (user gesture from Join click)
@@ -846,12 +909,44 @@ export function CallJoin() {
           {joinInfo.hostName && (
             <p className={styles.hostName}>Host: {joinInfo.hostName}</p>
           )}
-          {joinInfo.dialInEnabled && joinInfo.dialInPhoneNumber && joinInfo.joinCode && (
+          {joinInfo.meetingStatus === 'waiting_for_host' && (
+            <p className={styles.error} role="status">
+              The host hasn&apos;t started the meeting yet. You can wait here.
+            </p>
+          )}
+          {joinInfo.meetingStatus === 'too_early' && (
+            <p className={styles.error} role="status">
+              This meeting opens{' '}
+              {formatOpensBeforeLabel(joinInfo.joinOpensAt, joinInfo.scheduledStartAt)}
+              {joinInfo.joinOpensAt
+                ? ` (${new Date(joinInfo.joinOpensAt).toLocaleString()})`
+                : ''}
+              .
+            </p>
+          )}
+          {(joinInfo.meetingStatus === 'expired' ||
+            joinInfo.meetingStatus === 'ended' ||
+            joinInfo.meetingStatus === 'cancelled') && (
+            <p className={styles.error} role="status">
+              {joinInfo.meetingStatus === 'cancelled'
+                ? 'This meeting was cancelled.'
+                : joinInfo.meetingStatus === 'ended'
+                  ? 'This meeting has ended.'
+                  : 'This meeting link has expired.'}
+            </p>
+          )}
+          {joinInfo.dialInEnabled &&
+            joinInfo.dialInPhoneNumber &&
+            joinInfo.joinCode &&
+            (joinInfo.meetingStatus == null || joinInfo.meetingStatus === 'live') && (
             <DialInAltLink
               phoneNumber={joinInfo.dialInPhoneNumber}
               joinCode={joinInfo.joinCode}
             />
           )}
+          {(joinInfo.meetingStatus == null ||
+            joinInfo.meetingStatus === 'live' ||
+            joinInfo.meetingStatus === 'waiting_for_host') && (
           <div className={styles.form}>
             <label className={styles.label} htmlFor="call-join-name">
               Your Name
@@ -869,7 +964,12 @@ export function CallJoin() {
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !joining && name.trim()) {
+                if (
+                  e.key === 'Enter' &&
+                  !joining &&
+                  name.trim() &&
+                  joinInfo.meetingStatus !== 'waiting_for_host'
+                ) {
                   handleJoin();
                 }
               }}
@@ -908,11 +1008,20 @@ export function CallJoin() {
               type="button"
               className={styles.joinBtn}
               onClick={handleJoin}
-              disabled={joining || !name.trim()}
+              disabled={
+                joining ||
+                !name.trim() ||
+                joinInfo.meetingStatus === 'waiting_for_host'
+              }
             >
-              {joining ? 'Joining…' : 'Join Call'}
+              {joining
+                ? 'Joining...'
+                : joinInfo.meetingStatus === 'waiting_for_host'
+                  ? 'Waiting for host...'
+                  : 'Join Call'}
             </button>
           </div>
+          )}
         </>
       )}
       </div>

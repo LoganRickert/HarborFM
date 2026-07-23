@@ -39,6 +39,7 @@ import {
   sendMail,
   buildSubscriberAccessTokenEmail,
 } from "../../services/email.js";
+import { resolvePodcastPublicOrigin } from "../../services/dns/custom-domain-resolver.js";
 import type Stripe from "stripe";
 
 type RawBodyRequest = FastifyRequest & { rawBody?: Buffer };
@@ -402,7 +403,7 @@ export async function registerStripePublicRoutes(app: FastifyInstance) {
         return reply.send(genericOk);
       }
 
-      const baseUrl = getBaseUrl(settings);
+      const baseUrl = resolvePodcastPublicOrigin(podcast.id, getBaseUrl(settings));
       const slugEnc = encodeURIComponent(podcast.slug);
       const privateRssUrl = `${baseUrl}/${API_PREFIX}/public/podcasts/${slugEnc}/private/${encodeURIComponent(rawToken)}/rss`;
       const content = buildSubscriberAccessTokenEmail({

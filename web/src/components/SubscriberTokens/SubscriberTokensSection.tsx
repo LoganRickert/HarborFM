@@ -14,6 +14,7 @@ import { SubscriberTokenControls } from './SubscriberTokenControls';
 import { SubscriberTokensList } from './SubscriberTokensList';
 import { SubscriberTokenPagination } from './SubscriberTokenPagination';
 import { SubscriberTokenDeleteDialog } from './SubscriberTokenDeleteDialog';
+import { buildPrivateRssFeedUrl } from '../../utils/subscriberToken';
 import localStyles from './SubscriberTokens.module.css';
 import sharedStyles from '../PodcastDetail/shared.module.css';
 
@@ -25,6 +26,7 @@ interface SubscriberTokensSectionProps {
   readOnly: boolean;
   subscriberOnlyFeedEnabled: boolean;
   effectiveMaxSubscriberTokens?: number | null;
+  canonicalFeedUrl?: string | null;
 }
 
 export function SubscriberTokensSection({
@@ -33,6 +35,7 @@ export function SubscriberTokensSection({
   readOnly,
   subscriberOnlyFeedEnabled,
   effectiveMaxSubscriberTokens,
+  canonicalFeedUrl,
 }: SubscriberTokensSectionProps) {
   const queryClient = useQueryClient();
   const [moreInfoOpen, setMoreInfoOpen] = useState(false);
@@ -138,10 +141,13 @@ export function SubscriberTokensSection({
     },
   });
 
-  const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/public/podcasts/${encodeURIComponent(podcastSlug)}` : '';
+  const baseUrl = (() => {
+    const full = buildPrivateRssFeedUrl(podcastSlug, 'TOKEN', canonicalFeedUrl);
+    return full.replace(/\/private\/TOKEN\/rss$/, '');
+  })();
 
   function copyTokenUrl(token: string) {
-    const url = `${baseUrl}/private/${encodeURIComponent(token)}/rss`;
+    const url = buildPrivateRssFeedUrl(podcastSlug, token, canonicalFeedUrl);
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

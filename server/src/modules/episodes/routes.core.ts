@@ -565,6 +565,27 @@ export async function registerCoreRoutes(app: FastifyInstance) {
               err instanceof Error ? err.message : err,
             );
           });
+          try {
+            const { notifyMeetingInvitesOnEpisodePublish } = await import(
+              "../call/meetingPublishNotify.js"
+            );
+            const origin =
+              (request.headers["origin"] as string | undefined) ||
+              (typeof request.headers["referer"] === "string"
+                ? new URL(request.headers["referer"]).origin
+                : "http://localhost");
+            void notifyMeetingInvitesOnEpisodePublish(id, origin).catch((err) => {
+              console.warn(
+                "[callMeetings] publish notify failed:",
+                err instanceof Error ? err.message : err,
+              );
+            });
+          } catch (err) {
+            console.warn(
+              "[callMeetings] publish notify import failed:",
+              err instanceof Error ? err.message : err,
+            );
+          }
         }
       } catch {
         // non-fatal

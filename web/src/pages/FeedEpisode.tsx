@@ -181,6 +181,8 @@ export function FeedEpisode({
     image: episodeArtwork ?? undefined,
     url: episode && podcast ? pageUrl : undefined,
     favicon: publicConfig?.customFeedSlug ? podcastArtwork : undefined,
+    appleWebAppTitle: publicConfig?.customFeedSlug ? podcast?.title : undefined,
+    appleTouchIcon: publicConfig?.customFeedSlug ? podcastArtwork : undefined,
   });
 
   const canWriteReview =
@@ -532,6 +534,7 @@ export function FeedEpisode({
           onClose={() => setShowLockInfo(false)}
           isSubscriberOnly={Boolean(podcast.subscriberOnlyFeedEnabled && podcast.publicFeedDisabled)}
           podcastSlug={podcastSlug}
+          canonicalFeedUrl={podcast.canonicalFeedUrl}
         />
       )}
       {shareUrl && (

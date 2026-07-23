@@ -29,6 +29,7 @@ import {
 import { getPublicEpisodeAlerts } from '../../api/episodeAlerts';
 import { useSubscriberAuth } from '../../hooks/useSubscriberAuth';
 import { StripeConfirmDialog } from '../StripePayments/StripeConfirmDialog';
+import { buildPrivateRssFeedUrl } from '../../utils/subscriberToken';
 import styles from './SubscriptionInfoDialog.module.css';
 
 interface SubscriptionInfoDialogProps {
@@ -36,6 +37,7 @@ interface SubscriptionInfoDialogProps {
   onClose: () => void;
   isSubscriberOnly: boolean;
   podcastSlug: string;
+  canonicalFeedUrl?: string | null;
 }
 
 function formatMoney(cents: number, currency: string): string {
@@ -97,6 +99,7 @@ export function SubscriptionInfoDialog({
   onClose,
   isSubscriberOnly,
   podcastSlug,
+  canonicalFeedUrl,
 }: SubscriptionInfoDialogProps) {
   const queryClient = useQueryClient();
   const [tokenInput, setTokenInput] = useState('');
@@ -300,7 +303,7 @@ export function SubscriptionInfoDialog({
 
   const periodLabel = formatPeriodEnd(subStatus?.currentPeriodEnd ?? null);
   const newPrivateRssUrl = newToken
-    ? `${window.location.origin}/api/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(newToken)}/rss`
+    ? buildPrivateRssFeedUrl(podcastSlug, newToken, canonicalFeedUrl)
     : null;
 
   return (

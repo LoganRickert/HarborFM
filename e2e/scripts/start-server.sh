@@ -26,6 +26,8 @@ export POLL_RESULTS_RATE_LIMIT_MAX="${POLL_RESULTS_RATE_LIMIT_MAX:-200}"
 export RENDER_RATE_LIMIT_WINDOW_MS="${RENDER_RATE_LIMIT_WINDOW_MS:-1000}"
 # Import project/segment/Reaper: disable user cooldown so suites can import repeatedly.
 export IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS="${IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS:-0}"
+# Meeting invites: disable so suites can create multiple invite links/emails.
+export MEETING_INVITE_RATE_LIMIT_WINDOW_MS="${MEETING_INVITE_RATE_LIMIT_WINDOW_MS:-0}"
 # Theme ZIP import: short window so suites can import repeatedly while still testing 429.
 export THEME_IMPORT_RATE_LIMIT_WINDOW_MS="${THEME_IMPORT_RATE_LIMIT_WINDOW_MS:-1000}"
 export THEME_IMPORT_RATE_LIMIT_MAX="${THEME_IMPORT_RATE_LIMIT_MAX:-2}"

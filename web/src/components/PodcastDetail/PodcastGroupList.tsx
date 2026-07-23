@@ -61,7 +61,12 @@ export function PodcastGroupRow({
 
   if (to) {
     return (
-      <Link to={to} className={styles.groupListRow}>
+      <Link
+        to={to}
+        className={styles.groupListRow}
+        target={external ? '_blank' : undefined}
+        rel={external ? 'noopener noreferrer' : undefined}
+      >
         {content}
       </Link>
     );
