@@ -1,0 +1,37 @@
+---
+import Layout from './Layout.astro';
+import Header from '../components/Header.astro';
+import DocsSidebar from '../components/DocsSidebar.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+const currentPath = Astro.url.pathname;
+---
+
+<Layout title={title} description={description}>
+  <Header />
+  <div class="docs-shell">
+    <div class="docs-shell-inner">
+      <DocsSidebar currentPath={currentPath} />
+      <main class="docs-main">
+        <article class="docs-content">
+          <slot />
+        </article>
+      </main>
+    </div>
+  </div>
+  <footer class="footer">
+    <p>
+      HarborFM is open source.
+      <a href="https://github.com/LoganRickert/harborfm">GitHub</a>
+      ·
+      <a href="/">Home</a>
+      ·
+      <a href="/docs/">Docs</a>
+    </p>
+  </footer>
+</Layout>

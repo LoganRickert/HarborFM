@@ -1,0 +1,13 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+import { loadCuratedMarkdown } from '../../../lib/docs-nav';
+
+const html = loadCuratedMarkdown('installation/terraform.md');
+---
+
+<DocsLayout
+  title="Terraform - HarborFM Docs"
+  description="Provision HarborFM on AWS or Vultr with Terraform."
+>
+  <div set:html={html} />
+</DocsLayout>

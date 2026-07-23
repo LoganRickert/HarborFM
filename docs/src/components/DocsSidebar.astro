@@ -1,0 +1,67 @@
+---
+import { getDocsNav } from '../lib/docs-nav';
+
+interface Props {
+  currentPath: string;
+}
+
+const { currentPath } = Astro.props;
+const sections = getDocsNav();
+
+function isActive(href: string): boolean {
+  const path = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
+  const target = href.endsWith('/') ? href : `${href}/`;
+  return path === target;
+}
+---
+
+<aside class="docs-sidebar" aria-label="Documentation">
+  <details class="docs-nav-mobile">
+    <summary>Docs menu</summary>
+    <nav class="docs-nav">
+      {
+        sections.map((section) => (
+          <div class="docs-nav-block">
+            {section.label ? (
+              <span class="docs-nav-label">{section.label}</span>
+            ) : null}
+            <ul>
+              {section.links.map((link) => (
+                <li>
+                  <a href={link.href} class:list={[{ active: isActive(link.href) }]}>
+                    {link.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </nav>
+  </details>
+
+  <div class="docs-nav-desktop">
+    <div class="docs-nav-scroll">
+      <nav class="docs-nav">
+        {
+          sections.map((section) => (
+            <div class="docs-nav-block">
+              {section.label ? (
+                <span class="docs-nav-label">{section.label}</span>
+              ) : null}
+              <ul>
+                {section.links.map((link) => (
+                  <li>
+                    <a href={link.href} class:list={[{ active: isActive(link.href) }]}>
+                      {link.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </nav>
+    </div>
+  </div>
+</aside>

@@ -1,0 +1,13 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+import { loadCuratedMarkdown } from '../../../lib/docs-nav';
+
+const html = loadCuratedMarkdown('installation/docker.md');
+---
+
+<DocsLayout
+  title="Docker - HarborFM Docs"
+  description="Run HarborFM as a single Docker container."
+>
+  <div set:html={html} />
+</DocsLayout>

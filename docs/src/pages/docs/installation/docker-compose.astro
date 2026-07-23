@@ -1,0 +1,13 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+import { loadCuratedMarkdown } from '../../../lib/docs-nav';
+
+const html = loadCuratedMarkdown('installation/docker-compose.md');
+---
+
+<DocsLayout
+  title="Docker Compose - HarborFM Docs"
+  description="Install HarborFM with Docker Compose, HTTPS, and optional WebRTC."
+>
+  <div set:html={html} />
+</DocsLayout>

@@ -1,0 +1,13 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+import { loadCuratedMarkdown } from '../../../lib/docs-nav';
+
+const html = loadCuratedMarkdown('reporting-issues.md');
+---
+
+<DocsLayout
+  title="Reporting Issues - HarborFM Docs"
+  description="How to report bugs and request features for HarborFM on GitHub."
+>
+  <div set:html={html} />
+</DocsLayout>

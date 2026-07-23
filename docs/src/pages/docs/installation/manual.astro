@@ -1,0 +1,13 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+import { loadCuratedMarkdown } from '../../../lib/docs-nav';
+
+const html = loadCuratedMarkdown('installation/manual.md');
+---
+
+<DocsLayout
+  title="Manual Setup - HarborFM Docs"
+  description="Run HarborFM without Docker using pnpm, Node, and PM2."
+>
+  <div set:html={html} />
+</DocsLayout>

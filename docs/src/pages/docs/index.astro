@@ -1,0 +1,21 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { loadCuratedMarkdown } from '../../lib/docs-nav';
+import { resolveWikiDir } from '../../lib/wiki';
+
+const html = loadCuratedMarkdown('intro.md');
+const wikiMissing = !resolveWikiDir();
+---
+
+<DocsLayout
+  title="Documentation - HarborFM"
+  description="HarborFM documentation: install, usage guides, FAQ, and contributing."
+>
+  {wikiMissing ? (
+    <p class="docs-wiki-missing">
+      Usage guides are not available in this build. Clone
+      <code>HarborFM.wiki</code> next to the repo (or set <code>HARBORFM_WIKI_PATH</code>) to include them.
+    </p>
+  ) : null}
+  <div set:html={html} />
+</DocsLayout>

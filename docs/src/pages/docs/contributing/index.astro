@@ -1,0 +1,27 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+import { loadContributingMarkdown } from '../../../lib/docs-nav';
+
+const GITHUB = 'https://github.com/LoganRickert/harborfm/blob/main';
+
+let html = loadContributingMarkdown();
+html = html.replace(/href=["']([^"']+)["']/gi, (_m, href: string) => {
+  const h = href.trim();
+  if (h.startsWith('http') || h.startsWith('/') || h.startsWith('#')) {
+    return `href="${h}"`;
+  }
+  if (h === 'LICENSE' || h.startsWith('LICENSE')) {
+    return `href="/LICENSE"`;
+  }
+  // Relative repo links (README.md, paths)
+  const clean = h.replace(/^\.\//, '');
+  return `href="${GITHUB}/${clean}"`;
+});
+---
+
+<DocsLayout
+  title="Contributing - HarborFM Docs"
+  description="How to set up HarborFM for development and submit changes."
+>
+  <div set:html={html} />
+</DocsLayout>

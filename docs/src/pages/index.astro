@@ -52,7 +52,6 @@ import {
       <div class="install-bar" role="region" aria-label="Install options">
         <div class="install-tabs" role="tablist">
           <button type="button" role="tab" aria-selected="true" aria-controls="panel-compose-caddy" id="tab-compose-caddy">Docker Compose + Caddy</button>
-          <button type="button" role="tab" aria-selected="false" aria-controls="panel-compose-nginx" id="tab-compose-nginx">Docker Compose + Nginx</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-docker" id="tab-docker">Docker only</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-terraform-aws" id="tab-terraform-aws">Terraform (AWS)</button>
           <button type="button" role="tab" aria-selected="false" aria-controls="panel-local" id="tab-local">Install locally</button>
@@ -63,13 +62,11 @@ import {
             <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
           </div>
           <p class="help">When prompted, choose <strong>Caddy</strong>. Best for automatic HTTPS and dynamic or multiple hostnames - Caddy obtains and renews TLS certificates with no certbot. Ideal if you want custom subdomains per show or user. Works with or without WebRTC.</p>
-        </div>
-        <div class="install-panel" id="panel-compose-nginx" role="tabpanel" aria-labelledby="tab-compose-nginx">
-          <div class="code-block-wrap">
-            <pre><code>curl -fsSL https://raw.githubusercontent.com/LoganRickert/harborfm/main/install.sh | bash</code></pre>
-            <button type="button" class="copy-btn" aria-label="Copy to clipboard">Copy</button>
-          </div>
-          <p class="help">When prompted, choose <strong>nginx</strong> and enter your domain and Let's Encrypt email. Best for a single domain: nginx, certbot for SSL, optional Fail2Ban. After install, run certbot once to get the cert; use a cron job to renew.</p>
+          <p class="install-docs-callout">
+            Prefer not to pipe <code>install.sh</code>?
+            <a href="/docs/installation/docker-compose/#without-install-sh">Install with Docker Compose without install.sh</a>
+            in the docs walks through the files to download and the <code>.env</code> for Caddy.
+          </p>
         </div>
         <div class="install-panel" id="panel-docker" role="tabpanel" aria-labelledby="tab-docker">
           <div class="code-block-wrap">

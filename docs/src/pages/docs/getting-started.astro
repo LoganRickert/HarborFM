@@ -1,0 +1,13 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { loadCuratedMarkdown } from '../../lib/docs-nav';
+
+const html = loadCuratedMarkdown('getting-started.md');
+---
+
+<DocsLayout
+  title="Getting Started - HarborFM Docs"
+  description="Get HarborFM running quickly with Docker or Docker Compose."
+>
+  <div set:html={html} />
+</DocsLayout>

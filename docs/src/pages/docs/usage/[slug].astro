@@ -1,0 +1,31 @@
+---
+import DocsLayout from '../../../layouts/DocsLayout.astro';
+import {
+  listWikiPages,
+  loadWikiPage,
+  resolveWikiDir,
+} from '../../../lib/wiki';
+
+export function getStaticPaths() {
+  const wikiDir = resolveWikiDir();
+  if (!wikiDir) return [];
+  return listWikiPages(wikiDir).map((page) => ({
+    params: { slug: page.slug },
+  }));
+}
+
+const { slug } = Astro.params;
+const wikiDir = resolveWikiDir();
+const page = wikiDir && slug ? loadWikiPage(wikiDir, slug) : null;
+
+if (!page) {
+  return Astro.redirect('/docs/');
+}
+---
+
+<DocsLayout
+  title={`${page.title} - HarborFM Docs`}
+  description={`HarborFM usage guide: ${page.title}.`}
+>
+  <div set:html={page.html} />
+</DocsLayout>

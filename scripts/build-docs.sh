@@ -46,46 +46,68 @@ cp LICENSE docs-dist/ 2>/dev/null || true
 
 # 5) SEO: robots.txt and sitemap.xml (base URL for docs site)
 DOCS_BASE_URL="${DOCS_BASE_URL:-https://harborfm.com}"
+
+# Collect static marketing URLs plus every built HTML page under docs/
+SITEMAP_PATHS=(
+  "/"
+  "/features/"
+  "/themes/"
+  "/theme-guide/"
+  "/updates/"
+  "/server/"
+)
+
+if [[ -d docs-dist/docs ]]; then
+  while IFS= read -r -d '' html; do
+    rel="${html#docs-dist}"
+    rel="${rel%/index.html}"
+    if [[ "$rel" == "/index.html" || "$rel" == "" ]]; then
+      path="/docs/"
+    else
+      path="${rel}/"
+    fi
+    # Avoid duplicates
+    skip=0
+    for existing in "${SITEMAP_PATHS[@]}"; do
+      if [[ "$existing" == "$path" ]]; then skip=1; break; fi
+    done
+    if [[ $skip -eq 0 ]]; then
+      SITEMAP_PATHS+=("$path")
+    fi
+  done < <(find docs-dist/docs -type f -name 'index.html' -print0 | sort -z)
+fi
+
+{
+  cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+EOF
+  for path in "${SITEMAP_PATHS[@]}"; do
+    priority="0.7"
+    changefreq="weekly"
+    case "$path" in
+      /) priority="1.0" ;;
+      /features/) priority="0.9" ;;
+      /docs/) priority="0.9" ;;
+      /themes/|/server/) priority="0.8" ;;
+      /theme-guide/) priority="0.75" ;;
+    esac
+    cat <<EOF
+  <url>
+    <loc>${DOCS_BASE_URL}${path}</loc>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>
+EOF
+  done
+  echo '</urlset>'
+} > docs-dist/sitemap.xml
+
 cat > docs-dist/robots.txt <<EOF
 User-agent: *
 Allow: /
 
 Sitemap: ${DOCS_BASE_URL}/sitemap.xml
-EOF
-cat > docs-dist/sitemap.xml <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${DOCS_BASE_URL}/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${DOCS_BASE_URL}/features/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>${DOCS_BASE_URL}/themes/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>${DOCS_BASE_URL}/theme-guide/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.75</priority>
-  </url>
-  <url>
-    <loc>${DOCS_BASE_URL}/updates/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>${DOCS_BASE_URL}/server/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-</urlset>
 EOF
 
 echo "Docs built in docs-dist/ (Astro site + server/)"

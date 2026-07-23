@@ -20,6 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Checkout HarborFM wiki
+        uses: actions/checkout@v6
+        with:
+          repository: LoganRickert/HarborFM.wiki
+          path: HarborFM.wiki
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v6
