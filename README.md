@@ -460,6 +460,8 @@ All environment variables supported by the server work the same in Docker. Set t
 | `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
 | `REGISTRATION_RATE_LIMIT_MAX` | `5` | Max registration requests per IP per minute. Set higher (e.g. 100) for e2e tests. |
 | `RENDER_RATE_LIMIT_WINDOW_MS` | `60000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |
+| `MEETING_INVITE_RATE_LIMIT_WINDOW_MS` | `300000` | Window for meeting invite creates (share links / emails) per user. Set to `0` to disable (e.g. for e2e tests). |
+| `MEETING_INVITE_RATE_LIMIT_MAX` | `5` | Max meeting invite creates per user per window. |
 | **Podcast stats** | | |
 | `STATS_FLUSH_INTERVAL_MS` | `60000` | Podcast stats flush interval (ms) |
 | `LISTEN_THRESHOLD_BYTES` | `256000` | Min bytes requested in one range to count as a listen (250 KB) |
@@ -534,7 +536,7 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Episode and segment projects.** Download Project zips a full episode for backup or offline edit. Import Project on the Episodes page recreates a draft episode with new ids. Download Segment / Import Segment work the same way for one section (import overwrites that segment). Segment zips cannot be imported as full episodes.
 
-- **Group calls.** Record remote guests via WebRTC; host starts a call, guests join by link or 4-digit code; in-call chat, soundboard, and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
+- **Group calls.** Record remote guests via WebRTC; host starts an ad-hoc call or a **scheduled meeting** with a reserved join link/code, email or share invites, and calendar attachments; guests join by link or 4-digit code (or phone dial-in when enabled); in-call chat, soundboard, and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
 
 - **Real-time collaboration.** Episode editor WebSocket; collaborators see live segment, call, and render updates.
 

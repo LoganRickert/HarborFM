@@ -70,7 +70,12 @@ const sections: FeatureSection[] = [
       {
         name: 'Group calls (WebRTC)',
         detail:
-          'Host starts a call; guests join by link or 4-digit code. In-call chat, soundboard, and settings. Recordings land as episode segments.',
+          'Host starts an ad-hoc call; guests join by link or 4-digit code. In-call chat, soundboard, and settings. Recordings land as episode segments.',
+      },
+      {
+        name: 'Scheduled meetings',
+        detail:
+          'Pick a start time from the episode editor; HarborFM reserves a join link and code. Invite by email or share link, reschedule or cancel anytime, then Start Meeting when ready. Guests see clear join statuses (waiting for host, too early, expired). Invite emails include ICS and a Google Calendar link. One meeting per episode; up to 50 active per account.',
       },
       {
         name: 'Live collaboration',
@@ -363,7 +368,7 @@ const sections: FeatureSection[] = [
 
 <Layout
   title="Features - HarborFM"
-  description="Full feature list for HarborFM: segment editor, episode and segment project import/export, WebRTC calls, Podcast 2.0 RSS, Stripe BYOK subscriptions, analytics, exports, and self-hosting."
+  description="Full feature list for HarborFM: segment editor, episode and segment project import/export, WebRTC calls and scheduled meetings, Podcast 2.0 RSS, Stripe BYOK subscriptions, analytics, exports, and self-hosting."
 >
   <Header />
 
