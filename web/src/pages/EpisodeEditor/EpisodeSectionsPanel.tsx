@@ -1,4 +1,5 @@
-import { Mic, Library, Loader2 } from 'lucide-react';
+import { useRef } from 'react';
+import { Mic, Library, Loader2, Upload, FolderUp } from 'lucide-react';
 import { SegmentRow } from './SegmentRow';
 import { useBatchedSegmentWaveforms } from '../../hooks/useBatchedSegmentWaveforms';
 import type { EpisodeSegment } from '../../api/segments';
@@ -15,6 +16,12 @@ export interface EpisodeSectionsPanelProps {
   isRecordingActive?: boolean;
   onAddRecord: () => void;
   onAddLibrary: () => void;
+  /** Upload a local audio file as a new recorded section. */
+  onUploadAudioFile?: (file: File) => void;
+  /** Upload a HarborFM segment project zip as a new section. */
+  onUploadSegmentZip?: (file: File) => void;
+  /** True while an audio or zip upload is in flight. */
+  uploadBusy?: boolean;
   /** When true, disable "Record new section" (e.g. less than 5 MB free). */
   recordDisabled?: boolean;
   /** Shown when record is disabled. */
@@ -37,6 +44,120 @@ export interface EpisodeSectionsPanelProps {
   unregisterSegmentPause: (id: string) => void;
 }
 
+function SectionsUploadActions({
+  disabled,
+  disabledTitle,
+  onUploadAudioFile,
+  onUploadSegmentZip,
+  className,
+}: {
+  disabled: boolean;
+  disabledTitle?: string;
+  onUploadAudioFile?: (file: File) => void;
+  onUploadSegmentZip?: (file: File) => void;
+  className?: string;
+}) {
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+
+  if (!onUploadAudioFile && !onUploadSegmentZip) return null;
+
+  return (
+    <div className={className ? `${styles.sectionsUploadRow} ${className}` : styles.sectionsUploadRow}>
+      {onUploadAudioFile ? (
+        disabled ? (
+          <span
+            className={`${styles.sectionsUploadBtn} ${styles.sectionsUploadBtnDisabled}`}
+            title={disabledTitle}
+            aria-label="Upload audio file (disabled)"
+          >
+            <span className={styles.sectionsUploadBtnIcon} aria-hidden>
+              <Upload size={18} strokeWidth={2} />
+            </span>
+            <span className={styles.sectionsUploadBtnText}>
+              <span className={styles.sectionsUploadBtnLabel}>Upload Audio File</span>
+              <span className={styles.sectionsUploadBtnHint}>MP3, WAV, M4A, and more</span>
+            </span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className={styles.sectionsUploadBtn}
+            onClick={() => audioInputRef.current?.click()}
+            aria-label="Upload audio file"
+          >
+            <span className={styles.sectionsUploadBtnIcon} aria-hidden>
+              <Upload size={18} strokeWidth={2} />
+            </span>
+            <span className={styles.sectionsUploadBtnText}>
+              <span className={styles.sectionsUploadBtnLabel}>Upload Audio File</span>
+              <span className={styles.sectionsUploadBtnHint}>MP3, WAV, M4A, and more</span>
+            </span>
+          </button>
+        )
+      ) : null}
+      {onUploadSegmentZip ? (
+        disabled ? (
+          <span
+            className={`${styles.sectionsUploadBtn} ${styles.sectionsUploadBtnDisabled}`}
+            title={disabledTitle}
+            aria-label="Upload segment zip (disabled)"
+          >
+            <span className={styles.sectionsUploadBtnIcon} aria-hidden>
+              <FolderUp size={18} strokeWidth={2} />
+            </span>
+            <span className={styles.sectionsUploadBtnText}>
+              <span className={styles.sectionsUploadBtnLabel}>Upload Segment Zip</span>
+              <span className={styles.sectionsUploadBtnHint}>HarborFM segment project</span>
+            </span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className={styles.sectionsUploadBtn}
+            onClick={() => zipInputRef.current?.click()}
+            aria-label="Upload segment zip"
+          >
+            <span className={styles.sectionsUploadBtnIcon} aria-hidden>
+              <FolderUp size={18} strokeWidth={2} />
+            </span>
+            <span className={styles.sectionsUploadBtnText}>
+              <span className={styles.sectionsUploadBtnLabel}>Upload Segment Zip</span>
+              <span className={styles.sectionsUploadBtnHint}>HarborFM segment project</span>
+            </span>
+          </button>
+        )
+      ) : null}
+      {onUploadAudioFile ? (
+        <input
+          ref={audioInputRef}
+          type="file"
+          accept="audio/mpeg,audio/mp3,audio/wav,audio/wave,audio/x-wav,audio/mp4,audio/webm,audio/ogg,.mp3,.wav,.m4a,.webm,.ogg"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) onUploadAudioFile(file);
+          }}
+        />
+      ) : null}
+      {onUploadSegmentZip ? (
+        <input
+          ref={zipInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) onUploadSegmentZip(file);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export function EpisodeSectionsPanel({
   episodeId,
   segments,
@@ -45,6 +166,9 @@ export function EpisodeSectionsPanel({
   isRecordingActive = false,
   onAddRecord,
   onAddLibrary,
+  onUploadAudioFile,
+  onUploadSegmentZip,
+  uploadBusy = false,
   recordDisabled = false,
   recordDisabledMessage,
   readOnly = false,
@@ -64,6 +188,16 @@ export function EpisodeSectionsPanel({
   unregisterSegmentPause,
 }: EpisodeSectionsPanelProps) {
   const segmentWaveforms = useBatchedSegmentWaveforms(episodeId, segments);
+  const uploadDisabled = readOnly || recordDisabled || uploadBusy;
+  const uploadDisabledTitle = readOnly
+    ? 'Read-only account'
+    : recordDisabled
+      ? (recordDisabledMessage ?? 'Not enough storage')
+      : uploadBusy
+        ? 'Upload in progress'
+        : undefined;
+  const showUploadActions = Boolean(onUploadAudioFile || onUploadSegmentZip) && !segmentsLoading;
+  const hasVisibleSections = segments.length > 0 || processingSegmentIds.length > 0;
 
   return (
     <div className={styles.sectionsPanel}>
@@ -114,49 +248,72 @@ export function EpisodeSectionsPanel({
 
       {segmentsLoading ? (
         <p className={sharedStyles.pdCardEmptyState}>Loading sections...</p>
-      ) : segments.length === 0 && processingSegmentIds.length === 0 ? (
-        <p className={sharedStyles.pdCardEmptyState}>No sections yet. Record or add from library above.</p>
-      ) : (
-        <ul className={styles.segmentList}>
-          {segments.map((seg, index) => (
-            <SegmentRow
-              key={seg.id}
-              episodeId={episodeId}
-              segment={seg}
-              isRecordingActive={isRecordingActive}
-              index={index}
-              total={segments.length}
-              onMoveUp={() => onMoveUp(index)}
-              onMoveDown={() => onMoveDown(index)}
-              onManageRequest={() => onManageRequest(seg.id)}
-              onRecoverRequest={onRecoverRequest && seg.recordFailed ? () => onRecoverRequest(seg.id) : undefined}
-              onUpdateName={onUpdateSegmentName}
-              isDeleting={isDeletingSegment && deletingSegmentId === seg.id}
-              isRecovering={recoveringSegmentId === seg.id}
-              onPlayRequest={onSegmentPlayRequest}
-              onMoreInfo={onSegmentMoreInfo ? () => onSegmentMoreInfo(seg.id) : undefined}
-              onEdit={onSegmentEdit ? () => onSegmentEdit(seg.id) : undefined}
-              onToggleDisabled={onSegmentToggleDisabled ? () => onSegmentToggleDisabled(seg.id) : undefined}
-              registerPause={registerSegmentPause}
-              unregisterPause={unregisterSegmentPause}
-              readOnly={readOnly}
-              waveformData={segmentWaveforms.get(seg.id)}
+      ) : !hasVisibleSections ? (
+        <div className={styles.sectionsEmptyCard}>
+          <p className={styles.sectionsEmptyCopy}>
+            No sections yet. Record or add from library above, or upload below.
+          </p>
+          {showUploadActions ? (
+            <SectionsUploadActions
+              disabled={uploadDisabled}
+              disabledTitle={uploadDisabledTitle}
+              onUploadAudioFile={onUploadAudioFile}
+              onUploadSegmentZip={onUploadSegmentZip}
             />
-          ))}
-          {processingSegmentIds.map((segId) => (
-            <li key={segId} className={`${styles.segmentBlock} ${styles.segmentBlockProcessing}`}>
-              <div className={styles.segmentBlockTop}>
-                <span className={styles.segmentIcon} title={isRecordingActive ? 'Recording' : 'Processing'}>
-                  <Loader2 size={18} strokeWidth={2} className={styles.segmentProcessingSpinner} aria-hidden />
-                </span>
-                <div className={styles.segmentBody}>
-                  <span className={styles.segmentName}>{isRecordingActive ? 'Recording segment' : 'Processing recording…'}</span>
-                  <div className={styles.segmentMeta}>{isRecordingActive ? 'Capturing audio' : 'Generating segment'}</div>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <ul className={styles.segmentList}>
+            {segments.map((seg, index) => (
+              <SegmentRow
+                key={seg.id}
+                episodeId={episodeId}
+                segment={seg}
+                isRecordingActive={isRecordingActive}
+                index={index}
+                total={segments.length}
+                onMoveUp={() => onMoveUp(index)}
+                onMoveDown={() => onMoveDown(index)}
+                onManageRequest={() => onManageRequest(seg.id)}
+                onRecoverRequest={onRecoverRequest && seg.recordFailed ? () => onRecoverRequest(seg.id) : undefined}
+                onUpdateName={onUpdateSegmentName}
+                isDeleting={isDeletingSegment && deletingSegmentId === seg.id}
+                isRecovering={recoveringSegmentId === seg.id}
+                onPlayRequest={onSegmentPlayRequest}
+                onMoreInfo={onSegmentMoreInfo ? () => onSegmentMoreInfo(seg.id) : undefined}
+                onEdit={onSegmentEdit ? () => onSegmentEdit(seg.id) : undefined}
+                onToggleDisabled={onSegmentToggleDisabled ? () => onSegmentToggleDisabled(seg.id) : undefined}
+                registerPause={registerSegmentPause}
+                unregisterPause={unregisterSegmentPause}
+                readOnly={readOnly}
+                waveformData={segmentWaveforms.get(seg.id)}
+              />
+            ))}
+            {processingSegmentIds.map((segId) => (
+              <li key={segId} className={`${styles.segmentBlock} ${styles.segmentBlockProcessing}`}>
+                <div className={styles.segmentBlockTop}>
+                  <span className={styles.segmentIcon} title={isRecordingActive ? 'Recording' : 'Processing'}>
+                    <Loader2 size={18} strokeWidth={2} className={styles.segmentProcessingSpinner} aria-hidden />
+                  </span>
+                  <div className={styles.segmentBody}>
+                    <span className={styles.segmentName}>{isRecordingActive ? 'Recording segment' : 'Processing recording...'}</span>
+                    <div className={styles.segmentMeta}>{isRecordingActive ? 'Capturing audio' : 'Generating segment'}</div>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+          {showUploadActions ? (
+            <SectionsUploadActions
+              className={styles.sectionsUploadRowBelow}
+              disabled={uploadDisabled}
+              disabledTitle={uploadDisabledTitle}
+              onUploadAudioFile={onUploadAudioFile}
+              onUploadSegmentZip={onUploadSegmentZip}
+            />
+          ) : null}
+        </>
       )}
     </div>
   );

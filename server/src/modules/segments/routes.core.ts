@@ -42,6 +42,22 @@ import {
   getHostDuckingJobStatus,
   startHostDuckingJob,
 } from "../../services/hostDuckingRemake.js";
+import {
+  getRestoreOriginalMixJobStatus,
+  startRestoreOriginalMixJob,
+} from "../../services/restoreOriginalMixRemake.js";
+import { TRACKS_MANIFEST_ORIGINAL_NAME } from "../episodes/projectSegmentShared.js";
+import { join } from "path";
+
+function segmentHasOriginalTracksManifest(
+  podcastId: string,
+  episodeId: string,
+  segmentId: string,
+): boolean {
+  const mtDir = findMultitrackDir(podcastId, episodeId, segmentId);
+  if (!mtDir) return false;
+  return existsSync(join(mtDir, TRACKS_MANIFEST_ORIGINAL_NAME));
+}
 
 export async function registerCoreRoutes(app: FastifyInstance) {
   app.get(
@@ -85,10 +101,16 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         const hasRecordings = Boolean(
           findMultitrackDir(access.podcastId, episodeId, row.id),
         );
+        const hasOriginalTracksManifest = segmentHasOriginalTracksManifest(
+          access.podcastId,
+          episodeId,
+          row.id,
+        );
         return redactSegmentForClient({
           ...row,
           waveformExists,
           hasRecordings,
+          hasOriginalTracksManifest,
         });
       });
       return { segments };
@@ -430,7 +452,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (!row) return reply.status(404).send({ error: "Segment not found" });
       const durationSec = row.durationSec;
 
-      let trimRangesJson: string | null = null;
+      let trimRangesJson: string | null | undefined = undefined;
       if (body.trimRanges !== undefined) {
         const ranges = Array.isArray(body.trimRanges) ? body.trimRanges : [];
         if (ranges.length > 0) {
@@ -440,6 +462,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             }
           }
           trimRangesJson = JSON.stringify(ranges);
+        } else {
+          trimRangesJson = "[]";
         }
       }
 
@@ -483,7 +507,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (name !== undefined) {
         repo.updateSegmentName(segmentId, episodeId, name);
       }
-      if (trimRangesJson !== null) {
+      if (trimRangesJson !== undefined) {
         repo.updateSegmentTrimRanges(segmentId, episodeId, trimRangesJson);
       }
       if (markersJson !== null) {
@@ -501,6 +525,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       const hasRecordings = Boolean(
         findMultitrackDir(access.podcastId, episodeId, segmentId),
       );
+      const hasOriginalTracksManifest = segmentHasOriginalTracksManifest(
+        access.podcastId,
+        episodeId,
+        segmentId,
+      );
       const audio = updated
         ? repo.getSegmentAudioPath(
             updated as Parameters<typeof repo.getSegmentAudioPath>[0],
@@ -515,6 +544,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       return redactSegmentForClient({
         ...(updated as Record<string, unknown>),
         hasRecordings,
+        hasOriginalTracksManifest,
         waveformExists,
       });
     },
@@ -665,6 +695,150 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         return reply.status(409).send({
           status: "remaking",
           message: "Host ducking remake already in progress",
+        });
+      }
+      return reply.status(202).send({ status: "remaking" });
+    },
+  );
+
+  app.get(
+    "/episodes/:episodeId/segments/:segmentId/restore-original-mix/status",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Segments"],
+        summary: "Restore original mix job status",
+        description:
+          "Poll after POST restore-original-mix (202) until done or failed.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          200: {
+            description: "Job status",
+            type: "object",
+            properties: {
+              status: {
+                type: "string",
+                enum: ["idle", "remaking", "done", "failed"],
+              },
+              error: { type: "string" },
+            },
+            required: ["status"],
+          },
+          400: { description: "Validation failed" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = segmentEpisodeSegmentIdParamSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Validation failed",
+          details: parsed.error.flatten(),
+        });
+      }
+      const { episodeId, segmentId } = parsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "You do not have permission to edit segments." });
+      }
+      const row = repo.getSegmentById(segmentId, episodeId);
+      if (!row) return reply.status(404).send({ error: "Segment not found" });
+      return reply.send(getRestoreOriginalMixJobStatus(segmentId));
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/restore-original-mix",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Restore original multitrack mix",
+        description:
+          "Restore tracks_manifest.json from tracks_manifest.json.original and remake the segment mix, ignoring OTIO/Reaper layout changes. Returns 202; poll GET restore-original-mix/status until done or failed. Editors and above only.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          202: {
+            description: "Remake started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["remaking"] } },
+            required: ["status"],
+          },
+          409: {
+            description: "Remake already in progress",
+            type: "object",
+            properties: {
+              status: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+          400: { description: "Validation failed or no original backup" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = segmentEpisodeSegmentIdParamSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Validation failed",
+          details: parsed.error.flatten(),
+        });
+      }
+      const { episodeId, segmentId } = parsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "You do not have permission to edit segments." });
+      }
+      const row = repo.getSegmentById(segmentId, episodeId);
+      if (!row) return reply.status(404).send({ error: "Segment not found" });
+      const mtDir = findMultitrackDir(access.podcastId, episodeId, segmentId);
+      if (!mtDir) {
+        return reply.status(400).send({
+          error: "Restore original mix is only available for multitrack segments",
+        });
+      }
+      if (!existsSync(join(mtDir, TRACKS_MANIFEST_ORIGINAL_NAME))) {
+        return reply.status(400).send({
+          error:
+            "No original multitrack layout to restore. Import OTIO or Reaper again after this update so a backup can be saved.",
+        });
+      }
+      const started = startRestoreOriginalMixJob({
+        podcastId: access.podcastId,
+        episodeId,
+        segmentId,
+        onSuccess: () => {
+          broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
+        },
+      });
+      if (!started) {
+        return reply.status(409).send({
+          status: "remaking",
+          message: "Restore original mix already in progress",
         });
       }
       return reply.status(202).send({ status: "remaking" });

@@ -50,16 +50,23 @@ correct.
 ## Editing with DAWs
 
 Import into ${app} looks at audio file hashes (\`audio.*\` and
-\`recordings/*\`). When \`segment.rpp\` is present and its hash
-differs from \`segment.json\` (\`segmentRppSha256\`), import also
-applies that timeline sidecar: it rebuilds \`tracks_manifest.json\`
-from the clip layout and volume (track/item faders and mute) and
-remakes the mixed segment audio. If \`segment.rpp\` cannot be read,
-import ignores it and remakes the mix from \`tracks_manifest.json\`
-instead. Media paths in the sidecar must stay under the segment
-folder (no \`..\`). When host ducking is enabled and
-\`host_ducking.json\` is present, exclusive host gates are applied
-on remake. Other sidecars (\`timeline.otio\`, \`audacity.lof\`,
+\`recordings/*\`). When \`timeline.otio\` is present and its hash
+differs from \`segment.json\` (\`timelineOtioSha256\`), import
+applies that timeline first: it rebuilds \`tracks_manifest.json\`
+from clip cuts/trims (gaps and \`source_range\`) and remakes the
+mixed segment audio. Before that overwrite, HarborFM keeps a one-time
+backup as \`recordings/tracks_manifest.json.original\` so
+**Restore Original Mix** can remake the pre-OTIO / pre-Reaper mix.
+Resolve Fairlight FX are not re-imported.
+Otherwise, when \`segment.rpp\` is present and its hash differs
+(\`segmentRppSha256\`), import applies that Reaper sidecar
+(layout, volume, mute, and supported FX) the same way. If the
+chosen sidecar cannot be read, import ignores it and remakes from
+\`tracks_manifest.json\` instead. Reaper media paths must stay under
+the segment folder (no \`..\`); Resolve absolute media paths are
+matched by basename under \`recordings/\`. When host ducking is
+enabled and \`host_ducking.json\` is present, exclusive host gates
+are applied on remake. Other sidecars (\`audacity.lof\`,
 \`labels.txt\`) are still ignored on import.
 
 ### Audacity
@@ -116,8 +123,14 @@ on remake. Other sidecars (\`timeline.otio\`, \`audacity.lof\`,
 3. Tracks match Reaper (\`Logan_0\`, \`soundboard_<assetId>\`),
    participants above soundboard, sorted by start; reconnects
    share a track. Stubs under 2KB are omitted.
-4. Re-zip and **Import Project**. ${app} does not read the \`.otio\`
-   back in.
+4. Edit cuts and trims in Resolve, then **overwrite**
+   \`timeline.otio\` in the zip (export OTIO from Resolve) and
+   re-zip for **Import Project**, or on an existing segment use
+   **Import OTIO** with only \`timeline.otio\` (existing
+   recordings/mix on the server). When the OTIO hash differs (or
+   you use Import OTIO), ${app} rebuilds the multitrack layout
+   from clip timing and remakes the segment mix. Fairlight
+   volume/EQ/pan are not applied on import.
 
 ## Editing existing audio (any tool)
 
@@ -252,17 +265,18 @@ segment/
 ## Editing with DAWs
 
 Import cares about hashes of \`segment/audio.*\` and
-\`segment/recordings/*\`. When \`segment/segment.rpp\` is present
-and its hash differs from \`segment.json\` (\`segmentRppSha256\`),
-import also applies that timeline: rebuilds
-\`tracks_manifest.json\` from the clip layout and volume
-(track/item faders and mute) and remakes the mixed segment
-audio. If \`segment.rpp\` cannot be read, import ignores it and
-remakes from \`tracks_manifest.json\` instead. Media paths must
-stay under \`segment/\` (no \`..\`). When host ducking is enabled
-and \`host_ducking.json\` is present, exclusive host gates are
-applied on remake. Other sidecars (\`.otio\`, \`.lof\`, labels)
-are ignored on import.
+\`segment/recordings/*\`. When \`segment/timeline.otio\` is present
+and its hash differs (\`timelineOtioSha256\`), import applies that
+timeline first (cuts/trims; Resolve FX ignored) and remakes the
+mix. Otherwise, when \`segment/segment.rpp\` differs
+(\`segmentRppSha256\`), import applies the Reaper sidecar
+(layout, volume, mute, supported FX). If the chosen sidecar
+cannot be read, import ignores it and remakes from
+\`tracks_manifest.json\`. Reaper media paths must stay under
+\`segment/\` (no \`..\`); Resolve absolute paths match by basename
+under \`recordings/\`. When host ducking is enabled and
+\`host_ducking.json\` is present, exclusive host gates are applied
+on remake. Other sidecars (\`.lof\`, labels) are ignored on import.
 
 ### Audacity
 
@@ -308,9 +322,16 @@ are ignored on import.
    \`segment/\` (\`recordings/…\` or \`audio.*\`). If Resolve asks
    for media location, choose the \`segment/\` folder.
 2. Tracks match Reaper naming and layout (participants then
-   soundboard, reconnects on one track). Replace audio in place
-   after editing.
-3. Re-zip and **Import Segment**.
+   soundboard, reconnects on one track). Edit cuts and trims,
+   then overwrite \`segment/timeline.otio\` (Resolve OTIO export)
+   in the zip. You may also replace source files in place.
+3. Re-zip and **Import Segment**, or upload only
+   \`timeline.otio\` via **Import OTIO** on Manage Segment (uses
+   this segment's existing \`recordings/\` or mix audio; clips for
+   media the server does not have are skipped). A changed
+   \`timeline.otio\` rebuilds the multitrack layout from clip
+   timing and remakes the segment mix. Fairlight FX are not
+   re-imported.
 
 ## Editing audio (any tool)
 
@@ -325,8 +346,9 @@ On import, ${app} regenerates waveforms when audio hashes change,
 updates duration, and drops markers past the new end. Changed
 \`recordings/\` tracks remake the mixed segment audio. Delete a
 track file under \`recordings/\` (keep the manifest entry) to drop
-it from the remade mix. A changed \`segment.rpp\` hash also remakes
-the mix from the timeline layout.
+it from the remade mix. A changed \`timeline.otio\` or
+\`segment.rpp\` hash also remakes the mix from that timeline
+(OTIO takes precedence when both changed).
 
 ## Re-zipping
 

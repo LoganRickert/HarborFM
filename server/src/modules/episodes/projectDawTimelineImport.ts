@@ -21,7 +21,7 @@ import type {
   MultitrackSegmentEntry,
 } from "../../services/multitrackRemake.js";
 import { sha256FileSync } from "../../utils/hash.js";
-import { ImportValidationError } from "./projectSegmentShared.js";
+import { ImportValidationError, ensureOriginalTracksManifest } from "./projectSegmentShared.js";
 import { isAudioFilename } from "./projectDawSidecars.js";
 import {
   decodeReaCompBase64,
@@ -666,6 +666,7 @@ export function applyTimelineSidecarToManifest(opts: {
     ...(existingManifest ?? {}),
     segments,
   };
+  ensureOriginalTracksManifest(mtDest);
   writeFileSync(
     join(mtDest, "tracks_manifest.json"),
     JSON.stringify(manifest, null, 2),

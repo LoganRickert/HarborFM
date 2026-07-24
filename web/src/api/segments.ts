@@ -1,4 +1,4 @@
-import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody, SegmentHostDuckingStatusResponse } from '@harborfm/shared';
+import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody, SegmentHostDuckingStatusResponse, SegmentRestoreOriginalMixStatusResponse } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
@@ -91,6 +91,42 @@ export function getSegmentHostDuckingStatus(
 ): Promise<SegmentHostDuckingStatusResponse> {
   return fetch(
     `${BASE}/episodes/${episodeId}/segments/${segmentId}/host-ducking/status`,
+    { credentials: 'include' },
+  ).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+/** Start restore-original-mix remake (202). Poll getSegmentRestoreOriginalMixStatus until done/failed. */
+export function startSegmentRestoreOriginalMix(
+  episodeId: string,
+  segmentId: string,
+): Promise<void> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/restore-original-mix`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+  }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+export function getSegmentRestoreOriginalMixStatus(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentRestoreOriginalMixStatusResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/restore-original-mix/status`,
     { credentials: 'include' },
   ).then((r) => {
     if (!r.ok) {
@@ -247,6 +283,51 @@ export function getSegmentReaperImportStatus(
 ): Promise<SegmentReaperImportStatusResponse> {
   return fetch(
     `${BASE}/episodes/${episodeId}/segments/${segmentId}/import-reaper/status`,
+    { credentials: 'include' },
+  ).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+export type SegmentOtioImportStatusResponse = {
+  status: 'idle' | 'importing' | 'done' | 'failed';
+  error?: string;
+};
+
+/** Start timeline.otio import (202). Poll getSegmentOtioImportStatus until done/failed. */
+export function startImportSegmentOtio(
+  episodeId: string,
+  segmentId: string,
+  file: File,
+): Promise<void> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/import-otio`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+export function getSegmentOtioImportStatus(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentOtioImportStatusResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/import-otio/status`,
     { credentials: 'include' },
   ).then((r) => {
     if (!r.ok) {

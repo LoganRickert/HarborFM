@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.18.0 - 7-24-2026
+
+- **Episode details:** When an LLM is configured and the episode has final audio plus a transcript, Overview includes **Generate Description**, **Generate Subtitle**, and **Generate Summary** under those fields (fills the form; Save still required).
+- **Project / segment import:** When `timeline.otio` changes since export (for example after editing cuts in DaVinci Resolve), import rebuilds `tracks_manifest.json` from clip timing and remakes the segment mix. OTIO takes precedence over `segment.rpp` when both changed. Resolve Fairlight FX are not re-imported.
+- **Import OTIO:** Manage Segment **Import OTIO** applies an edited `timeline.otio` to the segment's existing recordings and remakes the mix (same pattern as Import Reaper).
+- **OTIO / multitrack remake performance:** Heavy Resolve timelines (many clips from the same takes) no longer regenerate each track waveform once per clip. Mix remake builds one concat lane per take (silence + trims) then amixes those few lanes, instead of amixing hundreds of full-length padded streams.
+
 ## v1.17.1 - 7.23-2026
 
 - **Liquid theme PWAs:** Feed themes installed to the home screen clear the iPhone notch / Dynamic Island (host safe-area padding plus sticky top chrome offsets).

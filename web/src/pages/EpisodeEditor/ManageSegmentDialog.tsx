@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, FileUp, FolderInput, FolderDown, Trash2, X } from 'lucide-react';
+import { Clapperboard, Download, FileUp, FolderInput, FolderDown, Trash2, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { PleaseWaitDialog } from '../../components/PleaseWaitDialog';
 import {
   downloadSegmentMp3Url,
   downloadSegmentProjectUrl,
   getSegmentHostDuckingStatus,
+  getSegmentOtioImportStatus,
   getSegmentProjectExportStatus,
   getSegmentProjectImportStatus,
   getSegmentReaperImportStatus,
+  startImportSegmentOtio,
   startImportSegmentProject,
   startImportSegmentReaper,
   startSegmentHostDucking,
@@ -29,7 +31,7 @@ export interface ManageSegmentDialogProps {
   isDeleting: boolean;
 }
 
-type WaitKind = 'export' | 'import' | 'reaper' | null;
+type WaitKind = 'export' | 'import' | 'reaper' | 'otio' | null;
 
 export function ManageSegmentDialog({
   open,
@@ -43,6 +45,7 @@ export function ManageSegmentDialog({
 }: ManageSegmentDialogProps) {
   const zipInputRef = useRef<HTMLInputElement>(null);
   const rppInputRef = useRef<HTMLInputElement>(null);
+  const otioInputRef = useRef<HTMLInputElement>(null);
   const [waitKind, setWaitKind] = useState<WaitKind>(null);
   const [waitError, setWaitError] = useState<string | null>(null);
   const [waitWarning, setWaitWarning] = useState<string | null>(null);
@@ -203,6 +206,33 @@ export function ManageSegmentDialog({
     }
   }
 
+  async function handleImportOtio(file: File | undefined) {
+    if (!segment || !file || busy || readOnly) return;
+    setWaitError(null);
+    setWaitWarning(null);
+    setWaitKind('otio');
+    try {
+      await startImportSegmentOtio(episodeId, segment.id, file);
+      const result = await pollUntil(
+        () => getSegmentOtioImportStatus(episodeId, segment.id),
+        {
+          pendingStatuses: ['importing'],
+          successStatuses: ['done'],
+        },
+      );
+      if (result.status !== 'done') {
+        throw new Error('Import finished unexpectedly');
+      }
+      setWaitKind(null);
+      onImported();
+      onOpenChange(false);
+    } catch (err) {
+      setWaitError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      if (otioInputRef.current) otioInputRef.current.value = '';
+    }
+  }
+
   async function handleHostDuckingToggle(enabled: boolean) {
     if (!segment || busy || readOnly) return;
     if (Boolean(segment.hostDuckingEnabled) === enabled) return;
@@ -212,12 +242,14 @@ export function ManageSegmentDialog({
   }
 
   const waitDescription = duckingBusy
-    ? 'Updating host ducking…'
+    ? 'Updating host ducking...'
     : waitKind === 'reaper'
-      ? 'Importing Reaper project…'
-      : waitKind === 'import'
-        ? 'Importing segment…'
-        : 'Preparing your download…';
+      ? 'Importing Reaper project...'
+      : waitKind === 'otio'
+        ? 'Importing OTIO timeline...'
+        : waitKind === 'import'
+          ? 'Importing segment...'
+          : 'Preparing your download...';
   const waitErrorTitle =
     waitKind === 'export' ? 'Download failed' : 'Import failed';
 
@@ -368,6 +400,33 @@ export function ManageSegmentDialog({
                 accept=".rpp,application/octet-stream"
                 hidden
                 onChange={(e) => void handleImportReaper(e.target.files?.[0])}
+              />
+
+              <button
+                type="button"
+                className={styles.manageSegmentAction}
+                disabled={readOnly || busy || !hasAudio}
+                onClick={() => otioInputRef.current?.click()}
+                title={
+                  readOnly
+                    ? 'Read-only account'
+                    : !hasAudio
+                      ? 'No audio to apply a timeline to'
+                      : undefined
+                }
+              >
+                <Clapperboard size={18} aria-hidden />
+                <span>Import OTIO</span>
+                <span className={styles.manageSegmentActionHint}>
+                  Apply timeline.otio to existing tracks
+                </span>
+              </button>
+              <input
+                ref={otioInputRef}
+                type="file"
+                accept=".otio,application/json,application/octet-stream"
+                hidden
+                onChange={(e) => void handleImportOtio(e.target.files?.[0])}
               />
 
               {canProject && !readOnly ? (

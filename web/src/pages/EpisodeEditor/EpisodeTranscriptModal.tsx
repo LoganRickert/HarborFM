@@ -167,9 +167,9 @@ export function EpisodeTranscriptModal({
                       className={styles.cancel}
                       onClick={requestClose}
                       disabled={isSaving}
-                      aria-label="Cancel"
+                      aria-label={hasChanges ? 'Cancel' : 'Close'}
                     >
-                      Cancel
+                      {hasChanges ? 'Cancel' : 'Close'}
                     </button>
                     <button
                       type="button"

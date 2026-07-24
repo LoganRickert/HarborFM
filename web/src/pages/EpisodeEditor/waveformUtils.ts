@@ -7,9 +7,21 @@ export function isInTrimRange(time: number, trimRanges: Array<[number, number]>)
   return false;
 }
 
-/** Get total trimmed duration. */
-export function getTrimmedDuration(trimRanges: Array<[number, number]>): number {
-  return trimRanges.reduce((sum, [s, e]) => sum + (e - s), 0);
+/** Get total trimmed duration, optionally clamped to the media length. */
+export function getTrimmedDuration(
+  trimRanges: Array<[number, number]>,
+  durationSec?: number,
+): number {
+  if (durationSec == null || !(durationSec > 0)) {
+    return trimRanges.reduce((sum, [s, e]) => sum + (e - s), 0);
+  }
+  let sum = 0;
+  for (const [s, e] of trimRanges) {
+    const a = Math.max(0, s);
+    const b = Math.min(durationSec, e);
+    if (b > a) sum += b - a;
+  }
+  return sum;
 }
 
 /** Map actual time to effective (playable) time. */

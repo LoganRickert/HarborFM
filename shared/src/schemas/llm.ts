@@ -39,3 +39,26 @@ export const llmGenerateChaptersResponseSchema = z.object({
 
 export type LlmChapterMarker = z.infer<typeof llmChapterMarkerSchema>;
 export type LlmGenerateChaptersResponse = z.infer<typeof llmGenerateChaptersResponseSchema>;
+
+export const llmEpisodeMetadataFieldSchema = z.enum(['description', 'subtitle', 'summary']);
+
+export type LlmEpisodeMetadataField = z.infer<typeof llmEpisodeMetadataFieldSchema>;
+
+/** Body for POST /llm/generate-episode-field. */
+export const llmGenerateEpisodeFieldBodySchema = z.object({
+  transcript: z.string().min(1, { message: 'Transcript is required' }),
+  field: llmEpisodeMetadataFieldSchema,
+  episodeTitle: z.string().optional(),
+  existingDescription: z.string().optional(),
+  existingSubtitle: z.string().optional(),
+  existingSummary: z.string().optional(),
+});
+
+export type LlmGenerateEpisodeFieldBody = z.infer<typeof llmGenerateEpisodeFieldBodySchema>;
+
+/** Response for POST /llm/generate-episode-field. */
+export const llmGenerateEpisodeFieldResponseSchema = z.object({
+  text: z.string(),
+});
+
+export type LlmGenerateEpisodeFieldResponse = z.infer<typeof llmGenerateEpisodeFieldResponseSchema>;

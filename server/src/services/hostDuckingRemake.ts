@@ -13,6 +13,7 @@ import {
 import * as audioService from "./audio.js";
 import {
   pruneMarkersForDuration,
+  pruneTrimRangesForDuration,
   remakeMixFromMultitrackDir,
   type MultitrackManifest,
 } from "./multitrackRemake.js";
@@ -23,12 +24,12 @@ import {
   type HostDuckingFile,
 } from "./hostDucking.js";
 import { findMultitrackDir } from "../modules/episodes/projectSegmentPack.js";
+import { refreshMultitrackTrackSidecars } from "../modules/episodes/projectSegmentShared.js";
 import {
   getSegmentById,
   updateSegmentAudio,
   updateSegmentHostDuckingEnabled,
 } from "../modules/segments/repo.js";
-import { sha256FileSync } from "../utils/hash.js";
 import { waveformPath } from "../modules/segments/utils.js";
 
 function loadManifest(mtDir: string): MultitrackManifest | null {
@@ -127,6 +128,19 @@ export async function remakeSegmentWithHostDucking(opts: {
   }
   markers = pruneMarkersForDuration(markers, remade.durationSec);
 
+  let trimRanges: unknown = existing?.trimRanges ?? [];
+  if (typeof trimRanges === "string" && trimRanges) {
+    try {
+      trimRanges = JSON.parse(trimRanges);
+    } catch {
+      trimRanges = [];
+    }
+  }
+  const prunedTrims = pruneTrimRangesForDuration(
+    trimRanges,
+    remade.durationSec,
+  );
+
   const oldAudio =
     existing && typeof existing.audioPath === "string"
       ? existing.audioPath
@@ -147,20 +161,13 @@ export async function remakeSegmentWithHostDucking(opts: {
   await audioService.generateWaveformFile(mixDest, episodeUploads);
   updateSegmentAudio(segmentId, episodeId, mixDest, remade.durationSec, {
     markers: JSON.stringify(markers ?? []),
+    trimRanges: JSON.stringify(prunedTrims),
   });
   if (setEnabledFlag !== undefined) {
     updateSegmentHostDuckingEnabled(segmentId, episodeId, setEnabledFlag);
   }
 
-  for (const entry of manifest.segments ?? []) {
-    const rel = typeof entry.filePath === "string" ? entry.filePath : null;
-    if (!rel) continue;
-    const trackAbs = join(mtDir, basename(rel.replace(/\\/g, "/")));
-    if (!existsSync(trackAbs)) continue;
-    entry.fileSha256 = sha256FileSync(trackAbs) ?? entry.fileSha256;
-    entry.waveformSha256 =
-      sha256FileSync(waveformPath(trackAbs)) ?? entry.waveformSha256;
-  }
+  await refreshMultitrackTrackSidecars(mtDir, manifest);
   writeFileSync(
     join(mtDir, "tracks_manifest.json"),
     JSON.stringify(manifest, null, 2),

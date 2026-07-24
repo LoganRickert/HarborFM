@@ -1,6 +1,9 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { Image } from 'lucide-react';
+import type { LlmEpisodeMetadataField } from '@harborfm/shared';
+import { generateEpisodeField } from '../../api/llm';
+import { getEpisodeTranscript } from '../../api/segments';
 import {
   isExpiresAtBeforePublishAt,
   isSubscriberOnlyWindowInvalid,
@@ -18,6 +21,12 @@ import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 const styles = { ...localStyles, ...sharedStyles };
 
 export type EpisodeDetailsTab = 'overview' | 'publish' | 'more';
+
+const GENERATE_FIELD_LABEL: Record<LlmEpisodeMetadataField, string> = {
+  description: 'Generate Description',
+  subtitle: 'Generate Subtitle',
+  summary: 'Generate Summary',
+};
 
 function safeImageSrc(url: string | null | undefined): string {
   if (!url) return '';
@@ -70,6 +79,12 @@ export interface EpisodeDetailsFormProps {
   };
   /** When false, Published and Scheduled cannot be selected in the publish UI. */
   hasFinalAudio: boolean;
+  /** Episode id for transcript fetch when generating metadata. */
+  episodeId?: string;
+  /** True when an LLM provider is configured in Settings. */
+  llmAvailable?: boolean;
+  /** True when final audio has a transcript.srt on disk. */
+  hasTranscript?: boolean;
 }
 
 export function EpisodeDetailsForm({
@@ -88,15 +103,75 @@ export function EpisodeDetailsForm({
   onRequestDeleteEpisode,
   coverImageConfig,
   hasFinalAudio,
+  episodeId,
+  llmAvailable = false,
+  hasTranscript = false,
 }: EpisodeDetailsFormProps) {
   const cover = coverImageConfig;
   const savingOrUploading = isSaving || (cover?.uploadArtworkPending ?? false);
   const summaryRef = useRef<HTMLTextAreaElement>(null);
   const contentEncodedRef = useRef<HTMLTextAreaElement>(null);
+  const [generatePendingField, setGeneratePendingField] = useState<LlmEpisodeMetadataField | null>(null);
+  const [generateErrors, setGenerateErrors] = useState<Partial<Record<LlmEpisodeMetadataField, string>>>({});
 
   useAutoResizeTextarea(descriptionTextareaRef, form.description, { minHeight: 80 });
   useAutoResizeTextarea(summaryRef, form.summary ?? '', { minHeight: 60 });
   useAutoResizeTextarea(contentEncodedRef, form.contentEncoded ?? '', { minHeight: 80 });
+
+  const canGenerateMetadata = Boolean(
+    episodeId && llmAvailable && hasFinalAudio && hasTranscript,
+  );
+
+  async function handleGenerateField(field: LlmEpisodeMetadataField) {
+    if (!episodeId || generatePendingField) return;
+    setGeneratePendingField(field);
+    setGenerateErrors((prev) => ({ ...prev, [field]: undefined }));
+    try {
+      const { text: transcript } = await getEpisodeTranscript(episodeId);
+      if (!transcript?.trim()) {
+        throw new Error('Generate a transcript first.');
+      }
+      const result = await generateEpisodeField(transcript, field, {
+        episodeTitle: form.title,
+        existingDescription: form.description,
+        existingSubtitle: form.subtitle,
+        existingSummary: form.summary,
+      });
+      const text = result.text.trim();
+      if (!text) {
+        throw new Error('LLM returned empty text.');
+      }
+      setForm((prev) => ({ ...prev, [field]: text }));
+    } catch (err) {
+      setGenerateErrors((prev) => ({
+        ...prev,
+        [field]: err instanceof Error ? err.message : 'Failed to generate',
+      }));
+    } finally {
+      setGeneratePendingField(null);
+    }
+  }
+
+  function renderGenerateControl(field: LlmEpisodeMetadataField) {
+    if (!canGenerateMetadata) return null;
+    const pending = generatePendingField === field;
+    const busy = generatePendingField != null;
+    const error = generateErrors[field];
+    return (
+      <div className={styles.generateFieldWrap}>
+        <button
+          type="button"
+          className={styles.generateFieldBtn}
+          onClick={() => void handleGenerateField(field)}
+          disabled={busy || savingOrUploading}
+          aria-label={GENERATE_FIELD_LABEL[field]}
+        >
+          {pending ? 'Generating...' : GENERATE_FIELD_LABEL[field]}
+        </button>
+        {error ? <p className={styles.error}>{error}</p> : null}
+      </div>
+    );
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -149,40 +224,49 @@ export function EpisodeDetailsForm({
               Used in URLs - lowercase, numbers, hyphens only.
             </p>
           </label>
-          <label className={styles.label}>
-            Description
-            <textarea
-              ref={descriptionTextareaRef}
-              value={form.description}
-              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              className={styles.textarea}
-              rows={2}
-              style={{ overflow: 'hidden', resize: 'none' }}
-              placeholder="What this episode is about. Shown in podcast apps."
-            />
-          </label>
-          <label className={styles.label}>
-            Subtitle
-            <input
-              type="text"
-              value={form.subtitle}
-              onChange={(e) => setForm((prev) => ({ ...prev, subtitle: e.target.value }))}
-              className={styles.input}
-              placeholder="e.g. One line summary for app listings"
-            />
-          </label>
-          <label className={styles.label}>
-            Summary
-            <textarea
-              ref={summaryRef}
-              value={form.summary}
-              onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
-              className={styles.textarea}
-              rows={2}
-              style={{ overflow: 'hidden', resize: 'none' }}
-              placeholder="Extended description for podcast apps (optional)"
-            />
-          </label>
+          <div className={styles.overviewFieldBlock}>
+            <label className={styles.label}>
+              Description
+              <textarea
+                ref={descriptionTextareaRef}
+                value={form.description}
+                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                className={styles.textarea}
+                rows={2}
+                style={{ overflow: 'hidden', resize: 'none' }}
+                placeholder="Primary episode blurb for podcast apps (RSS description)."
+              />
+            </label>
+            {renderGenerateControl('description')}
+          </div>
+          <div className={styles.overviewFieldBlock}>
+            <label className={styles.label}>
+              Subtitle
+              <input
+                type="text"
+                value={form.subtitle}
+                onChange={(e) => setForm((prev) => ({ ...prev, subtitle: e.target.value }))}
+                className={styles.input}
+                placeholder="One-line itunes:subtitle for app listings"
+              />
+            </label>
+            {renderGenerateControl('subtitle')}
+          </div>
+          <div className={styles.overviewFieldBlock}>
+            <label className={styles.label}>
+              Summary
+              <textarea
+                ref={summaryRef}
+                value={form.summary}
+                onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
+                className={styles.textarea}
+                rows={2}
+                style={{ overflow: 'hidden', resize: 'none' }}
+                placeholder="Longer itunes:summary for podcast apps (optional)"
+              />
+            </label>
+            {renderGenerateControl('summary')}
+          </div>
 
           <label className={styles.label}>
             Cover

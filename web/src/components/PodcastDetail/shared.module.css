@@ -1000,6 +1000,12 @@ textarea.input:disabled {
   gap: 1rem;
 }
 
+.overviewFieldBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .advancedFields {
   margin-top: 0;
   margin-bottom: 1rem;
