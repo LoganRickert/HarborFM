@@ -22,6 +22,7 @@ import {
   createSegmentFromPath,
   markSegmentRecordFailed,
 } from "../../services/segmentFromRecording.js";
+import { ensureOriginalTracksManifest } from "../episodes/projectSegmentShared.js";
 import * as audioService from "../../services/audio.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { recordFailureAndMaybeBan } from "../../services/loginAttempts.js";
@@ -375,6 +376,7 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
             const recordingEpochMs = typeof manifest?.recordingEpochMs === "number" ? manifest.recordingEpochMs : undefined;
             const mtDir = multitrackRecordingsDir(body.podcastId, body.episodeId, body.segmentId, recordingEpochMs);
             writeFileSync(join(mtDir, "tracks_manifest.json"), JSON.stringify(body.tracksManifest, null, 2));
+            ensureOriginalTracksManifest(mtDir);
             const webrtcDir = getWebrtcRecordingsDir();
             const copiedBases: string[] = [];
             for (const relPath of body.perTrackFilePaths) {

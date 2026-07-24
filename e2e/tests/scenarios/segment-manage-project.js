@@ -1,7 +1,7 @@
 import { createRequire } from 'module';
 import { createHash } from 'crypto';
 import { execFileSync, spawnSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, mkdtempSync, readdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, mkdtempSync, readdirSync, statSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
@@ -154,37 +154,50 @@ export async function run({ runOne }) {
   const folderName = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}_${seg.id}`;
   const mtDir = join(recordingsBase, folderName);
   mkdirSync(mtDir, { recursive: true });
-  writeFileSync(join(mtDir, 'host.mp3'), readFileSync(testDataMp3()));
-  writeFileSync(join(mtDir, 'guest.mp3'), readFileSync(testDataMp3()));
-  writeFileSync(
-    join(mtDir, 'tracks_manifest.json'),
-    JSON.stringify({
-      recordingEpochMs: epoch,
-      sessionStartedAtEpochMs: epoch,
-      episodeId: episode.id,
-      podcastId: podcast.id,
-      segments: [
-        {
-          segmentId: 'host-clip',
-          producerId: 'host',
-          participantName: 'Host',
-          startMs: 0,
-          endMs: Math.round(durationSec * 1000),
-          filePath: 'host.mp3',
-          codec: 'libmp3lame',
-        },
-        {
-          segmentId: 'guest-clip',
-          producerId: 'guest',
-          participantName: 'Guest',
-          startMs: 0,
-          endMs: Math.round(durationSec * 1000),
-          filePath: 'guest.mp3',
-          codec: 'libmp3lame',
-        },
-      ],
-    }),
-  );
+
+  /** Restore host+guest full takes after tests that delete tracks or apply OTIO/RPP cuts. */
+  function replantFullMultitrack() {
+    const activeMt = findMtDir(recordingsBase, seg.id) || mtDir;
+    mkdirSync(activeMt, { recursive: true });
+    writeFileSync(join(activeMt, 'host.mp3'), readFileSync(testDataMp3()));
+    writeFileSync(join(activeMt, 'guest.mp3'), readFileSync(testDataMp3()));
+    writeFileSync(
+      join(activeMt, 'tracks_manifest.json'),
+      JSON.stringify({
+        recordingEpochMs: epoch,
+        sessionStartedAtEpochMs: epoch,
+        episodeId: episode.id,
+        podcastId: podcast.id,
+        segments: [
+          {
+            segmentId: 'host-clip',
+            producerId: 'host',
+            participantName: 'Host',
+            startMs: 0,
+            endMs: Math.round(durationSec * 1000),
+            filePath: 'host.mp3',
+            codec: 'libmp3lame',
+          },
+          {
+            segmentId: 'guest-clip',
+            producerId: 'guest',
+            participantName: 'Guest',
+            startMs: 0,
+            endMs: Math.round(durationSec * 1000),
+            filePath: 'guest.mp3',
+            codec: 'libmp3lame',
+          },
+        ],
+      }),
+    );
+    // Drop stale DAW backup so the next OTIO/Reaper apply can snapshot this layout.
+    const originalPath = join(activeMt, 'tracks_manifest.json.original');
+    if (existsSync(originalPath)) {
+      unlinkSync(originalPath);
+    }
+  }
+
+  replantFullMultitrack();
 
   let zipBuffer = null;
 
@@ -602,7 +615,234 @@ export async function run({ runOne }) {
   );
 
   results.push(
+    await runOne('Import Segment applies Resolve-style timeline.otio and remakes mix', async () => {
+      // Prior tests may have deleted guest.mp3; OTIO fixture needs both takes.
+      replantFullMultitrack();
+
+      const exportRes = await apiFetch(
+        `/episodes/${episode.id}/segments/${seg.id}/project-export`,
+        {},
+        jar,
+      );
+      if (exportRes.status !== 200) {
+        throw new Error(`Re-export failed: ${exportRes.status} ${await exportRes.text()}`);
+      }
+      const zip = new AdmZip(Buffer.from(await exportRes.arrayBuffer()));
+      const otioPath = 'segment/timeline.otio';
+      if (!zip.getEntry(otioPath)) throw new Error('Export missing segment/timeline.otio');
+      const segJson = JSON.parse(zip.readAsText('segment/segment.json'));
+      if (!segJson.timelineOtioSha256) {
+        throw new Error('segment.json missing timelineOtioSha256');
+      }
+      if (!zip.getEntry('segment/recordings/host.mp3')) {
+        throw new Error('Export missing recordings/host.mp3');
+      }
+      if (!zip.getEntry('segment/recordings/guest.mp3')) {
+        throw new Error('Export missing recordings/guest.mp3');
+      }
+
+      // Resolve-shaped OTIO: 24 fps, Video track skipped, Windows absolute media path,
+      // gap + trimmed clips from the same source.
+      const rate = 24;
+      const rt = (value) => ({
+        OTIO_SCHEMA: 'RationalTime.1',
+        rate,
+        value,
+      });
+      const tr = (startFrames, durFrames) => ({
+        OTIO_SCHEMA: 'TimeRange.1',
+        start_time: rt(startFrames),
+        duration: rt(durFrames),
+      });
+      const winHost =
+        'C:\\Users\\editor\\Documents\\resolve\\recordings\\host.mp3';
+      const resolveOtio = {
+        OTIO_SCHEMA: 'Timeline.1',
+        name: 'Resolve edit',
+        global_start_time: null,
+        metadata: {},
+        tracks: {
+          OTIO_SCHEMA: 'Stack.1',
+          name: 'tracks',
+          children: [
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Video 1',
+              kind: 'Video',
+              children: [],
+              effects: [],
+              markers: [],
+              metadata: {},
+              source_range: null,
+              enabled: true,
+            },
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Host_0',
+              kind: 'Audio',
+              children: [
+                {
+                  OTIO_SCHEMA: 'Gap.1',
+                  name: '',
+                  source_range: tr(0, 24), // 1.0s
+                  effects: [],
+                  markers: [],
+                  metadata: {},
+                  enabled: true,
+                },
+                {
+                  OTIO_SCHEMA: 'Clip.2',
+                  name: 'host.mp3',
+                  source_range: tr(24, 48), // in at 1s, play 2s
+                  effects: [],
+                  markers: [],
+                  metadata: {},
+                  media_references: {
+                    DEFAULT_MEDIA: {
+                      OTIO_SCHEMA: 'ExternalReference.1',
+                      name: 'host.mp3',
+                      target_url: winHost,
+                      available_range: tr(0, 480),
+                      metadata: {},
+                    },
+                  },
+                  active_media_reference_key: 'DEFAULT_MEDIA',
+                  enabled: true,
+                },
+                {
+                  OTIO_SCHEMA: 'Clip.2',
+                  name: 'host.mp3',
+                  source_range: tr(96, 24), // in at 4s, play 1s
+                  effects: [],
+                  markers: [],
+                  metadata: {},
+                  media_references: {
+                    DEFAULT_MEDIA: {
+                      OTIO_SCHEMA: 'ExternalReference.1',
+                      name: 'host.mp3',
+                      target_url: winHost,
+                      available_range: tr(0, 480),
+                      metadata: {},
+                    },
+                  },
+                  active_media_reference_key: 'DEFAULT_MEDIA',
+                  enabled: true,
+                },
+              ],
+              effects: [],
+              markers: [],
+              metadata: {},
+              source_range: null,
+              enabled: true,
+            },
+            {
+              OTIO_SCHEMA: 'Track.1',
+              name: 'Guest_0',
+              kind: 'Audio',
+              children: [
+                {
+                  OTIO_SCHEMA: 'Clip.2',
+                  name: 'guest.mp3',
+                  source_range: tr(0, 36), // 1.5s from start
+                  effects: [],
+                  markers: [],
+                  metadata: {},
+                  media_references: {
+                    DEFAULT_MEDIA: {
+                      OTIO_SCHEMA: 'ExternalReference.1',
+                      name: 'guest.mp3',
+                      target_url:
+                        'D:\\Projects\\show\\recordings\\guest.mp3',
+                      available_range: tr(0, 480),
+                      metadata: {},
+                    },
+                  },
+                  active_media_reference_key: 'DEFAULT_MEDIA',
+                  enabled: true,
+                },
+              ],
+              effects: [],
+              markers: [],
+              metadata: {},
+              source_range: null,
+              enabled: true,
+            },
+          ],
+          effects: [],
+          markers: [],
+          metadata: {},
+          source_range: null,
+          enabled: true,
+        },
+      };
+      // Host lane: 1s gap + 2s + 1s = 4s timeline end.
+      const expectedTimelineSec = 4;
+
+      const otioText = `${JSON.stringify(resolveOtio, null, 2)}\n`;
+      const newHash = createHash('sha256').update(otioText, 'utf8').digest('hex');
+      if (newHash === segJson.timelineOtioSha256) {
+        throw new Error('Mutated timeline.otio hash did not change');
+      }
+      zip.updateFile(otioPath, Buffer.from(otioText, 'utf8'));
+
+      await importSegmentProject(jar, episode.id, seg.id, zip.toBuffer(), 'segment-otio.zip');
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) {
+        throw new Error(`GET segments after OTIO import failed: ${segRes.status}`);
+      }
+      const data = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (!data) throw new Error('Segment missing after OTIO import');
+      if (!String(data.audioPath || '').endsWith('.wav')) {
+        throw new Error(`Expected remade mix .wav after OTIO apply, got ${data.audioPath}`);
+      }
+      if (!(data.durationSec > expectedTimelineSec - 0.75 && data.durationSec < expectedTimelineSec + 1.5)) {
+        throw new Error(
+          `Expected remade mix ~${expectedTimelineSec}s from OTIO timeline, got ${data.durationSec}`,
+        );
+      }
+
+      const importedMt = findMtDir(
+        join(DATA_DIR, 'uploads', podcast.id, episode.id, 'recordings'),
+        seg.id,
+      );
+      if (!importedMt) throw new Error('Missing multitrack dir after OTIO import');
+      const afterManifest = JSON.parse(
+        readFileSync(join(importedMt, 'tracks_manifest.json'), 'utf8'),
+      );
+      const afterSegs = afterManifest.segments || [];
+      if (afterSegs.length < 3) {
+        throw new Error(`Expected >=3 clips from Resolve OTIO, got ${afterSegs.length}`);
+      }
+      const hostClips = afterSegs.filter(
+        (s) => String(s.filePath || '').includes('host') || s.participantName === 'Host_0',
+      );
+      if (hostClips.length < 2) {
+        throw new Error(`Expected multiple host clips from OTIO slices, got ${hostClips.length}`);
+      }
+      const starts = hostClips.map((s) => s.startMs || 0).sort((a, b) => a - b);
+      if (starts[0] < 900 || starts[0] > 1100) {
+        throw new Error(`Expected first host clip after 1s gap (~1000ms), got ${starts[0]}`);
+      }
+      const withOffset = hostClips.find((s) => (s.sourceOffsetMs || 0) >= 900);
+      if (!withOffset) {
+        throw new Error(
+          `Expected a host clip with sourceOffsetMs from 24fps source_range, got ${JSON.stringify(
+            hostClips.map((s) => s.sourceOffsetMs),
+          )}`,
+        );
+      }
+      const lengths = hostClips.map((s) => s.lengthMs).filter((v) => v != null);
+      if (!lengths.some((ms) => ms >= 1900 && ms <= 2100)) {
+        throw new Error(`Expected a ~2000ms host clip length, got ${JSON.stringify(lengths)}`);
+      }
+    }),
+  );
+
+  results.push(
     await runOne('Host ducking enable remakes mix and writes host_ducking.json', async () => {
+      // OTIO/RPP tests leave sliced manifests; ducking expects full takes again.
+      replantFullMultitrack();
+
       const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
       if (segRes.status !== 200) throw new Error(`GET segments failed: ${segRes.status}`);
       const before = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);

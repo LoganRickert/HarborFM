@@ -1,13 +1,65 @@
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { sha256FileSync } from "../../utils/hash.js";
+import * as audioService from "../../services/audio.js";
 import type { MultitrackManifest } from "../../services/multitrackRemake.js";
+import { waveformPath } from "../segments/utils.js";
 
 export class ImportValidationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ImportValidationError";
   }
+}
+
+export const TRACKS_MANIFEST_NAME = "tracks_manifest.json";
+/** Pre-OTIO / pre-Reaper layout, kept so Restore Original Mix can remake the original mix. */
+export const TRACKS_MANIFEST_ORIGINAL_NAME = "tracks_manifest.json.original";
+
+/**
+ * Before overwriting tracks_manifest.json from OTIO/Reaper, copy the current
+ * file to tracks_manifest.json.original once (never overwrite an existing backup).
+ */
+export function ensureOriginalTracksManifest(mtDir: string): boolean {
+  const current = join(mtDir, TRACKS_MANIFEST_NAME);
+  const original = join(mtDir, TRACKS_MANIFEST_ORIGINAL_NAME);
+  if (!existsSync(current) || existsSync(original)) return false;
+  copyFileSync(current, original);
+  return true;
+}
+
+export function readTracksManifestFile(
+  mtDir: string,
+  name: string = TRACKS_MANIFEST_NAME,
+): MultitrackManifest | null {
+  const path = join(mtDir, name);
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as MultitrackManifest;
+  } catch {
+    return null;
+  }
+}
+
+/** Restore tracks_manifest.json from .original. Throws if the backup is missing. */
+export function restoreOriginalTracksManifest(mtDir: string): MultitrackManifest {
+  const originalPath = join(mtDir, TRACKS_MANIFEST_ORIGINAL_NAME);
+  const currentPath = join(mtDir, TRACKS_MANIFEST_NAME);
+  if (!existsSync(originalPath)) {
+    throw new Error(
+      "No original multitrack layout to restore. Import OTIO or Reaper again after this update so a backup can be saved.",
+    );
+  }
+  const manifest = readTracksManifestFile(mtDir, TRACKS_MANIFEST_ORIGINAL_NAME);
+  if (
+    !manifest ||
+    !Array.isArray(manifest.segments) ||
+    manifest.segments.length === 0
+  ) {
+    throw new Error("Original tracks manifest is missing or empty");
+  }
+  copyFileSync(originalPath, currentPath);
+  return manifest;
 }
 
 export type SegmentProjectJson = {
@@ -132,4 +184,49 @@ export function pruneMissingManifestTracks(
     return existsSync(join(mtDir, basename(rel.replace(/\\/g, "/"))));
   });
   return { ...manifest, segments: kept };
+}
+
+/**
+ * Refresh file/waveform hashes on manifest clips. Generates each track waveform
+ * at most once (Resolve OTIO can produce hundreds of clips from a few takes).
+ */
+export async function refreshMultitrackTrackSidecars(
+  mtDest: string,
+  manifest: MultitrackManifest,
+  opts?: { generateWaveforms?: boolean },
+): Promise<void> {
+  const generateWaveforms = Boolean(opts?.generateWaveforms);
+  const cache = new Map<
+    string,
+    { fileSha256?: string; waveformSha256?: string }
+  >();
+
+  for (const entry of manifest.segments ?? []) {
+    const rel = typeof entry.filePath === "string" ? entry.filePath : null;
+    if (!rel) continue;
+    const base = basename(rel.replace(/\\/g, "/"));
+    const trackAbs = join(mtDest, base);
+    if (!existsSync(trackAbs)) continue;
+
+    const cached = cache.get(base);
+    if (cached) {
+      if (cached.fileSha256) entry.fileSha256 = cached.fileSha256;
+      if (cached.waveformSha256) entry.waveformSha256 = cached.waveformSha256;
+      continue;
+    }
+
+    try {
+      if (generateWaveforms) {
+        await audioService.generateWaveformFile(trackAbs, mtDest);
+      }
+      const fileSha256 = sha256FileSync(trackAbs) ?? entry.fileSha256;
+      const waveformSha256 =
+        sha256FileSync(waveformPath(trackAbs)) ?? undefined;
+      if (fileSha256) entry.fileSha256 = fileSha256;
+      if (waveformSha256) entry.waveformSha256 = waveformSha256;
+      cache.set(base, { fileSha256, waveformSha256 });
+    } catch {
+      // non-fatal per track
+    }
+  }
 }

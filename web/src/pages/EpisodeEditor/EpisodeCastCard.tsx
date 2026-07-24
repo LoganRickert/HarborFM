@@ -46,6 +46,16 @@ export function EpisodeCastCard({
 
   const assignedCast = episodeCastData?.cast ?? [];
 
+  const { data: showCastForHosts } = useQuery({
+    queryKey: ['cast', podcastId, { forQuickAddHosts: true }],
+    queryFn: () => listCast(podcastId, { limit: 100, offset: 0 }),
+    enabled: !!podcastId && canAssign,
+  });
+  const showHosts = (showCastForHosts?.cast ?? []).filter((c) => c.role === 'host');
+  const assignedIdSet = new Set(assignedCast.map((c) => c.id));
+  const allHostsAssigned =
+    showHosts.length === 0 || showHosts.every((h) => assignedIdSet.has(h.id));
+
   const { data: unassignedData, isLoading: isLoadingUnassigned } = useQuery({
     queryKey: [
       'cast',
@@ -110,20 +120,12 @@ export function EpisodeCastCard({
   };
 
   const handleQuickAddAllHosts = () => {
-    if (!canAssign || total === 0) return;
-    listCast(podcastId, {
-      limit: 100,
-      offset: 0,
-      sort,
-      episodeId: episodeId,
-    }).then(({ cast }) => {
-      const hostIds = cast.filter((c: CastMember) => c.role === 'host').map((c) => c.id);
-      if (hostIds.length > 0) {
-        assignMutation.mutate({
-          castIds: [...assignedCast.map((x) => x.id), ...hostIds],
-          addedId: undefined,
-        });
-      }
+    if (!canAssign || allHostsAssigned || assignMutation.isPending) return;
+    const hostIds = showHosts.filter((h) => !assignedIdSet.has(h.id)).map((h) => h.id);
+    if (hostIds.length === 0) return;
+    assignMutation.mutate({
+      castIds: [...assignedCast.map((x) => x.id), ...hostIds],
+      addedId: undefined,
     });
   };
 
@@ -138,7 +140,14 @@ export function EpisodeCastCard({
             type="button"
             className={mergedStyles.gearBtn}
             onClick={handleQuickAddAllHosts}
-            disabled={assignMutation.isPending}
+            disabled={assignMutation.isPending || allHostsAssigned}
+            title={
+              allHostsAssigned
+                ? showHosts.length === 0
+                  ? 'No hosts on this show'
+                  : 'All hosts are already assigned'
+                : undefined
+            }
           >
             <UserPlus size={14} />
             Quick Add All Hosts

@@ -1,5 +1,9 @@
 import { api, apiGet } from './client';
-import type { LlmGenerateChaptersResponse } from '@harborfm/shared';
+import type {
+  LlmEpisodeMetadataField,
+  LlmGenerateChaptersResponse,
+  LlmGenerateEpisodeFieldResponse,
+} from '@harborfm/shared';
 
 export function getLlmAvailable(): Promise<{ available: boolean }> {
   return apiGet<{ available: boolean }>('/llm/available');
@@ -37,6 +41,31 @@ export function generateChapterMarkers(
     json: {
       transcript,
       durationSec,
+    },
+  });
+}
+
+export type GenerateEpisodeFieldContext = {
+  episodeTitle?: string;
+  existingDescription?: string;
+  existingSubtitle?: string;
+  existingSummary?: string;
+};
+
+export function generateEpisodeField(
+  transcript: string,
+  field: LlmEpisodeMetadataField,
+  context?: GenerateEpisodeFieldContext,
+): Promise<LlmGenerateEpisodeFieldResponse> {
+  return api<LlmGenerateEpisodeFieldResponse>('/llm/generate-episode-field', {
+    method: 'POST',
+    json: {
+      transcript,
+      field,
+      episodeTitle: context?.episodeTitle,
+      existingDescription: context?.existingDescription,
+      existingSubtitle: context?.existingSubtitle,
+      existingSummary: context?.existingSummary,
     },
   });
 }

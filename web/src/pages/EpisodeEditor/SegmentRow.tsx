@@ -4,7 +4,7 @@ import { segmentStreamUrl } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { formatDuration } from './utils';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
-import { toEffectiveTime, toActualTime, isInTrimRange } from './waveformUtils';
+import { toEffectiveTime, toActualTime, isInTrimRange, getTrimmedDuration } from './waveformUtils';
 import styles from '../EpisodeEditor.module.css';
 
 export interface SegmentRowProps {
@@ -166,7 +166,7 @@ export function SegmentRow({
   const trimRanges = useMemo(() => segment.trimRanges ?? [], [segment.trimRanges]);
   const skipTrimmed = trimRanges.length > 0;
   const effectiveDurationSec = skipTrimmed
-    ? durationSec - trimRanges.reduce((sum, [s, e]) => sum + (e - s), 0)
+    ? Math.max(0, durationSec - getTrimmedDuration(trimRanges, durationSec))
     : durationSec;
 
   function handleProgressClick(e: React.MouseEvent<HTMLDivElement>) {

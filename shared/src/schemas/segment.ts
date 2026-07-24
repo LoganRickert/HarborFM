@@ -120,6 +120,12 @@ export const segmentHostDuckingStatusResponseSchema = z.object({
   error: z.string().optional(),
 });
 
+/** Response for GET .../restore-original-mix/status. */
+export const segmentRestoreOriginalMixStatusResponseSchema = z.object({
+  status: z.enum(['idle', 'remaking', 'done', 'failed']),
+  error: z.string().optional(),
+});
+
 /** Body for POST /episodes/:episodeId/segments/:segmentId/trim. */
 export const segmentTrimBodySchema = z
   .object({
@@ -201,6 +207,8 @@ export const segmentResponseSchema = z.object({
   hostDuckingEnabled: z.boolean().optional(),
   /** True when multitrack recordings exist for this segment. */
   hasRecordings: z.boolean().optional(),
+  /** True when tracks_manifest.json.original exists (Restore Original Mix). */
+  hasOriginalTracksManifest: z.boolean().optional(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */
@@ -282,6 +290,9 @@ export type SegmentUpdateBody = z.infer<typeof segmentUpdateBodySchema>;
 export type SegmentHostDuckingBody = z.infer<typeof segmentHostDuckingBodySchema>;
 export type SegmentHostDuckingStatusResponse = z.infer<
   typeof segmentHostDuckingStatusResponseSchema
+>;
+export type SegmentRestoreOriginalMixStatusResponse = z.infer<
+  typeof segmentRestoreOriginalMixStatusResponseSchema
 >;
 export type TrimRange = z.infer<typeof trimRangeSchema>;
 export type SegmentTrimBody = z.infer<typeof segmentTrimBodySchema>;

@@ -30,6 +30,7 @@ import {
 import * as audioService from "../../services/audio.js";
 import {
   pruneMarkersForDuration,
+  pruneTrimRangesForDuration,
   remakeMixFromMultitrackDir,
   type MultitrackManifest,
 } from "../../services/multitrackRemake.js";
@@ -51,6 +52,11 @@ import {
   timelineSidecarNeedsApply,
 } from "./projectDawTimelineImport.js";
 import {
+  applyOtioTimelineToManifest,
+  OTIO_IGNORED_WARNING,
+  timelineOtioNeedsApply,
+} from "./projectDawOtioImport.js";
+import {
   buildManifestForRemake,
   HOST_DUCKING_FILENAME,
   readHostDuckingFile,
@@ -62,6 +68,7 @@ import {
   pruneMissingManifestTracks,
   readJsonFile,
   recordingsTracksChanged,
+  refreshMultitrackTrackSidecars,
   rewriteManifestPaths,
   stringifyJsonField,
   type SegmentProjectJson,
@@ -295,7 +302,15 @@ export async function applySegmentFolderOntoExisting(opts: {
     }
   }
 
-  if (timelineSidecarNeedsApply(segDir, segMeta.segmentRppSha256)) {
+  // OTIO wins over RPP when timeline.otio changed; otherwise apply segment.rpp.
+  const otioNeedsApply = timelineOtioNeedsApply(
+    segDir,
+    segMeta.timelineOtioSha256,
+  );
+  const rppNeedsApply =
+    !otioNeedsApply &&
+    timelineSidecarNeedsApply(segDir, segMeta.segmentRppSha256);
+  if (otioNeedsApply || rppNeedsApply) {
     let epochMs: number | undefined;
     if (manifest && typeof manifest.recordingEpochMs === "number") {
       epochMs = manifest.recordingEpochMs;
@@ -308,44 +323,52 @@ export async function applySegmentFolderOntoExisting(opts: {
         epochMs,
       );
     }
-    const applied = applyTimelineSidecarToManifest({
-      segDir,
-      mtDest,
-      existingManifest: manifest,
-    });
-    if (applied.ok) {
-      manifest = applied.manifest;
-      bytesAdded += applied.bytesAdded;
-      tracksChanged = true;
-    } else {
-      // Unreadable segment.rpp: keep tracks_manifest and remake from it.
-      console.warn(
-        `[projectImport] Ignoring segment.rpp (${applied.error}); using tracks_manifest.json`,
-      );
-      warning = REAPER_IGNORED_WARNING;
-      if (manifest?.segments?.length) {
+    if (otioNeedsApply) {
+      const applied = applyOtioTimelineToManifest({
+        segDir,
+        mtDest,
+        existingManifest: manifest,
+      });
+      if (applied.ok) {
+        manifest = applied.manifest;
+        bytesAdded += applied.bytesAdded;
         tracksChanged = true;
+      } else {
+        console.warn(
+          `[projectImport] Ignoring timeline.otio (${applied.error}); using tracks_manifest.json`,
+        );
+        warning = OTIO_IGNORED_WARNING;
+        if (manifest?.segments?.length) {
+          tracksChanged = true;
+        }
+      }
+    } else {
+      const applied = applyTimelineSidecarToManifest({
+        segDir,
+        mtDest,
+        existingManifest: manifest,
+      });
+      if (applied.ok) {
+        manifest = applied.manifest;
+        bytesAdded += applied.bytesAdded;
+        tracksChanged = true;
+      } else {
+        // Unreadable segment.rpp: keep tracks_manifest and remake from it.
+        console.warn(
+          `[projectImport] Ignoring segment.rpp (${applied.error}); using tracks_manifest.json`,
+        );
+        warning = REAPER_IGNORED_WARNING;
+        if (manifest?.segments?.length) {
+          tracksChanged = true;
+        }
       }
     }
   }
 
   if (tracksChanged && mtDest && manifest) {
-    for (const entry of manifest.segments ?? []) {
-      const rel = typeof entry.filePath === "string" ? entry.filePath : null;
-      if (!rel) continue;
-      const trackAbs = join(mtDest, basename(rel.replace(/\\/g, "/")));
-      if (!existsSync(trackAbs)) continue;
-      try {
-        if (waveformsAvailable) {
-          await audioService.generateWaveformFile(trackAbs, mtDest);
-        }
-        entry.fileSha256 = sha256FileSync(trackAbs) ?? entry.fileSha256;
-        entry.waveformSha256 =
-          sha256FileSync(waveformPath(trackAbs)) ?? undefined;
-      } catch {
-        // non-fatal
-      }
-    }
+    await refreshMultitrackTrackSidecars(mtDest, manifest, {
+      generateWaveforms: waveformsAvailable,
+    });
     writeFileSync(
       join(mtDest, "tracks_manifest.json"),
       JSON.stringify(manifest, null, 2),
@@ -373,9 +396,24 @@ export async function applySegmentFolderOntoExisting(opts: {
       audioPathRel = pathRelativeToData(mixDest);
       durationSec = remade.durationSec;
       markers = pruneMarkersForDuration(markers, durationSec);
+      let trimSource: unknown =
+        segMeta.trimRanges !== undefined ? segMeta.trimRanges : null;
+      if (
+        trimSource == null &&
+        typeof existing.trimRanges === "string" &&
+        existing.trimRanges.trim()
+      ) {
+        try {
+          trimSource = JSON.parse(existing.trimRanges);
+        } catch {
+          trimSource = null;
+        }
+      }
+      const prunedTrims = pruneTrimRangesForDuration(trimSource, durationSec);
       await audioService.generateWaveformFile(mixDest, episodeUploads);
       updateSegmentAudio(segmentId, episodeId, mixDest, durationSec, {
         markers: stringifyJsonField(markers) ?? "[]",
+        trimRanges: stringifyJsonField(prunedTrims) ?? "[]",
       });
       bytesAdded += statSync(mixDest).size;
       needSegmentWaveformRegen = false;

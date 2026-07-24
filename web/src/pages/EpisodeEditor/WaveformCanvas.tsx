@@ -97,7 +97,7 @@ export function WaveformCanvas({ data, durationSec, currentTime, viewStartSec = 
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
 
-    const effectiveDuration = durationSec - getTrimmedDuration(trimRanges);
+    const effectiveDuration = durationSec - getTrimmedDuration(trimRanges, durationSec);
     const useCollapsed = trimRanges.length > 0 && effectiveDuration > 0;
 
     const timeToX = (t: number) => {
@@ -168,7 +168,7 @@ export function WaveformCanvas({ data, durationSec, currentTime, viewStartSec = 
     if (!container || durationSec <= 0) return;
     const rect = container.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const effectiveDuration = durationSec - getTrimmedDuration(trimRanges);
+    const effectiveDuration = durationSec - getTrimmedDuration(trimRanges, durationSec);
     const useCollapsed = trimRanges.length > 0 && effectiveDuration > 0;
     const time = useCollapsed
       ? toActualTime(frac * effectiveDuration, trimRanges, durationSec)

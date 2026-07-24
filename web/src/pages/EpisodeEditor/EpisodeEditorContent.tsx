@@ -14,8 +14,12 @@ import {
   recoverRecordedSegment,
   startRenderEpisode,
   getRenderStatus,
+  startImportSegmentProject,
+  getSegmentProjectImportStatus,
   type EpisodeSegment,
 } from '../../api/segments';
+import { PleaseWaitDialog } from '../../components/PleaseWaitDialog';
+import { pollUntil } from '../../utils/projectZipTransfer';
 import {
   episodeToForm,
   formToApiPayload,
@@ -53,6 +57,7 @@ import type { Podcast } from '../../api/podcasts';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
 import { getPublicConfig } from '../../api/public';
+import { getLlmAvailable } from '../../api/llm';
 import { startCall, getActiveSession, getEpisodeMeeting, startEpisodeMeeting } from '../../api/call';
 import { CallPanel } from '../../components/GroupCall/CallPanel';
 import { useEpisodeWebSocket } from '../../hooks/useEpisodeWebSocket';
@@ -68,6 +73,36 @@ function isPublishOnlyUpdate(variables: Record<string, unknown> | undefined): bo
   if (keys.length === 0) return false;
   const publishKeys = new Set(['status', 'seasonNumber', 'episodeNumber', 'publishAt', 'expiresAt']);
   return keys.every((k) => publishKeys.has(k));
+}
+
+/** Tiny silent WAV used as a placeholder before importing a segment project zip. */
+function createSilentWavFile(filename = 'placeholder.wav', durationSec = 0.05): File {
+  const sampleRate = 8000;
+  const numSamples = Math.max(1, Math.floor(sampleRate * durationSec));
+  const dataSize = numSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeStr = (offset: number, s: string) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
+  return new File([buffer], filename, { type: 'audio/wav' });
+}
+
+function nameFromUploadFilename(filename: string): string {
+  return filename.replace(/\.[^.]+$/, '').trim() || filename;
 }
 
 export interface EpisodeEditorContentProps {
@@ -96,6 +131,11 @@ export function EpisodeEditorContent({
     queryKey: ['publicConfig', host],
     queryFn: getPublicConfig,
   });
+  const { data: llmAvailableData } = useQuery({
+    queryKey: ['settings', 'llm-available'],
+    queryFn: () => getLlmAvailable(),
+  });
+  const llmAvailable = llmAvailableData?.available ?? false;
   const webrtcEnabled = publicConfig?.webrtcEnabled === true;
   const canRecord = (podcast?.canRecordNewSection ?? canRecordNewSection(meData)) === true;
   const readOnly = isReadOnly(meData?.user ?? user);
@@ -110,6 +150,10 @@ export function EpisodeEditorContent({
   const [dialogForm, setDialogForm] = useState(() => episodeToForm(episode));
   const [showRecord, setShowRecord] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [segmentZipImportOpen, setSegmentZipImportOpen] = useState(false);
+  const [segmentZipImportError, setSegmentZipImportError] = useState<string | null>(null);
+  const [segmentZipImportWarning, setSegmentZipImportWarning] = useState<string | null>(null);
+  const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [dialogFormBaseline, setDialogFormBaseline] = useState<string | null>(null);
   const [episodeDetailsActiveTab, setEpisodeDetailsActiveTab] = useState<EpisodeDetailsTab>('overview');
@@ -434,8 +478,77 @@ export function EpisodeEditorContent({
       queryClient.invalidateQueries({ queryKey: ['segments', id] });
       queryClient.invalidateQueries({ queryKey: ['me'] });
       setShowRecord(false);
+      setAudioUploadError(null);
     },
   });
+
+  async function handleUploadAudioFile(file: File) {
+    if (segmentReadOnly || !canRecord || addRecordedMutation.isPending || segmentZipImportOpen) return;
+    setAudioUploadError(null);
+    addRecordedMutation.mutate(
+      {
+        file,
+        name: nameFromUploadFilename(file.name),
+      },
+      {
+        onError: (err) => {
+          setAudioUploadError(err instanceof Error ? err.message : 'Upload failed');
+        },
+      },
+    );
+  }
+
+  async function handleUploadSegmentZip(file: File) {
+    if (segmentReadOnly || !canRecord || addRecordedMutation.isPending) return;
+    if (segmentZipImportOpen && !segmentZipImportError && !segmentZipImportWarning) return;
+    setSegmentZipImportError(null);
+    setSegmentZipImportWarning(null);
+    setSegmentZipImportOpen(true);
+    let createdSegmentId: string | null = null;
+    try {
+      const stub = createSilentWavFile();
+      const created = await addRecordedSegment(
+        id,
+        stub,
+        nameFromUploadFilename(file.name),
+      );
+      createdSegmentId = created.id;
+      await startImportSegmentProject(id, created.id, file);
+      const result = await pollUntil(
+        () => getSegmentProjectImportStatus(id, created.id),
+        {
+          pendingStatuses: ['importing'],
+          successStatuses: ['done'],
+        },
+      );
+      if (result.status !== 'done') {
+        throw new Error('Import finished unexpectedly');
+      }
+      await queryClient.invalidateQueries({ queryKey: ['segments', id] });
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      if (result.warning) {
+        setSegmentZipImportWarning(result.warning);
+        return;
+      }
+      setSegmentZipImportOpen(false);
+    } catch (err) {
+      if (createdSegmentId) {
+        try {
+          await deleteSegment(id, createdSegmentId);
+          await queryClient.invalidateQueries({ queryKey: ['segments', id] });
+        } catch {
+          // Keep the import error as the primary message.
+        }
+      }
+      setSegmentZipImportError(err instanceof Error ? err.message : 'Import failed');
+    }
+  }
+
+  function dismissSegmentZipImportWait() {
+    setSegmentZipImportOpen(false);
+    setSegmentZipImportError(null);
+    setSegmentZipImportWarning(null);
+  }
 
   const updateSegmentMutation = useMutation({
     mutationFn: ({ segmentId, name }: { segmentId: string; name: string | null }) =>
@@ -695,6 +808,12 @@ export function EpisodeEditorContent({
               })()}
               onAddRecord={() => setShowRecord(true)}
               onAddLibrary={() => setShowLibrary(true)}
+              onUploadAudioFile={handleUploadAudioFile}
+              onUploadSegmentZip={handleUploadSegmentZip}
+              uploadBusy={
+                addRecordedMutation.isPending ||
+                (segmentZipImportOpen && !segmentZipImportError && !segmentZipImportWarning)
+              }
               recordDisabled={!canRecord}
               recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
               readOnly={segmentReadOnly}
@@ -958,6 +1077,9 @@ export function EpisodeEditorContent({
                   uploadArtworkPending: uploadArtworkMutation.isPending,
                 }}
                 hasFinalAudio={Boolean(episode.audioFinalPath)}
+                episodeId={id}
+                llmAvailable={llmAvailable}
+                hasTranscript={episode.hasTranscript === true}
               />
             </div>
             <div className={`${sharedStyles.dialogFooter} ${sharedStyles.dialogFooterCancelLeft}`}>
@@ -1022,6 +1144,24 @@ export function EpisodeEditorContent({
           recordDisabledMessage={RECORD_BLOCKED_STORAGE_MESSAGE}
         />
       )}
+      <PleaseWaitDialog
+        open={segmentZipImportOpen}
+        title="Please wait"
+        description="Importing segment zip..."
+        error={segmentZipImportError}
+        errorTitle="Import failed"
+        warning={segmentZipImportWarning}
+        warningTitle="Import finished"
+        onDismiss={dismissSegmentZipImportWait}
+      />
+      <PleaseWaitDialog
+        open={audioUploadError != null}
+        title="Please wait"
+        description="Uploading audio..."
+        error={audioUploadError}
+        errorTitle="Upload failed"
+        onDismiss={() => setAudioUploadError(null)}
+      />
       {showRecord && (
         <RecordModal
           onClose={() => setShowRecord(false)}

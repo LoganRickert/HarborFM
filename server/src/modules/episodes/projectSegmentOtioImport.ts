@@ -36,7 +36,10 @@ import {
 } from "../segments/repo.js";
 import { findMultitrackDir } from "./projectSegmentPack.js";
 import { isAudioFilename } from "./projectDawSidecars.js";
-import { applyTimelineSidecarToManifest } from "./projectDawTimelineImport.js";
+import {
+  applyOtioTimelineToManifest,
+  TIMELINE_OTIO_NAME,
+} from "./projectDawOtioImport.js";
 import {
   ImportValidationError,
   refreshMultitrackTrackSidecars,
@@ -64,22 +67,23 @@ function readExistingManifest(mtDir: string): MultitrackManifest | null {
 }
 
 /**
- * Apply an uploaded segment.rpp against this segment's existing recordings/
+ * Apply an uploaded timeline.otio against this segment's existing recordings/
  * (or mix audio for single-track), rebuild tracks_manifest, and remake audio.wav.
+ * Resolve Fairlight FX are ignored; timing cuts/trims only.
  */
-export async function importSegmentReaperRpp(
+export async function importSegmentOtioTimeline(
   podcastId: string,
   episodeId: string,
   segmentId: string,
-  rppPath: string,
+  otioPath: string,
   importerUserId: string,
 ): Promise<{ bytesAdded: number }> {
   const segment = getSegmentById(segmentId, episodeId);
   if (!segment) {
     throw new ImportValidationError("Segment not found");
   }
-  if (!existsSync(rppPath) || !statSync(rppPath).isFile()) {
-    throw new ImportValidationError("Reaper file is missing");
+  if (!existsSync(otioPath) || !statSync(otioPath).isFile()) {
+    throw new ImportValidationError("OTIO file is missing");
   }
 
   const mtExisting = findMultitrackDir(podcastId, episodeId, segmentId);
@@ -94,16 +98,16 @@ export async function importSegmentReaperRpp(
 
   if (!mtExisting && !audioAbs) {
     throw new ImportValidationError(
-      "This segment has no recordings or audio to apply a Reaper project to.",
+      "This segment has no recordings or audio to apply a timeline to.",
     );
   }
 
-  const workDir = join(tmpdir(), `harborfm-reaper-import-${nanoid()}`);
+  const workDir = join(tmpdir(), `harborfm-otio-import-${nanoid()}`);
   mkdirSync(workDir, { recursive: true });
   let bytesAdded = 0;
 
   try {
-    writeFileSync(join(workDir, "segment.rpp"), readFileSync(rppPath));
+    writeFileSync(join(workDir, TIMELINE_OTIO_NAME), readFileSync(otioPath));
 
     let existingManifest: MultitrackManifest | null = null;
     let epochMs: number | undefined;
@@ -139,11 +143,10 @@ export async function importSegmentReaperRpp(
       multitrackRecordingsDir(podcastId, episodeId, segmentId, epochMs);
     mkdirSync(mtDest, { recursive: true });
 
-    const applied = applyTimelineSidecarToManifest({
+    const applied = applyOtioTimelineToManifest({
       segDir: workDir,
       mtDest,
       existingManifest,
-      skipMissingMedia: true,
     });
     if (!applied.ok) {
       throw new ImportValidationError(applied.error);
@@ -225,70 +228,70 @@ export async function importSegmentReaperRpp(
   }
 }
 
-/** Write uploaded .rpp bytes to a temp path. Caller / job owns cleanup. */
-export function writeTempRpp(buffer: Buffer): string {
-  const path = join(tmpdir(), `harborfm-reaper-upload-${nanoid()}.rpp`);
+/** Write uploaded .otio bytes to a temp path. Caller / job owns cleanup. */
+export function writeTempOtio(buffer: Buffer): string {
+  const path = join(tmpdir(), `harborfm-otio-upload-${nanoid()}.otio`);
   writeFileSync(path, buffer);
   return path;
 }
 
-const reaperImportStatusBySegment = new Map<
+const otioImportStatusBySegment = new Map<
   string,
   "importing" | "done" | "failed"
 >();
-const reaperImportErrorBySegment = new Map<string, string>();
+const otioImportErrorBySegment = new Map<string, string>();
 
-/** Start a background Reaper-only import. Returns false if already running. */
-export function startSegmentReaperImport(
+/** Start a background OTIO-only import. Returns false if already running. */
+export function startSegmentOtioImport(
   podcastId: string,
   episodeId: string,
   segmentId: string,
-  tmpRpp: string,
+  tmpOtio: string,
   importerUserId: string,
   onSuccess?: () => void,
 ): boolean {
-  if (reaperImportStatusBySegment.get(segmentId) === "importing") return false;
-  reaperImportStatusBySegment.set(segmentId, "importing");
-  reaperImportErrorBySegment.delete(segmentId);
+  if (otioImportStatusBySegment.get(segmentId) === "importing") return false;
+  otioImportStatusBySegment.set(segmentId, "importing");
+  otioImportErrorBySegment.delete(segmentId);
   setImmediate(() => {
-    void importSegmentReaperRpp(
+    void importSegmentOtioTimeline(
       podcastId,
       episodeId,
       segmentId,
-      tmpRpp,
+      tmpOtio,
       importerUserId,
     )
       .then(() => {
-        reaperImportStatusBySegment.set(segmentId, "done");
+        otioImportStatusBySegment.set(segmentId, "done");
         onSuccess?.();
       })
       .catch((err: unknown) => {
-        reaperImportStatusBySegment.set(segmentId, "failed");
+        otioImportStatusBySegment.set(segmentId, "failed");
         const message =
           err instanceof ImportValidationError
             ? err.message
             : err instanceof Error
               ? err.message
-              : "Failed to import Reaper file";
-        reaperImportErrorBySegment.set(segmentId, message);
+              : "Failed to import OTIO file";
+        otioImportErrorBySegment.set(segmentId, message);
       })
       .finally(() => {
-        removeTempPath(tmpRpp);
+        removeTempPath(tmpOtio);
       });
   });
   return true;
 }
 
-export function getSegmentReaperImportStatus(segmentId: string): {
+export function getSegmentOtioImportStatus(segmentId: string): {
   status: "idle" | "importing" | "done" | "failed";
   error?: string;
 } {
-  const status = reaperImportStatusBySegment.get(segmentId);
+  const status = otioImportStatusBySegment.get(segmentId);
   if (!status) return { status: "idle" };
   if (status === "importing") return { status: "importing" };
-  const error = reaperImportErrorBySegment.get(segmentId);
-  reaperImportStatusBySegment.delete(segmentId);
-  reaperImportErrorBySegment.delete(segmentId);
+  const error = otioImportErrorBySegment.get(segmentId);
+  otioImportStatusBySegment.delete(segmentId);
+  otioImportErrorBySegment.delete(segmentId);
   if (status === "failed") return { status: "failed", error };
   return { status: "done" };
 }

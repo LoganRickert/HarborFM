@@ -6,6 +6,8 @@ import {
   applyNoiseSuppressionToSegment,
   splitSegment,
   updateSegment,
+  startSegmentRestoreOriginalMix,
+  getSegmentRestoreOriginalMixStatus,
 } from '../../api/segments';
 import type { EpisodeSegment } from '../../api/segments';
 import { getLlmAvailable, askLlm, generateChapterMarkers } from '../../api/llm';
@@ -27,10 +29,12 @@ import { RemoveSilenceConfirmDialog } from './dialogs/RemoveSilenceConfirmDialog
 import { NoiseSuppressionConfirmDialog } from './dialogs/NoiseSuppressionConfirmDialog';
 import { SegmentSplitConfirmDialog } from './dialogs/SegmentSplitConfirmDialog';
 import { RemoveMarkerConfirmDialog } from './dialogs/RemoveMarkerConfirmDialog';
+import { RestoreOriginalMixConfirmDialog } from './dialogs/RestoreOriginalMixConfirmDialog';
 import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { detectSilencePeriods } from './utils/detectSilence';
 import { mergeTrimRanges, getTrimContainingEntry, filterTranscriptExcludingTrims, isTimeInTrim } from './utils/transcriptTrimUtils';
+import { pollUntil } from '../../utils/projectZipTransfer';
 
 const AI_CHAPTER_MARKER_COLOR = '#3b82f6';
 
@@ -250,6 +254,10 @@ export function SegmentModal({
   const [removingSilence, setRemovingSilence] = useState(false);
   const [applyingNoiseSuppression, setApplyingNoiseSuppression] = useState(false);
   const [splittingSegment, setSplittingSegment] = useState(false);
+  const [restoringOriginalMix, setRestoringOriginalMix] = useState(false);
+  const [clearingAllTrims, setClearingAllTrims] = useState(false);
+  const [clearAllTrimsConfirmOpen, setClearAllTrimsConfirmOpen] = useState(false);
+  const [restoreOriginalMixConfirmOpen, setRestoreOriginalMixConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'edit') setTrimError(null);
@@ -339,14 +347,34 @@ export function SegmentModal({
         onAddSilenceTrimsConfirmOpenChange={setAddSilenceTrimsConfirmOpen}
         onAddSilenceTrimsConfirm={handleAddSilenceTrimsConfirm}
         addSilenceTrimsDisabled={!edit.waveformData?.data?.length || edit.durationSec <= 0}
+        onClearAllTrimsClick={() => setClearAllTrimsConfirmOpen(true)}
+        clearAllTrimsConfirmOpen={clearAllTrimsConfirmOpen}
+        onClearAllTrimsConfirmOpenChange={setClearAllTrimsConfirmOpen}
+        onClearAllTrimsConfirm={() => {
+          setClearAllTrimsConfirmOpen(false);
+          setClearingAllTrims(true);
+          setTrimError(null);
+          edit.setTrimRanges([]);
+          updateSegment(episodeId, segmentId, { trimRanges: [] })
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
+            })
+            .catch((err) => setTrimError(err?.message ?? 'Failed to clear trims'))
+            .finally(() => setClearingAllTrims(false));
+        }}
+        clearAllTrimsDisabled={edit.trimRanges.length === 0}
+        clearingAllTrims={clearingAllTrims}
         onRemoveSilence={() => setRemoveSilenceConfirmOpen(true)}
         onNoiseSuppression={() => setNoiseSuppressionConfirmOpen(true)}
         onSegmentSplit={() => {
           setSegmentSplitConfirmOpen(true);
         }}
+        onRestoreOriginalMix={() => setRestoreOriginalMixConfirmOpen(true)}
+        restoreOriginalMixDisabled={!segment.hasOriginalTracksManifest}
         removingSilence={removingSilence}
         applyingNoiseSuppression={applyingNoiseSuppression}
         splittingSegment={splittingSegment}
+        restoringOriginalMix={restoringOriginalMix}
         trimError={trimError}
       />
     </div>
@@ -578,6 +606,36 @@ export function SegmentModal({
             })
             .catch((err) => setTrimError(err?.message ?? 'Failed to split segment'))
             .finally(() => setSplittingSegment(false));
+        }}
+      />
+
+      <RestoreOriginalMixConfirmDialog
+        open={restoreOriginalMixConfirmOpen}
+        onOpenChange={setRestoreOriginalMixConfirmOpen}
+        loading={restoringOriginalMix}
+        onConfirm={() => {
+          setRestoreOriginalMixConfirmOpen(false);
+          setRestoringOriginalMix(true);
+          setTrimError(null);
+          startSegmentRestoreOriginalMix(episodeId, segmentId)
+            .then(() =>
+              pollUntil(() => getSegmentRestoreOriginalMixStatus(episodeId, segmentId), {
+                pendingStatuses: ['remaking'],
+                successStatuses: ['done', 'idle'],
+              }),
+            )
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
+              return getSegmentTranscript(episodeId, segmentId)
+                .then((r) => {
+                  transcript.setText(r.text ?? null);
+                })
+                .catch(() => {
+                  transcript.setText(null);
+                });
+            })
+            .catch((err) => setTrimError(err?.message ?? 'Failed to restore original mix'))
+            .finally(() => setRestoringOriginalMix(false));
         }}
       />
 
