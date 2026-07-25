@@ -104,6 +104,9 @@ export interface SegmentEditorV2Props {
 const DEFAULT_VIEW_MS = 60_000;
 const MIN_VIEW_MS = 2_000;
 const LABEL_COL_PX = 168;
+/** Preview playback speeds (toolbar + E cycles through these). */
+const PREVIEW_RATES = [1, 1.5, 2] as const;
+type PreviewRate = (typeof PREVIEW_RATES)[number];
 
 /** Nice ruler intervals (ms), coarsest last. */
 const RULER_STEPS_MS = [
@@ -223,6 +226,9 @@ export function SegmentEditorV2({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [playheadMs, setPlayheadMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState<PreviewRate>(1);
+  const playbackRateRef = useRef<PreviewRate>(1);
+  playbackRateRef.current = playbackRate;
   const [laneSolo, setLaneSolo] = useState<Record<string, boolean>>({});
   const [renamingLaneKey, setRenamingLaneKey] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
@@ -499,6 +505,7 @@ export function SegmentEditorV2({
       onPlayingChange: setIsPlaying,
       onError: (message) => setError(message),
     });
+    engine.setPlaybackRate(playbackRateRef.current);
     previewRef.current = engine;
     return () => {
       if (playheadFlushTimerRef.current) {
@@ -538,23 +545,45 @@ export function SegmentEditorV2({
   const visibleWindowMs = Math.max(1, viewEndMs - viewStartMs);
   viewWindowMsRef.current = visibleWindowMs;
 
-  // Keep playhead in view when it drifts outside (e.g. audio playing),
-  // unless the user has panned/scrolled away on purpose.
+  const clampViewStart = useCallback(
+    (next: number) => {
+      const maxStart = Math.max(0, durationMs - viewWindowMs);
+      return Math.max(0, Math.min(next, maxStart));
+    },
+    [durationMs, viewWindowMs],
+  );
+
+  // Keep playhead in view when it drifts outside, and during playback pan once
+  // it crosses the right 90% of the view (same rule as the simple editor).
+  // Skipped when the user has panned/scrolled away on purpose.
   useEffect(() => {
     if (scrubbingRef.current || panningRef.current || !followPlayheadRef.current) {
       return;
     }
+    const win = visibleWindowMs;
+    if (win <= 1) return;
+
     if (playheadMs < viewStartMs) {
-      setViewStartMs(Math.max(0, playheadMs - viewWindowMs * 0.1));
-    } else if (playheadMs > viewEndMs) {
-      setViewStartMs(
-        Math.min(
-          Math.max(0, durationMs - viewWindowMs),
-          playheadMs - viewWindowMs * 0.9,
-        ),
-      );
+      const next = clampViewStart(playheadMs - win * 0.1);
+      if (Math.abs(next - viewStartMs) >= 1) setViewStartMs(next);
+      return;
     }
-  }, [playheadMs, viewStartMs, viewEndMs, viewWindowMs, durationMs]);
+
+    const pastRightEdge = playheadMs > viewEndMs;
+    const nearRightEdge = isPlaying && playheadMs >= viewStartMs + 0.9 * win;
+    if (!pastRightEdge && !nearRightEdge) return;
+
+    const next = clampViewStart(playheadMs - win * 0.1);
+    if (Math.abs(next - viewStartMs) < 1) return;
+    setViewStartMs(next);
+  }, [
+    playheadMs,
+    viewStartMs,
+    viewEndMs,
+    visibleWindowMs,
+    isPlaying,
+    clampViewStart,
+  ]);
 
   const lanes = useMemo(() => {
     const grouped = groupClipsByLane(clips);
@@ -654,10 +683,20 @@ export function SegmentEditorV2({
     if (resume) {
       const engine = previewRef.current;
       if (engine) {
+        followPlayheadRef.current = true;
         engine.setPlayheadMs(engine.getPlayheadMs());
         engine.play();
       }
     }
+  }, []);
+
+  const cyclePlaybackRate = useCallback(() => {
+    setPlaybackRate((prev) => {
+      const idx = PREVIEW_RATES.indexOf(prev);
+      const next = PREVIEW_RATES[(idx + 1) % PREVIEW_RATES.length]!;
+      previewRef.current?.setPlaybackRate(next);
+      return next;
+    });
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -694,14 +733,6 @@ export function SegmentEditorV2({
       previewRef.current?.setPlayheadMs(ms);
     },
     [clientXToMs, skipOutOfTrimMs],
-  );
-
-  const clampViewStart = useCallback(
-    (next: number) => {
-      const maxStart = Math.max(0, durationMs - viewWindowMs);
-      return Math.max(0, Math.min(next, maxStart));
-    },
-    [durationMs, viewWindowMs],
   );
 
   const applyPanDeltaPx = useCallback(
@@ -757,6 +788,7 @@ export function SegmentEditorV2({
       if (resume) {
         const engine = previewRef.current;
         if (engine) {
+          followPlayheadRef.current = true;
           engine.setPlayheadMs(engine.getPlayheadMs());
           engine.play();
         }
@@ -1238,163 +1270,7 @@ export function SegmentEditorV2({
     [lanes, playheadMs],
   );
 
-  useEffect(() => {
-    const isTypingTarget = (t: EventTarget | null) => {
-      if (!(t instanceof HTMLElement)) return false;
-      return (
-        t.tagName === 'INPUT' ||
-        t.tagName === 'TEXTAREA' ||
-        t.tagName === 'SELECT' ||
-        t.isContentEditable
-      );
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target)) return;
-
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && !e.altKey) {
-        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-        if (key === 'z' && !e.shiftKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (!readOnly && !busy) handleUndo();
-          return;
-        }
-        if (key === 'y' || (key === 'z' && e.shiftKey)) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (!readOnly && !busy) handleRedo();
-          return;
-        }
-      }
-
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-      // Space toggles preview; prevent the dialog/button from scrolling or activating.
-      if (e.key === ' ' || e.code === 'Space') {
-        e.preventDefault();
-        e.stopPropagation();
-        // Blur focused toolbar controls so Space does not leave a stuck :focus ring
-        // (and so disabled buttons do not bounce focus onto the dialog shell).
-        if (e.target instanceof HTMLElement && e.target.closest('button')) {
-          e.target.blur();
-        }
-        if (busy || segment.recordFailed || clips.length === 0) return;
-        togglePlay();
-        return;
-      }
-
-      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-
-      if (key === 'a') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (busy || segment.recordFailed || clips.length === 0) return;
-        nudgePlayheadMs(e.shiftKey ? -1_000 : -5_000);
-        return;
-      }
-
-      if (key === 'd') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (busy || segment.recordFailed || clips.length === 0) return;
-        nudgePlayheadMs(e.shiftKey ? 1_000 : 5_000);
-        return;
-      }
-
-      if (key === 'f') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (busy || clips.length === 0) return;
-        cycleSelectionAtPlayhead(e.shiftKey ? -1 : 1);
-        return;
-      }
-
-      if (readOnly || busy) return;
-
-      if (key === 's') {
-        e.preventDefault();
-        e.stopPropagation();
-        handleBladeAtPlayhead();
-        return;
-      }
-
-      if (key === 'e') {
-        e.preventDefault();
-        e.stopPropagation();
-        handleStartRipple();
-        return;
-      }
-
-      if (key === 'r') {
-        e.preventDefault();
-        e.stopPropagation();
-        handleEndRipple();
-        return;
-      }
-
-      if (key === 'x' || e.key === 'Backspace' || e.key === 'Delete') {
-        if (!selectedId) return;
-        e.preventDefault();
-        e.stopPropagation();
-        handleDeleteSelected();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [
-    readOnly,
-    busy,
-    selectedId,
-    handleDeleteSelected,
-    handleBladeAtPlayhead,
-    handleStartRipple,
-    handleEndRipple,
-    handleUndo,
-    handleRedo,
-    nudgePlayheadMs,
-    cycleSelectionAtPlayhead,
-    togglePlay,
-    clips.length,
-    segment.recordFailed,
-  ]);
-
-  const handleRemoveTrim = (index: number) => {
-    if (readOnly || busy) return;
-    pushHistory();
-    setTrimRanges((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleAddMarkerAtPlayhead = () => {
-    if (readOnly || busy) return;
-    const maxSec = durationMs / 1000;
-    const time = Math.min(Math.max(0, playheadMs / 1000), maxSec);
-    pushHistory();
-    const created: Marker = { time, color: MARKER_COLORS[0] };
-    const next = sortMarkers([...markers, created]);
-    setMarkers(next);
-    setEditMarkerIndex(next.indexOf(created));
-  };
-
-  const handleSaveMarkerEdit = (updated: Marker) => {
-    if (editMarkerIndex == null) return;
-    pushHistory();
-    const next = [...markers];
-    next[editMarkerIndex] = updated;
-    const sorted = sortMarkers(next);
-    setMarkers(sorted);
-    setEditMarkerIndex(null);
-  };
-
-  const handleRemoveMarkerEdit = () => {
-    if (editMarkerIndex == null) return;
-    pushHistory();
-    setMarkers(markers.filter((_, i) => i !== editMarkerIndex));
-    setEditMarkerIndex(null);
-  };
-
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (readOnly || busy) return;
     if (!dirty) return;
     if (clipsDirty && clips.length === 0) {
@@ -1436,6 +1312,202 @@ export function SegmentEditorV2({
     } finally {
       setSaving(false);
     }
+  }, [
+    readOnly,
+    busy,
+    dirty,
+    clipsDirty,
+    clips,
+    trimsDirty,
+    markersDirty,
+    trimRanges,
+    markers,
+    episodeId,
+    segmentId,
+    queryClient,
+    setError,
+  ]);
+
+  useEffect(() => {
+    const isTypingTarget = (t: EventTarget | null) => {
+      if (!(t instanceof HTMLElement)) return false;
+      return (
+        t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.tagName === 'SELECT' ||
+        t.isContentEditable
+      );
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return;
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && !e.altKey) {
+        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        if (key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!readOnly && !busy) handleUndo();
+          return;
+        }
+        if (key === 'y' || (key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!readOnly && !busy) handleRedo();
+          return;
+        }
+        if (key === 's' && !e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!readOnly && !busy) void handleSave();
+          return;
+        }
+      }
+
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      // Space toggles preview; prevent the dialog/button from scrolling or activating.
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        e.stopPropagation();
+        // Blur focused toolbar controls so Space does not leave a stuck :focus ring
+        // (and so disabled buttons do not bounce focus onto the dialog shell).
+        if (e.target instanceof HTMLElement && e.target.closest('button')) {
+          e.target.blur();
+        }
+        if (busy || segment.recordFailed || clips.length === 0) return;
+        togglePlay();
+        return;
+      }
+
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+
+      if (key === 'a') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (busy || segment.recordFailed || clips.length === 0) return;
+        nudgePlayheadMs(e.shiftKey ? -1_000 : -5_000);
+        return;
+      }
+
+      if (key === 'd') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (busy || segment.recordFailed || clips.length === 0) return;
+        nudgePlayheadMs(e.shiftKey ? 1_000 : 5_000);
+        return;
+      }
+
+      if (key === 'ArrowLeft') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (busy || segment.recordFailed || clips.length === 0) return;
+        nudgePlayheadMs(-200);
+        return;
+      }
+
+      if (key === 'ArrowRight') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (busy || segment.recordFailed || clips.length === 0) return;
+        nudgePlayheadMs(200);
+        return;
+      }
+
+      if (key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (busy || clips.length === 0) return;
+        cycleSelectionAtPlayhead(e.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (key === 'e') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (busy || segment.recordFailed || clips.length === 0) return;
+        cyclePlaybackRate();
+        return;
+      }
+
+      if (readOnly || busy) return;
+
+      if (key === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleBladeAtPlayhead();
+        return;
+      }
+
+      if (key === 'r') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (rippleStartSecRef.current == null) handleStartRipple();
+        else handleEndRipple();
+        return;
+      }
+
+      if (key === 'x' || e.key === 'Backspace' || e.key === 'Delete') {
+        if (!selectedId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        handleDeleteSelected();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [
+    readOnly,
+    busy,
+    selectedId,
+    handleDeleteSelected,
+    handleBladeAtPlayhead,
+    handleStartRipple,
+    handleEndRipple,
+    handleUndo,
+    handleRedo,
+    handleSave,
+    nudgePlayheadMs,
+    cycleSelectionAtPlayhead,
+    cyclePlaybackRate,
+    togglePlay,
+    clips.length,
+    segment.recordFailed,
+  ]);
+
+  const handleRemoveTrim = (index: number) => {
+    if (readOnly || busy) return;
+    pushHistory();
+    setTrimRanges((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddMarkerAtPlayhead = () => {
+    if (readOnly || busy) return;
+    const maxSec = durationMs / 1000;
+    const time = Math.min(Math.max(0, playheadMs / 1000), maxSec);
+    pushHistory();
+    const created: Marker = { time, color: MARKER_COLORS[0] };
+    const next = sortMarkers([...markers, created]);
+    setMarkers(next);
+    setEditMarkerIndex(next.indexOf(created));
+  };
+
+  const handleSaveMarkerEdit = (updated: Marker) => {
+    if (editMarkerIndex == null) return;
+    pushHistory();
+    const next = [...markers];
+    next[editMarkerIndex] = updated;
+    const sorted = sortMarkers(next);
+    setMarkers(sorted);
+    setEditMarkerIndex(null);
+  };
+
+  const handleRemoveMarkerEdit = () => {
+    if (editMarkerIndex == null) return;
+    pushHistory();
+    setMarkers(markers.filter((_, i) => i !== editMarkerIndex));
+    setEditMarkerIndex(null);
   };
 
   const handleRemake = async () => {
@@ -1551,7 +1623,7 @@ export function SegmentEditorV2({
           <div className={styles.segmentEditorV2Header}>
             <div className={styles.segmentEditorV2HeaderLeft}>
               <Dialog.Title className={styles.dialogTitle}>
-                Advanced editor: {segmentName || 'Section'}
+                Advanced Editor: {segmentName || 'Section'}
               </Dialog.Title>
               <Dialog.Description id="segment-editor-v2-desc" className={styles.srOnly}>
                 Multitrack clip timeline. Blade, trim, and delete clips. Soft trims skip on
@@ -1702,6 +1774,20 @@ export function SegmentEditorV2({
                   >
                     <MapPin size={14} aria-hidden />
                     Marker
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      playbackRate === 1
+                        ? styles.segmentEditorV2Tool
+                        : styles.segmentEditorV2ToolActive
+                    }
+                    onClick={cyclePlaybackRate}
+                    disabled={busy || segment.recordFailed || !clips.length}
+                    title="Cycle preview speed (E): 1x, 1.5x, 2x"
+                    aria-label={`Playback speed ${playbackRate}x`}
+                  >
+                    {playbackRate}x
                   </button>
                 </div>
                 <div className={styles.segmentEditorV2ToolGroup} role="group" aria-label="Zoom">
@@ -2267,8 +2353,8 @@ export function SegmentEditorV2({
               </button>
             </div>
             <p className={styles.segmentEditorV2Hotkeys}>
-              Space Pause · A/D ±5s · Shift+A/D ±1s · F / Shift+F cycle clip · S blade · E
-              start trim · R end trim · X delete
+              Space Pause · A/D ±5s · Shift+A/D ±1s · F / Shift+F cycle clip · E speed · S
+              blade · R start/end trim · X delete
             </p>
           </div>
         </Dialog.Content>

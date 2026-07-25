@@ -22,6 +22,7 @@ export type HarborfmBlockName =
   | 'player'
   | 'reviews'
   | 'cast'
+  | 'episode_cast'
   | 'funding'
   | 'links'
   | 'podroll'
@@ -35,6 +36,7 @@ const HARBORFM_BLOCK_NAMES: HarborfmBlockName[] = [
   'player',
   'reviews',
   'cast',
+  'episode_cast',
   'funding',
   'links',
   'podroll',

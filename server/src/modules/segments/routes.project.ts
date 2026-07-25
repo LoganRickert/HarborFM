@@ -2,13 +2,25 @@ import type { FastifyInstance } from "fastify";
 import { createReadStream, existsSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import { nanoid } from "nanoid";
-import { IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS } from "../../config.js";
+import {
+  IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+  SEGMENT_UPLOAD_MAX_BYTES,
+} from "../../config.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { canAccessEpisode, canEditSegments } from "../../services/access.js";
-import { assertSafeId } from "../../services/paths.js";
+import { assertSafeId, uploadsDir } from "../../services/paths.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import * as audioService from "../../services/audio.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
+import {
+  FileTooLargeError,
+  extensionFromAudioMimetype,
+  streamToFileWithLimit,
+} from "../../services/uploads.js";
+import {
+  cleanupImportUpload,
+  importSegmentMixAudio,
+} from "../../services/importSegmentMixAudio.js";
 import {
   removeTempPath,
   writeTempZip,
@@ -34,7 +46,8 @@ import {
 } from "../episodes/projectSegmentOtioImport.js";
 import { getPodcastTitle } from "../audio/repo.js";
 import * as episodeRepo from "../episodes/repo.js";
-import { mergeTrimRanges } from "./utils.js";
+import { redactSegmentForClient } from "../../utils/segment.js";
+import { ALLOWED_MIME, mergeTrimRanges } from "./utils.js";
 import * as repo from "./repo.js";
 
 function parseTrimRanges(
@@ -277,6 +290,161 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
         return reply.status(500).send({
           error: err instanceof Error ? err.message : "Failed to download MP3",
         });
+      }
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/import-mp3",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "import-mp3",
+          windowMs: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+          max: 1,
+        }),
+      ],
+      schema: {
+        tags: ["Segments"],
+        summary: "Import MP3 as segment final mix",
+        description:
+          "Upload audio (MP3/WAV/etc.) to replace this segment's final mix. Soft trims and EQ are cleared (Download MP3 already applies them). Markers past the new duration are pruned. Remake from tracks will overwrite this mix. Editors and above only. Rate limited to once per 30 seconds per user.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        response: {
+          200: { description: "Updated segment" },
+          400: { description: "Invalid file" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+          429: { description: "Rate limited" },
+          500: { description: "Import failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can import segment audio" });
+      }
+
+      let segment: Record<string, unknown> | undefined = repo.getSegmentById(
+        segmentId,
+        episodeId,
+      );
+      if (!segment) {
+        return reply.status(404).send({ error: "Segment not found" });
+      }
+
+      if (segment.type === "reusable") {
+        try {
+          segment = await repo.promoteReusableSegmentToRecorded(
+            segment,
+            episodeId,
+            access.podcastId,
+          );
+        } catch (err) {
+          request.log.error(err);
+          return reply.status(500).send({
+            error:
+              err instanceof Error
+                ? err.message
+                : "Failed to prepare segment for import",
+          });
+        }
+      } else if (segment.type !== "recorded") {
+        return reply.status(400).send({
+          error: "Only recorded or library segments can import a mix",
+        });
+      }
+
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send({ error: "No file uploaded" });
+      }
+      const mimetype = data.mimetype || "";
+      const filename = (data.filename || "").toLowerCase();
+      const looksAudio =
+        ALLOWED_MIME.includes(mimetype) ||
+        mimetype.startsWith("audio/") ||
+        /\.(mp3|wav|m4a|aac|ogg|flac|webm)$/.test(filename);
+      if (!looksAudio) {
+        return reply.status(400).send({
+          error: "Invalid file type. Use MP3, WAV, or another audio file.",
+        });
+      }
+
+      const ext = extensionFromAudioMimetype(mimetype) || "mp3";
+      const segmentBase = uploadsDir(access.podcastId, episodeId);
+      const tempPath = join(
+        segmentBase,
+        `_import_mix_${segmentId}_${nanoid()}.${ext}`,
+      );
+      try {
+        await streamToFileWithLimit(
+          data.file,
+          tempPath,
+          SEGMENT_UPLOAD_MAX_BYTES,
+        );
+      } catch (err) {
+        cleanupImportUpload(tempPath);
+        if (err instanceof FileTooLargeError) {
+          return reply.status(400).send({ error: "File too large" });
+        }
+        request.log.error({ err }, "import-mp3 upload failed");
+        return reply.status(500).send({ error: "Upload failed" });
+      }
+
+      try {
+        await importSegmentMixAudio({
+          podcastId: access.podcastId,
+          episodeId,
+          segmentId,
+          uploadPath: tempPath,
+          inputExt: ext,
+        });
+        const row = repo.getSegmentById(segmentId, episodeId);
+        if (!row) {
+          return reply.status(500).send({ error: "Failed to load updated segment" });
+        }
+        broadcastToEpisode(episodeId, {
+          type: "segmentUpdated",
+          segmentId,
+        });
+        return reply.send(redactSegmentForClient(row));
+      } catch (err) {
+        cleanupImportUpload(tempPath);
+        const message =
+          err instanceof Error ? err.message : "Failed to import audio";
+        if (/storage limit/i.test(message)) {
+          return reply.status(403).send({ error: message });
+        }
+        request.log.error({ err }, "import-mp3 failed");
+        return reply.status(500).send({ error: message });
       }
     },
   );

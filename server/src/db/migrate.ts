@@ -92,6 +92,7 @@ import * as m090 from "./migrations/090_feed_themes.js";
 import * as m091 from "./migrations/091_feed_themes_server_scope.js";
 import * as m092 from "./migrations/092_theme_catalog_destinations.js";
 import * as m093 from "./migrations/093_episode_group_call_meetings.js";
+import * as m094 from "./migrations/094_podcasts_feed_show_videos.js";
 import { syncServerThemesFromDisk } from "../modules/themes/builtins.js";
 
 const migrations = [
@@ -188,6 +189,7 @@ const migrations = [
   { name: "091_feed_themes_server_scope", ...m091 },
   { name: "092_theme_catalog_destinations", ...m092 },
   { name: "093_episode_group_call_meetings", ...m093 },
+  { name: "094_podcasts_feed_show_videos", ...m094 },
 ];
 
 const MIGRATIONS_TABLE = `

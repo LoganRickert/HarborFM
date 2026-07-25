@@ -39,6 +39,7 @@ type FormState = {
   feedShowAuthor: boolean;
   feedShowPodroll: boolean;
   feedShowCast: boolean;
+  feedShowVideos: boolean;
 };
 
 const DEFAULT_FORM: FormState = {
@@ -52,6 +53,7 @@ const DEFAULT_FORM: FormState = {
   feedShowAuthor: true,
   feedShowPodroll: true,
   feedShowCast: true,
+  feedShowVideos: true,
 };
 
 function asBool(v: unknown, fallback: boolean): boolean {
@@ -149,6 +151,7 @@ export function EditPageCustomizationsDialog({
         feedShowAuthor: asBool(podcast.feedShowAuthor, true),
         feedShowPodroll: asBool(podcast.feedShowPodroll, true),
         feedShowCast: asBool(podcast.feedShowCast, true),
+        feedShowVideos: asBool(podcast.feedShowVideos, true),
       };
       setForm(initial);
       setFormBaseline(snapshotForDirty(initial));
@@ -181,6 +184,7 @@ export function EditPageCustomizationsDialog({
       feedShowAuthor: form.feedShowAuthor,
       feedShowPodroll: form.feedShowPodroll,
       feedShowCast: form.feedShowCast,
+      feedShowVideos: form.feedShowVideos,
     };
     mutation.mutate(payload);
   }
@@ -389,6 +393,11 @@ export function EditPageCustomizationsDialog({
                   onChange={(feedShowReviewsEpisode) =>
                     setForm((f) => ({ ...f, feedShowReviewsEpisode }))
                   }
+                />
+                <ToggleRow
+                  label="Show Videos"
+                  checked={form.feedShowVideos}
+                  onChange={(feedShowVideos) => setForm((f) => ({ ...f, feedShowVideos }))}
                 />
               </form>
             )}

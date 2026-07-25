@@ -130,6 +130,7 @@ export function getPodcastBySlug(slug: string) {
       feedShowAuthor: sql<number>`COALESCE(${podcasts.feedShowAuthor}, 1)`.as("feedShowAuthor"),
       feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
       feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
+      feedShowVideos: sql<number>`COALESCE(${podcasts.feedShowVideos}, 1)`.as("feedShowVideos"),
       episodeAlertsEnabled: sql<number>`COALESCE(${podcasts.episodeAlertsEnabled}, 0)`.as(
         "episodeAlertsEnabled",
       ),
@@ -349,6 +350,30 @@ export function getPodcastCastGuests(
   return { rows, total };
 }
 
+/** Public cast rows assigned to a published episode (isPublic only). */
+export function getPublicEpisodeCastByEpisodeId(episodeId: string) {
+  return drizzleDb
+    .select({
+      id: podcastCast.id,
+      podcastId: podcastCast.podcastId,
+      name: podcastCast.name,
+      role: podcastCast.role,
+      description: podcastCast.description,
+      photoPath: podcastCast.photoPath,
+      photoUrl: podcastCast.photoUrl,
+      socialLinkText: podcastCast.socialLinkText,
+      isPublic: podcastCast.isPublic,
+      createdAt: podcastCast.createdAt,
+    })
+    .from(podcastCast)
+    .innerJoin(episodeCast, eq(episodeCast.castId, podcastCast.id))
+    .where(
+      and(eq(episodeCast.episodeId, episodeId), eq(podcastCast.isPublic, true)),
+    )
+    .orderBy(asc(podcastCast.role), desc(podcastCast.createdAt))
+    .all();
+}
+
 /** Get episode cast (public) by podcast slug and episode slug. Includes unlisted podcasts (by direct link). */
 export function getEpisodeCastBySlugs(podcastSlug: string, episodeSlug: string) {
   const podcast = drizzleDb
@@ -373,29 +398,7 @@ export function getEpisodeCastBySlugs(podcastSlug: string, episodeSlug: string) 
     .limit(1)
     .get();
   if (!episodeRow) return [];
-  return drizzleDb
-    .select({
-      id: podcastCast.id,
-      podcastId: podcastCast.podcastId,
-      name: podcastCast.name,
-      role: podcastCast.role,
-      description: podcastCast.description,
-      photoPath: podcastCast.photoPath,
-      photoUrl: podcastCast.photoUrl,
-      socialLinkText: podcastCast.socialLinkText,
-      isPublic: podcastCast.isPublic,
-      createdAt: podcastCast.createdAt,
-    })
-    .from(podcastCast)
-    .innerJoin(episodeCast, eq(episodeCast.castId, podcastCast.id))
-    .where(
-      and(
-        eq(episodeCast.episodeId, episodeRow.id),
-        eq(podcastCast.isPublic, true),
-      ),
-    )
-    .orderBy(asc(podcastCast.role), desc(podcastCast.createdAt))
-    .all();
+  return getPublicEpisodeCastByEpisodeId(episodeRow.id);
 }
 
 export type ListPublishedEpisodesOptions = {

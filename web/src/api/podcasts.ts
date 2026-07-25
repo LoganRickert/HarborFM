@@ -144,6 +144,7 @@ export interface Podcast {
   feedShowAuthor?: number | boolean;
   feedShowPodroll?: number | boolean;
   feedShowCast?: number | boolean;
+  feedShowVideos?: number | boolean;
   /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
   ownerCanTranscribe?: number;
   /** DNS: link domain (hostname). */

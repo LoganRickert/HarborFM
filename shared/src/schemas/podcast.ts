@@ -182,6 +182,7 @@ export const podcastUpdateSchema = podcastCreateSchema
     feedShowAuthor: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     feedShowPodroll: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     feedShowCast: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    feedShowVideos: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     /** DNS: link domain (hostname only, no https://). */
     linkDomain: z.string().nullable().optional(),
     /** DNS: managed domain (hostname only, no https://). */

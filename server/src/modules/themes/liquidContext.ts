@@ -89,6 +89,7 @@ export function podcastShowFlags(row: Record<string, unknown>) {
     reviews_episode: asBool(row.feedShowReviewsEpisode, true),
     podroll: asBool(row.feedShowPodroll, true) && podcastHasPodrollItems(row),
     cast: asBool(row.feedShowCast, true),
+    videos: asBool(row.feedShowVideos, true),
     links: podcastHasLinks(row),
   };
 }
@@ -143,8 +144,8 @@ function buildEpisodes(podcastId: string) {
 }
 
 /**
- * Full Liquid context for theme renders: podcast fields, cast, funding, links,
- * podroll, reviews, and episodes (when requested).
+ * Full Liquid context for theme renders: podcast fields, show cast, episode cast,
+ * funding, links, podroll, reviews, and episodes (when requested).
  */
 export function buildLiquidThemeContext(options: {
   podcast: Record<string, unknown> & {
@@ -210,13 +211,36 @@ export function buildLiquidThemeContext(options: {
         }))
       : [];
 
-  let cast = { hosts: [] as ReturnType<typeof mapCastMember>[], guests: [] as ReturnType<typeof mapCastMember>[] };
+  type CastMember = ReturnType<typeof mapCastMember>;
+  const emptyCast = (): { hosts: CastMember[]; guests: CastMember[] } => ({
+    hosts: [],
+    guests: [],
+  });
+
+  let cast = emptyCast();
   if (show.cast) {
     const hosts = publicRepo.getPodcastCastHosts(podcast.id);
     const { rows: guests } = publicRepo.getPodcastCastGuests(podcast.id, 100, 0);
     cast = {
       hosts: hosts.map((r) => mapCastMember(r, podcast.id)),
       guests: guests.map((r) => mapCastMember(r, podcast.id)),
+    };
+  }
+
+  let episode_cast = emptyCast();
+  const episodeId =
+    options.episode && typeof options.episode.id === "string"
+      ? options.episode.id
+      : null;
+  if (show.cast && episodeId) {
+    const rows = publicRepo.getPublicEpisodeCastByEpisodeId(episodeId);
+    episode_cast = {
+      hosts: rows
+        .filter((r) => String(r.role) === "host")
+        .map((r) => mapCastMember(r, podcast.id)),
+      guests: rows
+        .filter((r) => String(r.role) === "guest")
+        .map((r) => mapCastMember(r, podcast.id)),
     };
   }
 
@@ -316,6 +340,7 @@ export function buildLiquidThemeContext(options: {
       links,
     },
     cast,
+    episode_cast,
     funding_links,
     links,
     podroll,

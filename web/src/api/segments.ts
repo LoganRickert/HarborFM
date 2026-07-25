@@ -337,6 +337,32 @@ export function downloadSegmentMp3Url(episodeId: string, segmentId: string): str
   return `${BASE}/episodes/${episodeId}/segments/${segmentId}/download-mp3`;
 }
 
+/**
+ * Replace the segment final mix with an uploaded audio file (multipart `file`).
+ * Clears soft trims and EQ; prunes markers to the new duration.
+ */
+export function importSegmentMp3(
+  episodeId: string,
+  segmentId: string,
+  file: File,
+): Promise<SegmentResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/import-mp3`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
 /** Cookie-session download URL for segment project zip (editors and above). Prefer prepare + status first. */
 export function downloadSegmentProjectUrl(episodeId: string, segmentId: string): string {
   return `${BASE}/episodes/${episodeId}/segments/${segmentId}/project-export`;

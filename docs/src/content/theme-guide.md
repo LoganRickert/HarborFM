@@ -165,7 +165,8 @@ Place HarborFM features with `render` tags. HarborFM turns them into mount point
 | `show_header` | Stock show header (optional; many themes build their own) |
 | `site_header` | Platform chrome |
 | `reviews` | Reviews list |
-| `cast` | Hosts and guests |
+| `cast` | Show hosts and guests |
+| `episode_cast` | Episode hosts and guests (episode page) |
 | `funding` | Funding links |
 | `links` | Listen / social links |
 | `podroll` | Recommended shows |
@@ -178,7 +179,9 @@ Gate optional blocks with the show toggles from Page Customizations:
 {% endif %}
 ```
 
-For custom layout, you can loop Liquid data yourself (`cast`, `funding_links`, `links`, `podroll`, `reviews`) and only keep `harborfm/episodes` for the interactive archive.
+On episode pages use `{% render 'harborfm/episode_cast' %}` (or loop `episode_cast.hosts` / `episode_cast.guests`). `harborfm/cast` and `cast.*` are the show cast.
+
+For custom layout, you can loop Liquid data yourself (`cast`, `episode_cast`, `funding_links`, `links`, `podroll`, `reviews`) and only keep `harborfm/episodes` for the interactive archive.
 
 `links` items include `key`, `label`, `url`, `group` (`listen` or `social`), and `icon_url` (HarborFM-hosted monochrome SVG such as `/platform-icons/apple_podcasts.svg`). Gate with `show.links`. Prefer either the `harborfm/links` mount or a custom loop, not both on the same page.
 

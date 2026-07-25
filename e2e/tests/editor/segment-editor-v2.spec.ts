@@ -13,7 +13,7 @@ test.describe('SegmentEditorV2 advanced editor', () => {
     await openAdvancedEditor(page, fixture.episodeId);
 
     const advanced = page.getByRole('dialog').filter({
-      has: page.getByRole('heading', { name: /Advanced editor:/i }),
+      has: page.getByRole('heading', { name: /Advanced Editor:/i }),
     });
     await expect(advanced).toBeVisible();
     await expect(advanced.getByRole('button', { name: 'Select tool' })).toBeVisible();
@@ -31,7 +31,7 @@ test.describe('SegmentEditorV2 advanced editor', () => {
       timeout: 10000,
     });
     await page.getByRole('button', { name: 'Advanced editor' }).click();
-    await expect(advanced.getByRole('heading', { name: /Advanced editor:/i })).toBeVisible();
+    await expect(advanced.getByRole('heading', { name: /Advanced Editor:/i })).toBeVisible();
 
     // Seek into the clip so blade at playhead is valid, select first clip, blade.
     await page.keyboard.press('d');

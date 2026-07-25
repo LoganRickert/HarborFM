@@ -920,6 +920,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.feedShowCast !== undefined) {
         set.feedShowCast = Boolean(data.feedShowCast);
       }
+      if (data.feedShowVideos !== undefined) {
+        set.feedShowVideos = Boolean(data.feedShowVideos);
+      }
       if (data.fundingLinks !== undefined) set.fundingLinks = jsonArrayOrNull(data.fundingLinks);
       if (data.persons !== undefined) set.persons = data.persons;
       if (data.updateFrequency !== undefined) {

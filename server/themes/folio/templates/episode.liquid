@@ -54,6 +54,14 @@
         </section>
       {% endif %}
 
+      {% if show.cast %}
+        <section class="folio-section folio-section--wide">
+          <div class="folio-panel">
+            {% render 'harborfm/episode_cast' %}
+          </div>
+        </section>
+      {% endif %}
+
       {% if show.reviews_episode %}
         <section class="folio-section folio-section--wide">
           <div class="folio-panel">

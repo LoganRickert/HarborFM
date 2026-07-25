@@ -33,6 +33,7 @@ import {
   SubscriptionInfoDialog,
   PodcastLinksCard,
   hasPodcastLinks,
+  FeedCastCard,
   FeedCastList,
   FeedVideoPlayer,
   ReviewsCard,
@@ -205,7 +206,10 @@ export function FeedEpisode({
     : '';
 
   const scheduledNotReleased = Boolean(episode?.scheduledNotReleased);
-  const videoUrlRaw = scheduledNotReleased ? null : (episode?.privateVideoUrl ?? episode?.videoUrl ?? null);
+  const videoUrlRaw =
+    scheduledNotReleased || podcast?.feedShowVideos === false
+      ? null
+      : (episode?.privateVideoUrl ?? episode?.videoUrl ?? null);
   const videoUrl =
     !videoUrlRaw
       ? ''
@@ -406,7 +410,8 @@ export function FeedEpisode({
             plain
           />
         ) : undefined,
-      cast:
+      cast: podcast.feedShowCast !== false ? <FeedCastCard podcastSlug={podcastSlug} plain /> : undefined,
+      episode_cast:
         podcast.feedShowCast !== false && (episodeHosts.length > 0 || episodeGuests.length > 0) ? (
           <div className={styles.castCard}>
             <h2 className={styles.castTitle}>Cast</h2>

@@ -621,19 +621,26 @@ export function SegmentModal({
           setSegmentSplitConfirmOpen(false);
           setSplittingSegment(true);
           setTrimError(null);
-          splitSegment(episodeId, segmentId, { minutes, seconds })
-            .then(() => {
+          // Persist local trims/markers first so the server can partition them onto both halves.
+          void (async () => {
+            try {
+              await saveMutation.mutateAsync(undefined);
+              await splitSegment(episodeId, segmentId, { minutes, seconds });
               queryClient.invalidateQueries({ queryKey: ['segments', episodeId] });
-              return getSegmentTranscript(episodeId, segmentId)
-                .then((r) => {
-                  transcript.setText(r.text ?? null);
-                })
-                .catch(() => {
-                  transcript.setText(null);
-                });
-            })
-            .catch((err) => setTrimError(err?.message ?? 'Failed to split segment'))
-            .finally(() => setSplittingSegment(false));
+              try {
+                const r = await getSegmentTranscript(episodeId, segmentId);
+                transcript.setText(r.text ?? null);
+              } catch {
+                transcript.setText(null);
+              }
+            } catch (err) {
+              setTrimError(
+                err instanceof Error ? err.message : 'Failed to split segment',
+              );
+            } finally {
+              setSplittingSegment(false);
+            }
+          })();
         }}
       />
 

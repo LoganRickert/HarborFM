@@ -45,6 +45,7 @@ export const publicPodcastSchema = z.object({
   feedShowAuthor: z.boolean().optional(),
   feedShowPodroll: z.boolean().optional(),
   feedShowCast: z.boolean().optional(),
+  feedShowVideos: z.boolean().optional(),
 });
 
 /** Querystring for GET /public/podcasts (paginated list). */

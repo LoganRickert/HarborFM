@@ -72,6 +72,7 @@ export class ClipPreviewEngine {
   private activeClipByTake = new Map<string, string>();
   private playing = false;
   private playheadMs = 0;
+  private playbackRate = 1;
   private raf = 0;
   private lastTickPerf = 0;
   private disposed = false;
@@ -86,6 +87,19 @@ export class ClipPreviewEngine {
 
   getPlayheadMs(): number {
     return this.playheadMs;
+  }
+
+  getPlaybackRate(): number {
+    return this.playbackRate;
+  }
+
+  setPlaybackRate(rate: number): void {
+    const next =
+      Number.isFinite(rate) && rate > 0 ? Math.min(4, Math.max(0.25, rate)) : 1;
+    this.playbackRate = next;
+    for (const el of this.takes.values()) {
+      el.playbackRate = next;
+    }
   }
 
   dispose(): void {
@@ -170,7 +184,7 @@ export class ClipPreviewEngine {
       if (this.disposed || !this.playing) return;
       const dt = Math.max(0, Math.min(0.1, (now - this.lastTickPerf) / 1000));
       this.lastTickPerf = now;
-      let nextSec = this.playheadMs / 1000 + dt;
+      let nextSec = this.playheadMs / 1000 + dt * this.playbackRate;
       const trims = this.opts.getTrimRanges();
       const skipped = skipOutOfTrimSec(nextSec, trims);
       if (skipped > nextSec + 0.0005) {
@@ -215,6 +229,7 @@ export class ClipPreviewEngine {
       this.opts.segmentId,
       key,
     );
+    el.playbackRate = this.playbackRate;
     el.addEventListener('error', () => {
       this.opts.onError?.(`Could not load take audio: ${key}`);
     });
@@ -269,6 +284,7 @@ export class ClipPreviewEngine {
 
     for (const [key, state] of activeByTake) {
       const el = this.ensureTake(key);
+      if (el.playbackRate !== this.playbackRate) el.playbackRate = this.playbackRate;
       if (el.volume !== state.volume) el.volume = state.volume;
 
       const prevClipId = this.activeClipByTake.get(key);

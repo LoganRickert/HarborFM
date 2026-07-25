@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.19.1 - 7-25-2026
+
+- **Segment Split:** Also partitions `tracks_manifest` (and the original backup when present). Clips that end before the split stay on the first segment; clips that start after move to the new segment with timeline times shifted to 0; clips that cross the cut are bladed into both halves. Take files needed by the second half are copied into its recordings folder.
+- **Advanced segment editor:** New shortcuts: Left/Right arrows nudge ±200ms, E cycles preview speed (1x / 1.5x / 2x), Ctrl/Cmd+S saves.
+- **Page Customizations:** New **Show Videos** toggle (on by default). When off, generated episode videos are hidden on the public episode feed (default and Liquid themes).
+- **Liquid themes:** Episode pages expose `episode_cast` (with `hosts` / `guests`) and `{% render 'harborfm/episode_cast' %}` for the people on that episode. Show cast stays on `cast` / `harborfm/cast`. Listen / social `links` include `icon_url` (HarborFM-hosted platform icons such as Apple Podcasts and Spotify) so themes can render custom Listen On rows without the React mount. Theme authoring docs cover looping `links`, `funding_links`, `cast`, `episode_cast`, `podroll`, and `reviews` yourself when you want full layout control.
+- **Manage Segment:** **Import MP3** replaces the segment’s final mix (for example after downloading, enhancing externally, and bringing the file back). Soft trims and EQ are cleared on import because Download MP3 already applies them; markers past the new duration are pruned. Remake from tracks will overwrite this mix again.
+
 ## v1.19.0 - 7-24-2026
 
 - **Advanced segment editor:** On desktop, segments with multitrack recordings open a full-screen clip timeline where you can blade, slide, resize, mute, and delete takes, place markers (including chapters and soundbites), and soft-trim the same way as the simple editor. Preview follows the clip layout so you hear edits before Remake; Save keeps the layout, markers, and soft trims, and Remake rebuilds the mix for the simple editor and publish. Mobile still defaults to the simple mix editor, and you can switch between Simple and Advanced anytime. Segments that only have a mix (no separate takes yet) can still open Advanced; HarborFM copies the mix into the multitrack layout on first use.

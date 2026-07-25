@@ -254,7 +254,8 @@ Insert mounts with:
 | `breadcrumbs` | Episode crumb nav | Recommended (episode) |
 | `site_header` | Platform chrome | Recommended |
 | `reviews` | Reviews | Recommended; gate with `show.reviews_*` |
-| `cast` | Hosts / guests | Recommended; gate with `show.cast` |
+| `cast` | Show hosts / guests | Recommended on home / crew pages; gate with `show.cast` |
+| `episode_cast` | Episode hosts / guests | Recommended on episode pages; gate with `show.cast` |
 | `funding` | Funding | Recommended; gate with `show.funding` |
 | `links` | Platform links | Recommended; gate with `show.links` |
 | `podroll` | Recommended shows | Recommended; gate with `show.podroll` |
@@ -265,9 +266,9 @@ Insert mounts with:
 {% endif %}
 ```
 
-On episode pages use `show.reviews_episode` and `show.episode_description`.
+On episode pages use `show.reviews_episode`, `show.episode_description`, and `{% render 'harborfm/episode_cast' %}` for the people on that episode (not `harborfm/cast`, which is the show cast).
 
-For custom markup (layout, labels, icons), skip the mount and loop Liquid data instead (`links`, `funding_links`, `cast`, `podroll`, `reviews`). Keep `harborfm/episodes` (and usually `search` / `player`) as mounts; those need HarborFM interactivity.
+For custom markup (layout, labels, icons), skip the mount and loop Liquid data instead (`links`, `funding_links`, `cast`, `episode_cast`, `podroll`, `reviews`). Keep `harborfm/episodes` (and usually `search` / `player`) as mounts; those need HarborFM interactivity.
 
 ---
 
@@ -304,7 +305,7 @@ Same shape as one episodes row.
 
 ### `show` (booleans)
 
-`author`, `podcast_description`, `episode_description`, `funding`, `reviews_podcast`, `reviews_episode`, `podroll`, `cast`, `links`
+`author`, `podcast_description`, `episode_description`, `funding`, `reviews_podcast`, `reviews_episode`, `podroll`, `cast`, `videos`, `links`
 
 `funding`, `podroll`, and `links` are true only when the Page Customizations toggle allows the block **and** the show has at least one item.
 
@@ -385,9 +386,9 @@ Empty when `show.funding` is false. Each item: `url`, `text`.
 {% endif %}
 ```
 
-### `cast`
+### `cast` (show hosts / guests)
 
-Object with `hosts` and `guests` arrays (empty when `show.cast` is false). Each member:
+Show-level cast. Object with `hosts` and `guests` arrays (empty when `show.cast` is false). Each member:
 
 | Key | Type | Notes |
 |-----|------|--------|
@@ -409,8 +410,48 @@ Object with `hosts` and `guests` arrays (empty when `show.cast` is false). Each 
       {% if host.role != blank %}<p>{{ host.role | escape }}</p>{% endif %}
     </article>
   {% endfor %}
+  {% for guest in cast.guests %}
+    <article>
+      <h3>{{ guest.name | escape }}</h3>
+    </article>
+  {% endfor %}
 {% endif %}
 ```
+
+Prefer `{% render 'harborfm/cast' %}` for the stock show-cast block, or loop `cast.hosts` / `cast.guests` for custom markup.
+
+### `episode_cast` (episode hosts / guests)
+
+Cast assigned to the **current episode**. Same member shape as `cast`. Empty hosts/guests when `show.cast` is false, or when not rendering an episode page.
+
+```liquid
+{% if show.cast %}
+  {% render 'harborfm/episode_cast' %}
+{% endif %}
+```
+
+Custom markup (whole list, or hosts / guests only):
+
+```liquid
+{% if show.cast %}
+  {% for host in episode_cast.hosts %}
+    <article>
+      {% if host.image_url != blank %}
+        <img src="{{ host.image_url | escape }}" alt="" />
+      {% endif %}
+      <h3>{{ host.name | escape }}</h3>
+      {% if host.description != blank %}<p>{{ host.description | escape }}</p>{% endif %}
+    </article>
+  {% endfor %}
+  {% for guest in episode_cast.guests %}
+    <article>
+      <h3>{{ guest.name | escape }}</h3>
+    </article>
+  {% endfor %}
+{% endif %}
+```
+
+Do **not** use `cast.hosts` / `cast.guests` for episode-specific people; those are the show cast.
 
 ### `podroll`
 
@@ -562,6 +603,7 @@ If an accent could be dark, use a theme foreground variable that has been visual
     {% if show.episode_description %}
       <p>{{ episode.description }}</p>
     {% endif %}
+    {% if show.cast %}{% render 'harborfm/episode_cast' %}{% endif %}
     {% if show.reviews_episode %}{% render 'harborfm/reviews' %}{% endif %}
   </main>
 </body>

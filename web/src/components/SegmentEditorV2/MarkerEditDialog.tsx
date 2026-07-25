@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Trash2, X } from 'lucide-react';
 import type { Marker } from '@harborfm/shared';
@@ -96,6 +96,7 @@ export function MarkerEditDialog({
   const [duration, setDuration] = useState(initialDuration);
   const [error, setError] = useState<string | null>(null);
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+  const labelInputRef = useRef<HTMLInputElement>(null);
   const [baseline, setBaseline] = useState({
     title: initialTitle,
     timeStr: initialTimeStr,
@@ -186,6 +187,10 @@ export function MarkerEditDialog({
           />
           <Dialog.Content
             className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.dialogContentOnModal}`}
+            onOpenAutoFocus={(e) => {
+              e.preventDefault();
+              labelInputRef.current?.focus();
+            }}
             onEscapeKeyDown={(e) => {
               e.stopPropagation();
               dialogContentProps.onEscapeKeyDown(e);
@@ -225,12 +230,12 @@ export function MarkerEditDialog({
               <label className={styles.chapterEditLabel}>
                 <span>Label</span>
                 <input
+                  ref={labelInputRef}
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Optional label"
                   className={styles.chapterEditInput}
-                  autoFocus
                 />
               </label>
               <label className={styles.chapterEditLabel}>

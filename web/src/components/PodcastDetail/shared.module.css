@@ -296,12 +296,19 @@ textarea.input:disabled {
   animation: fadeIn 0.15s ease;
 }
 
-/* Nested modal (confirm dialog on top of another dialog) */
+/* Nested modal (dialog on top of another dialog) */
 .dialogOverlayOnModal {
   z-index: 1200 !important;
 }
 .dialogContentOnModal {
   z-index: 1201 !important;
+}
+/* Confirm / "are you sure" stacked above an OnModal dialog */
+.dialogOverlayOnStackedModal {
+  z-index: 1300 !important;
+}
+.dialogContentOnStackedModal {
+  z-index: 1301 !important;
 }
 
 @keyframes fadeIn {

@@ -14,6 +14,7 @@ export const HARBORFM_BLOCKS = [
   "player",
   "reviews",
   "cast",
+  "episode_cast",
   "funding",
   "links",
   "podroll",
@@ -123,12 +124,17 @@ function expandHarborfmRenders(source: string): string {
   );
 }
 
+export type LiquidCastGroup = {
+  hosts: Array<Record<string, unknown>>;
+  guests: Array<Record<string, unknown>>;
+};
+
 export type LiquidPodcastContext = {
   podcast: Record<string, unknown>;
-  cast?: {
-    hosts: Array<Record<string, unknown>>;
-    guests: Array<Record<string, unknown>>;
-  };
+  /** Show-level cast (podcast hosts / guests). */
+  cast?: LiquidCastGroup;
+  /** Episode-assigned cast when rendering an episode page. */
+  episode_cast?: LiquidCastGroup;
   funding_links?: Array<Record<string, unknown>>;
   links?: Array<Record<string, unknown>>;
   podroll?: Array<Record<string, unknown>>;
@@ -145,6 +151,7 @@ export type LiquidPodcastContext = {
     reviews_episode: boolean;
     podroll: boolean;
     cast: boolean;
+    videos: boolean;
     links: boolean;
   };
   urls: {
@@ -204,9 +211,11 @@ export async function renderLiquidPage(
 
   const accent = resolveAccent(ctx.accentId);
   const engine = createEngine(themeRoot);
+  const emptyCast = { hosts: [], guests: [] };
   const html = await engine.parseAndRender(source, {
     podcast: ctx.podcast,
-    cast: ctx.cast ?? { hosts: [], guests: [] },
+    cast: ctx.cast ?? emptyCast,
+    episode_cast: ctx.episode_cast ?? emptyCast,
     funding_links: ctx.funding_links ?? [],
     links: ctx.links ?? [],
     podroll: ctx.podroll ?? [],

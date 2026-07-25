@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Clapperboard, Download, FileUp, FolderInput, FolderDown, Trash2, X } from 'lucide-react';
+import {
+  Clapperboard,
+  Download,
+  FileUp,
+  FolderInput,
+  FolderDown,
+  Upload,
+  Trash2,
+  X,
+} from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { PleaseWaitDialog } from '../../components/PleaseWaitDialog';
 import {
@@ -10,6 +19,7 @@ import {
   getSegmentProjectExportStatus,
   getSegmentProjectImportStatus,
   getSegmentReaperImportStatus,
+  importSegmentMp3,
   startImportSegmentOtio,
   startImportSegmentProject,
   startImportSegmentReaper,
@@ -31,7 +41,7 @@ export interface ManageSegmentDialogProps {
   isDeleting: boolean;
 }
 
-type WaitKind = 'export' | 'import' | 'reaper' | 'otio' | null;
+type WaitKind = 'export' | 'import' | 'import-mp3' | 'reaper' | 'otio' | null;
 
 export function ManageSegmentDialog({
   open,
@@ -44,6 +54,7 @@ export function ManageSegmentDialog({
   isDeleting,
 }: ManageSegmentDialogProps) {
   const zipInputRef = useRef<HTMLInputElement>(null);
+  const mp3InputRef = useRef<HTMLInputElement>(null);
   const rppInputRef = useRef<HTMLInputElement>(null);
   const otioInputRef = useRef<HTMLInputElement>(null);
   const [waitKind, setWaitKind] = useState<WaitKind>(null);
@@ -55,10 +66,6 @@ export function ManageSegmentDialog({
   const busy = (waitKind != null && !waitError && !waitWarning) || duckingBusy;
   const duckingInProgressTitle = 'Host ducking update in progress';
 
-  const name =
-    segment?.name?.trim() ||
-    (segment?.type === 'recorded' ? 'Recorded section' : segment?.assetName) ||
-    'Section';
   const hasAudio = Boolean(
     segment &&
       ((segment.type === 'recorded' && segment.audioPath) ||
@@ -179,6 +186,23 @@ export function ManageSegmentDialog({
     }
   }
 
+  async function handleImportMp3(file: File | undefined) {
+    if (!segment || !file || busy || readOnly) return;
+    setWaitError(null);
+    setWaitWarning(null);
+    setWaitKind('import-mp3');
+    try {
+      await importSegmentMp3(episodeId, segment.id, file);
+      setWaitKind(null);
+      onImported();
+      onOpenChange(false);
+    } catch (err) {
+      setWaitError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      if (mp3InputRef.current) mp3InputRef.current.value = '';
+    }
+  }
+
   async function handleImportReaper(file: File | undefined) {
     if (!segment || !file || busy || readOnly) return;
     setWaitError(null);
@@ -247,9 +271,11 @@ export function ManageSegmentDialog({
       ? 'Importing Reaper project...'
       : waitKind === 'otio'
         ? 'Importing OTIO timeline...'
-        : waitKind === 'import'
-          ? 'Importing segment...'
-          : 'Preparing your download...';
+        : waitKind === 'import-mp3'
+          ? 'Importing final mix...'
+          : waitKind === 'import'
+            ? 'Importing segment...'
+            : 'Preparing your download...';
   const waitErrorTitle =
     waitKind === 'export' ? 'Download failed' : 'Import failed';
 
@@ -284,53 +310,9 @@ export function ManageSegmentDialog({
               </Dialog.Close>
             </div>
             <div className={styles.dialogBodyScroll}>
-            <Dialog.Description className={styles.dialogDescription}>
-              {name}
+            <Dialog.Description className={styles.srOnly}>
+              Download or import segment audio, manage tracks, or delete this section.
             </Dialog.Description>
-
-            {showHostDucking ? (
-              <div
-                className={styles.hostDuckingSetting}
-                title={duckingBusy ? duckingInProgressTitle : undefined}
-              >
-                <span className={styles.hostDuckingSettingLabel}>Host Ducking</span>
-                <div
-                  className={styles.hostDuckingSegmented}
-                  role="group"
-                  aria-label="Host Ducking"
-                  aria-busy={duckingBusy}
-                >
-                  <button
-                    type="button"
-                    className={
-                      !duckingEnabled
-                        ? styles.hostDuckingSegmentedActive
-                        : styles.hostDuckingSegmentedBtn
-                    }
-                    aria-pressed={!duckingEnabled}
-                    disabled={busy}
-                    title={duckingBusy ? duckingInProgressTitle : undefined}
-                    onClick={() => handleHostDuckingToggle(false)}
-                  >
-                    Disabled
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      duckingEnabled
-                        ? styles.hostDuckingSegmentedActive
-                        : styles.hostDuckingSegmentedBtn
-                    }
-                    aria-pressed={duckingEnabled}
-                    disabled={busy}
-                    title={duckingBusy ? duckingInProgressTitle : undefined}
-                    onClick={() => handleHostDuckingToggle(true)}
-                  >
-                    Enabled
-                  </button>
-                </div>
-              </div>
-            ) : null}
 
             <div className={styles.manageSegmentActions}>
               {hasAudio && !readOnly ? (
@@ -355,6 +337,31 @@ export function ManageSegmentDialog({
                   <span className={styles.manageSegmentActionHint}>Trimmed final mix</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                className={styles.manageSegmentAction}
+                disabled={readOnly || busy}
+                onClick={() => mp3InputRef.current?.click()}
+                title={
+                  readOnly
+                    ? 'Read-only account'
+                    : 'Replace the final mix (for example after enhancing externally)'
+                }
+              >
+                <Upload size={18} aria-hidden />
+                <span>Import MP3</span>
+                <span className={styles.manageSegmentActionHint}>
+                  Replace final mix
+                </span>
+              </button>
+              <input
+                ref={mp3InputRef}
+                type="file"
+                accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm"
+                hidden
+                onChange={(e) => void handleImportMp3(e.target.files?.[0])}
+              />
 
               <button
                 type="button"
@@ -456,6 +463,50 @@ export function ManageSegmentDialog({
                   </span>
                 </button>
               )}
+
+              {showHostDucking ? (
+                <div
+                  className={styles.hostDuckingSetting}
+                  title={duckingBusy ? duckingInProgressTitle : undefined}
+                >
+                  <span className={styles.hostDuckingSettingLabel}>Host Ducking</span>
+                  <div
+                    className={styles.hostDuckingSegmented}
+                    role="group"
+                    aria-label="Host Ducking"
+                    aria-busy={duckingBusy}
+                  >
+                    <button
+                      type="button"
+                      className={
+                        !duckingEnabled
+                          ? styles.hostDuckingSegmentedActive
+                          : styles.hostDuckingSegmentedBtn
+                      }
+                      aria-pressed={!duckingEnabled}
+                      disabled={busy}
+                      title={duckingBusy ? duckingInProgressTitle : undefined}
+                      onClick={() => handleHostDuckingToggle(false)}
+                    >
+                      Disabled
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        duckingEnabled
+                          ? styles.hostDuckingSegmentedActive
+                          : styles.hostDuckingSegmentedBtn
+                      }
+                      aria-pressed={duckingEnabled}
+                      disabled={busy}
+                      title={duckingBusy ? duckingInProgressTitle : undefined}
+                      onClick={() => handleHostDuckingToggle(true)}
+                    >
+                      Enabled
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <button
                 type="button"

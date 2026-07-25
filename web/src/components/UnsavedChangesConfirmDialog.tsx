@@ -18,9 +18,11 @@ export function UnsavedChangesConfirmDialog({
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onOpenChange(false)}>
       <Dialog.Portal>
-        <Dialog.Overlay className={`${styles.dialogOverlay} ${styles.dialogOverlayOnModal}`} />
+        <Dialog.Overlay
+          className={`${styles.dialogOverlay} ${styles.dialogOverlayOnStackedModal}`}
+        />
         <Dialog.Content
-          className={`${styles.dialogContent} ${styles.dialogContentOnModal}`}
+          className={`${styles.dialogContent} ${styles.dialogContentOnStackedModal}`}
           onEscapeKeyDown={(e) => e.stopPropagation()}
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}

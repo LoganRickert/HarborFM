@@ -163,6 +163,7 @@ export const podcasts = sqliteTable(
     feedShowAuthor: integer("feed_show_author", { mode: "boolean" }).default(true),
     feedShowPodroll: integer("feed_show_podroll", { mode: "boolean" }).default(true),
     feedShowCast: integer("feed_show_cast", { mode: "boolean" }).default(true),
+    feedShowVideos: integer("feed_show_videos", { mode: "boolean" }).default(true),
     feedTheme: text("feed_theme").default("default"),
     episodeAlertsEnabled: integer("episode_alerts_enabled", {
       mode: "boolean",

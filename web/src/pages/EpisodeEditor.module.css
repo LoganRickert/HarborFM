@@ -3138,12 +3138,19 @@
   z-index: 1100;
   animation: fadeIn 0.15s ease;
 }
-/* Overlay/content for confirm dialogs shown on top of another modal (e.g. Remove marker) */
+/* Overlay/content for dialogs shown on top of another modal (e.g. marker edit) */
 .dialogOverlayOnModal {
   z-index: 1200 !important;
 }
 .dialogContentOnModal {
   z-index: 1201 !important;
+}
+/* Confirm / "are you sure" stacked above an OnModal dialog */
+.dialogOverlayOnStackedModal {
+  z-index: 1300 !important;
+}
+.dialogContentOnStackedModal {
+  z-index: 1301 !important;
 }
 .dialogContent {
   position: fixed;
@@ -3954,6 +3961,10 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+.manageSegmentActions .hostDuckingSetting {
+  margin-top: 0;
 }
 
 .hostDuckingSettingLabel {

@@ -62,6 +62,7 @@ export interface PublicPodcast {
   feedShowAuthor?: boolean;
   feedShowPodroll?: boolean;
   feedShowCast?: boolean;
+  feedShowVideos?: boolean;
 }
 
 /** camelCase shape for public episode (transformed from server snake_case). */
@@ -203,6 +204,7 @@ function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
     feedShowAuthor: asPublicBool(r.feed_show_author ?? r.feedShowAuthor, true),
     feedShowPodroll: asPublicBool(r.feed_show_podroll ?? r.feedShowPodroll, true),
     feedShowCast: asPublicBool(r.feed_show_cast ?? r.feedShowCast, true),
+    feedShowVideos: asPublicBool(r.feed_show_videos ?? r.feedShowVideos, true),
   };
 }
 

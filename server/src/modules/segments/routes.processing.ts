@@ -34,13 +34,33 @@ import {
   formatSrtTime,
   adjustSrtEntriesForWindow,
   formatSrtEntries,
+  mergeTrimRanges,
   partitionMarkersAtSplit,
   partitionTrimRangesAtSplit,
   type SrtEntry,
 } from "./utils.js";
 import { redactSegmentForClient } from "../../utils/segment.js";
+import {
+  SplitTracksManifestError,
+  assertSplitTracksManifestStorageAllowed,
+  splitSegmentTracksManifest,
+} from "../../services/splitSegmentTracksManifest.js";
 
 const exec = promisify(execFile);
+
+/** Markers / trimRanges may be a JSON string or (rarely) an already-parsed array. */
+function parseJsonArrayField(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
+}
 
 export async function registerProcessingRoutes(app: FastifyInstance) {
   app.post(
@@ -662,7 +682,7 @@ export async function registerProcessingRoutes(app: FastifyInstance) {
         tags: ["Segments"],
         summary: "Split segment",
         description:
-          "Split segment audio at minutes+seconds into two segments. Body: minutes, seconds.",
+          "Split segment audio at minutes+seconds into two segments. Soft trims and markers are partitioned: items before the cut stay on this segment; items at/after the cut move to the new segment with times shifted. Body: minutes, seconds.",
         params: {
           type: "object",
           properties: {
@@ -775,6 +795,21 @@ export async function registerProcessingRoutes(app: FastifyInstance) {
 
       const durationA = splitSec;
       const durationB = currentDurationSec - splitSec;
+
+      try {
+        assertSplitTracksManifestStorageAllowed({
+          podcastId: access.podcastId,
+          episodeId,
+          segmentId,
+          splitSec,
+        });
+      } catch (err) {
+        if (err instanceof SplitTracksManifestError && err.statusCode === 403) {
+          return reply.status(403).send({ error: err.message });
+        }
+        throw err;
+      }
+
       const newSegmentId = nanoid();
       const dir = dirname(audio.path);
       assertPathUnder(dir, audio.base);
@@ -871,43 +906,35 @@ export async function registerProcessingRoutes(app: FastifyInstance) {
           }
         }
 
-        let markersRaw: unknown[] = [];
-        if (typeof segment.markers === "string" && segment.markers) {
-          try {
-            const parsed = JSON.parse(segment.markers);
-            if (Array.isArray(parsed)) markersRaw = parsed;
-          } catch {
-            /* ignore */
-          }
-        }
-        let trimRaw: Array<[number, number]> = [];
-        if (typeof segment.trimRanges === "string" && segment.trimRanges) {
-          try {
-            const parsed = JSON.parse(segment.trimRanges);
-            if (Array.isArray(parsed)) {
-              trimRaw = parsed as Array<[number, number]>;
-            }
-          } catch {
-            /* ignore */
-          }
-        }
+        const markersRaw = parseJsonArrayField(segment.markers) as Array<{
+          time: number;
+          title?: string;
+          color?: string;
+          markerType?: "" | "chapter" | "soundbite";
+          duration?: number;
+        }>;
+        const trimRaw = parseJsonArrayField(
+          segment.trimRanges,
+        ) as Array<[number, number]>;
 
         const { before: markersA, after: markersB } = partitionMarkersAtSplit(
-          markersRaw as Array<{
-            time: number;
-            title?: string;
-            color?: string;
-            markerType?: "" | "chapter" | "soundbite";
-            duration?: number;
-          }>,
+          markersRaw,
           splitSec,
           durationA,
           durationB,
         );
-        const { before: trimsA, after: trimsB } = partitionTrimRangesAtSplit(
-          trimRaw,
+        const { before: trimsAUnmerged, after: trimsBUnmerged } =
+          partitionTrimRangesAtSplit(trimRaw, splitSec);
+        const trimsA = mergeTrimRanges(trimsAUnmerged, durationA);
+        const trimsB = mergeTrimRanges(trimsBUnmerged, durationB);
+
+        splitSegmentTracksManifest({
+          podcastId: access.podcastId,
+          episodeId,
+          segmentId,
+          newSegmentId,
           splitSec,
-        );
+        });
 
         const audioEqRaw =
           typeof segment.audioEq === "string" && segment.audioEq

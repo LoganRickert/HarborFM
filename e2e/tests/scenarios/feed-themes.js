@@ -705,7 +705,7 @@ export async function run({ runOne }) {
         name: 'E2E HarborFM Mounts',
         version: '1.0.0',
         podcastBody: `<div class="hfm">{{ podcast.title }}{% render 'harborfm/episodes' %}{% render 'harborfm/player' %}{% render 'harborfm/cast' %}{% render 'harborfm/search' %}</div>`,
-        episodeBody: `<div class="hfm-ep">{{ episode.title }}{% render 'harborfm/player' %}</div>`,
+        episodeBody: `<div class="hfm-ep">{{ episode.title }}{% render 'harborfm/player' %}{% render 'harborfm/episode_cast' %}{% for h in episode_cast.hosts %}{{ h.name }}{% endfor %}</div>`,
       });
       const res = await importThemeZip(jar, zip);
       if (res.status !== 201 && res.status !== 200) {
@@ -885,6 +885,9 @@ export async function run({ runOne }) {
       }
       if (!String(body.html).includes('E2E Theme Episode') && !String(body.html).includes('data-harborfm-block')) {
         throw new Error('episode theme-render HTML missing expected content');
+      }
+      if (!String(body.html).includes('data-harborfm-block="episode_cast"')) {
+        throw new Error('fluid episode theme-render missing episode_cast mount');
       }
     }),
   );

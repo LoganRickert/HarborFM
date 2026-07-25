@@ -84,6 +84,7 @@ export interface PodcastListRow {
   feedShowAuthor: number;
   feedShowPodroll: number;
   feedShowCast: number;
+  feedShowVideos: number;
   maxEpisodes: number | null;
   episodeCount: number;
 }
@@ -191,6 +192,7 @@ function podcastListSelection(epCounts: typeof episodeCounts) {
     feedShowAuthor: sql<number>`COALESCE(${podcasts.feedShowAuthor}, 1)`.as("feedShowAuthor"),
     feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
     feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
+    feedShowVideos: sql<number>`COALESCE(${podcasts.feedShowVideos}, 1)`.as("feedShowVideos"),
     maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as(
       "maxEpisodes",
     ),
@@ -362,6 +364,7 @@ export function getByIdWithFilenameForCreate(
       feedShowAuthor: sql<number>`COALESCE(${podcasts.feedShowAuthor}, 1)`.as("feedShowAuthor"),
       feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
       feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
+      feedShowVideos: sql<number>`COALESCE(${podcasts.feedShowVideos}, 1)`.as("feedShowVideos"),
       maxEpisodes: sql<number | null>`COALESCE(${podcasts.maxEpisodes}, ${users.maxEpisodes})`.as("maxEpisodes"),
       episodeCount: sql<number>`0`.as("episodeCount"),
       cloudflareApiKeyEnc: podcasts.cloudflareApiKeyEnc,
