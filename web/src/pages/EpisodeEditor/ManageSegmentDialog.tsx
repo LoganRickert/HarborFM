@@ -41,7 +41,14 @@ export interface ManageSegmentDialogProps {
   isDeleting: boolean;
 }
 
-type WaitKind = 'export' | 'import' | 'import-mp3' | 'reaper' | 'otio' | null;
+type WaitKind =
+  | 'export'
+  | 'download-mp3'
+  | 'import'
+  | 'import-mp3'
+  | 'reaper'
+  | 'otio'
+  | null;
 
 export function ManageSegmentDialog({
   open,
@@ -132,6 +139,21 @@ export function ManageSegmentDialog({
     if (hadWarning) {
       onImported();
       onOpenChange(false);
+    }
+  }
+
+  async function handleDownloadMp3() {
+    if (!segment || busy || readOnly) return;
+    setWaitError(null);
+    setWaitKind('download-mp3');
+    try {
+      await downloadAuthenticatedBlob(
+        downloadSegmentMp3Url(episodeId, segment.id),
+        'segment.mp3',
+      );
+      dismissWait();
+    } catch (err) {
+      setWaitError(err instanceof Error ? err.message : 'Failed to download MP3');
     }
   }
 
@@ -275,9 +297,13 @@ export function ManageSegmentDialog({
           ? 'Importing final mix...'
           : waitKind === 'import'
             ? 'Importing segment...'
-            : 'Preparing your download...';
+            : waitKind === 'download-mp3'
+              ? 'Preparing MP3...'
+              : 'Preparing your download...';
   const waitErrorTitle =
-    waitKind === 'export' ? 'Download failed' : 'Import failed';
+    waitKind === 'export' || waitKind === 'download-mp3'
+      ? 'Download failed'
+      : 'Import failed';
 
   return (
     <>
@@ -315,28 +341,23 @@ export function ManageSegmentDialog({
             </Dialog.Description>
 
             <div className={styles.manageSegmentActions}>
-              {hasAudio && !readOnly ? (
-                <a
-                  className={styles.manageSegmentAction}
-                  href={downloadSegmentMp3Url(episodeId, segment!.id)}
-                  download
-                >
-                  <Download size={18} aria-hidden />
-                  <span>Download MP3</span>
-                  <span className={styles.manageSegmentActionHint}>Trimmed final mix</span>
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  className={styles.manageSegmentAction}
-                  disabled
-                  title={readOnly ? 'Read-only account' : 'No audio to download'}
-                >
-                  <Download size={18} aria-hidden />
-                  <span>Download MP3</span>
-                  <span className={styles.manageSegmentActionHint}>Trimmed final mix</span>
-                </button>
-              )}
+              <button
+                type="button"
+                className={styles.manageSegmentAction}
+                disabled={!hasAudio || readOnly || busy}
+                onClick={() => void handleDownloadMp3()}
+                title={
+                  readOnly
+                    ? 'Read-only account'
+                    : !hasAudio
+                      ? 'No audio to download'
+                      : undefined
+                }
+              >
+                <Download size={18} aria-hidden />
+                <span>Download MP3</span>
+                <span className={styles.manageSegmentActionHint}>Trimmed final mix</span>
+              </button>
 
               <button
                 type="button"

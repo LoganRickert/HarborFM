@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.2 - 7-25-2026
+
+- **Manage Segment:** **Download MP3** shows a Please wait dialog while the trimmed mix is prepared, instead of sitting with no feedback until the file starts.
+
 ## v1.19.1 - 7-25-2026
 
 - **Segment Split:** Also partitions `tracks_manifest` (and the original backup when present). Clips that end before the split stay on the first segment; clips that start after move to the new segment with timeline times shifted to 0; clips that cross the cut are bladed into both halves. Take files needed by the second half are copied into its recordings folder.
