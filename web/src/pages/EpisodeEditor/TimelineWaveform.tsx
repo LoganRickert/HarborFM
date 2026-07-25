@@ -27,6 +27,8 @@ export interface TimelineWaveformProps {
   className?: string;
   /** Right-click on the timeline (no context menu). Used to cycle pan > trim > edit. */
   onContextMenuCycle?: () => void;
+  /** Called after a new trim range is placed (end point or drag-select). */
+  onTrimComplete?: () => void;
 }
 
 export function TimelineWaveform({
@@ -49,6 +51,7 @@ export function TimelineWaveform({
   readOnly = false,
   className,
   onContextMenuCycle,
+  onTrimComplete,
 }: TimelineWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   /** Set when we handled pointer up (seek or pan); prevents click from triggering a second seek. */
@@ -135,6 +138,7 @@ export function TimelineWaveform({
           const end = Math.max(pendingTrimStart, endTime);
           if (end - start >= 0.01) {
             onTrimRangesChange(mergeRanges([...trimRanges, [start, end]]));
+            onTrimComplete?.();
           }
           setPendingTrimStart(null);
           onSelectionChange(null);
@@ -147,7 +151,7 @@ export function TimelineWaveform({
         onSelectionChange({ start: time, end: time });
       }
     },
-    [durationSec, readOnly, dragging, viewStartSec, viewEndSec, onSelectionChange, onAddMarker, onViewChange, mode, onTrimRangesChange, pendingTrimStart, trimRanges, clientXToTime]
+    [durationSec, readOnly, dragging, viewStartSec, viewEndSec, onSelectionChange, onAddMarker, onViewChange, mode, onTrimRangesChange, onTrimComplete, pendingTrimStart, trimRanges, clientXToTime]
   );
 
   const handlePointerMove = useCallback(
@@ -241,6 +245,7 @@ export function TimelineWaveform({
         if (end - start >= 0.01) {
           const newRanges = [...trimRangesRef.current, [start, end] as [number, number]].sort((a, b) => a[0] - b[0]) as Array<[number, number]>;
           onTrimRangesChange(mergeRanges(newRanges));
+          onTrimComplete?.();
         }
         setPendingTrimStart(null);
         onSelectionChange?.(null);
@@ -251,7 +256,7 @@ export function TimelineWaveform({
     setDragRangeIndex(null);
     setPanStartView(null);
     panHasMovedRef.current = false;
-  }, [mode, onSeek, onTrimRangesChange, onSelectionChange, dragStartTime]);
+  }, [mode, onSeek, onTrimRangesChange, onSelectionChange, onTrimComplete, dragStartTime]);
 
   const handleClickCapture = useCallback((e: React.MouseEvent) => {
     if (didHandlePointerRef.current) {
@@ -320,8 +325,9 @@ export function TimelineWaveform({
         currentTime={currentTime}
         viewStartSec={viewStartSec}
         viewEndSec={viewEndSec}
-        onSeek={mode === 'drag' ? onSeek : () => {}}
+        onSeek={onSeek}
         onPlayPause={onPlayPause}
+        interactive={false}
         className={styles.timelineWaveformBase}
       />
       {/* Trim range overlays - positioned relative to visible window */}

@@ -7,6 +7,7 @@ import { registerProcessingRoutes } from "./routes.processing.js";
 import { registerRenderRoutes } from "./routes.render.js";
 import { registerVideoRoutes } from "./routes.video.js";
 import { registerSegmentProjectRoutes } from "./routes.project.js";
+import { registerTracksRoutes } from "./routes.tracks.js";
 
 export async function segmentRoutes(app: FastifyInstance) {
   await app.register(registerAsrRoutes);
@@ -17,6 +18,7 @@ export async function segmentRoutes(app: FastifyInstance) {
   await app.register(registerRenderRoutes);
   await app.register(registerVideoRoutes);
   await app.register(registerSegmentProjectRoutes);
+  await app.register(registerTracksRoutes);
 }
 
 export { generateSrtFromWhisper, generateSrtFromOpenAI, runTranscription } from "./utils.js";

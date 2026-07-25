@@ -1,4 +1,4 @@
-import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody, SegmentHostDuckingStatusResponse, SegmentRestoreOriginalMixStatusResponse } from '@harborfm/shared';
+import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody, SegmentHostDuckingStatusResponse, SegmentRestoreOriginalMixStatusResponse, SegmentTracksResponse, SegmentTrackClip, SegmentTracksApplyStatusResponse, SegmentTracksSaveResponse } from '@harborfm/shared';
 import { csrfHeaders } from './client';
 
 const BASE = '/api';
@@ -127,6 +127,189 @@ export function getSegmentRestoreOriginalMixStatus(
 ): Promise<SegmentRestoreOriginalMixStatusResponse> {
   return fetch(
     `${BASE}/episodes/${episodeId}/segments/${segmentId}/restore-original-mix/status`,
+    { credentials: 'include' },
+  ).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+export function getSegmentTracks(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentTracksResponse> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks`, {
+    credentials: 'include',
+  }).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+export type BootstrapSegmentTracksFromMixResponse = {
+  hasRecordings: true;
+  alreadyExisted: boolean;
+  bytesAdded: number;
+  takeFile?: string;
+};
+
+/** Copy mix audio into recordings/ so the advanced editor can open (mix-only segments). */
+export function bootstrapSegmentTracksFromMix(
+  episodeId: string,
+  segmentId: string,
+): Promise<BootstrapSegmentTracksFromMixResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks/bootstrap-from-mix`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfHeaders(),
+    },
+  ).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+export function takeWaveformUrl(
+  episodeId: string,
+  segmentId: string,
+  filePath: string,
+): string {
+  const q = new URLSearchParams({ file: filePath });
+  return `${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks/waveform?${q}`;
+}
+
+/** Cookie-session stream URL for a take file in the segment recordings folder. */
+export function takeStreamUrl(
+  episodeId: string,
+  segmentId: string,
+  filePath: string,
+): string {
+  const q = new URLSearchParams({ file: filePath });
+  return `${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks/stream?${q}`;
+}
+
+export type AddSegmentTrackMediaResponse = {
+  filePath: string;
+  durationMs: number;
+  participantName: string;
+};
+
+/** Upload audio or copy a library asset into segment recordings for Add track. */
+export function addSegmentTrackMedia(
+  episodeId: string,
+  segmentId: string,
+  opts: { file?: File; libraryAssetId?: string; trackName?: string },
+): Promise<AddSegmentTrackMediaResponse> {
+  if (opts.libraryAssetId && !opts.file) {
+    return fetch(
+      `${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks/media`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({
+          libraryAssetId: opts.libraryAssetId,
+          trackName: opts.trackName,
+        }),
+      },
+    ).then((r) => {
+      if (!r.ok) {
+        return r.json().then((err: { error?: string }) => {
+          throw new Error(err.error ?? r.statusText);
+        });
+      }
+      return r.json();
+    });
+  }
+  const form = new FormData();
+  if (opts.file) form.append('file', opts.file);
+  if (opts.trackName) form.append('trackName', opts.trackName);
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks/media`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+    body: form,
+  }).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+/** Save advanced editor clips (no remake). Backs up .original once when missing. */
+export function saveSegmentTracks(
+  episodeId: string,
+  segmentId: string,
+  clips: SegmentTrackClip[],
+): Promise<SegmentTracksSaveResponse> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks`, {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ clips }),
+  }).then((r) => {
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+    return r.json();
+  });
+}
+
+/** Start remake from saved tracks_manifest (202). Poll getSegmentTracksApplyStatus. */
+export function startRemakeSegmentTracks(
+  episodeId: string,
+  segmentId: string,
+): Promise<void> {
+  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks/remake`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+  }).then((r) => {
+    if (r.status === 202 || r.status === 409) return;
+    if (!r.ok) {
+      return r.json().then((err: { error?: string }) => {
+        throw new Error(err.error ?? r.statusText);
+      });
+    }
+  });
+}
+
+/** @deprecated Prefer saveSegmentTracks + startRemakeSegmentTracks. */
+export function startApplySegmentTracks(
+  episodeId: string,
+  segmentId: string,
+  clips: SegmentTrackClip[],
+): Promise<void> {
+  return saveSegmentTracks(episodeId, segmentId, clips).then(() =>
+    startRemakeSegmentTracks(episodeId, segmentId),
+  );
+}
+
+export function getSegmentTracksApplyStatus(
+  episodeId: string,
+  segmentId: string,
+): Promise<SegmentTracksApplyStatusResponse> {
+  return fetch(
+    `${BASE}/episodes/${episodeId}/segments/${segmentId}/tracks/apply-status`,
     { credentials: 'include' },
   ).then((r) => {
     if (!r.ok) {

@@ -51,6 +51,13 @@ export interface SegmentModalProps {
   ownerCanTranscribe?: boolean;
   initialTab?: SegmentModalTab;
   onClose: () => void;
+  /** When set, show Advanced editor toggle (multitrack or bootstrap-from-mix). */
+  onSwitchToAdvanced?: () => void;
+  showAdvancedToggle?: boolean;
+  /** True while bootstrapping recordings from mix audio. */
+  advancedBootstrapPending?: boolean;
+  /** Error from bootstrap-from-mix (storage limit, etc.). */
+  advancedBootstrapError?: string | null;
 }
 
 function isRateLimitMessage(msg: string | null): boolean {
@@ -68,6 +75,10 @@ export function SegmentModal({
   ownerCanTranscribe = true,
   initialTab = 'transcript',
   onClose,
+  onSwitchToAdvanced,
+  showAdvancedToggle = false,
+  advancedBootstrapPending = false,
+  advancedBootstrapError = null,
 }: SegmentModalProps) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<SegmentModalTab>(initialTab);
@@ -442,10 +453,27 @@ export function SegmentModal({
           >
             <div className={styles.dialogHeaderRow}>
               <Dialog.Title className={styles.dialogTitle}>{segmentName}</Dialog.Title>
-              <button type="button" className={styles.dialogClose} aria-label="Close" onClick={requestClose}>
-                <X size={18} strokeWidth={2} aria-hidden="true" />
-              </button>
+              <div className={styles.segmentEditorV2HeaderActions}>
+                {showAdvancedToggle && onSwitchToAdvanced && (
+                  <button
+                    type="button"
+                    className={`${styles.generateFieldBtn} ${styles.segmentAdvancedEditorBtn}`}
+                    onClick={onSwitchToAdvanced}
+                    disabled={advancedBootstrapPending}
+                  >
+                    {advancedBootstrapPending ? 'Opening...' : 'Advanced editor'}
+                  </button>
+                )}
+                <button type="button" className={styles.dialogClose} aria-label="Close" onClick={requestClose}>
+                  <X size={18} strokeWidth={2} aria-hidden="true" />
+                </button>
+              </div>
             </div>
+            {advancedBootstrapError ? (
+              <p className={styles.error} role="alert">
+                {advancedBootstrapError}
+              </p>
+            ) : null}
             <div className={sharedStyles.editDetailsTabSelectWrap}>
               <select
                 className={sharedStyles.editDetailsTabSelect}

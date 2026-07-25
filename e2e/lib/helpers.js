@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, unlinkSync } from 'fs';
+import { readFileSync, existsSync, unlinkSync, mkdirSync, writeFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -6,6 +6,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const E2E_DIR = join(__dirname, '..');
 
 export const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api';
+
+export function e2eDataDir() {
+  return process.env.E2E_DATA_DIR || join(E2E_DIR, 'data');
+}
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -482,6 +486,215 @@ export async function importEpisodeProjectExpectFail(
     }
     return err instanceof Error ? err.message : String(err);
   }
+}
+
+/**
+ * Find multitrack recordings dir for a segment (segmentId or date_segmentId).
+ */
+export function findSegmentMultitrackDir(podcastId, episodeId, segmentId) {
+  const recordingsBase = join(
+    e2eDataDir(),
+    'uploads',
+    podcastId,
+    episodeId,
+    'recordings',
+  );
+  if (!existsSync(recordingsBase)) return null;
+  const names = readdirSync(recordingsBase);
+  const match = names.find((n) => n === segmentId || n.endsWith(`_${segmentId}`));
+  return match ? join(recordingsBase, match) : null;
+}
+
+/**
+ * Plant host+guest multitrack takes + tracks_manifest for advanced editor e2e.
+ * Copies the test mp3 for both takes and writes a minimal waveform JSON for host.
+ */
+export function plantSegmentMultitrack({
+  podcastId,
+  episodeId,
+  segmentId,
+  durationSec,
+  hostName = 'Host',
+  guestName = 'Guest',
+}) {
+  const recordingsBase = join(
+    e2eDataDir(),
+    'uploads',
+    podcastId,
+    episodeId,
+    'recordings',
+  );
+  mkdirSync(recordingsBase, { recursive: true });
+  const epoch = Date.now();
+  const d = new Date(epoch);
+  const folderName = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}_${segmentId}`;
+  const existing = findSegmentMultitrackDir(podcastId, episodeId, segmentId);
+  const mtDir = existing || join(recordingsBase, folderName);
+  mkdirSync(mtDir, { recursive: true });
+
+  const mp3 = readFileSync(testDataMp3());
+  writeFileSync(join(mtDir, 'host.mp3'), mp3);
+  writeFileSync(join(mtDir, 'guest.mp3'), mp3);
+  // Minimal audiowaveform-shaped JSON so GET .../tracks/waveform can return 200.
+  writeFileSync(
+    join(mtDir, 'host.waveform.json'),
+    JSON.stringify({
+      version: 2,
+      channels: 1,
+      sample_rate: 48000,
+      samples_per_pixel: 256,
+      bits: 8,
+      length: 100,
+      data: Array.from({ length: 100 }, (_, i) => (i % 2 === 0 ? 20 : -20)),
+    }),
+  );
+
+  const endMs = Math.max(1000, Math.round((durationSec ?? 10) * 1000));
+  writeFileSync(
+    join(mtDir, 'tracks_manifest.json'),
+    JSON.stringify({
+      recordingEpochMs: epoch,
+      sessionStartedAtEpochMs: epoch,
+      episodeId,
+      podcastId,
+      segments: [
+        {
+          segmentId: 'host-clip',
+          producerId: 'host',
+          participantName: hostName,
+          participantId: 'host-participant',
+          startMs: 0,
+          endMs,
+          lengthMs: endMs,
+          filePath: 'host.mp3',
+          codec: 'libmp3lame',
+        },
+        {
+          segmentId: 'guest-clip',
+          producerId: 'guest',
+          participantName: guestName,
+          participantId: 'guest-participant',
+          startMs: 0,
+          endMs,
+          lengthMs: endMs,
+          filePath: 'guest.mp3',
+          codec: 'libmp3lame',
+        },
+      ],
+    }),
+  );
+  const originalPath = join(mtDir, 'tracks_manifest.json.original');
+  if (existsSync(originalPath)) unlinkSync(originalPath);
+  return { mtDir, epoch, endMs };
+}
+
+/** GET .../segments/:id/tracks */
+export async function getSegmentTracks(jar, episodeId, segmentId) {
+  const res = await apiFetch(
+    `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/tracks`,
+    {},
+    jar,
+  );
+  if (!res.ok) {
+    throw new Error(`GET tracks failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/**
+ * POST .../tracks/bootstrap-from-mix
+ * Returns { hasRecordings, alreadyExisted, bytesAdded, takeFile? } or throws with status.
+ */
+export async function bootstrapSegmentTracksFromMix(jar, episodeId, segmentId) {
+  const res = await apiFetch(
+    `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/tracks/bootstrap-from-mix`,
+    { method: 'POST' },
+    jar,
+  );
+  const text = await res.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { error: text };
+  }
+  if (!res.ok) {
+    const err = new Error(
+      data.error || `Bootstrap from mix failed: ${res.status} ${text}`,
+    );
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+/** PUT .../segments/:id/tracks { clips } */
+export async function saveSegmentTracks(jar, episodeId, segmentId, clips) {
+  const res = await apiFetch(
+    `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/tracks`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clips }),
+    },
+    jar,
+  );
+  if (!res.ok) {
+    throw new Error(`PUT tracks failed: ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/**
+ * POST .../tracks/media multipart upload. Returns { filePath, durationMs, participantName, ... }.
+ */
+export async function uploadSegmentTrackMedia(
+  jar,
+  episodeId,
+  segmentId,
+  { filePath, trackName, filename = 'import-bed.mp3' } = {},
+) {
+  const path = filePath || testDataMp3();
+  if (!existsSync(path)) throw new Error(`e2e: upload file not found: ${path}`);
+  const buf = readFileSync(path);
+  const formData = new FormData();
+  formData.append('file', new Blob([buf], { type: 'audio/mpeg' }), filename);
+  if (trackName) formData.append('trackName', trackName);
+  const headers = jar ? jar.apply({}) : {};
+  delete headers['Content-Type'];
+  const csrf = jar?.get()['harborfm_csrf'];
+  if (csrf) headers['x-csrf-token'] = csrf;
+  const url = `${baseURL}/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/tracks/media`;
+  const res = await fetch(url, { method: 'POST', headers, body: formData });
+  jar?.store(getSetCookies(res));
+  if (res.status !== 201) {
+    throw new Error(`Media upload expected 201, got ${res.status} ${await res.text()}`);
+  }
+  return res.json();
+}
+
+/**
+ * POST .../tracks/remake (202) and poll apply-status until done.
+ */
+export async function remakeSegmentTracks(jar, episodeId, segmentId) {
+  const res = await apiFetch(
+    `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/tracks/remake`,
+    { method: 'POST' },
+    jar,
+  );
+  if (res.status !== 202 && res.status !== 409) {
+    throw new Error(`Remake start expected 202, got ${res.status} ${await res.text()}`);
+  }
+  return pollStatus(
+    `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/tracks/apply-status`,
+    jar,
+    {
+      pendingStatuses: ['remaking'],
+      successStatuses: ['done'],
+      timeoutMs: 180000,
+    },
+  );
 }
 
 /** Start segment project import (202) and poll until done. */

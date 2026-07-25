@@ -246,7 +246,9 @@ export function GenerateVideoModal({
   const aspectRatio =
     orientation === 'portrait'
       ? 9 / 16
-      : 16 / 9;
+      : orientation === 'square'
+        ? 1
+        : 16 / 9;
 
   return (
     <Dialog.Root open onOpenChange={handleOpenChange}>
@@ -309,6 +311,16 @@ export function GenerateVideoModal({
                   >
                     <span className={styles.generateVideoOrientationPreview} style={{ aspectRatio: '9/16', width: '1.5rem' }} />
                     <span>Portrait</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={orientation === 'square' ? styles.generateVideoOrientationActive : styles.generateVideoOrientationBtn}
+                    onClick={() => setOrientation('square')}
+                    disabled={isGenerating}
+                    aria-pressed={orientation === 'square'}
+                  >
+                    <span className={styles.generateVideoOrientationPreview} style={{ aspectRatio: '1/1', width: '1.75rem' }} />
+                    <span>Square</span>
                   </button>
                 </div>
               </div>
@@ -442,6 +454,7 @@ export function GenerateVideoModal({
                   style={{
                     aspectRatio: String(aspectRatio),
                     ...(orientation === 'portrait' && { maxWidth: 'calc(280px * 9 / 16)' }),
+                    ...(orientation === 'square' && { maxWidth: '280px' }),
                   }}
                 >
                   {backgroundImageUrl && (

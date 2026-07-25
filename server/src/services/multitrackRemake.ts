@@ -126,21 +126,39 @@ function clipPlayLengthMs(
   entry: MultitrackSegmentEntry,
   probedDurationMs: number | null,
 ): number | null {
+  const sourceOffsetMs =
+    typeof entry.sourceOffsetMs === "number" && entry.sourceOffsetMs > 0
+      ? Math.round(entry.sourceOffsetMs)
+      : 0;
+  const maxFromMedia =
+    probedDurationMs != null && probedDurationMs > 0
+      ? Math.max(0, Math.round(probedDurationMs - sourceOffsetMs))
+      : null;
+
+  let len: number | null = null;
   if (typeof entry.lengthMs === "number" && entry.lengthMs > 0) {
-    return Math.round(entry.lengthMs);
+    len = Math.round(entry.lengthMs);
+  } else {
+    const startMs = typeof entry.startMs === "number" ? entry.startMs : 0;
+    if (typeof entry.endMs === "number" && entry.endMs > startMs) {
+      len = Math.round(entry.endMs - startMs);
+    } else if (maxFromMedia != null) {
+      return maxFromMedia;
+    } else {
+      return null;
+    }
   }
-  const startMs = typeof entry.startMs === "number" ? entry.startMs : 0;
-  if (typeof entry.endMs === "number" && entry.endMs > startMs) {
-    return Math.round(entry.endMs - startMs);
+
+  // Inflated endMs / lengthMs (common for soundboard one-shots) must not
+  // stretch past real media unless the clip is explicitly set to loop.
+  if (
+    maxFromMedia != null &&
+    entry.loop !== true &&
+    len > maxFromMedia
+  ) {
+    return maxFromMedia;
   }
-  if (probedDurationMs != null && probedDurationMs > 0) {
-    const sourceOffsetMs =
-      typeof entry.sourceOffsetMs === "number" && entry.sourceOffsetMs > 0
-        ? Math.round(entry.sourceOffsetMs)
-        : 0;
-    return Math.max(0, Math.round(probedDurationMs - sourceOffsetMs));
-  }
-  return null;
+  return len;
 }
 
 /** Chain atempo filters; each factor must be in [0.5, 2]. */

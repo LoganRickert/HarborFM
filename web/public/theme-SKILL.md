@@ -267,6 +267,8 @@ Insert mounts with:
 
 On episode pages use `show.reviews_episode` and `show.episode_description`.
 
+For custom markup (layout, labels, icons), skip the mount and loop Liquid data instead (`links`, `funding_links`, `cast`, `podroll`, `reviews`). Keep `harborfm/episodes` (and usually `search` / `player`) as mounts; those need HarborFM interactivity.
+
 ---
 
 ## Liquid context
@@ -281,6 +283,10 @@ On episode pages use `show.reviews_episode` and `show.episode_description`.
 | `artwork_url` | string \| empty | |
 | `rss_url` | string | |
 | `slug` | string | |
+| `apple_podcasts_url` … `discord_url` | string | Per-platform URL fields (empty when unset). Prefer the `links` array for lists. |
+| `funding_links` | array | Same as top-level `funding_links` when `show.funding` |
+| `podroll` | array | Same as top-level `podroll` when `show.podroll` |
+| `links` | array | Same as top-level `links` when `show.links` |
 
 ### `episodes` (home / extra pages)
 
@@ -294,11 +300,13 @@ Same shape as one episodes row.
 
 ### `accent`
 
-`id`, `color`, `dim`, `glow` - map to CSS variables.
+`id`, `color`, `dim`, `glow`, `fg` - map to CSS variables. Use `accent.fg` (or another checked contrast color) on accent-filled buttons.
 
 ### `show` (booleans)
 
 `author`, `podcast_description`, `episode_description`, `funding`, `reviews_podcast`, `reviews_episode`, `podroll`, `cast`, `links`
+
+`funding`, `podroll`, and `links` are true only when the Page Customizations toggle allows the block **and** the show has at least one item.
 
 ### `urls`
 
@@ -320,6 +328,101 @@ Logical role: home template basename, `episode`, or custom page basename (for ac
 ```liquid
 <a href="{{ urls.home }}" {% if page == 'home' %}aria-current="page"{% endif %}>Home</a>
 ```
+
+### `links` (Listen On / social)
+
+Top-level `links` and `podcast.links` are the same array. Empty when `show.links` is false.
+
+Each item:
+
+| Key | Type | Notes |
+|-----|------|--------|
+| `key` | string | Stable id for CSS / branching (see table below) |
+| `label` | string | Display name (`Apple Podcasts`, `Spotify`, …) |
+| `url` | string | Destination (already trimmed; may omit `https://`) |
+| `group` | string | `listen` or `social` |
+| `icon_url` | string | HarborFM-hosted monochrome SVG (e.g. `/platform-icons/apple_podcasts.svg`) |
+
+Listen keys: `apple_podcasts`, `spotify`, `amazon_music`, `podcast_index`, `listen_notes`, `castbox`
+
+Social keys: `x`, `facebook`, `instagram`, `tiktok`, `youtube`, `discord`
+
+```liquid
+{% if show.links %}
+  <nav class="listen-on" aria-label="Listen on">
+    {% for link in links %}
+      {% if link.group == 'listen' %}
+        <a
+          class="listen-on__link listen-on__link--{{ link.key }}"
+          href="{{ link.url | escape }}"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <img src="{{ link.icon_url | escape }}" alt="" width="20" height="20" />
+          <span>{{ link.label | escape }}</span>
+        </a>
+      {% endif %}
+    {% endfor %}
+  </nav>
+{% endif %}
+```
+
+Icons are monochrome SVGs (`currentColor`). With `<img>` they render black by default. To tint with your theme color, prefer a CSS mask (or ship your own assets and key off `link.key`).
+
+Do **not** also `{% render 'harborfm/links' %}` on the same page if you build a custom list; pick one approach.
+
+### `funding_links`
+
+Empty when `show.funding` is false. Each item: `url`, `text`.
+
+```liquid
+{% if show.funding %}
+  <ul>
+    {% for item in funding_links %}
+      <li><a href="{{ item.url | escape }}" target="_blank" rel="noopener noreferrer">{{ item.text | escape }}</a></li>
+    {% endfor %}
+  </ul>
+{% endif %}
+```
+
+### `cast`
+
+Object with `hosts` and `guests` arrays (empty when `show.cast` is false). Each member:
+
+| Key | Type | Notes |
+|-----|------|--------|
+| `id` | string | |
+| `name` | string | |
+| `role` | string | |
+| `description` | string | Plain text |
+| `image_url` | string | May be empty |
+| `url` | string | Social / profile URL when set |
+
+```liquid
+{% if show.cast %}
+  {% for host in cast.hosts %}
+    <article>
+      {% if host.image_url != blank %}
+        <img src="{{ host.image_url | escape }}" alt="" />
+      {% endif %}
+      <h3>{{ host.name | escape }}</h3>
+      {% if host.role != blank %}<p>{{ host.role | escape }}</p>{% endif %}
+    </article>
+  {% endfor %}
+{% endif %}
+```
+
+### `podroll`
+
+Empty when `show.podroll` is false. Each item: `title`, `feed_url`, `home_url`, `cover_art_url`, `feed_guid`.
+
+Prefer `home_url` for the click-through; fall back to `feed_url` when needed.
+
+### `reviews`
+
+SSR preview list (not paginated). Prefer `{% render 'harborfm/reviews' %}` for Load more / write UI.
+
+Each item: `id`, `name`, `rating`, `body`, `verified`, `created_at`, `episode_title`.
 
 ---
 

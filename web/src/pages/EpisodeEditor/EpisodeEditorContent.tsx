@@ -16,6 +16,7 @@ import {
   getRenderStatus,
   startImportSegmentProject,
   getSegmentProjectImportStatus,
+  bootstrapSegmentTracksFromMix,
   type EpisodeSegment,
 } from '../../api/segments';
 import { PleaseWaitDialog } from '../../components/PleaseWaitDialog';
@@ -41,6 +42,12 @@ import { ManageSegmentDialog } from './ManageSegmentDialog';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { SegmentModal } from '../../components/SegmentModal';
+import { SegmentEditorV2 } from '../../components/SegmentEditorV2';
+import {
+  getSegmentEditorMode,
+  setSegmentEditorMode,
+  type SegmentEditorMode,
+} from '../../utils/segmentEditorMode';
 import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { useBaselineDirty, snapshotForDirty } from '../../hooks/useBaselineDirty';
@@ -161,6 +168,11 @@ export function EpisodeEditorContent({
   const [segmentToDelete, setSegmentToDelete] = useState<string | null>(null);
   const [segmentIdForInfo, setSegmentIdForInfo] = useState<string | null>(null);
   const [segmentModalInitialTab, setSegmentModalInitialTab] = useState<'edit' | 'transcript' | 'ask'>('transcript');
+  const [segmentEditorMode, setSegmentEditorModeState] = useState<SegmentEditorMode>(() =>
+    getSegmentEditorMode(),
+  );
+  const [advancedBootstrapPending, setAdvancedBootstrapPending] = useState(false);
+  const [advancedBootstrapError, setAdvancedBootstrapError] = useState<string | null>(null);
   const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
   const [pendingArtworkFile, setPendingArtworkFile] = useState<File | null>(null);
   const [pendingArtworkPreviewUrl, setPendingArtworkPreviewUrl] = useState<string | null>(null);
@@ -831,6 +843,9 @@ export function EpisodeEditorContent({
               onSegmentEdit={segmentReadOnly ? undefined : (segmentId) => {
                 pauseCurrentSegment();
                 setSegmentModalInitialTab('edit');
+                // Always open the simple editor; advanced is opt-in via the toggle.
+                setSegmentEditorMode('simple');
+                setSegmentEditorModeState('simple');
                 setSegmentIdForInfo(segmentId);
               }}
               onSegmentToggleDisabled={
@@ -1190,6 +1205,27 @@ export function EpisodeEditorContent({
       {segmentIdForInfo && (() => {
         const seg = segments.find((s) => s.id === segmentIdForInfo);
         if (!seg) return null;
+        if (segmentEditorMode === 'advanced' && seg.hasRecordings) {
+          return (
+            <SegmentEditorV2
+              key={`v2-${segmentIdForInfo}`}
+              episodeId={id}
+              segment={seg}
+              segmentId={segmentIdForInfo}
+              segmentName={seg.name?.trim() || 'Section'}
+              segmentWaveformData={segmentWaveforms.get(seg.id)}
+              readOnly={segmentReadOnly}
+              onClose={() => setSegmentIdForInfo(null)}
+              onSwitchToSimple={() => {
+                setSegmentEditorMode('simple');
+                setSegmentEditorModeState('simple');
+              }}
+            />
+          );
+        }
+        const showAdvancedToggle =
+          !segmentReadOnly &&
+          (Boolean(seg.hasRecordings) || Boolean(seg.canBootstrapAdvancedEditor));
         return (
         <SegmentModal
           key={segmentIdForInfo}
@@ -1202,7 +1238,38 @@ export function EpisodeEditorContent({
           asrAvailable={Boolean(asrAvail?.available)}
           ownerCanTranscribe={podcast?.ownerCanTranscribe === 1}
           initialTab={segmentModalInitialTab}
-          onClose={() => setSegmentIdForInfo(null)}
+          onClose={() => {
+            setAdvancedBootstrapError(null);
+            setSegmentIdForInfo(null);
+          }}
+          showAdvancedToggle={showAdvancedToggle}
+          advancedBootstrapPending={advancedBootstrapPending}
+          advancedBootstrapError={advancedBootstrapError}
+          onSwitchToAdvanced={() => {
+            void (async () => {
+              setAdvancedBootstrapError(null);
+              if (!seg.hasRecordings) {
+                setAdvancedBootstrapPending(true);
+                try {
+                  await bootstrapSegmentTracksFromMix(id, seg.id);
+                  await queryClient.invalidateQueries({ queryKey: ['segments', id] });
+                  await queryClient.refetchQueries({ queryKey: ['segments', id] });
+                  await queryClient.invalidateQueries({ queryKey: ['me'] });
+                } catch (err) {
+                  setAdvancedBootstrapError(
+                    err instanceof Error && err.message
+                      ? err.message
+                      : 'Failed to open advanced editor',
+                  );
+                  return;
+                } finally {
+                  setAdvancedBootstrapPending(false);
+                }
+              }
+              setSegmentEditorMode('advanced');
+              setSegmentEditorModeState('advanced');
+            })();
+          }}
         />
         );
       })()}

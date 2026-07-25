@@ -47,6 +47,7 @@ import {
   startRestoreOriginalMixJob,
 } from "../../services/restoreOriginalMixRemake.js";
 import { TRACKS_MANIFEST_ORIGINAL_NAME } from "../episodes/projectSegmentShared.js";
+import { canBootstrapAdvancedEditorFromMix } from "../../services/bootstrapSegmentMultitrackFromMix.js";
 import { join } from "path";
 
 function segmentHasOriginalTracksManifest(
@@ -106,11 +107,17 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           episodeId,
           row.id,
         );
+        const canBootstrapAdvancedEditor = canBootstrapAdvancedEditorFromMix(
+          access.podcastId,
+          episodeId,
+          row as Record<string, unknown>,
+        );
         return redactSegmentForClient({
           ...row,
           waveformExists,
           hasRecordings,
           hasOriginalTracksManifest,
+          canBootstrapAdvancedEditor,
         });
       });
       return { segments };
@@ -541,11 +548,19 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         audio && existsSync(audio.path)
           ? existsSync(waveformPath(audio.path))
           : false;
+      const canBootstrapAdvancedEditor = updated
+        ? canBootstrapAdvancedEditorFromMix(
+            access.podcastId,
+            episodeId,
+            updated as Record<string, unknown>,
+          )
+        : false;
       return redactSegmentForClient({
         ...(updated as Record<string, unknown>),
         hasRecordings,
         hasOriginalTracksManifest,
         waveformExists,
+        canBootstrapAdvancedEditor,
       });
     },
   );

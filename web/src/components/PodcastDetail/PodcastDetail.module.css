@@ -746,6 +746,169 @@ a.groupListRow:hover .groupListRowLabel {
   word-break: break-all;
 }
 
+/* Submit to Directories dialog */
+.submitDirDialog {
+  gap: 0;
+}
+
+.submitDirLead {
+  margin: 0 0 0.85rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.submitDirRssBlock {
+  flex-shrink: 0;
+  margin: 0 0 0.85rem;
+}
+
+.submitDirRssLabel {
+  margin-bottom: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.submitDirRssRow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 2.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.submitDirRssUrl {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  padding: 0.55rem 0.75rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.submitDirCopyBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  align-self: stretch;
+  padding: 0 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-left: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.submitDirCopyBtn:hover {
+  background: var(--accent-dim);
+}
+
+.submitDirCopyBtnDone {
+  background: rgba(0, 212, 170, 0.22);
+  color: var(--accent);
+}
+
+.submitDirCopyBtnDone:hover {
+  background: rgba(0, 212, 170, 0.3);
+  color: var(--accent);
+}
+
+.submitDirSection {
+  margin: 0 0 0.85rem;
+}
+
+.submitDirGroupHeading {
+  margin: 0 0 0.35rem;
+  padding: 0 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.submitDirList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.submitDirList > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.submitDirRow,
+.submitDirRow:visited {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  color: var(--text);
+  text-decoration: none;
+  opacity: 1;
+  transition: background 0.15s ease;
+}
+
+.submitDirRow:hover,
+.submitDirRow:focus-visible {
+  background: rgba(0, 212, 170, 0.07);
+  color: var(--text);
+  text-decoration: none;
+  opacity: 1;
+  outline: none;
+}
+
+.submitDirRow:hover .submitDirName,
+.submitDirRow:focus-visible .submitDirName {
+  color: var(--text);
+}
+
+.submitDirRow:hover .submitDirBlurb,
+.submitDirRow:focus-visible .submitDirBlurb {
+  color: var(--text-muted);
+}
+
+.submitDirText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.submitDirName {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.submitDirBlurb {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.submitDirExternal {
+  flex-shrink: 0;
+  color: rgba(0, 212, 170, 0.7);
+}
+
 /* Media Queries */
 @media (max-width: 719px) {
   .podcastShowBody {

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.19.0 - 7-24-2026
+
+- **Advanced segment editor:** On desktop, segments with multitrack recordings open a full-screen clip timeline where you can blade, slide, resize, mute, and delete takes, place markers (including chapters and soundbites), and soft-trim the same way as the simple editor. Preview follows the clip layout so you hear edits before Remake; Save keeps the layout, markers, and soft trims, and Remake rebuilds the mix for the simple editor and publish. Mobile still defaults to the simple mix editor, and you can switch between Simple and Advanced anytime. Segments that only have a mix (no separate takes yet) can still open Advanced; HarborFM copies the mix into the multitrack layout on first use.
+- **Liquid themes:** Listen / social `links` in Liquid now include `icon_url` (HarborFM-hosted platform icons such as Apple Podcasts and Spotify) so themes can render custom Listen On rows without the React mount. Theme authoring docs cover looping `links`, `funding_links`, `cast`, `podroll`, and `reviews` yourself when you want full layout control.
+- **Submit to directories:** From a show with a public RSS feed, open **Submit to Directories** for a checklist of major podcast directories with your feed URL ready to paste.
+- **Video generation:** Orientation includes Square (1:1) alongside Landscape and Portrait (480×480 / 720×720 / 1080×1080).
+
 ## v1.18.0 - 7-24-2026
 
 - **Episode details:** When an LLM is configured and the episode has final audio plus a transcript, Overview includes **Generate Description**, **Generate Subtitle**, and **Generate Summary** under those fields (fills the form; Save still required).

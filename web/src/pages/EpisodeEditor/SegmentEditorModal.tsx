@@ -515,6 +515,9 @@ export function SegmentEditorModal({
                     onRemoveTrimRange={readOnly ? undefined : handleRemoveTrimRange}
                     mode={audioEditActive ? 'drag' : timelineMode}
                     readOnly={readOnly}
+                    onTrimComplete={
+                      readOnly ? undefined : () => setTimelineMode('drag')
+                    }
                   />
                 </div>
                 {!readOnly && durationSec > 0 && markers.length > 0 && <div />}

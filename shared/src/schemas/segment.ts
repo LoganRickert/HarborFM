@@ -209,6 +209,11 @@ export const segmentResponseSchema = z.object({
   hasRecordings: z.boolean().optional(),
   /** True when tracks_manifest.json.original exists (Restore Original Mix). */
   hasOriginalTracksManifest: z.boolean().optional(),
+  /**
+   * True when the advanced editor can be opened by bootstrapping a single-track
+   * recordings folder from the existing mix audio (mix-only recorded segments).
+   */
+  canBootstrapAdvancedEditor: z.boolean().optional(),
 });
 
 /** Response for GET /episodes/:id/segments and PUT reorder. */
@@ -242,7 +247,7 @@ export const videoResolutionSchema = z.enum(['480p', '720p', '1080p']);
 export type VideoResolution = z.infer<typeof videoResolutionSchema>;
 
 /** Orientation for video generation. */
-export const videoOrientationSchema = z.enum(['landscape', 'portrait']);
+export const videoOrientationSchema = z.enum(['landscape', 'portrait', 'square']);
 export type VideoOrientation = z.infer<typeof videoOrientationSchema>;
 
 /** Waveform visualization type. */
@@ -293,6 +298,93 @@ export type SegmentHostDuckingStatusResponse = z.infer<
 >;
 export type SegmentRestoreOriginalMixStatusResponse = z.infer<
   typeof segmentRestoreOriginalMixStatusResponseSchema
+>;
+
+/** Clip entry for advanced multitrack editor (tracks_manifest segment). */
+export const segmentTrackClipSchema = z
+  .object({
+    segmentId: z.string().optional(),
+    startMs: z.number().finite().optional(),
+    endMs: z.number().finite().optional(),
+    filePath: z.string().min(1),
+    sourceOffsetMs: z.number().finite().optional(),
+    lengthMs: z.number().finite().positive().optional(),
+    participantName: z.string().nullable().optional(),
+    participantId: z.string().nullable().optional(),
+    producerId: z.string().optional(),
+    volume: z.number().finite().optional(),
+    muted: z.boolean().optional(),
+    playRate: z.number().finite().positive().optional(),
+    preservePitch: z.boolean().optional(),
+    pitchSemitones: z.number().finite().optional(),
+    fadeInSec: z.number().finite().optional(),
+    fadeOutSec: z.number().finite().optional(),
+    loop: z.boolean().optional(),
+    source: z.string().nullable().optional(),
+    soundboardAssetId: z.string().nullable().optional(),
+    muteSec: z
+      .array(z.tuple([z.number(), z.number()]))
+      .optional(),
+  })
+  .passthrough();
+
+export type SegmentTrackClip = z.infer<typeof segmentTrackClipSchema>;
+
+/** Take lane summary for GET .../tracks. */
+export const segmentTrackTakeSchema = z.object({
+  filePath: z.string(),
+  participantName: z.string().nullable().optional(),
+  soundboardAssetId: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  waveformExists: z.boolean(),
+});
+
+export type SegmentTrackTake = z.infer<typeof segmentTrackTakeSchema>;
+
+/** Response for GET .../segments/:segmentId/tracks. */
+export const segmentTracksResponseSchema = z.object({
+  clips: z.array(segmentTrackClipSchema),
+  takes: z.array(segmentTrackTakeSchema),
+  timelineDurationMs: z.number(),
+});
+
+export type SegmentTracksResponse = z.infer<typeof segmentTracksResponseSchema>;
+
+/** Body for PUT .../segments/:segmentId/tracks (save clips only). */
+export const segmentTracksPutBodySchema = z.object({
+  clips: z.array(segmentTrackClipSchema).min(1),
+});
+
+export type SegmentTracksPutBody = z.infer<typeof segmentTracksPutBodySchema>;
+
+/** Response for PUT .../tracks (save without remake). */
+export const segmentTracksSaveResponseSchema = z.object({
+  clips: z.array(segmentTrackClipSchema),
+  timelineDurationMs: z.number(),
+  originalBackedUp: z.boolean(),
+});
+
+export type SegmentTracksSaveResponse = z.infer<
+  typeof segmentTracksSaveResponseSchema
+>;
+
+/** Response for GET .../tracks/apply-status. */
+export const segmentTracksApplyStatusResponseSchema = z.object({
+  status: z.enum(['idle', 'remaking', 'done', 'failed']),
+  error: z.string().optional(),
+});
+
+export type SegmentTracksApplyStatusResponse = z.infer<
+  typeof segmentTracksApplyStatusResponseSchema
+>;
+
+/** Response for POST .../tracks/remake (202). */
+export const segmentTracksRemakeAcceptedSchema = z.object({
+  status: z.literal('remaking'),
+});
+
+export type SegmentTracksRemakeAccepted = z.infer<
+  typeof segmentTracksRemakeAcceptedSchema
 >;
 export type TrimRange = z.infer<typeof trimRangeSchema>;
 export type SegmentTrimBody = z.infer<typeof segmentTrimBodySchema>;

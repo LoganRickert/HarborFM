@@ -12,7 +12,7 @@ import {
   Share2,
   Palette,
 } from 'lucide-react';
-import { getPublicRssUrl } from '../../api/rss';
+import { buildAbsolutePublicRssUrl } from '../../api/rss';
 import { PodcastGroupDetailRow, PodcastGroupRow } from './PodcastGroupList';
 import localStyles from './PodcastDetail.module.css';
 import sharedStyles from './shared.module.css';
@@ -53,6 +53,7 @@ interface PodcastHeroProps {
   canManageShow: boolean;
   onEditClick: () => void;
   onLinksClick?: () => void;
+  onSubmitDirectoriesClick?: () => void;
   onPageCustomizationsClick?: () => void;
   publicFeedsEnabled?: boolean;
   detailsExpanded: boolean;
@@ -65,6 +66,7 @@ export function PodcastHero({
   canManageShow,
   onEditClick,
   onLinksClick,
+  onSubmitDirectoriesClick,
   onPageCustomizationsClick,
   publicFeedsEnabled,
   detailsExpanded,
@@ -154,7 +156,7 @@ export function PodcastHero({
             label="Public RSS"
             icon={Rss}
             iconTone="amber"
-            href={getPublicRssUrl(podcast.slug)}
+            href={buildAbsolutePublicRssUrl(podcast.slug, podcast.canonicalFeedUrl)}
             external
           />
         )}
@@ -188,6 +190,14 @@ export function PodcastHero({
             icon={Palette}
             iconTone="purple"
             onClick={onPageCustomizationsClick}
+          />
+        )}
+        {canEdit && showPublicRss && onSubmitDirectoriesClick && (
+          <PodcastGroupRow
+            label="Submit to Directories"
+            icon={Globe}
+            iconTone="blue"
+            onClick={onSubmitDirectoriesClick}
           />
         )}
 

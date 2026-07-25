@@ -37,6 +37,15 @@ export interface WaveformCanvasProps {
   markers?: WaveformMarker[];
   onSeek: (timeSec: number) => void;
   onPlayPause?: () => void;
+  /** Called when the user starts a click-drag scrub on the waveform. */
+  onScrubStart?: () => void;
+  /** Called when the scrub gesture ends (pointer up / cancel). */
+  onScrubEnd?: () => void;
+  /**
+   * When false, ignore pointer scrub/seek (parent owns gestures, e.g. TimelineWaveform pan).
+   * Default true.
+   */
+  interactive?: boolean;
   className?: string;
 }
 
@@ -57,11 +66,42 @@ function getThemeColor(el: Element | null, variable: string, fallback: string): 
   return value || fallback;
 }
 
-export function WaveformCanvas({ data, durationSec, currentTime, viewStartSec = 0, viewEndSec, trimRanges = [], markers = [], onSeek, onPlayPause, className }: WaveformCanvasProps) {
+export function WaveformCanvas({
+  data,
+  durationSec,
+  currentTime,
+  viewStartSec = 0,
+  viewEndSec,
+  trimRanges = [],
+  markers = [],
+  onSeek,
+  onPlayPause,
+  onScrubStart,
+  onScrubEnd,
+  interactive = true,
+  className,
+}: WaveformCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scrubbingRef = useRef(false);
   const viewEnd = viewEndSec ?? durationSec;
   const viewWindow = Math.max(0.01, viewEnd - viewStartSec);
+
+  const clientXToTime = useCallback(
+    (clientX: number): number => {
+      const container = containerRef.current;
+      if (!container || durationSec <= 0) return 0;
+      const rect = container.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const effectiveDuration = durationSec - getTrimmedDuration(trimRanges, durationSec);
+      const useCollapsed = trimRanges.length > 0 && effectiveDuration > 0;
+      const time = useCollapsed
+        ? toActualTime(frac * effectiveDuration, trimRanges, durationSec)
+        : viewStartSec + frac * viewWindow;
+      return Math.max(0, Math.min(durationSec, time));
+    },
+    [durationSec, trimRanges, viewStartSec, viewWindow],
+  );
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -162,18 +202,36 @@ export function WaveformCanvas({ data, durationSec, currentTime, viewStartSec = 
     return () => ro.disconnect();
   }, [draw]);
 
-  function handleClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (!onSeek) return;
-    const container = containerRef.current;
-    if (!container || durationSec <= 0) return;
-    const rect = container.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const effectiveDuration = durationSec - getTrimmedDuration(trimRanges, durationSec);
-    const useCollapsed = trimRanges.length > 0 && effectiveDuration > 0;
-    const time = useCollapsed
-      ? toActualTime(frac * effectiveDuration, trimRanges, durationSec)
-      : viewStartSec + frac * viewWindow;
-    onSeek(Math.max(0, Math.min(durationSec, time)));
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!interactive || !onSeek || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    scrubbingRef.current = true;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    onScrubStart?.();
+    onSeek(clientXToTime(e.clientX));
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!interactive || !scrubbingRef.current || !onSeek) return;
+    e.stopPropagation();
+    onSeek(clientXToTime(e.clientX));
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!interactive || !scrubbingRef.current) return;
+    e.stopPropagation();
+    scrubbingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    onScrubEnd?.();
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -188,10 +246,17 @@ export function WaveformCanvas({ data, durationSec, currentTime, viewStartSec = 
     <div
       ref={containerRef}
       className={className ?? styles.waveformTrack}
-      style={{ position: 'relative' }}
-      onClick={handleClick}
+      style={{
+        position: 'relative',
+        touchAction: interactive ? 'none' : undefined,
+        pointerEvents: interactive ? undefined : 'none',
+      }}
+      onPointerDown={interactive ? handlePointerDown : undefined}
+      onPointerMove={interactive ? handlePointerMove : undefined}
+      onPointerUp={interactive ? handlePointerUp : undefined}
+      onPointerCancel={interactive ? handlePointerUp : undefined}
       onKeyDown={handleKeyDown}
-      tabIndex={0}
+      tabIndex={interactive ? 0 : -1}
       role="progressbar"
       aria-valuenow={Math.round(currentTime)}
       aria-valuemin={0}

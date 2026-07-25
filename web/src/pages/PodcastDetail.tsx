@@ -10,6 +10,7 @@ import { EditSocialLinksDialog } from './EditSocialLinksDialog';
 import { EditPageCustomizationsDialog } from './EditPageCustomizationsDialog';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { PodcastHero } from '../components/PodcastDetail/PodcastHero';
+import { SubmitDirectoriesDialog } from '../components/PodcastDetail/SubmitDirectoriesDialog';
 import { RssFeedCard } from '../components/PodcastDetail/RssFeedCard';
 import { ShowCastCard } from '../components/ShowCast';
 import { ExportsSection } from '../components/Exports/ExportsSection';
@@ -44,6 +45,7 @@ export function PodcastDetail() {
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [linksDialogOpen, setLinksDialogOpen] = useState(false);
+  const [submitDirectoriesDialogOpen, setSubmitDirectoriesDialogOpen] = useState(false);
   const [pageCustomizationsDialogOpen, setPageCustomizationsDialogOpen] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
@@ -67,6 +69,7 @@ export function PodcastDetail() {
           canManageShow={canManageShow}
           onEditClick={() => setDetailsDialogOpen(true)}
           onLinksClick={() => setLinksDialogOpen(true)}
+          onSubmitDirectoriesClick={() => setSubmitDirectoriesDialogOpen(true)}
           onPageCustomizationsClick={() => setPageCustomizationsDialogOpen(true)}
           publicFeedsEnabled={publicFeedsEnabled}
           detailsExpanded={detailsExpanded}
@@ -87,6 +90,14 @@ export function PodcastDetail() {
           open
           podcastId={id}
           onClose={() => setLinksDialogOpen(false)}
+        />
+      )}
+
+      {submitDirectoriesDialogOpen && (
+        <SubmitDirectoriesDialog
+          open
+          podcast={podcast}
+          onClose={() => setSubmitDirectoriesDialogOpen(false)}
         />
       )}
 

@@ -2266,6 +2266,38 @@
   padding: 0.75rem 1rem;
 }
 
+.segmentEditorV2Error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: rgba(255, 107, 107, 0.15);
+  border: 1px solid var(--error);
+  border-radius: var(--radius);
+  opacity: 1;
+  transition: opacity 0.45s ease;
+}
+
+.segmentEditorV2ErrorFading {
+  opacity: 0;
+}
+
+.segmentEditorV2ErrorIcon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: var(--error);
+}
+
+.segmentEditorV2ErrorMessage {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.45;
+}
+
 .rateLimitError {
   margin-top: 0.75rem;
 }
@@ -4929,6 +4961,16 @@ a.manageSegmentAction .manageSegmentActionHint {
   border-radius: 2px;
   min-height: 0.5rem;
 }
+@media (max-width: 640px) {
+  .generateVideoOrientation {
+    flex-direction: column;
+  }
+  .generateVideoOrientationBtn,
+  .generateVideoOrientationActive {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
 .generateVideoThumbnailField {
   align-items: center;
 }
@@ -5482,4 +5524,643 @@ a.manageSegmentAction .manageSegmentActionHint {
     justify-content: center;
     min-height: 44px;
   }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.segmentEditorV2Dialog {
+  position: fixed;
+  top: 50%;
+  left: 10px;
+  right: 10px;
+  bottom: auto;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: calc(100vh - 20px);
+  max-height: calc(100dvh - 20px);
+  margin: 0;
+  transform: translateY(-50%);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem 1.25rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  /* Above .dialogOverlay (1100); was 50 and blocked all clicks. */
+  z-index: 1101;
+  overflow: hidden;
+}
+
+/* Radix focuses Dialog.Content (tabIndex=-1) when a control blurs/disables.
+   Suppress the shell focus ring so the border does not flash as "selected". */
+.segmentEditorV2Dialog:focus,
+.segmentEditorV2Dialog:focus-visible {
+  outline: none;
+}
+
+.segmentEditorV2Footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+  min-width: 0;
+  padding-top: 0.15rem;
+}
+
+.segmentEditorV2FooterLeft {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.segmentEditorV2Hotkeys {
+  margin: 0;
+  margin-left: auto;
+  text-align: right;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  opacity: 0.85;
+  min-width: 0;
+}
+
+.segmentEditorV2Header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.segmentEditorV2HeaderLeft {
+  min-width: 0;
+}
+
+.segmentEditorV2HeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .segmentAdvancedEditorBtn {
+    display: none;
+  }
+}
+
+.segmentEditorV2Toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.segmentEditorV2ToolbarEnd {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.segmentEditorV2ToolGroup {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.segmentEditorV2Tool,
+.segmentEditorV2ToolActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.segmentEditorV2Tool svg,
+.segmentEditorV2ToolActive svg {
+  flex-shrink: 0;
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.segmentEditorV2ToolIcon {
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.segmentEditorV2Tool:hover:not(:disabled),
+.segmentEditorV2ToolActive {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(0, 212, 170, 0.1);
+}
+
+.segmentEditorV2Tool:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.segmentEditorV2Tool.segmentEditorV2SaveBtn {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.segmentEditorV2Tool.segmentEditorV2SaveBtn:hover:not(:disabled) {
+  color: var(--bg);
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+
+.segmentEditorV2Tool.segmentEditorV2SaveBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.segmentEditorV2TrimBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.segmentEditorV2Transport {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.segmentEditorV2PlayBtn {
+  flex-shrink: 0;
+}
+
+.segmentEditorV2TransportWave {
+  flex: 1;
+  min-width: 0;
+}
+
+.segmentEditorV2TransportWaveInner {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.segmentEditorV2TransportWaveEmpty {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.segmentEditorV2TimelineWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* Pan/zoom is custom; hide x so edge ruler ticks don't create a bottom scrollbar. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  background: var(--bg);
+}
+
+.segmentEditorV2ZoomLabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  align-self: center;
+  padding: 0 0.25rem;
+}
+
+.segmentEditorV2TimelineGrid {
+  display: grid;
+  grid-template-columns: var(--v2-label-col, 7rem) minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  gap: 0.35rem 0.5rem;
+  min-height: 140px;
+}
+
+.segmentEditorV2LabelSpacer {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.segmentEditorV2Ruler {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  height: 1.5rem;
+  overflow: hidden;
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.segmentEditorV2Ruler:active {
+  cursor: grabbing;
+}
+
+.segmentEditorV2RulerTick {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.segmentEditorV2RulerTickStart {
+  transform: translate(0, -50%);
+}
+
+.segmentEditorV2RulerTickEnd {
+  transform: translate(-100%, -50%);
+}
+
+.segmentEditorV2MarkersLabel {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.segmentEditorV2MarkersLane {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  height: 18px;
+  min-height: 18px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg-muted) 70%, var(--bg) 30%);
+}
+
+.segmentEditorV2MarkersLane .markerHandle {
+  /* Sit inside the lane (simple editor offsets under the waveform). */
+  transform: none;
+  bottom: 4px;
+}
+
+.segmentEditorV2LaneLabels {
+  grid-column: 1;
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.segmentEditorV2TracksCol {
+  grid-column: 2;
+  grid-row: 3;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.segmentEditorV2Playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  z-index: 3;
+  pointer-events: none;
+  transform: translateX(-1px);
+}
+
+.segmentEditorV2TrimOverlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  background: rgba(239, 68, 68, 0.28);
+  pointer-events: none;
+  border-left: 1px solid rgba(239, 68, 68, 0.7);
+  border-right: 1px solid rgba(239, 68, 68, 0.7);
+}
+
+.segmentEditorV2TrimOverlay .timelineTrimRemoveBtn {
+  pointer-events: auto;
+}
+
+.segmentEditorV2RippleStart {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f59e0b;
+  z-index: 3;
+  pointer-events: none;
+  transform: translateX(-1px);
+}
+
+.segmentEditorV2LaneLabel {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.segmentEditorV2LaneLabelMuted {
+  opacity: 0.55;
+}
+
+.segmentEditorV2LaneNameBtn {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.15rem 0.2rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.segmentEditorV2LaneNameBtn:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(0, 212, 170, 0.08);
+}
+
+.segmentEditorV2LaneNameBtn:disabled {
+  cursor: default;
+}
+
+.segmentEditorV2LaneNameInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.segmentEditorV2LaneControls {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.15rem;
+}
+
+.segmentEditorV2LaneCtrl,
+.segmentEditorV2LaneCtrlActive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.segmentEditorV2LaneCtrl:hover:not(:disabled),
+.segmentEditorV2LaneCtrlActive {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(0, 212, 170, 0.1);
+}
+
+.segmentEditorV2LaneCtrl:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.segmentEditorV2AddTrackBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 40px;
+  width: 100%;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.segmentEditorV2AddTrackBtn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.segmentEditorV2AddTrackBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.segmentEditorV2LaneTrackSpacer {
+  height: 40px;
+}
+
+.segmentEditorV2LaneTrackMuted {
+  opacity: 0.45;
+}
+
+.segmentEditorV2AddTrackPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.segmentEditorV2AddTrackField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.segmentEditorV2AddTrackField input {
+  font: inherit;
+  color: var(--text);
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.segmentEditorV2LibraryList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.segmentEditorV2LibraryList button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.segmentEditorV2LaneTrack {
+  position: relative;
+  height: 56px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+}
+
+.segmentEditorV2Clip {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border: 1px solid rgba(160, 200, 190, 0.22);
+  border-left: 2px solid rgba(210, 235, 225, 0.7);
+  border-right: 2px solid rgba(210, 235, 225, 0.7);
+  border-radius: 4px;
+  background: rgba(0, 40, 36, 0.55);
+  cursor: pointer;
+  padding: 0;
+  min-width: 4px;
+  overflow: hidden;
+  box-sizing: border-box;
+  touch-action: none;
+}
+
+.segmentEditorV2ClipDraggable {
+  cursor: grab;
+}
+
+.segmentEditorV2ClipDraggable:active {
+  cursor: grabbing;
+}
+
+.segmentEditorV2ClipWave {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.segmentEditorV2Clip:hover {
+  background: rgba(0, 60, 52, 0.7);
+}
+
+.segmentEditorV2ClipSelected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: rgba(0, 70, 60, 0.75);
+  border-left-color: var(--accent);
+  border-right-color: var(--accent);
+}
+
+.segmentEditorV2ClipHandleLeft,
+.segmentEditorV2ClipHandleRight {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 2;
+  padding: 0;
+  border: none;
+  background: rgba(0, 212, 170, 0.35);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.segmentEditorV2ClipHandleLeft {
+  left: 0;
+  border-radius: 3px 0 0 3px;
+}
+
+.segmentEditorV2ClipHandleRight {
+  right: 0;
+  border-radius: 0 3px 3px 0;
+}
+
+.segmentEditorV2ClipHandleLeft:hover,
+.segmentEditorV2ClipHandleRight:hover {
+  background: rgba(0, 212, 170, 0.7);
 }

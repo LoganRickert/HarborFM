@@ -250,6 +250,7 @@ export function SegmentEditTab({
                 mode={audioEditActive ? 'drag' : timelineMode}
                 readOnly={false}
                 onContextMenuCycle={cycleTimelineTool}
+                onTrimComplete={() => onTimelineModeChange('drag')}
               />
             </div>
             {durationSec > 0 && markers.length > 0 && (

@@ -61,7 +61,7 @@ export function estimateEpisodeVideoBytes(
   return Math.ceil(durationSec * bytesPerSec * ESTIMATE_SAFETY_FACTOR);
 }
 
-/** Resolution to dimensions (width, height) for 16:9 landscape. Portrait swaps. */
+/** Resolution to dimensions (width, height) for 16:9 landscape. Portrait swaps. Square uses short edge. */
 function resolutionToDimensions(
   resolution: VideoResolution | undefined,
   orientation: VideoOrientation | undefined,
@@ -85,6 +85,10 @@ function resolutionToDimensions(
     default:
       width = 1280;
       height = 720;
+  }
+  if (orientation === "square") {
+    const side = Math.min(width, height);
+    return { width: side, height: side };
   }
   if (orientation === "portrait") {
     [width, height] = [height, width];

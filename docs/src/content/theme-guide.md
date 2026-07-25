@@ -180,6 +180,8 @@ Gate optional blocks with the show toggles from Page Customizations:
 
 For custom layout, you can loop Liquid data yourself (`cast`, `funding_links`, `links`, `podroll`, `reviews`) and only keep `harborfm/episodes` for the interactive archive.
 
+`links` items include `key`, `label`, `url`, `group` (`listen` or `social`), and `icon_url` (HarborFM-hosted monochrome SVG such as `/platform-icons/apple_podcasts.svg`). Gate with `show.links`. Prefer either the `harborfm/links` mount or a custom loop, not both on the same page.
+
 ### Action Buttons
 
 Wire HarborFM dialogs without the stock header:

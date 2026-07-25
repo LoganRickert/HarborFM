@@ -31,6 +31,7 @@ export function redactSegmentForClient(
     hostDuckingEnabled: segment.hostDuckingEnabled,
     hasRecordings: segment.hasRecordings,
     hasOriginalTracksManifest: segment.hasOriginalTracksManifest,
+    canBootstrapAdvancedEditor: segment.canBootstrapAdvancedEditor,
   };
   const path = segment.audioPath;
   if (path != null && typeof path === "string" && path.length > 0) {

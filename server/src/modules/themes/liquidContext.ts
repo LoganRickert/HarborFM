@@ -220,7 +220,13 @@ export function buildLiquidThemeContext(options: {
     };
   }
 
-  const links: Array<{ key: string; label: string; url: string; group: string }> = [];
+  const links: Array<{
+    key: string;
+    label: string;
+    url: string;
+    group: string;
+    icon_url: string;
+  }> = [];
   if (show.links) {
     const listen: Array<[string, string, string]> = [
       ["apple_podcasts", "Apple Podcasts", String(dto.apple_podcasts_url || "")],
@@ -239,10 +245,26 @@ export function buildLiquidThemeContext(options: {
       ["discord", "Discord", String(dto.discord_url || "")],
     ];
     for (const [key, label, url] of listen) {
-      if (url.trim()) links.push({ key, label, url: url.trim(), group: "listen" });
+      if (url.trim()) {
+        links.push({
+          key,
+          label,
+          url: url.trim(),
+          group: "listen",
+          icon_url: `/platform-icons/${key}.svg`,
+        });
+      }
     }
     for (const [key, label, url] of social) {
-      if (url.trim()) links.push({ key, label, url: url.trim(), group: "social" });
+      if (url.trim()) {
+        links.push({
+          key,
+          label,
+          url: url.trim(),
+          group: "social",
+          icon_url: `/platform-icons/${key}.svg`,
+        });
+      }
     }
   }
 

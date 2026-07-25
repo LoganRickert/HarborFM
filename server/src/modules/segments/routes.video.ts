@@ -216,7 +216,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             strokeWidth: { type: "integer", minimum: 1, maximum: 30, description: "Sine/circle: stroke px; bars/dots: count" },
             smoothing: { type: "number", minimum: 0, maximum: 1, description: "Smoothing 0–1 (how fast the line reacts)" },
             resolution: { type: "string", enum: ["480p", "720p", "1080p"] },
-            orientation: { type: "string", enum: ["landscape", "portrait"] },
+            orientation: { type: "string", enum: ["landscape", "portrait", "square"] },
             waveformType: { type: "string", enum: ["sine", "bars", "circle", "dots"] },
             color: { type: "string", maxLength: 100, description: "CSS color (hex, rgb, rgba, or gradient)" },
           },
