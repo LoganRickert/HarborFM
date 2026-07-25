@@ -3,6 +3,9 @@ import { X } from 'lucide-react';
 import { WaveformCanvas, type WaveformData } from './WaveformCanvas';
 import styles from '../EpisodeEditor.module.css';
 
+/** Ignore sub-threshold jitter so click-to-seek is not treated as a pan. */
+const PAN_MOVE_THRESHOLD_PX = 3;
+
 export type TimelineMode = 'drag' | 'trim';
 
 export interface TimelineWaveformProps {
@@ -58,11 +61,12 @@ export function TimelineWaveform({
   const didHandlePointerRef = useRef(false);
   const draggingRef = useRef<'select' | 'trim-start' | 'trim-end' | 'pan' | null>(null);
   const selectionRef = useRef<{ start: number; end: number } | null>(null);
+  /** Synced in pointerdown so a quick click-up still sees the gesture (useEffect is too late). */
+  const dragStartTimeRef = useRef(0);
+  const panStartViewRef = useRef<{ start: number; end: number } | null>(null);
+  const panStartXRef = useRef(0);
   const [dragging, setDragging] = useState<'select' | 'trim-start' | 'trim-end' | 'pan' | null>(null);
   const [dragRangeIndex, setDragRangeIndex] = useState<number | null>(null);
-  const [dragStartTime, setDragStartTime] = useState(0);
-  const [panStartView, setPanStartView] = useState<{ start: number; end: number } | null>(null);
-  const [panStartX, setPanStartX] = useState(0);
 
   const viewWindow = Math.max(0.01, viewEndSec - viewStartSec);
 
@@ -118,10 +122,11 @@ export function TimelineWaveform({
       if (forcePan || (mode === 'drag' && onViewChange)) {
         panHasMovedRef.current = false;
         el.setPointerCapture(e.pointerId);
+        draggingRef.current = 'pan';
+        dragStartTimeRef.current = time;
+        panStartViewRef.current = { start: viewStartSec, end: viewEndSec };
+        panStartXRef.current = e.clientX;
         setDragging('pan');
-        setPanStartView({ start: viewStartSec, end: viewEndSec });
-        setPanStartX(e.clientX);
-        setDragStartTime(time);
         return;
       }
 
@@ -145,8 +150,9 @@ export function TimelineWaveform({
           return;
         }
         el.setPointerCapture(e.pointerId);
+        draggingRef.current = 'select';
+        dragStartTimeRef.current = time;
         setDragging('select');
-        setDragStartTime(time);
         setPendingTrimStart(time);
         onSelectionChange({ start: time, end: time });
       }
@@ -156,7 +162,8 @@ export function TimelineWaveform({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!dragging) return;
+      const active = draggingRef.current;
+      if (!active) return;
       const el = containerRef.current;
       if (!el || durationSec <= 0) return;
       const rect = el.getBoundingClientRect();
@@ -166,13 +173,15 @@ export function TimelineWaveform({
       const viewShowsStart = viewStartSec <= 0.001;
       const viewShowsEnd = viewEndSec >= durationSec - 0.001;
 
-      if (dragging === 'pan' && panStartView && onViewChange) {
+      const panStartViewActive = panStartViewRef.current;
+      if (active === 'pan' && panStartViewActive && onViewChange) {
+        const deltaX = e.clientX - panStartXRef.current;
+        if (Math.abs(deltaX) <= PAN_MOVE_THRESHOLD_PX) return;
         panHasMovedRef.current = true;
-        const deltaX = e.clientX - panStartX;
-        const winSize = panStartView.end - panStartView.start;
+        const winSize = panStartViewActive.end - panStartViewActive.start;
         const deltaSec = (deltaX / rect.width) * winSize;
-        let newStart = panStartView.start - deltaSec;
-        let newEnd = panStartView.end - deltaSec;
+        let newStart = panStartViewActive.start - deltaSec;
+        let newEnd = panStartViewActive.end - deltaSec;
         if (newStart < 0) {
           newStart = 0;
           newEnd = winSize;
@@ -184,17 +193,18 @@ export function TimelineWaveform({
         onViewChange(newStart, newEnd);
         return;
       }
-      if (dragging === 'select' && onSelectionChange) {
+      const startTime = dragStartTimeRef.current;
+      if (active === 'select' && onSelectionChange) {
         let endTime = time;
         if (atRightEdge && viewShowsEnd) endTime = durationSec;
         if (atLeftEdge && viewShowsStart) endTime = 0;
-        const start = Math.min(dragStartTime, endTime);
-        const end = Math.max(dragStartTime, endTime);
+        const start = Math.min(startTime, endTime);
+        const end = Math.max(startTime, endTime);
         onSelectionChange({ start, end });
-      } else if ((dragging === 'trim-start' || dragging === 'trim-end') && dragRangeIndex !== null && onTrimRangesChange) {
+      } else if ((active === 'trim-start' || active === 'trim-end') && dragRangeIndex !== null && onTrimRangesChange) {
         const newRanges = [...trimRanges];
         const [s, end] = newRanges[dragRangeIndex]!;
-        if (dragging === 'trim-start') {
+        if (active === 'trim-start') {
           let newStart = Math.max(0, Math.min(end - 0.01, time));
           if (atLeftEdge && viewShowsStart) newStart = 0;
           newRanges[dragRangeIndex] = [newStart, end];
@@ -206,12 +216,9 @@ export function TimelineWaveform({
         onTrimRangesChange(newRanges);
       }
     },
-    [dragging, dragRangeIndex, trimRanges, durationSec, dragStartTime, panStartView, panStartX, viewStartSec, viewEndSec, onSelectionChange, onTrimRangesChange, onViewChange, clientXToTime]
+    [dragRangeIndex, trimRanges, durationSec, viewStartSec, viewEndSec, onSelectionChange, onTrimRangesChange, onViewChange, clientXToTime]
   );
 
-  useEffect(() => {
-    draggingRef.current = dragging;
-  }, [dragging]);
   useEffect(() => {
     if (mode === 'drag') setPendingTrimStart(null);
   }, [mode]);
@@ -224,19 +231,21 @@ export function TimelineWaveform({
   }, [trimRanges]);
 
   const handlePointerUp = useCallback(() => {
-    if (draggingRef.current === 'pan' && mode === 'drag') {
+    const active = draggingRef.current;
+    if (!active) return;
+    if (active === 'pan' && mode === 'drag') {
       if (onSeek && !panHasMovedRef.current) {
-        onSeek(dragStartTime);
+        onSeek(dragStartTimeRef.current);
       }
       // Prevent click from seeking to release position after a pan (drag)
       didHandlePointerRef.current = true;
     }
-    if (draggingRef.current === 'trim-start' || draggingRef.current === 'trim-end') {
+    if (active === 'trim-start' || active === 'trim-end') {
       // Prevent click from deleting trim range when user was just adjusting a handle
       didHandlePointerRef.current = true;
     }
     if (
-      draggingRef.current === 'select' &&
+      active === 'select' &&
       selectionRef.current &&
       selectionRef.current.start !== selectionRef.current.end
     ) {
@@ -252,11 +261,12 @@ export function TimelineWaveform({
       }
       didHandlePointerRef.current = true;
     }
+    draggingRef.current = null;
+    panStartViewRef.current = null;
     setDragging(null);
     setDragRangeIndex(null);
-    setPanStartView(null);
     panHasMovedRef.current = false;
-  }, [mode, onSeek, onTrimRangesChange, onSelectionChange, onTrimComplete, dragStartTime]);
+  }, [mode, onSeek, onTrimRangesChange, onSelectionChange, onTrimComplete]);
 
   const handleClickCapture = useCallback((e: React.MouseEvent) => {
     if (didHandlePointerRef.current) {
@@ -377,6 +387,7 @@ export function TimelineWaveform({
                       if (e.altKey || e.button === 1 || e.button === 2) return;
                       e.stopPropagation();
                       containerRef.current?.setPointerCapture(e.pointerId);
+                      draggingRef.current = 'trim-start';
                       setDragging('trim-start');
                       setDragRangeIndex(i);
                     }}
@@ -388,6 +399,7 @@ export function TimelineWaveform({
                       if (e.altKey || e.button === 1 || e.button === 2) return;
                       e.stopPropagation();
                       containerRef.current?.setPointerCapture(e.pointerId);
+                      draggingRef.current = 'trim-end';
                       setDragging('trim-end');
                       setDragRangeIndex(i);
                     }}

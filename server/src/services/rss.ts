@@ -1089,6 +1089,8 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
         epArtworkUrl = `${publicBaseNoSlash}/${API_PREFIX}/public/artwork/${encodeURIComponent(podcastId)}/episodes/${encodeURIComponent(String(ep.id))}/${encodeURIComponent(filename)}`;
       }
     }
+    // Fall back to the podcast cover when the episode has no artwork of its own.
+    if (!epArtworkUrl && artworkUrl) epArtworkUrl = artworkUrl;
     if (epArtworkUrl)
       out += `      <itunes:image href="${escapeXml(epArtworkUrl)}"/>\n`;
     const episodeTranscriptPath = join(
