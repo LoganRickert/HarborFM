@@ -61,20 +61,6 @@ export const SUBMIT_DIRECTORIES: DirectoryLink[] = [
     group: 'also',
   },
   {
-    id: 'pandora',
-    name: 'Pandora',
-    blurb: 'Music and podcast discovery in the US.',
-    href: 'https://www.pandora.com/station/submit',
-    group: 'also',
-  },
-  {
-    id: 'tunein',
-    name: 'TuneIn',
-    blurb: 'Also helps Alexa pick up your show.',
-    href: 'https://help.tunein.com/contact/add-podcast-S19BZg6_P',
-    group: 'also',
-  },
-  {
     id: 'deezer',
     name: 'Deezer',
     blurb: 'Strong reach in Europe and beyond.',
@@ -85,14 +71,7 @@ export const SUBMIT_DIRECTORIES: DirectoryLink[] = [
     id: 'castbox',
     name: 'Castbox',
     blurb: 'Popular Android podcast app.',
-    href: 'https://castbox.fm/creator',
-    group: 'also',
-  },
-  {
-    id: 'podchaser',
-    name: 'Podchaser',
-    blurb: 'Reviews, credits, and discovery.',
-    href: 'https://www.podchaser.com/',
+    href: 'https://helpcenter.castbox.fm/portal/en/kb/articles/submit-my-podcast',
     group: 'also',
   },
   {
