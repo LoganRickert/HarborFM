@@ -178,7 +178,7 @@ export function ScheduleMeetingDialog({
     setError(null);
     setBusy(true);
     try {
-      await createMeetingInvite(meeting.id, {
+      const res = await createMeetingInvite(meeting.id, {
         name: inviteName.trim() || null,
         email,
       });
@@ -186,6 +186,14 @@ export function ScheduleMeetingDialog({
       setInviteEmail('');
       invalidate();
       await refetch();
+      // Invite row is created even when outbound mail fails; surface that clearly.
+      if (email && res.invite && res.invite.emailSent === false) {
+        setError(
+          res.invite.emailError?.trim()
+            ? `Invite saved, but email was not sent: ${res.invite.emailError}`
+            : 'Invite saved, but email was not sent. Check email settings.',
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send invite');
     } finally {

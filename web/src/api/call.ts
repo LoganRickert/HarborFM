@@ -190,7 +190,10 @@ export function createMeetingInvite(
   joinUrl: string;
   invite: CallMeetingInvite | null;
 }> {
-  return apiPost(`/call/meetings/${encodeURIComponent(meetingId)}/invites`, {
+  return apiPost<{
+    joinUrl: string;
+    invite: CallMeetingInvite | null;
+  }>(`/call/meetings/${encodeURIComponent(meetingId)}/invites`, {
     ...body,
     timeZone: browserTimeZone(),
   });

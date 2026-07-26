@@ -82,6 +82,19 @@ export function getConfiguredFromAddress(): string {
 }
 
 /**
+ * SendGrid v3 rejects many MIME type parameters (notably charset=...), with a
+ * misleading error about ';'. Calendar invites may keep `method=` only.
+ */
+function sendGridAttachmentType(contentType: string): string {
+  const raw = contentType.trim() || "application/octet-stream";
+  const [mediaType, ...params] = raw.split(";").map((p) => p.trim()).filter(Boolean);
+  const base = mediaType || "application/octet-stream";
+  if (base.toLowerCase() !== "text/calendar") return base;
+  const method = params.find((p) => /^method=/i.test(p));
+  return method ? `${base}; ${method}` : base;
+}
+
+/**
  * Send an email using configured provider (SMTP or SendGrid). No-op if email is not configured.
  * Returns { sent: true } on success, { sent: false, error } on failure.
  */
@@ -99,11 +112,18 @@ export async function sendMail(
 
   if (settings.email_provider === "smtp") {
     try {
+      const smtpUser = settings.smtp_user?.trim() || "";
+      const smtpPass = settings.smtp_password ?? "";
+      // Only authenticate when a username is set. A password alone (common with
+      // local catchers like smtp4dev) makes nodemailer fail with
+      // "Missing credentials for PLAIN".
       const transporter = nodemailer.createTransport({
         host: settings.smtp_host?.trim() || "localhost",
         port: settings.smtp_port,
         secure: settings.smtp_port === 465 ? settings.smtp_secure : false,
-        auth: { user: settings.smtp_user.trim(), pass: settings.smtp_password },
+        ...(smtpUser
+          ? { auth: { user: smtpUser, pass: smtpPass } }
+          : {}),
       });
       await transporter.sendMail({
         from: { name: APP_NAME, address: from },
@@ -141,8 +161,7 @@ export async function sendMail(
         ...attachments.map((a) => ({
           content: Buffer.from(a.content, "utf8").toString("base64"),
           filename: a.filename,
-          // Keep method=REQUEST (etc.) on calendar types; Gmail needs it.
-          type: a.contentType.trim() || "application/octet-stream",
+          type: sendGridAttachmentType(a.contentType),
           disposition: a.contentDisposition ?? "attachment",
         })),
         ...(ical
@@ -150,7 +169,9 @@ export async function sendMail(
               {
                 content: Buffer.from(ical.content, "utf8").toString("base64"),
                 filename: ical.filename,
-                type: `text/calendar; charset=utf-8; method=${ical.method}`,
+                type: sendGridAttachmentType(
+                  `text/calendar; method=${ical.method}`,
+                ),
                 disposition: "attachment" as const,
               },
             ]
