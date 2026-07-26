@@ -6,6 +6,7 @@ import {
   LOGIN_BAN_MINUTES,
   LOGIN_FAILURE_THRESHOLD,
   LOGIN_WINDOW_MINUTES,
+  WORKER_WS_FAILURE_THRESHOLD,
 } from "../config.js";
 import { drizzleDb } from "../db/drizzle.js";
 import { ipBans, loginAttempts, userTotpAttempts, users } from "../db/schema.js";
@@ -17,7 +18,8 @@ export type AttemptContext =
   | "setup"
   | "auth_apikey"
   | "auth_subscriber_token"
-  | "call_join";
+  | "call_join"
+  | "worker_ws";
 
 export function getClientIp(request: FastifyRequest): string {
   // Note: if you run behind a reverse proxy, configure Fastify trustProxy so request.ip is correct.
@@ -58,7 +60,9 @@ export function getIpBan(
 }
 
 function getThresholdForContext(context: AttemptContext): number {
-  return context === "call_join" ? CALL_JOIN_FAILURE_THRESHOLD : LOGIN_FAILURE_THRESHOLD;
+  if (context === "call_join") return CALL_JOIN_FAILURE_THRESHOLD;
+  if (context === "worker_ws") return WORKER_WS_FAILURE_THRESHOLD;
+  return LOGIN_FAILURE_THRESHOLD;
 }
 
 export function recordFailureAndMaybeBan(

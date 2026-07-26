@@ -10,6 +10,7 @@ export const SETTINGS_TAB_IDS = [
   'final-output',
   'geolite',
   'transcription',
+  'workers',
   'llm',
   'captcha',
   'webrtc',
@@ -79,6 +80,20 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
     id: 'transcription',
     label: 'Transcription',
     searchTerms: ['Transcription', 'transcript', 'Whisper', 'OpenAI', 'ASR', 'Self-Hosted'],
+  },
+  {
+    id: 'workers',
+    label: 'Workers',
+    searchTerms: [
+      'Workers',
+      'compute',
+      'remote',
+      'video',
+      'Whisper',
+      'dispatch',
+      'fallback',
+      'harborfm-worker',
+    ],
   },
   {
     id: 'llm',

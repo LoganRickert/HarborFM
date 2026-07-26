@@ -17,7 +17,11 @@ import { TwoFactorProfileSection } from '../components/TwoFactorProfile/TwoFacto
 import { OtpInput } from '../components/OtpInput/OtpInput';
 import { Key, Edit2, X } from 'lucide-react';
 import { TokenListRow, type TokenStatus } from '../components/TokenListRow';
-import { formatDate as formatDateUtil, formatDateTime as formatDateTimeUtil } from '../utils/format';
+import {
+  formatBytes,
+  formatDate as formatDateUtil,
+  formatDateTime as formatDateTimeUtil,
+} from '../utils/format';
 import { formatDateForInput } from '../utils/datetime';
 import styles from './Profile.module.css';
 import sharedStyles from '../components/PodcastDetail/shared.module.css';
@@ -34,14 +38,6 @@ function formatDate(iso: string | null | undefined): string {
 function formatDateTime(iso: string | null | undefined): string {
   const s = formatDateTimeUtil(iso);
   return s || '-';
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export function Profile() {

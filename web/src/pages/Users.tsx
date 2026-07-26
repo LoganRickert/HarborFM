@@ -4,25 +4,12 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { Edit, Plus, Trash2, Library, Radio, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { listUsers, deleteUser, updateUser, createUser, type User } from '../api/users';
-import { formatDate, formatDateTime } from '../utils/format';
+import { formatBytes, formatDate, formatDateTime } from '../utils/format';
 import { FailedToLoadCard } from '../components/FailedToLoadCard';
 import { UnsavedChangesConfirmDialog } from '../components/UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../hooks/useDialogCloseGuard';
 import { useBaselineDirty, snapshotForDirty } from '../hooks/useBaselineDirty';
 import styles from './Users.module.css';
-
-function formatBytes(bytes: number): string {
-  const n = Number(bytes);
-  if (!Number.isFinite(n) || n <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let v = n;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i += 1;
-  }
-  return `${v.toFixed(2)} ${units[i]}`;
-}
 
 export function Users() {
   const navigate = useNavigate();

@@ -31,6 +31,7 @@ import {
   uploadEpisodeFile,
 } from '../../api/episodeFiles';
 import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
+import { formatBytes } from '../../utils/format';
 import { DeleteShowNotesItemDialog } from './DeleteShowNotesItemDialog';
 import styles from './EpisodeFilesDialog.module.css';
 
@@ -54,13 +55,6 @@ const EPISODE_FILE_ALLOWED_EXTENSIONS = new Set([
 ]);
 const EPISODE_FILE_UNSUPPORTED_TYPE_MESSAGE =
   'Unsupported file type. Allowed: jpg, png, gif, webp, heic, pdf, docx, xlsx, pptx, zip, txt, csv, md';
-
-function formatBytes(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return '';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function extensionFromFilename(filename: string): string | null {
   const base = filename.trim().split(/[/\\]/).pop() ?? '';
@@ -227,7 +221,9 @@ function SortableFileRow({
               </a>
             )}
             {item.kind === 'file' && (
-              <p className={styles.sizeOrUrl}>{formatBytes(item.byteSize)}</p>
+              <p className={styles.sizeOrUrl}>
+                {item.byteSize != null ? formatBytes(item.byteSize) : ''}
+              </p>
             )}
           </div>
         </div>

@@ -175,6 +175,18 @@ export interface AppSettings {
   telnyx_public_key: string;
   /** Telnyx Call Control connection / application id. */
   telnyx_connection_id: string;
+  /** When true, dispatch video/transcript jobs to connected compute workers. */
+  workers_enabled: boolean;
+  /** Secret path segment for worker WebSocket: /api/workers/ws/{path}. */
+  workers_ws_path: string;
+  /** Shared secret workers send on auth. */
+  workers_shared_secret: string;
+  /** How many wait/retry cycles before giving up on remote workers. */
+  workers_dispatch_attempts: number;
+  /** Seconds to wait between dispatch attempts when no idle worker. */
+  workers_dispatch_retry_sec: number;
+  /** After attempts exhausted, run the job on the HarborFM server. */
+  workers_fallback_local: boolean;
 }
 
 export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -267,6 +279,12 @@ export const DEFAULTS: AppSettings = {
   telnyx_api_key: "",
   telnyx_public_key: "",
   telnyx_connection_id: "",
+  workers_enabled: false,
+  workers_ws_path: "",
+  workers_shared_secret: "",
+  workers_dispatch_attempts: 3,
+  workers_dispatch_retry_sec: 60,
+  workers_fallback_local: true,
 };
 
 export const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -504,6 +522,23 @@ export function buildAppSettingsFromRows(
     else if (row.key === "email_enable_review_verification")
       (settings as Partial<AppSettings>).email_enable_review_verification =
         row.value === "true";
+    else if (row.key === "workers_enabled")
+      (settings as Partial<AppSettings>).workers_enabled = row.value === "true";
+    else if (row.key === "workers_ws_path")
+      (settings as Partial<AppSettings>).workers_ws_path = row.value;
+    else if (row.key === "workers_shared_secret")
+      (settings as Partial<AppSettings>).workers_shared_secret = row.value;
+    else if (row.key === "workers_dispatch_attempts") {
+      const n = parseInt(row.value, 10);
+      if (Number.isFinite(n))
+        (settings as Partial<AppSettings>).workers_dispatch_attempts = n;
+    } else if (row.key === "workers_dispatch_retry_sec") {
+      const n = parseInt(row.value, 10);
+      if (Number.isFinite(n))
+        (settings as Partial<AppSettings>).workers_dispatch_retry_sec = n;
+    } else if (row.key === "workers_fallback_local")
+      (settings as Partial<AppSettings>).workers_fallback_local =
+        row.value === "true";
   }
 
   return {
@@ -677,6 +712,24 @@ export function buildAppSettingsFromRows(
     email_enable_review_verification:
       (settings as Partial<AppSettings>).email_enable_review_verification ??
       DEFAULTS.email_enable_review_verification,
+    workers_enabled:
+      (settings as Partial<AppSettings>).workers_enabled ??
+      DEFAULTS.workers_enabled,
+    workers_ws_path:
+      (settings as Partial<AppSettings>).workers_ws_path ??
+      DEFAULTS.workers_ws_path,
+    workers_shared_secret:
+      (settings as Partial<AppSettings>).workers_shared_secret ??
+      DEFAULTS.workers_shared_secret,
+    workers_dispatch_attempts:
+      (settings as Partial<AppSettings>).workers_dispatch_attempts ??
+      DEFAULTS.workers_dispatch_attempts,
+    workers_dispatch_retry_sec:
+      (settings as Partial<AppSettings>).workers_dispatch_retry_sec ??
+      DEFAULTS.workers_dispatch_retry_sec,
+    workers_fallback_local:
+      (settings as Partial<AppSettings>).workers_fallback_local ??
+      DEFAULTS.workers_fallback_local,
   };
 }
 
@@ -806,5 +859,12 @@ export function settingsToApiResponse(
     emailSigninDisabled: Boolean(settings.email_signin_disabled),
     ssoOidcProviders: ssoOidc,
     ssoSamlProviders: ssoSaml,
+    workersEnabled: Boolean(settings.workers_enabled),
+    // Admin-only settings: path + secret are shown so workers can be configured.
+    workersWsPath: settings.workers_ws_path ?? "",
+    workersSharedSecret: settings.workers_shared_secret ?? "",
+    workersDispatchAttempts: settings.workers_dispatch_attempts ?? 3,
+    workersDispatchRetrySec: settings.workers_dispatch_retry_sec ?? 60,
+    workersFallbackLocal: settings.workers_fallback_local !== false,
   };
 }

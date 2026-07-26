@@ -31,6 +31,8 @@ export MEETING_INVITE_RATE_LIMIT_WINDOW_MS="${MEETING_INVITE_RATE_LIMIT_WINDOW_M
 # Theme ZIP import: short window so suites can import repeatedly while still testing 429.
 export THEME_IMPORT_RATE_LIMIT_WINDOW_MS="${THEME_IMPORT_RATE_LIMIT_WINDOW_MS:-1000}"
 export THEME_IMPORT_RATE_LIMIT_MAX="${THEME_IMPORT_RATE_LIMIT_MAX:-2}"
+# Worker WS guessing ban: low threshold so the Workers suite can hit ban quickly.
+export WORKER_WS_FAILURE_THRESHOLD="${WORKER_WS_FAILURE_THRESHOLD:-3}"
 
 echo "" > "$E2E_DIR/server.log"
 

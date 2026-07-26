@@ -143,6 +143,9 @@ importers:
       '@harborfm/shared':
         specifier: workspace:*
         version: link:../shared
+      '@harborfm/video-gen':
+        specifier: workspace:*
+        version: link:../video-gen
       '@maxmind/geoip2-node':
         specifier: 6.3.4
         version: 6.3.4
@@ -296,6 +299,31 @@ importers:
         specifier: ^8.15.0
         version: 8.54.0(eslint@9.39.2)(typescript@5.9.3)
 
+  video-gen:
+    dependencies:
+      '@harborfm/shared':
+        specifier: workspace:*
+        version: link:../shared
+      canvas:
+        specifier: ^3.2.1
+        version: 3.2.1
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9
+        version: 9.39.2
+      '@types/node':
+        specifier: ^22.10.1
+        version: 22.19.9
+      eslint:
+        specifier: ^9
+        version: 9.39.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.54.0
+        version: 8.54.0(eslint@9.39.2)(typescript@5.9.3)
+
   web:
     dependencies:
       '@dnd-kit/core':
@@ -432,6 +460,46 @@ importers:
       '@types/node':
         specifier: ^22.10.1
         version: 22.19.9
+      eslint:
+        specifier: ^9
+        version: 9.39.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.54.0
+        version: 8.54.0(eslint@9.39.2)(typescript@5.9.3)
+
+  worker-service:
+    dependencies:
+      '@harborfm/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@harborfm/video-gen':
+        specifier: workspace:*
+        version: link:../video-gen
+      dotenv:
+        specifier: ^17.2.4
+        version: 17.2.4
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.6
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9
+        version: 9.39.2
+      '@types/node':
+        specifier: ^22.10.1
+        version: 22.19.9
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
       eslint:
         specifier: ^9
         version: 9.39.2

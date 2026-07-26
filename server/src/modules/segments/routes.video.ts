@@ -26,6 +26,10 @@ import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
 import { generateEpisodeVideo, estimateEpisodeVideoBytes } from "../../services/videoGeneration.js";
 import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB, ALLOW_VIDEO_GENERATION } from "../../config.js";
 import { MIMETYPE_TO_EXT } from "../../utils/artwork.js";
+import {
+  dispatchComputeJob,
+  workerApiBaseFromRequest,
+} from "../workers/index.js";
 
 const VIDEO_COVER_EXTS = ["jpg", "jpeg", "png", "webp"];
 
@@ -334,6 +338,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
       videoGenStatusByEpisode.set(episodeId, "generating");
       videoGenErrorByEpisode.delete(episodeId);
       const log = request.log;
+      const apiBase = workerApiBaseFromRequest(request);
       broadcastToEpisode(episodeId, { type: "videoGenerationStarted" });
       setImmediate(() => {
         (async () => {
@@ -345,7 +350,8 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             if (!existsSync(audioPath)) {
               throw new Error("Final audio file not found. Build the final episode first.");
             }
-            await generateEpisodeVideo(podcastId, episodeId, {
+            const outPath = episodeVideoPath(podcastId, episodeId);
+            const videoOpts = {
               imagePath: imagePathForVideo,
               audioPath,
               x: options.x,
@@ -359,8 +365,33 @@ export async function registerVideoRoutes(app: FastifyInstance) {
               orientation: options.orientation,
               waveformType: options.waveformType,
               color: options.color,
+            };
+            await dispatchComputeJob({
+              kind: "video_generate",
+              apiBase,
+              inputs: [
+                { name: "audio", absolutePath: audioPath },
+                { name: "image", absolutePath: imagePathForVideo },
+              ],
+              outputs: [{ name: "video.mp4", absolutePath: outPath }],
+              params: {
+                x: options.x,
+                y: options.y,
+                width: options.width,
+                amplitude: options.amplitude,
+                style: options.style,
+                strokeWidth: options.strokeWidth,
+                smoothing: options.smoothing,
+                resolution: options.resolution,
+                orientation: options.orientation,
+                waveformType: options.waveformType,
+                color: options.color,
+              },
+              runLocal: () =>
+                generateEpisodeVideo(podcastId, episodeId, videoOpts).then(
+                  () => undefined,
+                ),
             });
-            const outPath = episodeVideoPath(podcastId, episodeId);
             const actualSize = statSync(outPath).size;
             if (ownerId) {
               const delta = actualSize - estimatedBytesForTask;

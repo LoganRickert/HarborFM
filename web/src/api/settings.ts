@@ -105,3 +105,38 @@ export function geoliteUpdate(payload: {
 }): Promise<{ ok: boolean; error?: string }> {
   return api<{ ok: boolean; error?: string }>('/settings/geolite/update', { method: 'POST', json: payload });
 }
+
+/** Regenerate worker path/secret, persist, and disconnect connected workers. */
+export function regenerateWorkerSecrets(): Promise<{
+  workersWsPath: string;
+  workersSharedSecret: string;
+  disconnected: number;
+}> {
+  return api<{
+    workersWsPath: string;
+    workersSharedSecret: string;
+    disconnected: number;
+  }>('/settings/workers-regenerate-secrets', { method: 'POST' });
+}
+
+export type WorkerJobStat = {
+  id: string;
+  workerId: string | null;
+  workerName: string | null;
+  kind: string;
+  status: string;
+  error: string | null;
+  bytesDownloaded: number;
+  bytesUploaded: number;
+  durationMs: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
+};
+
+/** Recent finished compute-worker jobs (admin). */
+export function fetchWorkerJobStats(limit = 50): Promise<{ jobs: WorkerJobStat[] }> {
+  return apiGet<{ jobs: WorkerJobStat[] }>(
+    `/settings/workers-job-stats?limit=${encodeURIComponent(String(limit))}`,
+  );
+}

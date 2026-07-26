@@ -40,6 +40,10 @@ import {
   parseSrtTime,
   removeSrtEntryAndAdjustTimings,
 } from "./utils.js";
+import {
+  dispatchComputeJob,
+  workerApiBaseFromRequest,
+} from "../workers/index.js";
 
 export async function registerTranscriptRoutes(app: FastifyInstance) {
   app.get(
@@ -193,12 +197,35 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
       const audioPath = audio.path;
       const audioBase = audio.base;
       const log = request.log;
+      const apiBase = workerApiBaseFromRequest(request);
+      const useWorker =
+        settings.transcription_provider === "self_hosted" &&
+        settings.workers_enabled;
       setImmediate(() => {
         (async () => {
           try {
-            const text = await runTranscription(audioPath, audioBase, settings);
-            assertPathUnder(dirname(txtPath), audioBase);
-            writeFileSync(txtPath, text, "utf-8");
+            if (useWorker) {
+              assertPathUnder(dirname(txtPath), audioBase);
+              await dispatchComputeJob({
+                kind: "transcribe",
+                apiBase,
+                inputs: [{ name: "audio", absolutePath: audioPath }],
+                outputs: [{ name: "transcript.srt", absolutePath: txtPath }],
+                params: {},
+                runLocal: async () => {
+                  const text = await runTranscription(
+                    audioPath,
+                    audioBase,
+                    settings,
+                  );
+                  writeFileSync(txtPath, text, "utf-8");
+                },
+              });
+            } else {
+              const text = await runTranscription(audioPath, audioBase, settings);
+              assertPathUnder(dirname(txtPath), audioBase);
+              writeFileSync(txtPath, text, "utf-8");
+            }
             transcriptStatusBySegment.set(segmentId, "done");
             broadcastToEpisode(episodeId, {
               type: "segmentTranscriptGenerated",
@@ -778,13 +805,35 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
       transcriptStatusByEpisode.set(episodeId, "transcribing");
       transcriptErrorByEpisode.delete(episodeId);
       const log = request.log;
+      const apiBase = workerApiBaseFromRequest(request);
+      const useWorker =
+        settings.transcription_provider === "self_hosted" &&
+        settings.workers_enabled;
       setImmediate(() => {
         (async () => {
           try {
-            const text = await runTranscription(audioPath, procDir, settings);
             const srtPath = transcriptSrtPath(podcastId, episodeId);
             assertResolvedPathUnder(srtPath, getDataDir());
-            writeFileSync(srtPath, text, "utf-8");
+            if (useWorker) {
+              await dispatchComputeJob({
+                kind: "transcribe",
+                apiBase,
+                inputs: [{ name: "audio", absolutePath: audioPath }],
+                outputs: [{ name: "transcript.srt", absolutePath: srtPath }],
+                params: {},
+                runLocal: async () => {
+                  const text = await runTranscription(
+                    audioPath,
+                    procDir,
+                    settings,
+                  );
+                  writeFileSync(srtPath, text, "utf-8");
+                },
+              });
+            } else {
+              const text = await runTranscription(audioPath, procDir, settings);
+              writeFileSync(srtPath, text, "utf-8");
+            }
             transcriptStatusByEpisode.set(episodeId, "done");
             broadcastToEpisode(episodeId, { type: "transcriptGenerated", status: "done" });
           } catch (err: unknown) {

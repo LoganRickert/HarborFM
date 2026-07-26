@@ -16,3 +16,4 @@ export { SsoSection } from './SsoSection';
 export { DnsConfigurationSection } from './DnsConfigurationSection';
 export { CustomLegalSection } from './CustomLegalSection';
 export { ReviewSettingsSection } from './ReviewSettingsSection';
+export { WorkersSection } from './WorkersSection';

@@ -152,6 +152,13 @@ export const settingsPatchBodySchema = z.object({
   ssoSamlProviders: z.array(ssoSamlProviderSchema).optional(),
   /** When true, email/password sign-in is disabled (SSO only). */
   emailSigninDisabled: z.boolean().optional(),
+  // Remote compute workers
+  workersEnabled: z.boolean().optional(),
+  workersWsPath: z.string().optional(),
+  workersSharedSecret: z.string().optional(),
+  workersDispatchAttempts: z.coerce.number().int().min(1).max(30).optional(),
+  workersDispatchRetrySec: z.coerce.number().int().min(1).max(3600).optional(),
+  workersFallbackLocal: z.boolean().optional(),
 });
 
 export type SettingsPatchBody = z.infer<typeof settingsPatchBodySchema>;
@@ -247,6 +254,12 @@ export const settingsResponseSchema = z.object({
   emailSigninDisabled: z.boolean(),
   ssoOidcProviders: z.array(z.record(z.string(), z.unknown())).optional(),
   ssoSamlProviders: z.array(z.record(z.string(), z.unknown())).optional(),
+  workersEnabled: z.boolean(),
+  workersWsPath: z.string(),
+  workersSharedSecret: z.string(),
+  workersDispatchAttempts: z.number(),
+  workersDispatchRetrySec: z.number(),
+  workersFallbackLocal: z.boolean(),
 });
 
 export type SettingsResponse = z.infer<typeof settingsResponseSchema>;

@@ -21,6 +21,8 @@ import {
   settingsToApiResponse,
   type AppSettings,
 } from "./utils.js";
+import { generateWorkerSecrets } from "../workers/routes.ws.js";
+import { invalidateAllWorkerSessions } from "../workers/dispatch.js";
 
 export async function registerCoreRoutes(app: FastifyInstance) {
   app.get(
@@ -629,6 +631,38 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           ? Boolean(body.twoFactorEnforced)
           : current.two_factor_enforced;
 
+      const workers_enabled =
+        body.workersEnabled !== undefined
+          ? Boolean(body.workersEnabled)
+          : current.workers_enabled;
+      let workers_ws_path =
+        body.workersWsPath !== undefined
+          ? String(body.workersWsPath).trim()
+          : current.workers_ws_path;
+      let workers_shared_secret = current.workers_shared_secret;
+      if (body.workersSharedSecret !== undefined) {
+        const v = String(body.workersSharedSecret).trim();
+        workers_shared_secret =
+          v === "(set)" ? current.workers_shared_secret : v;
+      }
+      const workers_dispatch_attempts =
+        body.workersDispatchAttempts !== undefined
+          ? Math.max(1, Math.min(30, Number(body.workersDispatchAttempts) || 3))
+          : current.workers_dispatch_attempts;
+      const workers_dispatch_retry_sec =
+        body.workersDispatchRetrySec !== undefined
+          ? Math.max(1, Math.min(3600, Number(body.workersDispatchRetrySec) || 60))
+          : current.workers_dispatch_retry_sec;
+      const workers_fallback_local =
+        body.workersFallbackLocal !== undefined
+          ? Boolean(body.workersFallbackLocal)
+          : current.workers_fallback_local;
+      if (workers_enabled && (!workers_ws_path || !workers_shared_secret)) {
+        const generated = generateWorkerSecrets();
+        if (!workers_ws_path) workers_ws_path = generated.path;
+        if (!workers_shared_secret) workers_shared_secret = generated.secret;
+      }
+
       const next: AppSettings = {
         whisper_asr_url,
         transcription_provider,
@@ -722,6 +756,12 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         two_factor_methods,
         two_factor_enforced,
         email_signin_disabled,
+        workers_enabled,
+        workers_ws_path,
+        workers_shared_secret,
+        workers_dispatch_attempts,
+        workers_dispatch_retry_sec,
+        workers_fallback_local,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||
@@ -741,6 +781,18 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
 
       repo.writeSettings(next);
+
+      const workersCredsChanged =
+        next.workers_ws_path !== current.workers_ws_path ||
+        next.workers_shared_secret !== current.workers_shared_secret ||
+        next.workers_enabled !== current.workers_enabled;
+      if (workersCredsChanged) {
+        invalidateAllWorkerSessions(
+          next.workers_enabled
+            ? "Worker credentials or settings changed"
+            : "Workers disabled",
+        );
+      }
 
       if (
         maxmindKeysChanged &&

@@ -1289,3 +1289,31 @@ export const episodeGroupCallMeetingInvites = sqliteTable(
     index("idx_egcmi_invite_token").on(table.inviteToken),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Worker job stats (095)
+// ---------------------------------------------------------------------------
+export const workerJobStats = sqliteTable(
+  "worker_job_stats",
+  {
+    id: text("id").primaryKey(),
+    workerId: text("worker_id"),
+    workerName: text("worker_name"),
+    kind: text("kind").notNull(),
+    status: text("status").notNull(),
+    error: text("error"),
+    bytesDownloaded: integer("bytes_downloaded").notNull().default(0),
+    bytesUploaded: integer("bytes_uploaded").notNull().default(0),
+    durationMs: integer("duration_ms"),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_worker_job_stats_created_at").on(table.createdAt),
+    index("idx_worker_job_stats_worker_name_created").on(
+      table.workerName,
+      table.createdAt,
+    ),
+  ],
+);

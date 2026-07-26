@@ -120,6 +120,76 @@ export const ALLOW_VIDEO_GENERATION =
   process.env.ALLOW_VIDEO_GENERATION?.trim() === "1" ||
   process.env.ALLOW_VIDEO_GENERATION?.trim() === "true";
 
+function envPositiveInt(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : fallback;
+}
+
+/**
+ * Max single-shot worker file upload body (MB). Prefer chunked uploads.
+ * Env: WORKER_FILE_BODY_LIMIT_MB. Default 8192 (8 GiB).
+ */
+export const WORKER_FILE_BODY_LIMIT_MB = envPositiveInt(
+  "WORKER_FILE_BODY_LIMIT_MB",
+  8192,
+);
+export const WORKER_FILE_BODY_LIMIT =
+  WORKER_FILE_BODY_LIMIT_MB * 1024 * 1024;
+
+/** Worker upload chunk size (MB). Env: WORKER_UPLOAD_CHUNK_MB. Default 50. */
+export const WORKER_UPLOAD_CHUNK_MB = envPositiveInt(
+  "WORKER_UPLOAD_CHUNK_MB",
+  50,
+);
+export const WORKER_UPLOAD_CHUNK_BYTES =
+  WORKER_UPLOAD_CHUNK_MB * 1024 * 1024;
+
+/**
+ * Max accepted chunk body (MB). Defaults to chunk size + 1 MiB slack; never below that.
+ * Env: WORKER_UPLOAD_CHUNK_BODY_LIMIT_MB.
+ */
+export const WORKER_UPLOAD_CHUNK_BODY_LIMIT_MB = Math.max(
+  envPositiveInt(
+    "WORKER_UPLOAD_CHUNK_BODY_LIMIT_MB",
+    WORKER_UPLOAD_CHUNK_MB + 1,
+  ),
+  WORKER_UPLOAD_CHUNK_MB + 1,
+);
+export const WORKER_UPLOAD_CHUNK_BODY_LIMIT =
+  WORKER_UPLOAD_CHUNK_BODY_LIMIT_MB * 1024 * 1024;
+
+/** Wait for a worker to accept a job (ms). Env: WORKER_ACCEPT_TIMEOUT_MS. Default 30000. */
+export const WORKER_ACCEPT_TIMEOUT_MS = envPositiveInt(
+  "WORKER_ACCEPT_TIMEOUT_MS",
+  30_000,
+);
+
+/** Max wait for an accepted worker job to finish (ms). Env: WORKER_JOB_TIMEOUT_MS. Default 2700000 (45 min). */
+export const WORKER_JOB_TIMEOUT_MS = envPositiveInt(
+  "WORKER_JOB_TIMEOUT_MS",
+  45 * 60 * 1000,
+);
+
+/**
+ * After a busy worker's WebSocket drops, keep its accepted job alive this long so a
+ * reconnect with the same worker name can resume (uploads + completed).
+ * Env: WORKER_RECONNECT_GRACE_MS. Default 10000.
+ */
+export const WORKER_RECONNECT_GRACE_MS = envPositiveInt(
+  "WORKER_RECONNECT_GRACE_MS",
+  10_000,
+);
+
+/**
+ * Server -> worker WebSocket heartbeat interval (ms). Keeps idle connections alive
+ * through reverse proxies during long encodes.
+ * Env: WORKER_WS_HEARTBEAT_MS. Default 25000.
+ */
+export const WORKER_WS_HEARTBEAT_MS = envPositiveInt(
+  "WORKER_WS_HEARTBEAT_MS",
+  25_000,
+);
+
 /** When false, WebRTC/group calls are disabled (e.g. Terraform webrtc_enabled=0). Env: WEBRTC_ENABLED. Default false when unset or invalid. */
 export const WEBRTC_ENABLED =
   process.env.WEBRTC_ENABLED?.trim() === "1" ||
@@ -486,6 +556,13 @@ export const LOGIN_FAILURE_THRESHOLD =
 /** Call-join failure threshold: ban after this many failures. Higher than login because invalid links can trigger multiple requests per page load (e.g. getJoinInfo + WebSocket guest). Env: CALL_JOIN_FAILURE_THRESHOLD. Default 6 (allows ~3 real attempts). */
 export const CALL_JOIN_FAILURE_THRESHOLD =
   Number(process.env.CALL_JOIN_FAILURE_THRESHOLD) || 6;
+
+/**
+ * Worker WebSocket path/secret guessing threshold: ban IP after this many failures
+ * in the login window. Env: WORKER_WS_FAILURE_THRESHOLD. Default 10.
+ */
+export const WORKER_WS_FAILURE_THRESHOLD =
+  Number(process.env.WORKER_WS_FAILURE_THRESHOLD) || 10;
 
 /** Login ban duration (minutes). Env: LOGIN_BAN_MINUTES. Default 10. */
 export const LOGIN_BAN_MINUTES = Number(process.env.LOGIN_BAN_MINUTES) || 10;

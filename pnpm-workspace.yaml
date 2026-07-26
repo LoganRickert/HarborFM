@@ -2,8 +2,10 @@ packages:
   - server
   - web
   - shared
+  - video-gen
   - docs
   - webrtc-service
+  - worker-service
   - e2e
   - infrastructure/instance-manager
 
@@ -16,3 +18,4 @@ ignoredBuiltDependencies:
 onlyBuiltDependencies:
   - better-sqlite3
   - mediasoup
+  - canvas

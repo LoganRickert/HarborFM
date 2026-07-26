@@ -14,6 +14,7 @@ import {
   FinalOutputSection,
   GeoliteSection,
   WhisperSection,
+  WorkersSection,
   LLMSection,
   CaptchaSection,
   WebRTCSection,
@@ -245,6 +246,12 @@ export function Settings() {
         emailSigninDisabled: form.emailSigninDisabled,
         ssoOidcProviders: form.ssoOidcProviders,
         ssoSamlProviders: form.ssoSamlProviders,
+        workersEnabled: form.workersEnabled,
+        workersWsPath: form.workersWsPath?.trim() ?? '',
+        workersSharedSecret: form.workersSharedSecret?.trim() ?? '',
+        workersDispatchAttempts: form.workersDispatchAttempts,
+        workersDispatchRetrySec: form.workersDispatchRetrySec,
+        workersFallbackLocal: form.workersFallbackLocal,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
@@ -489,6 +496,9 @@ export function Settings() {
                 transcriptionOpenaiTestMutation={transcriptionOpenaiTestMutation}
                 onTranscriptionOpenaiTest={() => transcriptionOpenaiTestMutation.mutate()}
               />
+            )}
+            {activeTabId === 'workers' && (
+              <WorkersSection form={form} onFormChange={updateForm} />
             )}
             {activeTabId === 'llm' && (
               <LLMSection

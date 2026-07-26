@@ -252,6 +252,21 @@ export function writeSettings(settings: AppSettings): void {
   upsert("two_factor_methods", settings.two_factor_methods ?? DEFAULTS.two_factor_methods);
   upsert("two_factor_enforced", String(settings.two_factor_enforced));
   upsert("email_signin_disabled", String(settings.email_signin_disabled ?? false));
+  upsert("workers_enabled", String(settings.workers_enabled ?? false));
+  upsert("workers_ws_path", settings.workers_ws_path ?? "");
+  upsert("workers_shared_secret", settings.workers_shared_secret ?? "");
+  upsert(
+    "workers_dispatch_attempts",
+    String(settings.workers_dispatch_attempts ?? 3),
+  );
+  upsert(
+    "workers_dispatch_retry_sec",
+    String(settings.workers_dispatch_retry_sec ?? 60),
+  );
+  upsert(
+    "workers_fallback_local",
+    String(settings.workers_fallback_local !== false),
+  );
 }
 
 /**

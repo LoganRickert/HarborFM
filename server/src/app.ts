@@ -72,6 +72,7 @@ import {
 } from "./modules/episodeAlerts/index.js";
 import { episodeCollaborationRoutes } from "./modules/episodeCollaboration/index.js";
 import { themesRoutes, themePublicRoutes } from "./modules/themes/index.js";
+import { workerRoutes } from "./modules/workers/index.js";
 import fastifyWebsocket from "@fastify/websocket";
 import {
   flush,
@@ -310,6 +311,7 @@ async function main() {
   await app.register(episodeCollaborationRoutes, { prefix: apiPrefix });
   await app.register(themesRoutes, { prefix: apiPrefix });
   await app.register(themePublicRoutes, { prefix: apiPrefix });
+  await app.register(workerRoutes, { prefix: apiPrefix });
 
   pruneListenDedup();
   startFlushInterval();

@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.20.0 - 7-25-2026
+
+- **Compute workers:** Offload video generation and Whisper transcription to remote machines via authenticated WebSocket workers, with uploads in 50 MiB chunks and configurable settings and stats shown in Settings → Workers. Failed path/secret guesses are banned per IP (`WORKER_WS_FAILURE_THRESHOLD`). Includes new `worker-service` image (`harborfm-worker`) with Docker Compose support, plus e2e coverage for auth, status, regenerate, and bans.
+
 ## v1.19.2 - 7-25-2026
 
 - **Manage Segment:** **Download MP3** shows a Please wait dialog while the trimmed mix is prepared, instead of sitting with no feedback until the file starts.

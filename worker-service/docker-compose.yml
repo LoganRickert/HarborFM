@@ -1,0 +1,35 @@
+# Run on a powerful PC to offload HarborFM video + Whisper work.
+# Set HARBORFM_URL, WORKER_WS_PATH, WORKER_SECRET from HarborFM Settings > Workers.
+services:
+  worker:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-harborfm}/harborfm-worker:latest
+    build:
+      context: ..
+      dockerfile: worker-service/Dockerfile
+    container_name: harborfm-worker
+    restart: unless-stopped
+    environment:
+      HARBORFM_URL: ${HARBORFM_URL:?set HARBORFM_URL}
+      WORKER_WS_PATH: ${WORKER_WS_PATH:?set WORKER_WS_PATH}
+      WORKER_SECRET: ${WORKER_SECRET:?set WORKER_SECRET}
+      WORKER_NAME: ${WORKER_NAME:-pc-worker}
+      WHISPER_ASR_URL: http://whisper:9000
+      WORKER_WORK_DIR: /work
+    volumes:
+      - worker_work:/work
+    depends_on:
+      - whisper
+
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: harborfm-worker-whisper
+    restart: unless-stopped
+    environment:
+      ASR_MODEL: ${ASR_MODEL:-base}
+      ASR_ENGINE: openai_whisper
+    volumes:
+      - whisper_cache:/root/.cache
+
+volumes:
+  worker_work:
+  whisper_cache:

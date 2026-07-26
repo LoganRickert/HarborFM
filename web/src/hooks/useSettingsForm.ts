@@ -92,6 +92,12 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   emailSigninDisabled: false,
   ssoOidcProviders: [],
   ssoSamlProviders: [],
+  workersEnabled: false,
+  workersWsPath: '',
+  workersSharedSecret: '',
+  workersDispatchAttempts: 3,
+  workersDispatchRetrySec: 60,
+  workersFallbackLocal: true,
 };
 
 export function useSettingsForm(initialSettings?: SettingsResponse) {

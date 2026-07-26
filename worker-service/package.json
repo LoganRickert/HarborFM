@@ -1,0 +1,29 @@
+{
+  "name": "worker-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@harborfm/shared": "workspace:*",
+    "@harborfm/video-gen": "workspace:*",
+    "dotenv": "^17.2.4",
+    "nanoid": "^5.1.6",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "@types/node": "^22.10.1",
+    "@types/ws": "^8.5.13",
+    "eslint": "^9",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0"
+  }
+}

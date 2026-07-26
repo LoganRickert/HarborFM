@@ -39,6 +39,7 @@
     "@fastify/swagger-ui": "^5.2.5",
     "@fastify/websocket": "^11.2.0",
     "@harborfm/shared": "workspace:*",
+    "@harborfm/video-gen": "workspace:*",
     "@maxmind/geoip2-node": "6.3.4",
     "@node-saml/node-saml": "5.1.0",
     "adm-zip": "^0.6.0",

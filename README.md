@@ -417,6 +417,15 @@ All environment variables supported by the server work the same in Docker. Set t
 | `LIBRARY_UPLOAD_MAX_MB` | `50` | Max library asset upload size |
 | `MULTIPART_MAX_MB` | `500` | Max multipart body size for Fastify |
 | `ARTWORK_MAX_MB` | `5` | Max podcast/episode artwork upload size |
+| **Compute workers** | | |
+| `WORKER_FILE_BODY_LIMIT_MB` | `8192` | Max single-shot worker file body (MB); prefer chunked uploads |
+| `WORKER_UPLOAD_CHUNK_MB` | `50` | Worker upload chunk size (MB) |
+| `WORKER_UPLOAD_CHUNK_BODY_LIMIT_MB` | `chunk+1` | Max accepted chunk body (MB); never below chunk size + 1 |
+| `WORKER_ACCEPT_TIMEOUT_MS` | `30000` | Wait for a worker to accept a job (ms) |
+| `WORKER_JOB_TIMEOUT_MS` | `2700000` | Max wait for an accepted worker job (ms, default 45 min) |
+| `WORKER_RECONNECT_GRACE_MS` | `10000` | Keep accepted jobs alive after a WS drop so the same worker name can reconnect |
+| `WORKER_WS_HEARTBEAT_MS` | `25000` | Worker WebSocket ping interval (ms) to avoid idle proxy disconnects |
+| `WORKER_WS_FAILURE_THRESHOLD` | `10` | Ban IP after this many failed worker WS path/secret attempts in the login window |
 | **Binaries** | | |
 | `FFMPEG_PATH` | `ffmpeg` | Path to ffmpeg binary |
 | `FFPROBE_PATH` | `ffprobe` | Path to ffprobe binary |

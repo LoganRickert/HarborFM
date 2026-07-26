@@ -288,6 +288,109 @@ export function callWsUrl() {
   return `${u}/call/ws`;
 }
 
+/** WebSocket URL for compute workers (derived from baseURL). */
+export function workerWsUrl(pathToken) {
+  const u = baseURL.replace(/^https?:/, (s) => (s === 'https:' ? 'wss:' : 'ws:'));
+  return `${u}/workers/ws/${encodeURIComponent(pathToken)}`;
+}
+
+/**
+ * Connect to the worker WebSocket and optionally send auth.
+ * Resolves with { ok: true, ws, workerId } on auth_ok, or
+ * { ok: false, code, reason, authError } when the socket closes without auth_ok.
+ *
+ * @param {{ path: string, secret?: string | null, name?: string, firstMessage?: object | null, timeoutMs?: number }} opts
+ *   - secret: string to send as auth (default); null skips sending auth (for Expected auth tests)
+ *   - firstMessage: override first outbound message (e.g. { type: 'ping' })
+ */
+export async function connectWorkerWs(opts = {}) {
+  const { default: WebSocket } = await import('ws');
+  const pathToken = opts.path;
+  if (!pathToken) throw new Error('connectWorkerWs: path is required');
+  const timeoutMs = opts.timeoutMs ?? 8000;
+  const url = workerWsUrl(pathToken);
+
+  return new Promise((resolve) => {
+    const ws = new WebSocket(url);
+    let settled = false;
+    let authError = null;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+
+    const timeout = setTimeout(() => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      finish({
+        ok: false,
+        code: null,
+        reason: 'timeout',
+        authError,
+        ws,
+      });
+    }, timeoutMs);
+
+    ws.on('open', () => {
+      if (opts.firstMessage != null) {
+        ws.send(JSON.stringify(opts.firstMessage));
+        return;
+      }
+      if (opts.secret === null) {
+        // Leave socket open without auth (caller may send later); for Expected-auth tests
+        // send a non-auth message so the server rejects immediately.
+        ws.send(JSON.stringify({ type: 'ping' }));
+        return;
+      }
+      if (typeof opts.secret === 'string') {
+        ws.send(
+          JSON.stringify({
+            type: 'auth',
+            secret: opts.secret,
+            name: opts.name || 'e2e-worker',
+          }),
+        );
+      }
+    });
+
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'auth_ok' && msg.workerId) {
+          finish({ ok: true, ws, workerId: msg.workerId, authError: null });
+          return;
+        }
+        if (msg.type === 'auth_error') {
+          authError = typeof msg.error === 'string' ? msg.error : 'auth_error';
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+
+    ws.on('error', () => {
+      // close handler will settle
+    });
+
+    ws.on('close', (code, reasonBuf) => {
+      const reason = reasonBuf ? reasonBuf.toString() : '';
+      finish({
+        ok: false,
+        code,
+        reason,
+        authError,
+        ws,
+      });
+    });
+  });
+}
+
 /**
  * Start a group call for an episode. Returns { token, sessionId, joinUrl, webrtcUrl?, roomId?, webrtcUnavailable? }.
  * When webrtc is not configured: webrtcUnavailable may be true; webrtcUrl/roomId absent.

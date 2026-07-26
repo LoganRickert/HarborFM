@@ -1,14 +1,7 @@
 import { SectionCard } from './SectionCard';
 import type { SystemStatsResponse } from '../../api/settings';
+import { formatBytes } from '../../utils/format';
 import styles from '../../pages/Settings.module.css';
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
-  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(1)} KB`;
-  return `${bytes} B`;
-}
 
 export interface SystemSectionProps {
   version: string | null | undefined;
