@@ -390,6 +390,21 @@ export const MEETING_JOIN_OPENS_BEFORE_MS =
 export const MEETING_JOIN_EXPIRES_AFTER_MS =
   Number(process.env.MEETING_JOIN_EXPIRES_AFTER_MS) || 4 * 60 * 60 * 1000;
 
+/**
+ * Send invitee reminder this long before scheduled start (ms).
+ * Env: MEETING_REMINDER_BEFORE_MS. Default 4 hours.
+ */
+export const MEETING_REMINDER_BEFORE_MS =
+  Number(process.env.MEETING_REMINDER_BEFORE_MS) || 4 * 60 * 60 * 1000;
+
+/**
+ * Only send the reminder if the meeting was scheduled at least this far ahead
+ * when created (scheduled_start - created_at). Env: MEETING_REMINDER_MIN_LEAD_MS.
+ * Default 5 hours (so short-notice meetings do not get a "4 hours" reminder).
+ */
+export const MEETING_REMINDER_MIN_LEAD_MS =
+  Number(process.env.MEETING_REMINDER_MIN_LEAD_MS) || 5 * 60 * 60 * 1000;
+
 /** Max scheduled/live meetings a user may have at once. Env: MAX_ACTIVE_MEETINGS_PER_USER. Default 50. */
 export const MAX_ACTIVE_MEETINGS_PER_USER =
   Number(process.env.MAX_ACTIVE_MEETINGS_PER_USER) || 50;

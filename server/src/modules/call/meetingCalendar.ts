@@ -20,10 +20,11 @@ export type MeetingCalendarInput = {
   dialInPhoneNumber?: string | null;
   hostEmail?: string | null;
   hostName?: string | null;
+  organizerEmail?: string | null;
   attendeeEmail?: string | null;
   attendeeName?: string | null;
   sequence?: number;
-  method?: "REQUEST" | "CANCEL";
+  method?: "REQUEST" | "CANCEL" | "PUBLISH";
 };
 
 function pad(n: number): string {
@@ -87,6 +88,7 @@ export function buildMeetingDescription(input: MeetingCalendarInput): string {
 export function buildMeetingIcs(input: MeetingCalendarInput): {
   filename: string;
   contentType: string;
+  method: "REQUEST" | "CANCEL" | "PUBLISH";
   body: string;
 } {
   const start = new Date(input.scheduledStartAt);
@@ -99,6 +101,9 @@ export function buildMeetingIcs(input: MeetingCalendarInput): {
   const summary = `${input.podcastTitle} - ${input.episodeTitle} group call`;
   const description = buildMeetingDescription(input);
   const sequence = input.sequence ?? 0;
+  const organizerEmail = (input.organizerEmail || input.hostEmail || "")
+    .trim()
+    .toLowerCase();
 
   const lines: string[] = [
     "BEGIN:VCALENDAR",
@@ -113,21 +118,21 @@ export function buildMeetingIcs(input: MeetingCalendarInput): {
     `DTEND:${toIcsUtc(end)}`,
     `SUMMARY:${escapeIcsText(summary)}`,
     `DESCRIPTION:${escapeIcsText(description)}`,
+    `LOCATION:${escapeIcsText(input.joinUrl)}`,
     `URL:${input.joinUrl}`,
     `SEQUENCE:${sequence}`,
     `STATUS:${method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
   ];
 
-  if (input.hostEmail) {
-    const cn = escapeIcsText(input.hostName || input.hostEmail);
-    lines.push(
-      `ORGANIZER;CN=${cn}:mailto:${input.hostEmail}`,
-    );
+  if (organizerEmail) {
+    const cn = escapeIcsText(input.hostName || input.hostEmail || organizerEmail);
+    lines.push(`ORGANIZER;CN=${cn}:mailto:${organizerEmail}`);
   }
-  if (input.attendeeEmail && method === "REQUEST") {
+  if (input.attendeeEmail && (method === "REQUEST" || method === "CANCEL")) {
     const cn = escapeIcsText(input.attendeeName || input.attendeeEmail);
+    const rsvp = method === "REQUEST" ? ";RSVP=TRUE" : "";
     lines.push(
-      `ATTENDEE;CN=${cn};RSVP=TRUE:mailto:${input.attendeeEmail}`,
+      `ATTENDEE;CN=${cn}${rsvp};PARTSTAT=${method === "CANCEL" ? "DECLINED" : "NEEDS-ACTION"}:mailto:${input.attendeeEmail}`,
     );
   }
 
@@ -136,8 +141,73 @@ export function buildMeetingIcs(input: MeetingCalendarInput): {
   const body = lines.map(foldIcsLine).join("\r\n") + "\r\n";
   return {
     filename: `${APP_NAME_SLUG}-meeting.ics`,
-    contentType: "text/calendar; charset=utf-8; method=" + method,
+    contentType: `text/calendar; charset=utf-8; method=${method}`,
+    method,
     body,
+  };
+}
+
+/**
+ * schema.org EventReservation JSON-LD for Gmail event chips / highlight.
+ * @see https://developers.google.com/gmail/markup/reference/event-reservation
+ */
+export function buildMeetingEventJsonLd(
+  input: MeetingCalendarInput,
+): Record<string, unknown> {
+  const start = new Date(input.scheduledStartAt);
+  const end = input.scheduledEndAt
+    ? new Date(input.scheduledEndAt)
+    : meetingEventEndAt(input.scheduledStartAt);
+  const cancelled = input.method === "CANCEL";
+  const underEmail = (input.attendeeEmail || input.hostEmail || "").trim();
+  const underName = (
+    input.attendeeName ||
+    input.hostName ||
+    underEmail ||
+    "Guest"
+  ).trim();
+  const eventName = `${input.podcastTitle} - ${input.episodeTitle} group call`;
+  return {
+    "@context": "https://schema.org",
+    "@type": "EventReservation",
+    reservationNumber: input.meetingId,
+    reservationStatus: cancelled
+      ? "https://schema.org/ReservationCancelled"
+      : "https://schema.org/ReservationConfirmed",
+    ...(underEmail
+      ? {
+          underName: {
+            "@type": "Person",
+            name: underName,
+            email: underEmail,
+          },
+        }
+      : {}),
+    reservationFor: {
+      "@type": "Event",
+      name: eventName,
+      description: buildMeetingDescription(input),
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      eventAttendanceMode: "https://schema.org/OnlineEventAttendanceMode",
+      eventStatus: cancelled
+        ? "https://schema.org/EventCancelled"
+        : "https://schema.org/EventScheduled",
+      location: {
+        "@type": "VirtualLocation",
+        url: input.joinUrl,
+      },
+      url: input.joinUrl,
+      ...(input.hostEmail || input.hostName
+        ? {
+            organizer: {
+              "@type": "Person",
+              name: (input.hostName || input.hostEmail || "").trim(),
+              ...(input.hostEmail ? { email: input.hostEmail } : {}),
+            },
+          }
+        : {}),
+    },
   };
 }
 

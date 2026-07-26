@@ -1,6 +1,16 @@
 /** Extensible compute job kinds. Add new kinds without changing the wire shape. */
 export type ComputeJobKind = "video_generate" | "transcribe";
 
+/** Per-job CPU/memory from the worker (cgroup or process tree; not host-global). */
+export type WorkerJobResourceStats = {
+  avgCpuPercent: number | null;
+  peakCpuPercent: number | null;
+  avgMemoryBytes: number | null;
+  peakMemoryBytes: number | null;
+  sampleCount: number;
+  source?: "cgroup" | "proc" | null;
+};
+
 export type WorkerWsClientMessage =
   | { type: "auth"; secret: string; name?: string }
   | { type: "ping" }
@@ -8,8 +18,17 @@ export type WorkerWsClientMessage =
   | { type: "accepted"; jobId: string }
   | { type: "rejected"; jobId: string; reason?: string }
   | { type: "progress"; jobId: string; message?: string }
-  | { type: "completed"; jobId: string }
-  | { type: "failed"; jobId: string; error: string };
+  | {
+      type: "completed";
+      jobId: string;
+      resourceStats?: WorkerJobResourceStats;
+    }
+  | {
+      type: "failed";
+      jobId: string;
+      error: string;
+      resourceStats?: WorkerJobResourceStats;
+    };
 
 export type WorkerWsServerMessage =
   | { type: "auth_ok"; workerId: string }

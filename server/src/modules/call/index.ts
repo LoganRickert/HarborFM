@@ -5,6 +5,8 @@ import { registerWsRoutes } from "./routes.ws.js";
 import { registerDialInRoutes } from "./routes.dialIn.js";
 import { registerMeetingRoutes } from "./routes.meetings.js";
 
+export { startMeetingReminderPoller } from "./meetingReminderPoller.js";
+
 export async function callRoutes(app: FastifyInstance): Promise<void> {
   await app.register(registerLifecycleRoutes);
   await app.register(registerMeetingRoutes);

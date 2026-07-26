@@ -13,7 +13,7 @@ import { dirname, join } from "path";
 import { createHash } from "crypto";
 import { nanoid } from "nanoid";
 import { getDataDir } from "../../services/paths.js";
-import type { ComputeJobKind } from "./protocol.js";
+import type { ComputeJobKind, WorkerJobResourceStats } from "./protocol.js";
 
 export type JobFileRef = {
   name: string;
@@ -53,6 +53,8 @@ export type ActiveJob = {
   bytesUploaded: number;
   /** Wall-clock start when the worker accepted the job (ms since epoch). */
   acceptedAt: number | null;
+  /** CPU/memory samples from the worker for this job (set on completed/failed). */
+  resourceStats: WorkerJobResourceStats | null;
 };
 
 const jobs = new Map<string, ActiveJob>();
@@ -93,6 +95,7 @@ export function createJob(opts: {
     bytesDownloaded: 0,
     bytesUploaded: 0,
     acceptedAt: null,
+    resourceStats: null,
   };
   jobs.set(id, job);
   return job;

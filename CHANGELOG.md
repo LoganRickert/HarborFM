@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.20.1 - 7-26-2026
+
+- **Meeting emails:** Calendar invites use a proper `text/calendar` MIME part (including `method=REQUEST` / `CANCEL` / `PUBLISH`), match the envelope From as ICS organizer, and include schema.org `EventReservation` JSON-LD so Gmail can load the event chip. Host confirmation emails use `PUBLISH` (add to calendar) instead of a self-RSVP.
+- **Meeting reminders:** When a group call was scheduled at least 5 hours ahead, invitees with email get a **REMINDER** about 4 hours before start (“In just 4 hours”) with the host-local time called out, so time zones are harder to misread. Rescheduling clears the flag so a new reminder can send.
+- **Compute workers:** Each job reports average and peak CPU (percent of one core) and memory from that worker’s container/process tree (not host-wide), shown in Settings → Workers → Recent jobs.
+
 ## v1.20.0 - 7-25-2026
 
 - **Compute workers:** Offload video generation and Whisper transcription to remote machines via authenticated WebSocket workers, with uploads in 50 MiB chunks and configurable settings and stats shown in Settings → Workers. Failed path/secret guesses are banned per IP (`WORKER_WS_FAILURE_THRESHOLD`). Includes new `worker-service` image (`harborfm-worker`) with Docker Compose support, plus e2e coverage for auth, status, regenerate, and bans.

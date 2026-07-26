@@ -129,6 +129,12 @@ export type WorkerJobStat = {
   bytesDownloaded: number;
   bytesUploaded: number;
   durationMs: number | null;
+  avgCpuPercent: number | null;
+  peakCpuPercent: number | null;
+  avgMemoryBytes: number | null;
+  peakMemoryBytes: number | null;
+  resourceSampleCount: number | null;
+  resourceSource: string | null;
   startedAt: string;
   finishedAt: string | null;
   createdAt: string;

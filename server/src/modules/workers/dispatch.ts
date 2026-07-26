@@ -214,12 +214,36 @@ async function offerAndAwaitWorker(
   }
 }
 
+function normalizeResourceStats(
+  raw: unknown,
+): ActiveJob["resourceStats"] {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const numOrNull = (v: unknown): number | null => {
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const sampleCount = Math.max(0, Math.trunc(Number(o.sampleCount) || 0));
+  const source =
+    o.source === "cgroup" || o.source === "proc" ? o.source : null;
+  return {
+    avgCpuPercent: numOrNull(o.avgCpuPercent),
+    peakCpuPercent: numOrNull(o.peakCpuPercent),
+    avgMemoryBytes: numOrNull(o.avgMemoryBytes),
+    peakMemoryBytes: numOrNull(o.peakMemoryBytes),
+    sampleCount,
+    source,
+  };
+}
+
 function persistWorkerJobStat(
   job: ActiveJob,
   outcome: { status: "completed" | "failed"; error?: string },
 ): void {
   const finishedMs = Date.now();
   const startedMs = job.acceptedAt ?? job.createdAt;
+  const rs = job.resourceStats;
   try {
     insertWorkerJobStat({
       id: job.id,
@@ -231,6 +255,12 @@ function persistWorkerJobStat(
       bytesDownloaded: job.bytesDownloaded,
       bytesUploaded: job.bytesUploaded,
       durationMs: Math.max(0, finishedMs - startedMs),
+      avgCpuPercent: rs?.avgCpuPercent ?? null,
+      peakCpuPercent: rs?.peakCpuPercent ?? null,
+      avgMemoryBytes: rs?.avgMemoryBytes ?? null,
+      peakMemoryBytes: rs?.peakMemoryBytes ?? null,
+      resourceSampleCount: rs?.sampleCount ?? null,
+      resourceSource: rs?.source ?? null,
       startedAt: new Date(startedMs).toISOString(),
       finishedAt: new Date(finishedMs).toISOString(),
     });
@@ -247,6 +277,7 @@ export function handleWorkerJobMessage(
     jobId: string;
     error?: string;
     reason?: string;
+    resourceStats?: unknown;
   },
 ): void {
   const job = getJob(msg.jobId);
@@ -267,11 +298,13 @@ export function handleWorkerJobMessage(
   }
   if (msg.type === "completed") {
     clearJobDisconnectGrace(job);
+    job.resourceStats = normalizeResourceStats(msg.resourceStats);
     job.doneResolve?.();
     return;
   }
   if (msg.type === "failed") {
     clearJobDisconnectGrace(job);
+    job.resourceStats = normalizeResourceStats(msg.resourceStats);
     job.doneReject?.(
       new WorkerExecutionError(msg.error || msg.reason || "Worker job failed"),
     );

@@ -63,7 +63,7 @@ import { sitemapRoutes } from "./modules/sitemap/index.js";
 import { registerRobotsRoute } from "./modules/sitemap/routes.robots.js";
 import { registerPwaManifestRoute } from "./services/pwaManifest.js";
 import { bansRoutes } from "./modules/bans/index.js";
-import { callRoutes } from "./modules/call/index.js";
+import { callRoutes, startMeetingReminderPoller } from "./modules/call/index.js";
 import { stripeRoutes } from "./modules/stripe/index.js";
 import {
   episodeAlertRoutes,
@@ -316,6 +316,7 @@ async function main() {
   pruneListenDedup();
   startFlushInterval();
   startEpisodeAlertsPoller();
+  startMeetingReminderPoller();
   app.addHook("onClose", async () => {
     stopFlushInterval();
     flush();

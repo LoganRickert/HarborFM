@@ -1,9 +1,11 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { drizzleDb } from "../../db/index.js";
 import {
   MEETING_JOIN_EXPIRES_AFTER_MS,
   MEETING_JOIN_OPENS_BEFORE_MS,
+  MEETING_REMINDER_BEFORE_MS,
+  MEETING_REMINDER_MIN_LEAD_MS,
   MAX_ACTIVE_MEETINGS_PER_USER,
   MAX_SCHEDULE_AHEAD_MS,
 } from "../../config.js";
@@ -18,6 +20,8 @@ import {
 export {
   MEETING_JOIN_OPENS_BEFORE_MS,
   MEETING_JOIN_EXPIRES_AFTER_MS,
+  MEETING_REMINDER_BEFORE_MS,
+  MEETING_REMINDER_MIN_LEAD_MS,
   MAX_ACTIVE_MEETINGS_PER_USER,
   MAX_SCHEDULE_AHEAD_MS,
 };
@@ -280,6 +284,8 @@ export function updateMeetingSchedule(
       scheduledStartAt,
       ...(nextTz ? { hostTimeZone: nextTz } : {}),
       icsSequence: (existing.icsSequence ?? 0) + 1,
+      // New start time: allow a fresh 4-hour reminder when eligible.
+      reminderSentAt: null,
       updatedAt: nowIso,
     })
     .where(eq(episodeGroupCallMeetings.id, id))
@@ -381,6 +387,61 @@ export function setEpisodePublishedNotified(id: string): void {
     })
     .where(eq(episodeGroupCallMeetings.id, id))
     .run();
+}
+
+/**
+ * Meetings due for a 4-hour invitee reminder:
+ * scheduled, not yet reminded, originally scheduled 5+ hours out,
+ * and currently in the catch window ending at T-4h (default ~1 hour wide)
+ * so a 15-minute poller can send without a late "in just 4 hours" email.
+ */
+export function listDueMeetingReminders(limit = 50): MeetingRow[] {
+  const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit) || 50));
+  const now = Date.now();
+  const windowMs = Math.max(60_000, Math.round(MEETING_REMINDER_BEFORE_MS / 4));
+  const dueEndMs = now + MEETING_REMINDER_BEFORE_MS;
+  const dueStartMs = dueEndMs - windowMs;
+  const candidates = drizzleDb
+    .select()
+    .from(episodeGroupCallMeetings)
+    .where(
+      and(
+        eq(episodeGroupCallMeetings.status, "scheduled"),
+        isNull(episodeGroupCallMeetings.reminderSentAt),
+      ),
+    )
+    .all();
+  const due: MeetingRow[] = [];
+  for (const row of candidates) {
+    const startMs = new Date(row.scheduledStartAt).getTime();
+    const createdMs = new Date(row.createdAt).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(createdMs)) continue;
+    if (startMs - createdMs < MEETING_REMINDER_MIN_LEAD_MS) continue;
+    if (startMs <= dueStartMs || startMs > dueEndMs) continue;
+    due.push(row);
+    if (due.length >= safeLimit) break;
+  }
+  return due;
+}
+
+/** Atomically claim reminder send for a meeting. Returns false if already claimed. */
+export function claimMeetingReminderSent(meetingId: string): boolean {
+  const nowIso = new Date().toISOString();
+  const result = drizzleDb
+    .update(episodeGroupCallMeetings)
+    .set({
+      reminderSentAt: nowIso,
+      updatedAt: nowIso,
+    })
+    .where(
+      and(
+        eq(episodeGroupCallMeetings.id, meetingId),
+        eq(episodeGroupCallMeetings.status, "scheduled"),
+        isNull(episodeGroupCallMeetings.reminderSentAt),
+      ),
+    )
+    .run();
+  return (result.changes ?? 0) > 0;
 }
 
 export function listInvites(meetingId: string): MeetingInviteRow[] {

@@ -14,6 +14,12 @@ export type WorkerJobStatRow = {
   bytesDownloaded: number;
   bytesUploaded: number;
   durationMs: number | null;
+  avgCpuPercent: number | null;
+  peakCpuPercent: number | null;
+  avgMemoryBytes: number | null;
+  peakMemoryBytes: number | null;
+  resourceSampleCount: number | null;
+  resourceSource: string | null;
   startedAt: string;
   finishedAt: string | null;
   createdAt: string;
@@ -29,6 +35,12 @@ export type InsertWorkerJobStat = {
   bytesDownloaded: number;
   bytesUploaded: number;
   durationMs: number | null;
+  avgCpuPercent?: number | null;
+  peakCpuPercent?: number | null;
+  avgMemoryBytes?: number | null;
+  peakMemoryBytes?: number | null;
+  resourceSampleCount?: number | null;
+  resourceSource?: string | null;
   startedAt: string;
   finishedAt: string;
 };
@@ -42,6 +54,12 @@ function pruneOldStats(): void {
       LIMIT ${MAX_RETAINED_ROWS}
     )
   `);
+}
+
+function asOptionalNumber(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** Persist one finished worker job and keep only the newest rows. */
@@ -58,6 +76,12 @@ export function insertWorkerJobStat(row: InsertWorkerJobStat): void {
       bytesDownloaded: row.bytesDownloaded,
       bytesUploaded: row.bytesUploaded,
       durationMs: row.durationMs,
+      avgCpuPercent: row.avgCpuPercent ?? null,
+      peakCpuPercent: row.peakCpuPercent ?? null,
+      avgMemoryBytes: row.avgMemoryBytes ?? null,
+      peakMemoryBytes: row.peakMemoryBytes ?? null,
+      resourceSampleCount: row.resourceSampleCount ?? null,
+      resourceSource: row.resourceSource ?? null,
       startedAt: row.startedAt,
       finishedAt: row.finishedAt,
     })
@@ -82,6 +106,12 @@ export function listWorkerJobStats(limit = 50): WorkerJobStatRow[] {
       bytesDownloaded: workerJobStats.bytesDownloaded,
       bytesUploaded: workerJobStats.bytesUploaded,
       durationMs: workerJobStats.durationMs,
+      avgCpuPercent: workerJobStats.avgCpuPercent,
+      peakCpuPercent: workerJobStats.peakCpuPercent,
+      avgMemoryBytes: workerJobStats.avgMemoryBytes,
+      peakMemoryBytes: workerJobStats.peakMemoryBytes,
+      resourceSampleCount: workerJobStats.resourceSampleCount,
+      resourceSource: workerJobStats.resourceSource,
       startedAt: workerJobStats.startedAt,
       finishedAt: workerJobStats.finishedAt,
       createdAt: workerJobStats.createdAt,
@@ -96,5 +126,11 @@ export function listWorkerJobStats(limit = 50): WorkerJobStatRow[] {
       bytesUploaded: Number(r.bytesUploaded) || 0,
       durationMs:
         r.durationMs == null ? null : Number(r.durationMs) || 0,
+      avgCpuPercent: asOptionalNumber(r.avgCpuPercent),
+      peakCpuPercent: asOptionalNumber(r.peakCpuPercent),
+      avgMemoryBytes: asOptionalNumber(r.avgMemoryBytes),
+      peakMemoryBytes: asOptionalNumber(r.peakMemoryBytes),
+      resourceSampleCount: asOptionalNumber(r.resourceSampleCount),
+      resourceSource: r.resourceSource ?? null,
     }));
 }

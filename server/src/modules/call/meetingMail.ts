@@ -1,12 +1,16 @@
 import {
   buildGoogleCalendarUrl,
+  buildMeetingEventJsonLd,
   buildMeetingIcs,
   type MeetingCalendarInput,
 } from "./meetingCalendar.js";
 import {
+  claimMeetingReminderSent,
+  formatMeetingDurationMs,
   getMeetingContext,
   listEmailedInvites,
   markInviteSent,
+  MEETING_REMINDER_BEFORE_MS,
   type MeetingInviteRow,
   type MeetingRow,
 } from "./meetings.js";
@@ -18,7 +22,9 @@ import {
   buildGroupCallMeetingCreatorEmail,
   buildGroupCallMeetingEpisodePublishedEmail,
   buildGroupCallMeetingInviteEmail,
+  buildGroupCallMeetingReminderEmail,
   buildGroupCallMeetingRescheduledEmail,
+  getConfiguredFromAddress,
   sendMail,
   type GroupCallMeetingEmailOptions,
 } from "../../services/email.js";
@@ -65,7 +71,7 @@ function calendarInputForMeeting(
   extras?: {
     attendeeEmail?: string | null;
     attendeeName?: string | null;
-    method?: "REQUEST" | "CANCEL";
+    method?: "REQUEST" | "CANCEL" | "PUBLISH";
   },
 ): MeetingCalendarInput {
   const ctx = getMeetingContext(meeting);
@@ -80,10 +86,24 @@ function calendarInputForMeeting(
     dialInPhoneNumber: dial.enabled ? dial.phoneNumber : null,
     hostEmail: ctx.hostEmail,
     hostName: ctx.hostName,
+    // Match envelope From so Gmail accepts the invite (host CN still shown).
+    organizerEmail: getConfiguredFromAddress(),
     attendeeEmail: extras?.attendeeEmail,
     attendeeName: extras?.attendeeName,
     sequence: meeting.icsSequence ?? 0,
     method: extras?.method,
+  };
+}
+
+function meetingIcalAndJsonLd(cal: MeetingCalendarInput) {
+  const ics = buildMeetingIcs(cal);
+  return {
+    icalEvent: {
+      filename: ics.filename,
+      method: ics.method,
+      content: ics.body,
+    },
+    eventJsonLd: buildMeetingEventJsonLd(cal),
   };
 }
 
@@ -145,23 +165,23 @@ export async function sendMeetingCreatorConfirmation(
   const ctx = getMeetingContext(meeting);
   if (!ctx.hostEmail) return { sent: false, error: "Host has no email" };
   const joinUrl = absoluteJoinUrl(meeting, fallbackOrigin);
-  const cal = calendarInputForMeeting(meeting, joinUrl);
+  // PUBLISH: host confirmation is "add to calendar", not an RSVP to themselves.
+  const cal = calendarInputForMeeting(meeting, joinUrl, {
+    attendeeEmail: ctx.hostEmail,
+    attendeeName: ctx.hostName,
+    method: "PUBLISH",
+  });
   const gcal = buildGoogleCalendarUrl(cal);
-  const ics = buildMeetingIcs(cal);
+  const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
   const content = buildGroupCallMeetingCreatorEmail({
     ...meetingEmailSharedOpts(meeting, fallbackOrigin),
     googleCalendarUrl: gcal,
+    eventJsonLd,
   });
   return sendMail({
     to: ctx.hostEmail,
     ...content,
-    attachments: [
-      {
-        filename: ics.filename,
-        content: ics.body,
-        contentType: ics.contentType,
-      },
-    ],
+    icalEvent,
   });
 }
 
@@ -179,26 +199,75 @@ export async function sendMeetingInviteEmail(
     attendeeName: invite.displayName,
   });
   const gcal = buildGoogleCalendarUrl(cal);
-  const ics = buildMeetingIcs(cal);
+  const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
   const content = buildGroupCallMeetingInviteEmail({
     ...meetingEmailSharedOpts(meeting, fallbackOrigin, invite),
     googleCalendarUrl: gcal,
     guestName: invite.displayName,
+    eventJsonLd,
   });
   const result = await sendMail({
     to: email,
     ...content,
     replyTo: ctx.hostEmail ?? undefined,
-    attachments: [
-      {
-        filename: ics.filename,
-        content: ics.body,
-        contentType: ics.contentType,
-      },
-    ],
+    icalEvent,
   });
   if (result.sent) markInviteSent(invite.id);
   return result;
+}
+
+/**
+ * Send "REMINDER: … In just N hours" to every invitee with an email.
+ * Caller should claim reminder_sent_at first (see sendDueMeetingReminder).
+ */
+export async function notifyEmailedInvitesReminder(
+  meeting: MeetingRow,
+  fallbackOrigin: string,
+): Promise<void> {
+  const invites = listEmailedInvites(meeting.id);
+  if (invites.length === 0) return;
+  const ctx = getMeetingContext(meeting);
+  const leadPhrase = formatMeetingDurationMs(MEETING_REMINDER_BEFORE_MS);
+  for (const invite of invites) {
+    const email = invite.email?.trim();
+    if (!email) continue;
+    const joinUrl = absoluteJoinUrl(meeting, fallbackOrigin, invite);
+    const cal = calendarInputForMeeting(meeting, joinUrl, {
+      attendeeEmail: email,
+      attendeeName: invite.displayName,
+    });
+    const gcal = buildGoogleCalendarUrl(cal);
+    const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
+    const content = buildGroupCallMeetingReminderEmail({
+      ...meetingEmailSharedOpts(meeting, fallbackOrigin, invite),
+      googleCalendarUrl: gcal,
+      guestName: invite.displayName,
+      eventJsonLd,
+      reminderLeadPhrase: leadPhrase,
+    });
+    await sendMail({
+      to: email,
+      ...content,
+      replyTo: ctx.hostEmail ?? undefined,
+      icalEvent,
+    });
+  }
+}
+
+/**
+ * Claim and send the 4-hour reminder for one due meeting (idempotent).
+ * Uses settings hostname when fallbackOrigin is empty (background poller).
+ * Meetings with no emailed invites are claimed without sending so the poller
+ * does not retry forever.
+ */
+export async function sendDueMeetingReminder(
+  meeting: MeetingRow,
+  fallbackOrigin = "",
+): Promise<void> {
+  const invites = listEmailedInvites(meeting.id);
+  if (!claimMeetingReminderSent(meeting.id)) return;
+  if (invites.length === 0) return;
+  await notifyEmailedInvitesReminder(meeting, fallbackOrigin);
 }
 
 export async function notifyEmailedInvitesRescheduled(
@@ -217,24 +286,19 @@ export async function notifyEmailedInvitesRescheduled(
       attendeeName: invite.displayName,
     });
     const gcal = buildGoogleCalendarUrl(cal);
-    const ics = buildMeetingIcs(cal);
+    const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
     const content = buildGroupCallMeetingRescheduledEmail({
       ...meetingEmailSharedOpts(meeting, fallbackOrigin, invite),
       previousScheduledStartAt,
       googleCalendarUrl: gcal,
       guestName: invite.displayName,
+      eventJsonLd,
     });
     await sendMail({
       to: email,
       ...content,
       replyTo: ctx.hostEmail ?? undefined,
-      attachments: [
-        {
-          filename: ics.filename,
-          content: ics.body,
-          contentType: ics.contentType,
-        },
-      ],
+      icalEvent,
     });
   }
 }
@@ -254,7 +318,7 @@ export async function notifyEmailedInvitesCancelled(
       attendeeName: invite.displayName,
       method: "CANCEL",
     });
-    const ics = buildMeetingIcs(cal);
+    const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
     const content = buildGroupCallMeetingCancelledEmail({
       podcastTitle: ctx.podcastTitle,
       episodeTitle: ctx.episodeTitle,
@@ -263,18 +327,13 @@ export async function notifyEmailedInvitesCancelled(
       guestName: invite.displayName,
       joinUrl,
       coverArtUrl: absoluteCoverArtUrl(ctx, fallbackOrigin),
+      eventJsonLd,
     });
     await sendMail({
       to: email,
       ...content,
       replyTo: ctx.hostEmail ?? undefined,
-      attachments: [
-        {
-          filename: ics.filename,
-          content: ics.body,
-          contentType: ics.contentType,
-        },
-      ],
+      icalEvent,
     });
   }
 }
@@ -296,23 +355,18 @@ export async function notifyEmailedInvitesEpisodePublished(
       attendeeName: invite.displayName,
     });
     const gcal = buildGoogleCalendarUrl(cal);
-    const ics = buildMeetingIcs(cal);
+    const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
     const content = buildGroupCallMeetingEpisodePublishedEmail({
       ...meetingEmailSharedOpts(meeting, fallbackOrigin, invite),
       googleCalendarUrl: gcal,
       guestName: invite.displayName,
+      eventJsonLd,
     });
     await sendMail({
       to: email,
       ...content,
       replyTo: ctx.hostEmail ?? undefined,
-      attachments: [
-        {
-          filename: ics.filename,
-          content: ics.body,
-          contentType: ics.contentType,
-        },
-      ],
+      icalEvent,
     });
   }
 }

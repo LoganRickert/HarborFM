@@ -14,6 +14,8 @@ import { downloadJobFile, uploadJobFile } from "./transfer.js";
 import { ensureInputHasExtension } from "./ensureInputExt.js";
 import { runTranscribeJob } from "./jobs/transcribe.js";
 import { runVideoJob } from "./jobs/videoGenerationCore.js";
+import { startJobResourceSampler } from "./jobResourceSampler.js";
+import type { JobResourceStatsPayload } from "./protocol.js";
 
 function localInputPath(
   workDir: string,
@@ -152,6 +154,8 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
   sendReliable({ type: "accepted", jobId: msg.jobId });
   const workDir = join(WORK_DIR, msg.jobId || nanoid());
   mkdirSync(workDir, { recursive: true });
+  const resourceSampler = startJobResourceSampler(1000);
+  let resourceStats: JobResourceStatsPayload | undefined;
 
   try {
     sendReliable({
@@ -223,12 +227,29 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
       });
     }
 
-    sendReliable({ type: "completed", jobId: msg.jobId });
+    resourceStats = resourceSampler.stop();
+    sendReliable({
+      type: "completed",
+      jobId: msg.jobId,
+      resourceStats,
+    });
     console.log(`[worker] job ${msg.jobId} completed`);
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     console.error(`[worker] job ${msg.jobId} failed:`, error);
-    sendReliable({ type: "failed", jobId: msg.jobId, error });
+    if (!resourceStats) {
+      try {
+        resourceStats = resourceSampler.stop();
+      } catch {
+        resourceStats = undefined;
+      }
+    }
+    sendReliable({
+      type: "failed",
+      jobId: msg.jobId,
+      error,
+      resourceStats,
+    });
   } finally {
     try {
       rmSync(workDir, { recursive: true, force: true });

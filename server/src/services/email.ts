@@ -42,6 +42,15 @@ export interface SendMailAttachment {
   filename: string;
   content: string;
   contentType: string;
+  /** Defaults to attachment. Use inline for calendar parts when not using icalEvent. */
+  contentDisposition?: "attachment" | "inline";
+}
+
+/** Calendar invite MIME part (nodemailer icalEvent / SendGrid text/calendar). */
+export interface SendMailIcalEvent {
+  filename: string;
+  method: "REQUEST" | "CANCEL" | "PUBLISH";
+  content: string;
 }
 
 export interface SendMailOptions {
@@ -51,6 +60,25 @@ export interface SendMailOptions {
   html: string;
   replyTo?: string;
   attachments?: SendMailAttachment[];
+  /** Preferred for meeting invites so clients get a proper calendar MIME part. */
+  icalEvent?: SendMailIcalEvent;
+}
+
+/** Envelope From used by the configured email provider (noreply@hostname fallback). */
+export function getConfiguredFromAddress(): string {
+  const settings = readSettings();
+  const fromRaw =
+    settings.email_provider === "smtp"
+      ? settings.smtp_from
+      : settings.email_provider === "webhook"
+        ? ""
+        : settings.sendgrid_from;
+  const hostnameRaw = (settings.hostname?.trim() || "localhost")
+    .replace(/^https?:\/\//i, "")
+    .split("/")[0]
+    .trim();
+  const hostname = hostnameRaw || "localhost";
+  return fromRaw?.trim() ? fromRaw.trim() : `noreply@${hostname}`;
 }
 
 /**
@@ -65,19 +93,9 @@ export async function sendMail(
     return { sent: false, error: "Email is not configured" };
   }
 
-  const fromRaw =
-    settings.email_provider === "smtp"
-      ? settings.smtp_from
-      : settings.email_provider === "webhook"
-        ? ""
-        : settings.sendgrid_from;
-  const hostnameRaw = (settings.hostname?.trim() || "localhost")
-    .replace(/^https?:\/\//i, "")
-    .split("/")[0]
-    .trim();
-  const hostname = hostnameRaw || "localhost";
-  const from = fromRaw?.trim() ? fromRaw.trim() : `noreply@${hostname}`;
+  const from = getConfiguredFromAddress();
   const attachments = options.attachments?.filter((a) => a.content?.length) ?? [];
+  const ical = options.icalEvent?.content?.length ? options.icalEvent : undefined;
 
   if (settings.email_provider === "smtp") {
     try {
@@ -88,7 +106,7 @@ export async function sendMail(
         auth: { user: settings.smtp_user.trim(), pass: settings.smtp_password },
       });
       await transporter.sendMail({
-        from,
+        from: { name: APP_NAME, address: from },
         to: options.to,
         replyTo: options.replyTo?.trim() || undefined,
         subject: toTitleCase(options.subject),
@@ -98,7 +116,17 @@ export async function sendMail(
           filename: a.filename,
           content: a.content,
           contentType: a.contentType,
+          contentDisposition: a.contentDisposition,
         })),
+        ...(ical
+          ? {
+              icalEvent: {
+                filename: ical.filename,
+                method: ical.method,
+                content: Buffer.from(ical.content, "utf8"),
+              },
+            }
+          : {}),
       });
       return { sent: true };
     } catch (err) {
@@ -109,6 +137,25 @@ export async function sendMail(
 
   if (settings.email_provider === "sendgrid") {
     try {
+      const sgAttachments = [
+        ...attachments.map((a) => ({
+          content: Buffer.from(a.content, "utf8").toString("base64"),
+          filename: a.filename,
+          // Keep method=REQUEST (etc.) on calendar types; Gmail needs it.
+          type: a.contentType.trim() || "application/octet-stream",
+          disposition: a.contentDisposition ?? "attachment",
+        })),
+        ...(ical
+          ? [
+              {
+                content: Buffer.from(ical.content, "utf8").toString("base64"),
+                filename: ical.filename,
+                type: `text/calendar; charset=utf-8; method=${ical.method}`,
+                disposition: "attachment" as const,
+              },
+            ]
+          : []),
+      ];
       const res = await fetch(SENDGRID_MAIL_SEND_URL, {
         method: "POST",
         headers: {
@@ -126,16 +173,7 @@ export async function sendMail(
             { type: "text/plain", value: options.text },
             { type: "text/html", value: options.html },
           ],
-          ...(attachments.length > 0
-            ? {
-                attachments: attachments.map((a) => ({
-                  content: Buffer.from(a.content, "utf8").toString("base64"),
-                  filename: a.filename,
-                  type: a.contentType.split(";")[0]?.trim() || "text/calendar",
-                  disposition: "attachment",
-                })),
-              }
-            : {}),
+          ...(sgAttachments.length > 0 ? { attachments: sgAttachments } : {}),
         }),
       });
       if (!res.ok) {
@@ -169,14 +207,24 @@ export async function sendMail(
     const content = `Subject: ${toTitleCase(options.subject)}\n\n${textContent}`.trim();
     try {
       const payload: Record<string, string> = { [fieldKey]: content };
-      if (attachments.length > 0) {
-        payload.attachments_json = JSON.stringify(
-          attachments.map((a) => ({
-            filename: a.filename,
-            contentType: a.contentType,
-            contentBase64: Buffer.from(a.content, "utf8").toString("base64"),
-          })),
-        );
+      const webhookAttachments = [
+        ...attachments.map((a) => ({
+          filename: a.filename,
+          contentType: a.contentType,
+          contentBase64: Buffer.from(a.content, "utf8").toString("base64"),
+        })),
+        ...(ical
+          ? [
+              {
+                filename: ical.filename,
+                contentType: `text/calendar; charset=utf-8; method=${ical.method}`,
+                contentBase64: Buffer.from(ical.content, "utf8").toString("base64"),
+              },
+            ]
+          : []),
+      ];
+      if (webhookAttachments.length > 0) {
+        payload.attachments_json = JSON.stringify(webhookAttachments);
       }
       const res = await fetch(url, {
         method: "POST",
@@ -1212,6 +1260,8 @@ export interface GroupCallMeetingEmailOptions {
   previousScheduledStartAt?: string | null;
   /** Absolute podcast cover URL for the email header. */
   coverArtUrl?: string | null;
+  /** schema.org EventReservation JSON-LD for Gmail event chips. */
+  eventJsonLd?: Record<string, unknown> | null;
 }
 
 function meetingTimeZone(timeZone?: string | null): string {
@@ -1323,7 +1373,14 @@ function wrapMeetingEmail(opts: {
   eyebrow: string;
   introHtml: string;
   detailsHtml: string;
+  eventJsonLd?: Record<string, unknown> | null;
 }): string {
+  const jsonLd =
+    opts.eventJsonLd && typeof opts.eventJsonLd === "object"
+      ? `<script type="application/ld+json">
+${JSON.stringify(opts.eventJsonLd).replace(/</g, "\\u003c")}
+</script>`
+      : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1332,6 +1389,7 @@ function wrapMeetingEmail(opts: {
   <meta name="color-scheme" content="dark" />
   <meta name="supported-color-schemes" content="dark" />
   <title>${opts.subject}</title>
+  ${jsonLd}
 </head>
 <body style="margin:0; font-family: ${STYLE.fontSans}; background: ${STYLE.bg}; color: ${STYLE.text}; line-height: 1.6;">
   <div style="width:100%;background-color:${STYLE.bg};margin:0;padding:0;">
@@ -1371,6 +1429,7 @@ export function buildGroupCallMeetingCreatorEmail(
     eyebrow: "Meeting scheduled",
     introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">Your group call meeting is scheduled. Share the join link or invite guests from the episode editor.</p>`,
     detailsHtml: meetingDetailsHtml(opts),
+    eventJsonLd: opts.eventJsonLd,
   });
   return { subject, text, html };
 }
@@ -1400,6 +1459,50 @@ export function buildGroupCallMeetingInviteEmail(
     eyebrow: "Group call invite",
     introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} You're invited to a group call.</p>`,
     detailsHtml: meetingDetailsHtml(opts),
+    eventJsonLd: opts.eventJsonLd,
+  });
+  return { subject, text, html };
+}
+
+export function buildGroupCallMeetingReminderEmail(
+  opts: GroupCallMeetingEmailOptions & {
+    /** e.g. "4 hours" for "In just 4 hours". */
+    reminderLeadPhrase?: string;
+  },
+): { subject: string; text: string; html: string } {
+  const greeting = opts.guestName?.trim()
+    ? `Hi ${opts.guestName.trim()},`
+    : "Hi,";
+  const lead = (opts.reminderLeadPhrase?.trim() || "4 hours").replace(
+    /\.$/,
+    "",
+  );
+  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const subject = `REMINDER: ${opts.podcastTitle} - ${opts.episodeTitle}`;
+  const text = [
+    greeting,
+    "",
+    `In just ${lead}: your group call for ${opts.podcastTitle} - ${opts.episodeTitle}.`,
+    "",
+    `When: ${when}`,
+    "",
+    "Double-check the time above in case your calendar is in a different time zone.",
+    "",
+    ...meetingDetailsText(opts),
+    "",
+    "An .ics calendar invite is attached.",
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.joinUrl);
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Reminder",
+    introHtml: `<p style="margin: 0 0 16px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} <strong>In just ${escapeHtml(lead)}</strong>: your group call is coming up.</p>
+      <p style="margin: 0 0 24px; font-size: 0.9375rem; color: ${STYLE.textMuted};">Starts <strong style="color: ${STYLE.text};">${escapeHtml(when)}</strong>. Double-check that time if your calendar uses a different time zone.</p>`,
+    detailsHtml: meetingDetailsHtml(opts),
+    eventJsonLd: opts.eventJsonLd,
   });
   return { subject, text, html };
 }
@@ -1438,6 +1541,7 @@ export function buildGroupCallMeetingRescheduledEmail(
     eyebrow: "Meeting rescheduled",
     introHtml: `<p style="margin: 0 0 16px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} The group call has been rescheduled.</p>${prevHtml}`,
     detailsHtml: meetingDetailsHtml(opts),
+    eventJsonLd: opts.eventJsonLd,
   });
   return { subject, text, html };
 }
@@ -1452,6 +1556,7 @@ export function buildGroupCallMeetingCancelledEmail(
     | "guestName"
     | "joinUrl"
     | "coverArtUrl"
+    | "eventJsonLd"
   >,
 ): { subject: string; text: string; html: string } {
   const greeting = opts.guestName?.trim()
@@ -1489,6 +1594,7 @@ export function buildGroupCallMeetingCancelledEmail(
       <p style="margin: 0 0 16px; font-size: 0.9375rem; color: ${STYLE.text};">${escapeHtml(opts.episodeTitle)}</p>
       <p style="margin: 0; font-size: 0.9375rem; color: ${STYLE.text};">Was scheduled for: <strong>${escapeHtml(when)}</strong></p>
     `,
+    eventJsonLd: opts.eventJsonLd,
   });
   return { subject, text, html };
 }
@@ -1516,6 +1622,7 @@ export function buildGroupCallMeetingEpisodePublishedEmail(
     eyebrow: "Episode published",
     introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} <strong>${escapeHtml(opts.podcastTitle)}</strong> just published <strong>${escapeHtml(opts.episodeTitle)}</strong>. Your scheduled group call details are below.</p>`,
     detailsHtml: meetingDetailsHtml(opts),
+    eventJsonLd: opts.eventJsonLd,
   });
   return { subject, text, html };
 }

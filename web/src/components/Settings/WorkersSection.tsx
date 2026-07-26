@@ -32,6 +32,33 @@ function formatFinishedAt(iso: string | null): string {
   return d.toLocaleString();
 }
 
+/** CPU percent of one core (may exceed 100). */
+function formatCpuStat(
+  avg: number | null | undefined,
+  peak: number | null | undefined,
+): string | null {
+  if (avg == null && peak == null) return null;
+  const fmt = (n: number) =>
+    Number.isInteger(n) ? String(n) : n.toFixed(1);
+  if (avg != null && peak != null) {
+    return `CPU avg ${fmt(avg)}% (peak ${fmt(peak)}%)`;
+  }
+  if (avg != null) return `CPU avg ${fmt(avg)}%`;
+  return `CPU peak ${fmt(peak!)}%`;
+}
+
+function formatMemStat(
+  avg: number | null | undefined,
+  peak: number | null | undefined,
+): string | null {
+  if (avg == null && peak == null) return null;
+  if (avg != null && peak != null) {
+    return `Mem avg ${formatBytes(avg)} (peak ${formatBytes(peak)})`;
+  }
+  if (avg != null) return `Mem avg ${formatBytes(avg)}`;
+  return `Mem peak ${formatBytes(peak!)}`;
+}
+
 function randomToken(bytes = 24): string {
   const arr = new Uint8Array(bytes);
   crypto.getRandomValues(arr);
@@ -144,7 +171,16 @@ export function WorkersSection({ form, onFormChange }: SettingsFormProps) {
               <p className={styles.inputHelp}>No worker jobs recorded yet.</p>
             ) : (
               <ul className={styles.ssoProviderList}>
-                {(jobStats?.jobs ?? []).map((job: WorkerJobStat) => (
+                {(jobStats?.jobs ?? []).map((job: WorkerJobStat) => {
+                  const cpuLabel = formatCpuStat(
+                    job.avgCpuPercent,
+                    job.peakCpuPercent,
+                  );
+                  const memLabel = formatMemStat(
+                    job.avgMemoryBytes,
+                    job.peakMemoryBytes,
+                  );
+                  return (
                   <li key={job.id} className={styles.ssoProviderItem}>
                     <div className={styles.ssoProviderRow}>
                       <div className={styles.ssoProviderMeta}>
@@ -172,6 +208,8 @@ export function WorkersSection({ form, onFormChange }: SettingsFormProps) {
                       <span>Duration {formatDurationMs(job.durationMs)}</span>
                       <span>To worker {formatBytes(job.bytesDownloaded)}</span>
                       <span>From worker {formatBytes(job.bytesUploaded)}</span>
+                      {cpuLabel ? <span>{cpuLabel}</span> : null}
+                      {memLabel ? <span>{memLabel}</span> : null}
                     </div>
                     {job.status === 'failed' && job.error && (
                       <p className={styles.workerJobError} title={job.error}>
@@ -179,7 +217,8 @@ export function WorkersSection({ form, onFormChange }: SettingsFormProps) {
                       </p>
                     )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
