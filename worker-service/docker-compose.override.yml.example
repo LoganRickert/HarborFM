@@ -1,0 +1,18 @@
+# Copy to docker-compose.override.yml (gitignored; auto-merged by docker compose).
+# Use when Whisper already runs elsewhere.
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   # edit WHISPER_ASR_URL, then:
+#   docker compose --env-file .env up -d
+#
+# Set WHISPER_ASR_URL in .env or below. host.docker.internal reaches host-published ports.
+services:
+  worker:
+    depends_on: !reset []
+    environment:
+      WHISPER_ASR_URL: ${WHISPER_ASR_URL:-http://host.docker.internal:9000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  whisper:
+    profiles: ["with-whisper"]

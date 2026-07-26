@@ -14,6 +14,8 @@ Connects to your HarborFM server over a secret WebSocket path and runs heavy job
 docker compose --env-file .env up -d
 ```
 
+If Whisper already runs elsewhere, copy `docker-compose.override.yml.example` to `docker-compose.override.yml` (gitignored; auto-merged) and set `WHISPER_ASR_URL` (e.g. `http://host.docker.internal:9000`).
+
 Or pull `ghcr.io/<owner>/harborfm-worker` and use the same compose file.
 
 ## Large files / reverse proxy
@@ -31,4 +33,4 @@ pnpm --filter worker-service install
 HARBORFM_URL=http://localhost:3001 WORKER_WS_PATH=... WORKER_SECRET=... pnpm --filter worker-service dev
 ```
 
-Whisper must be reachable at `WHISPER_ASR_URL` (compose includes a local Whisper container).
+Whisper must be reachable at `WHISPER_ASR_URL`. Default compose starts a local Whisper container; use a local `docker-compose.override.yml` to skip it.

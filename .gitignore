@@ -4,8 +4,8 @@ dist
 data
 *.db
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.log
 logs/
 .DS_Store
@@ -20,6 +20,10 @@ server/public/
 ci-data/
 ci-secrets/
 .*/
+# Keep GitHub Actions / workflow configs trackable (negates .*/ above).
+!.github
+!.github/
+!.github/**
 
 # e2e runtime
 e2e/data/

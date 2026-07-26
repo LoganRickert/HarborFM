@@ -13,13 +13,14 @@ services:
       WORKER_WS_PATH: ${WORKER_WS_PATH:?set WORKER_WS_PATH}
       WORKER_SECRET: ${WORKER_SECRET:?set WORKER_SECRET}
       WORKER_NAME: ${WORKER_NAME:-pc-worker}
-      WHISPER_ASR_URL: http://whisper:9000
+      WHISPER_ASR_URL: ${WHISPER_ASR_URL:-http://whisper:9000}
       WORKER_WORK_DIR: /work
     volumes:
       - worker_work:/work
     depends_on:
       - whisper
 
+  # Omit locally via docker-compose.override.yml (see .example).
   whisper:
     image: onerahmet/openai-whisper-asr-webservice:latest
     container_name: harborfm-worker-whisper
