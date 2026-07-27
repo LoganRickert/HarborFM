@@ -431,6 +431,11 @@ export function ScheduleMeetingDialog({
                           onChange={(e) => setInviteName(e.target.value)}
                           disabled={busy}
                           aria-label="Invitee name"
+                          autoComplete="off"
+                          data-bwignore="true"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          data-form-type="other"
                         />
                         <input
                           id="meeting-invite-email"
@@ -441,6 +446,11 @@ export function ScheduleMeetingDialog({
                           onChange={(e) => setInviteEmail(e.target.value)}
                           disabled={busy}
                           aria-label="Invitee email"
+                          autoComplete="off"
+                          data-bwignore="true"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          data-form-type="other"
                         />
                       </div>
                       <div className={styles.inviteActionsRow}>
