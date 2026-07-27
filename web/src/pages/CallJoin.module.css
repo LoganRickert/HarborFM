@@ -163,6 +163,22 @@
   color: var(--text-muted, #888);
 }
 
+.topicsLinkWrap {
+  margin: 0 0 1rem;
+  text-align: center;
+}
+
+.topicsLink {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--accent, #00d4aa);
+  text-decoration: none;
+}
+
+.topicsLink:hover {
+  text-decoration: underline;
+}
+
 .dialInAlt {
   margin: 0 0 1.25rem;
   padding: 0.75rem 0.85rem;

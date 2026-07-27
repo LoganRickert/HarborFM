@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User, Settings, X, List } from 'lucide-react';
 import type { ShowNotesItem } from '@harborfm/shared';
@@ -982,6 +982,22 @@ export function CallJoin() {
                   : 'This meeting link has expired.'}
             </p>
           )}
+          {token &&
+            joinInfo.meetingStatus != null &&
+            (joinInfo.meetingStatus === 'too_early' ||
+              joinInfo.meetingStatus === 'waiting_for_host' ||
+              joinInfo.meetingStatus === 'live') && (
+              <p className={styles.topicsLinkWrap}>
+                <Link
+                  className={styles.topicsLink}
+                  to={`/call/join/${encodeURIComponent(token)}/topics${
+                    inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''
+                  }`}
+                >
+                  Suggest Topics
+                </Link>
+              </p>
+            )}
           {joinInfo.dialInEnabled &&
             joinInfo.dialInPhoneNumber &&
             joinInfo.joinCode &&

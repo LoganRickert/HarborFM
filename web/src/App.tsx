@@ -38,6 +38,7 @@ import { SubscribeSuccess } from './pages/SubscribeSuccess';
 import { EmbedEpisode } from './pages/EmbedEpisode';
 import { CallJoin } from './pages/CallJoin';
 import { CallJoinIndex } from './pages/CallJoinIndex';
+import { CallMeetingTopics } from './pages/CallMeetingTopics';
 import { Library } from './pages/Library';
 import { Themes } from './pages/Themes';
 import { SubscriberAuthProvider } from './hooks/useSubscriberAuth';
@@ -325,6 +326,7 @@ export default function App() {
         <Routes>
           {/* Call join first - public, no auth (guests join via link) */}
           <Route path="/call/join" element={<CallJoinIndex />} />
+          <Route path="/call/join/:token/topics" element={<CallMeetingTopics />} />
           <Route path="/call/join/:token" element={<CallJoin />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />

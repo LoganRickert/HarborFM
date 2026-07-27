@@ -115,6 +115,30 @@ function inviteJoinUrl(
   return absoluteJoinUrl(meeting, fallbackOrigin, invite);
 }
 
+/** Join URL with `/topics` before the query string (preserves `?invite=`). */
+export function absoluteTopicsUrl(
+  meeting: MeetingRow,
+  fallbackOrigin: string,
+  invite?: MeetingInviteRow | null,
+): string {
+  const joinUrl = absoluteJoinUrl(meeting, fallbackOrigin, invite);
+  try {
+    const u = new URL(joinUrl);
+    const path = u.pathname.replace(/\/+$/, "");
+    if (!path.endsWith("/topics")) {
+      u.pathname = `${path}/topics`;
+    }
+    return u.toString();
+  } catch {
+    const qIndex = joinUrl.indexOf("?");
+    const base = qIndex >= 0 ? joinUrl.slice(0, qIndex) : joinUrl;
+    const qs = qIndex >= 0 ? joinUrl.slice(qIndex) : "";
+    const path = base.replace(/\/+$/, "");
+    const withTopics = path.endsWith("/topics") ? path : `${path}/topics`;
+    return `${withTopics}${qs}`;
+  }
+}
+
 function absoluteCoverArtUrl(
   ctx: ReturnType<typeof getMeetingContext>,
   fallbackOrigin: string,
@@ -140,6 +164,7 @@ function meetingEmailSharedOpts(
   | "scheduledStartAt"
   | "hostTimeZone"
   | "joinUrl"
+  | "topicsUrl"
   | "joinCode"
   | "dialInPhoneNumber"
   | "coverArtUrl"
@@ -152,6 +177,7 @@ function meetingEmailSharedOpts(
     scheduledStartAt: meeting.scheduledStartAt,
     hostTimeZone: meeting.hostTimeZone,
     joinUrl: absoluteJoinUrl(meeting, fallbackOrigin, invite),
+    topicsUrl: absoluteTopicsUrl(meeting, fallbackOrigin, invite),
     joinCode: meeting.joinCode,
     dialInPhoneNumber: dial.enabled ? dial.phoneNumber : null,
     coverArtUrl: absoluteCoverArtUrl(ctx, fallbackOrigin),

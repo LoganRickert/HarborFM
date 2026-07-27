@@ -314,6 +314,8 @@ export async function importProjectZip(
           durationMin?: number | null;
           checked?: boolean;
           position?: number;
+          tag?: string;
+          submittedBy?: string | null;
         }>;
       }>(showNotesPath);
       if (typeof sn.guestVisible === "boolean") {
@@ -327,6 +329,14 @@ export async function importProjectZip(
         const item = items[i];
         const itemId = nanoid();
         const now = sqlNow();
+        const tag =
+          item.tag === "discuss" || item.tag === "avoid" || item.tag === "none"
+            ? item.tag
+            : "none";
+        const submittedBy =
+          item.submittedBy != null && String(item.submittedBy).trim()
+            ? String(item.submittedBy).trim()
+            : null;
         drizzleDb
           .insert(episodeShowNotesItems)
           .values({
@@ -336,6 +346,8 @@ export async function importProjectZip(
             text: item.text ?? "",
             durationMin: item.durationMin ?? null,
             checked: Boolean(item.checked),
+            tag,
+            submittedBy,
             createdAt: now,
             updatedAt: now,
           })

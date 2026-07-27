@@ -122,7 +122,10 @@ export async function registerShowNotesRoutes(app: FastifyInstance): Promise<voi
       }
       const id = nanoid();
       const position = repo.getNextPosition(episodeId);
-      const item = repo.insertItem(episodeId, id, bodyParsed.data.text ?? "", position);
+      const item = repo.insertItem(episodeId, id, bodyParsed.data.text ?? "", position, {
+        tag: bodyParsed.data.tag ?? "none",
+        submittedBy: bodyParsed.data.submittedBy ?? null,
+      });
       broadcastShowNotesUpdate(episodeId);
       return reply.status(201).send(item);
     },
@@ -161,7 +164,7 @@ export async function registerShowNotesRoutes(app: FastifyInstance): Promise<voi
       if (!canEditSegments(access.role)) {
         return reply.status(403).send({ error: "Forbidden" });
       }
-      const { durationMin, text, checked } = bodyParsed.data;
+      const { durationMin, text, checked, tag, submittedBy } = bodyParsed.data;
       if (!isValidDuration(durationMin)) {
         return reply.status(400).send({ error: "Invalid durationMin" });
       }
@@ -169,6 +172,8 @@ export async function registerShowNotesRoutes(app: FastifyInstance): Promise<voi
         ...(text !== undefined && { text }),
         ...(durationMin !== undefined && { durationMin }),
         ...(checked !== undefined && { checked }),
+        ...(tag !== undefined && { tag }),
+        ...(submittedBy !== undefined && { submittedBy }),
       });
       if (!updated) return reply.status(404).send({ error: "Item not found" });
       broadcastShowNotesUpdate(episodeId);
@@ -210,12 +215,58 @@ export async function registerShowNotesRoutes(app: FastifyInstance): Promise<voi
         return reply.status(403).send({ error: "Forbidden" });
       }
       try {
-        const items = repo.reorderItems(episodeId, bodyParsed.data.itemIds);
+        // Prefer notes-only reorder when the client sends only tag=none ids.
+        const all = repo.listItemsForEpisode(episodeId);
+        const noteIds = new Set(all.filter((i) => i.tag === "none").map((i) => i.id));
+        const ids = bodyParsed.data.itemIds;
+        const notesOnly =
+          ids.length === noteIds.size && ids.every((id) => noteIds.has(id));
+        const items = notesOnly
+          ? repo.reorderNotesItems(episodeId, ids)
+          : repo.reorderItems(episodeId, ids);
         broadcastShowNotesUpdate(episodeId);
         return { items };
       } catch {
         return reply.status(400).send({ error: "Invalid reorder" });
       }
+    },
+  );
+
+  app.post(
+    "/episodes/:id/show-notes/items/:itemId/add-to-notes",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Show Notes"],
+        summary: "Promote a discuss submission into Notes",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" }, itemId: { type: "string" } },
+          required: ["id", "itemId"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const paramsParsed = showNotesItemIdParamSchema.safeParse(request.params);
+      if (!paramsParsed.success) {
+        return reply.status(400).send({
+          error: paramsParsed.error.issues[0]?.message ?? "Validation failed",
+        });
+      }
+      const { id: episodeId, itemId } = paramsParsed.data;
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) return reply.status(404).send({ error: "Episode not found" });
+      if (!canEditSegments(access.role)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const item = repo.promoteDiscussTopicToNotes(episodeId, itemId);
+      if (!item) {
+        return reply.status(400).send({
+          error: "Only Topic To Discuss submissions can be added to Notes",
+        });
+      }
+      broadcastShowNotesUpdate(episodeId);
+      return item;
     },
   );
 

@@ -1705,10 +1705,10 @@ export function SegmentEditorV2({
                     onClick={handleBladeAtPlayhead}
                     disabled={readOnly || busy || !selected}
                     title="Blade selected clip at the playhead"
-                    aria-label="Blade at playhead"
+                    aria-label="Blade at Playhead"
                   >
                     <Split size={14} aria-hidden />
-                    Blade at playhead
+                    Blade at Playhead
                   </button>
                   <button
                     type="button"
@@ -2128,9 +2128,9 @@ export function SegmentEditorV2({
                         className={styles.segmentEditorV2AddTrackBtn}
                         onClick={() => setAddTrackOpen(true)}
                         disabled={busy}
-                        title="Add track"
+                        title="Add Track"
                       >
-                        <Plus size={14} aria-hidden /> Add track
+                        <Plus size={14} aria-hidden /> Add Track
                       </button>
                     )}
                   </div>

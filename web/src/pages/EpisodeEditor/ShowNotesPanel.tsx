@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -20,8 +20,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from 'lucide-react';
 import type { ShowNotesDurationMin, ShowNotesItem } from '@harborfm/shared';
-import { SHOW_NOTES_DURATION_OPTIONS } from '@harborfm/shared';
+import { SHOW_NOTES_DURATION_OPTIONS, SHOW_NOTES_TAG_LABELS } from '@harborfm/shared';
 import {
+  addShowNotesItemToNotes,
   createShowNotesItem,
   deleteShowNotesItem,
   getShowNotes,
@@ -113,7 +114,7 @@ function SortableShowNotesRow({
         className={styles.showNotesTextarea}
         value={localText}
         disabled={!canEdit}
-        placeholder="Topic to discuss…"
+        placeholder="Topic to discuss..."
         maxLength={500}
         rows={1}
         onChange={(e) => {
@@ -176,8 +177,16 @@ export function ShowNotesPanel({ episodeId, canEdit }: ShowNotesPanelProps) {
     queryFn: () => getShowNotes(episodeId),
   });
 
-  const items = data?.items ?? [];
+  const items = data?.items;
   const guestVisible = data?.guestVisible ?? false;
+  const noteItems = useMemo(
+    () => (items ?? []).filter((i) => i.tag === 'none'),
+    [items],
+  );
+  const submittedItems = useMemo(
+    () => (items ?? []).filter((i) => i.tag === 'discuss' || i.tag === 'avoid'),
+    [items],
+  );
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: showNotesQueryKey(episodeId) });
@@ -189,7 +198,12 @@ export function ShowNotesPanel({ episodeId, canEdit }: ShowNotesPanelProps) {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => createShowNotesItem(episodeId, { text: '' }),
+    mutationFn: () => createShowNotesItem(episodeId, { text: '', tag: 'none' }),
+    onSuccess: invalidate,
+  });
+
+  const addToNotesMutation = useMutation({
+    mutationFn: (itemId: string) => addShowNotesItemToNotes(episodeId, itemId),
     onSuccess: invalidate,
   });
 
@@ -223,15 +237,19 @@ export function ShowNotesPanel({ episodeId, canEdit }: ShowNotesPanelProps) {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = items.findIndex((i) => i.id === active.id);
-    const newIndex = items.findIndex((i) => i.id === over.id);
+    const oldIndex = noteItems.findIndex((i) => i.id === active.id);
+    const newIndex = noteItems.findIndex((i) => i.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(items, oldIndex, newIndex);
+    const nextNotes = arrayMove(noteItems, oldIndex, newIndex);
+    const nextAll = [
+      ...nextNotes,
+      ...(items ?? []).filter((i) => i.tag !== 'none'),
+    ].map((item, position) => ({ ...item, position }));
     queryClient.setQueryData(showNotesQueryKey(episodeId), {
       guestVisible,
-      items: next.map((item, position) => ({ ...item, position })),
+      items: nextAll,
     });
-    reorderMutation.mutate(next.map((i) => i.id));
+    reorderMutation.mutate(nextNotes.map((i) => i.id));
   };
 
   if (isLoading && !data) {
@@ -298,10 +316,11 @@ export function ShowNotesPanel({ episodeId, canEdit }: ShowNotesPanelProps) {
           </div>
         )}
 
+        <h3 className={styles.showNotesSectionHeading}>Notes</h3>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext items={noteItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <ul className={styles.showNotesList}>
-              {items.map((item) => (
+              {noteItems.map((item) => (
                 <SortableShowNotesRow
                   key={item.id}
                   item={item}
@@ -333,6 +352,56 @@ export function ShowNotesPanel({ episodeId, canEdit }: ShowNotesPanelProps) {
             Add Topic
           </button>
         )}
+
+        <h3 className={styles.showNotesSectionHeading}>Submitted Topics</h3>
+        {submittedItems.length === 0 ? (
+          <p className={styles.showNotesSubmittedEmpty}>
+            Guests can suggest topics to discuss or avoid from their meeting invite or join link.
+          </p>
+        ) : (
+          <ul className={styles.showNotesSubmittedList}>
+            {submittedItems.map((item) => (
+              <li key={item.id} className={styles.showNotesSubmittedItem}>
+                <div className={styles.showNotesSubmittedMeta}>
+                  <span
+                    className={`${styles.showNotesSubmittedTag} ${
+                      item.tag === 'avoid' ? styles.showNotesSubmittedTagAvoid : ''
+                    }`}
+                  >
+                    {SHOW_NOTES_TAG_LABELS[item.tag]}
+                  </span>
+                  <span className={styles.showNotesSubmittedBy}>
+                    Submitted by {item.submittedBy?.trim() || 'Unknown'}
+                  </span>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className={styles.showNotesDeleteBtn}
+                      onClick={() => setDeleteTarget(item)}
+                      aria-label="Remove submitted topic"
+                    >
+                      <Trash2 size={16} aria-hidden />
+                    </button>
+                  )}
+                </div>
+                <p className={styles.showNotesSubmittedText}>
+                  {item.text.trim() || '(empty)'}
+                </p>
+                {canEdit && item.tag === 'discuss' && (
+                  <button
+                    type="button"
+                    className={styles.showNotesQuickAddBtn}
+                    disabled={addToNotesMutation.isPending}
+                    onClick={() => addToNotesMutation.mutate(item.id)}
+                  >
+                    <Plus size={14} aria-hidden />
+                    Add To Notes
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
         </div>
       </div>
 
@@ -341,7 +410,7 @@ export function ShowNotesPanel({ episodeId, canEdit }: ShowNotesPanelProps) {
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         description={
           deleteTarget?.text.trim()
-            ? `"${deleteTarget.text.trim().slice(0, 80)}${deleteTarget.text.length > 80 ? '…' : ''}" will be removed.`
+            ? `"${deleteTarget.text.trim().slice(0, 80)}${deleteTarget.text.length > 80 ? '...' : ''}" will be removed.`
             : 'This topic will be removed.'
         }
         onConfirm={() => {

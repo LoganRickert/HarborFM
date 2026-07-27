@@ -41,7 +41,7 @@ test.describe('SegmentEditorV2 advanced editor', () => {
     const clipsBeforeBlade = await advanced
       .locator('button[class*="segmentEditorV2Clip"]')
       .count();
-    await advanced.getByRole('button', { name: 'Blade at playhead' }).click();
+    await advanced.getByRole('button', { name: 'Blade at Playhead' }).click();
     await expect
       .poll(async () => advanced.locator('button[class*="segmentEditorV2Clip"]').count())
       .toBeGreaterThan(clipsBeforeBlade);

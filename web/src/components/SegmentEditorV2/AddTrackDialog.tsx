@@ -97,7 +97,7 @@ export function AddTrackDialog({
           }}
         >
           <div className={styles.dialogHeaderRow}>
-            <Dialog.Title className={styles.dialogTitle}>Add track</Dialog.Title>
+            <Dialog.Title className={styles.dialogTitle}>Add Track</Dialog.Title>
             <Dialog.Close asChild>
               <button
                 type="button"

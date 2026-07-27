@@ -67,6 +67,21 @@ export function updateShowNotesItem(
   });
 }
 
+/** Promote a guest "Topic To Discuss" submission into Notes (same item, tag none). */
+export function addShowNotesItemToNotes(
+  episodeId: string,
+  itemId: string,
+): Promise<ShowNotesItem> {
+  return fetch(`${BASE}/episodes/${episodeId}/show-notes/items/${itemId}/add-to-notes`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: csrfHeaders(),
+  }).then((r) => {
+    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    return r.json();
+  });
+}
+
 export function reorderShowNotesItems(
   episodeId: string,
   itemIds: string[],

@@ -1274,6 +1274,8 @@ export interface GroupCallMeetingEmailOptions {
   /** IANA time zone from the host who scheduled (e.g. America/New_York). */
   hostTimeZone?: string | null;
   joinUrl: string;
+  /** Suggest discuss/avoid topics page (same invite query as joinUrl when personalized). */
+  topicsUrl?: string | null;
   joinCode: string;
   dialInPhoneNumber?: string | null;
   googleCalendarUrl?: string | null;
@@ -1336,6 +1338,13 @@ function meetingDetailsText(opts: GroupCallMeetingEmailOptions): string[] {
     "Join on the web (recommended):",
     opts.joinUrl,
   ];
+  if (opts.topicsUrl?.trim()) {
+    lines.push(
+      "",
+      "Suggest topics to discuss or avoid:",
+      opts.topicsUrl.trim(),
+    );
+  }
   if (opts.dialInPhoneNumber) {
     lines.push(
       "",
@@ -1383,6 +1392,14 @@ function meetingDetailsHtml(opts: GroupCallMeetingEmailOptions): string {
       <p style="margin: 0 0 8px; font-size: 0.8125rem; word-break: break-all; text-align: center;">
         <a href="${escapeHtml(opts.joinUrl)}" style="color: ${STYLE.accent}; text-decoration: underline;">${escapeHtml(opts.joinUrl)}</a>
       </p>
+      ${
+        opts.topicsUrl?.trim()
+          ? `<p style="margin: 16px 0 0; text-align: center;">
+        <a href="${escapeHtml(opts.topicsUrl.trim())}" style="display: inline-block; padding: 10px 20px; background: transparent; color: ${STYLE.accent}; font-weight: 600; text-decoration: none; border-radius: 8px; border: 1px solid ${STYLE.accent};">Suggest topics</a>
+      </p>
+      <p style="margin: 8px 0 0; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">Share topics to discuss or avoid before the call.</p>`
+          : ""
+      }
       ${dialIn}
       ${gcal}
   `;

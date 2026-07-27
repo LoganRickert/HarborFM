@@ -415,6 +415,8 @@ export const episodeShowNotesItems = sqliteTable(
     text: text("text").notNull().default(""),
     durationMin: integer("duration_min"),
     checked: integer("checked", { mode: "boolean" }).notNull().default(false),
+    tag: text("tag").notNull().default("none"),
+    submittedBy: text("submitted_by"),
     createdAt: text("created_at").notNull().default(sqlNow()),
     updatedAt: text("updated_at").notNull().default(sqlNow()),
   },

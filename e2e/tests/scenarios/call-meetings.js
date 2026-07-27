@@ -286,6 +286,17 @@ export async function run({ runOne }) {
         if (!emails.some((e) => /you're invited/i.test(e) && /Guest Ada/i.test(e) && /E2E Meeting Show/i.test(e))) {
           throw new Error(`Expected guest invite email, got: ${JSON.stringify(emails)}`);
         }
+        if (
+          !emails.some(
+            (e) =>
+              /\/call\/join\/[^?\s]+\/topics/i.test(e) &&
+              (/suggest topics/i.test(e) || /topics to discuss or avoid/i.test(e)),
+          )
+        ) {
+          throw new Error(
+            `Expected invite email topics link, got: ${JSON.stringify(emails)}`,
+          );
+        }
 
         const linkOnly = await apiFetch(
           `/call/meetings/${meetingId}/invites`,
@@ -330,6 +341,218 @@ export async function run({ runOne }) {
         const info = await infoRes.json();
         if (info.inviteDisplayName !== 'Guest Ada') {
           throw new Error(`Expected inviteDisplayName Guest Ada, got ${info.inviteDisplayName}`);
+        }
+      }),
+    );
+
+    results.push(
+      await runOne('Guest topics API: invite identity, name gate, quick-add, closed lockout', async () => {
+        const topicsEp = await createEpisode(jar, podcast.id, {
+          title: 'E2E Topics Episode',
+          status: 'draft',
+        });
+        const createMeeting = await apiFetch(
+          '/call/meetings',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              episodeId: topicsEp.id,
+              scheduledStartAt: isoIn(2 * 60 * 60 * 1000),
+            }),
+          },
+          jar,
+        );
+        if (createMeeting.status !== 200) {
+          throw new Error(`Topics meeting failed: ${createMeeting.status} ${await createMeeting.text()}`);
+        }
+        const topicsMeeting = (await createMeeting.json()).meeting;
+        const token = topicsMeeting.token;
+
+        catcher.reset();
+        const inviteRes = await apiFetch(
+          `/call/meetings/${topicsMeeting.id}/invites`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'Topics Ada', email: `topics-ada-${ts}@e2e.test` }),
+          },
+          jar,
+        );
+        if (inviteRes.status !== 200) {
+          throw new Error(`Topics invite failed: ${inviteRes.status}`);
+        }
+        const inviteBody = await inviteRes.json();
+        const inviteToken = inviteBody.invite.inviteToken;
+        await catcher.waitFor(1, 10000);
+        const topicEmails = emailContents(catcher);
+        if (
+          !topicEmails.some(
+            (e) =>
+              /\/call\/join\/[^?\s]+\/topics/i.test(e) &&
+              (/suggest topics/i.test(e) || /topics to discuss or avoid/i.test(e)),
+          )
+        ) {
+          throw new Error(`Expected topics invite email link, got: ${JSON.stringify(topicEmails)}`);
+        }
+
+        const createDiscuss = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invite: inviteToken,
+              tag: 'discuss',
+              text: 'Ada discuss topic',
+            }),
+          },
+        );
+        if (createDiscuss.status !== 201) {
+          throw new Error(`Create discuss failed: ${createDiscuss.status} ${await createDiscuss.text()}`);
+        }
+
+        const createAvoid = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invite: inviteToken,
+              tag: 'avoid',
+              text: 'Ada avoid topic',
+            }),
+          },
+        );
+        if (createAvoid.status !== 201) {
+          throw new Error(`Create avoid failed: ${createAvoid.status}`);
+        }
+
+        const listInvite = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics?invite=${encodeURIComponent(inviteToken)}`,
+        );
+        if (listInvite.status !== 200) throw new Error(`List invite topics failed: ${listInvite.status}`);
+        const inviteTopics = await listInvite.json();
+        if (inviteTopics.items.length < 2) {
+          throw new Error(`Expected Ada topics, got ${inviteTopics.items.length}`);
+        }
+        if (!inviteTopics.fromInvite) throw new Error('Expected fromInvite true');
+
+        const createName = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              submittedBy: 'Alex',
+              tag: 'discuss',
+              text: 'Alex topic',
+            }),
+          },
+        );
+        if (createName.status !== 201) {
+          throw new Error(`Create name topic failed: ${createName.status}`);
+        }
+        const listAlex = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics?submittedBy=${encodeURIComponent('alex')}`,
+        );
+        const alexBody = await listAlex.json();
+        if (listAlex.status !== 200 || alexBody.items.length !== 1) {
+          throw new Error('Expected case-insensitive Alex topics');
+        }
+        if (alexBody.items.some((i) => /Ada/i.test(i.text))) {
+          throw new Error('Alex must not see Ada topics');
+        }
+
+        const hostNotes = await apiFetch(`/episodes/${topicsEp.id}/show-notes`, {}, jar);
+        if (hostNotes.status !== 200) throw new Error('Host show-notes failed');
+        const notesBody = await hostNotes.json();
+        const submitted = (notesBody.items || []).filter(
+          (i) => i.tag === 'discuss' || i.tag === 'avoid',
+        );
+        if (submitted.length < 3) {
+          throw new Error(`Expected host to see submitted topics, got ${submitted.length}`);
+        }
+        const discuss = submitted.find((i) => i.text === 'Ada discuss topic');
+        if (!discuss) throw new Error('Missing Ada discuss for add-to-notes');
+        const addToNotes = await apiFetch(
+          `/episodes/${topicsEp.id}/show-notes/items/${discuss.id}/add-to-notes`,
+          { method: 'POST' },
+          jar,
+        );
+        if (addToNotes.status !== 200) {
+          throw new Error(`Add to notes failed: ${addToNotes.status} ${await addToNotes.text()}`);
+        }
+        const afterAdd = await (await apiFetch(`/episodes/${topicsEp.id}/show-notes`, {}, jar)).json();
+        const promoted = (afterAdd.items || []).find((i) => i.id === discuss.id);
+        if (!promoted || promoted.tag !== 'none') {
+          throw new Error('Discuss topic should be promoted to Notes (tag none)');
+        }
+        if ((afterAdd.items || []).some((i) => i.id === discuss.id && i.tag === 'discuss')) {
+          throw new Error('Promoted topic should leave Submitted topics');
+        }
+        const guestAfter = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics?invite=${encodeURIComponent(inviteToken)}`,
+        );
+        const guestBody = await guestAfter.json();
+        const guestPromoted = (guestBody.items || []).find((i) => i.id === discuss.id);
+        if (!guestPromoted?.addedToNotes) {
+          throw new Error('Guest topics page should mark promoted item as addedToNotes');
+        }
+
+        const cancelRes = await apiFetch(
+          `/call/meetings/${topicsMeeting.id}/cancel`,
+          { method: 'POST' },
+          jar,
+        );
+        if (cancelRes.status !== 200) throw new Error(`Cancel for topics lockout failed: ${cancelRes.status}`);
+
+        const closedList = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics?invite=${encodeURIComponent(inviteToken)}`,
+        );
+        if (closedList.status !== 403) {
+          throw new Error(`Expected 403 after cancel, got ${closedList.status}`);
+        }
+        const closedCreate = await fetch(
+          `${baseURL}/call/meetings/by-token/${encodeURIComponent(token)}/topics`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invite: inviteToken,
+              tag: 'discuss',
+              text: 'Should fail',
+            }),
+          },
+        );
+        if (closedCreate.status !== 403) {
+          throw new Error(`Expected 403 create after cancel, got ${closedCreate.status}`);
+        }
+
+        // Reminder emails use the same meetingDetails helpers (topicsUrl).
+        try {
+          const emailMod = await import(
+            new URL('../../../server/dist/services/email.js', import.meta.url).href
+          );
+          const reminder = emailMod.buildGroupCallMeetingReminderEmail({
+            podcastTitle: 'E2E Meeting Show',
+            episodeTitle: 'E2E Topics Episode',
+            scheduledStartAt: isoIn(4 * 60 * 60 * 1000),
+            joinUrl: `http://127.0.0.1/call/join/${token}?invite=${inviteToken}`,
+            topicsUrl: `http://127.0.0.1/call/join/${token}/topics?invite=${inviteToken}`,
+            joinCode: '1234',
+            reminderLeadPhrase: '4 hours',
+          });
+          const blob = `${reminder.subject}\n${reminder.text}\n${reminder.html}`;
+          if (!/\/topics/i.test(blob) || !(/suggest topics/i.test(blob) || /topics to discuss or avoid/i.test(blob))) {
+            throw new Error('Reminder email builder missing topics link');
+          }
+        } catch (err) {
+          if (err && typeof err === 'object' && 'code' in err && err.code === 'ERR_MODULE_NOT_FOUND') {
+            // Server dist may be absent in some local runs; invite webhook assertion above still covers topicsUrl wiring.
+          } else {
+            throw err;
+          }
         }
       }),
     );
