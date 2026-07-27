@@ -624,6 +624,29 @@ a.dialInAltNumber:focus-visible {
   border-radius: 6px;
 }
 
+.meetingSoon {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.875rem;
+  text-align: center;
+  color: var(--text, #e5e5e5);
+  background: rgba(0, 212, 170, 0.08);
+  border: 1px solid rgba(0, 212, 170, 0.35);
+  border-radius: 6px;
+}
+
+.meetingSoonStart {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.meetingSoonCountdown {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted, #8b92a3);
+  font-variant-numeric: tabular-nums;
+}
+
 .form {
   display: flex;
   flex-direction: column;

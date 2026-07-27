@@ -27,21 +27,70 @@ const DISPLAY_NAME_KEY = 'harborfm_call_display_name';
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const MEETING_POLL_MS = 30_000;
 
-function formatOpensBeforeLabel(
-  joinOpensAt?: string,
-  scheduledStartAt?: string,
-): string {
-  const opens = joinOpensAt ? new Date(joinOpensAt).getTime() : NaN;
-  const start = scheduledStartAt ? new Date(scheduledStartAt).getTime() : NaN;
-  if (!Number.isFinite(opens) || !Number.isFinite(start) || start <= opens) {
-    return 'before the scheduled start';
+function formatMeetingDateAt(iso: string): string | null {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  const date = d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+  const time = d.toLocaleTimeString(undefined, { timeStyle: 'short' });
+  return `${date} at ${time}`;
+}
+
+/** Human countdown for meeting start (days / hours / minutes). */
+function formatTimeUntil(msRemaining: number): string {
+  if (msRemaining <= 0) return 'less than a minute';
+  const totalMinutes = Math.max(1, Math.ceil(msRemaining / 60_000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(days === 1 ? '1 day' : `${days} days`);
+  if (hours > 0) parts.push(hours === 1 ? '1 hour' : `${hours} hours`);
+  if (minutes > 0 || parts.length === 0) {
+    parts.push(minutes === 1 ? '1 minute' : `${minutes} minutes`);
   }
-  const minutes = Math.max(1, Math.round((start - opens) / 60_000));
-  if (minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return `${hours === 1 ? '1 hour' : `${hours} hours`} before the scheduled start`;
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts[0]}, ${parts[1]}, and ${parts[2]}`;
+}
+
+function MeetingStartsSoonStatus({ scheduledStartAt }: { scheduledStartAt: string }) {
+  const startMs = new Date(scheduledStartAt).getTime();
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!Number.isFinite(startMs)) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [startMs]);
+
+  if (!Number.isFinite(startMs)) {
+    return (
+      <p className={styles.error} role="status">
+        This meeting has not opened for joining yet.
+      </p>
+    );
   }
-  return `${minutes === 1 ? '1 minute' : `${minutes} minutes`} before the scheduled start`;
+
+  const dateAt = formatMeetingDateAt(scheduledStartAt);
+
+  return (
+    <div className={styles.meetingSoon} role="status">
+      <p className={styles.meetingSoonStart}>
+        This meeting starts on
+        {dateAt ? (
+          <>
+            <br />
+            {dateAt}.
+          </>
+        ) : (
+          ' soon.'
+        )}
+      </p>
+      <p className={styles.meetingSoonCountdown}>
+        Starts in {formatTimeUntil(startMs - nowMs)}.
+      </p>
+    </div>
+  );
 }
 
 export function CallJoin() {
@@ -914,16 +963,14 @@ export function CallJoin() {
               The host hasn&apos;t started the meeting yet. You can wait here.
             </p>
           )}
-          {joinInfo.meetingStatus === 'too_early' && (
-            <p className={styles.error} role="status">
-              This meeting opens{' '}
-              {formatOpensBeforeLabel(joinInfo.joinOpensAt, joinInfo.scheduledStartAt)}
-              {joinInfo.joinOpensAt
-                ? ` (${new Date(joinInfo.joinOpensAt).toLocaleString()})`
-                : ''}
-              .
-            </p>
-          )}
+          {joinInfo.meetingStatus === 'too_early' &&
+            (joinInfo.scheduledStartAt ? (
+              <MeetingStartsSoonStatus scheduledStartAt={joinInfo.scheduledStartAt} />
+            ) : (
+              <p className={styles.error} role="status">
+                This meeting has not opened for joining yet.
+              </p>
+            ))}
           {(joinInfo.meetingStatus === 'expired' ||
             joinInfo.meetingStatus === 'ended' ||
             joinInfo.meetingStatus === 'cancelled') && (

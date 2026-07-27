@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.2 - 7-26-2026
+
+- **Join call meetings:** The join page now displays a countdown timer until the scheduled meeting starts.
+
 ## v1.20.1 - 7-26-2026
 
 - **Meeting emails:** Calendar invites use a proper `text/calendar` MIME part (including `method=REQUEST` / `CANCEL` / `PUBLISH`), match the envelope From as ICS organizer, and include schema.org `EventReservation` JSON-LD so Gmail can load the event chip. Host confirmation emails use `PUBLISH` (add to calendar) instead of a self-RSVP.

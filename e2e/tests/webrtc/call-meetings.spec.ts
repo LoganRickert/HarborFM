@@ -188,9 +188,10 @@ test.describe('Scheduled group call meetings', () => {
     const guestPage = await guestContext.newPage();
     try {
       await guestPage.goto(`${baseURL}/call/join/${meeting.token}`);
-      await expect(guestPage.getByText(/opens .+ before the scheduled start/i)).toBeVisible({
+      await expect(guestPage.getByText(/This meeting starts/i)).toBeVisible({
         timeout: 15000,
       });
+      await expect(guestPage.getByText(/Starts in/i)).toBeVisible();
       await expect(guestPage.getByRole('button', { name: /join call/i })).toHaveCount(0);
     } finally {
       await guestContext.close();
