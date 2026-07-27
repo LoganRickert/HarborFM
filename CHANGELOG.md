@@ -3,6 +3,7 @@
 ## v1.21.0 - 7-26-2026
 
 - **Meeting topics:** Guests can suggest Topic To Discuss / Topic To Avoid items from a public topics page linked from invite and reminder emails and from the join page. Show Notes adds Submitted Topics with Add To Notes (promotes a discuss suggestion into the run-of-show list). Guests see an Added to Show Notes state and cannot edit promoted topics. Topics are locked when the meeting is cancelled, ended, or expired.
+- **Scheduled meetings:** Default join window / calendar event length after start is **2 hours** (was 4; override with `MEETING_JOIN_EXPIRES_AFTER_MS`).
 
 ## 1.20.2 - 7-26-2026
 

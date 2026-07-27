@@ -386,9 +386,9 @@ export const JWT_COOKIE_SIGNED =
 export const MEETING_JOIN_OPENS_BEFORE_MS =
   Number(process.env.MEETING_JOIN_OPENS_BEFORE_MS) || 60 * 60 * 1000;
 
-/** How long after scheduled start the join window stays open (ms). Env: MEETING_JOIN_EXPIRES_AFTER_MS. Default 4 hours. */
+/** How long after scheduled start the join window stays open (ms). Env: MEETING_JOIN_EXPIRES_AFTER_MS. Default 2 hours. */
 export const MEETING_JOIN_EXPIRES_AFTER_MS =
-  Number(process.env.MEETING_JOIN_EXPIRES_AFTER_MS) || 4 * 60 * 60 * 1000;
+  Number(process.env.MEETING_JOIN_EXPIRES_AFTER_MS) || 2 * 60 * 60 * 1000;
 
 /**
  * Send invitee reminder this long before scheduled start (ms).
