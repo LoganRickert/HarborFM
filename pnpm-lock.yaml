@@ -120,6 +120,24 @@ importers:
         specifier: ^6.0.3
         version: 6.4.1(@types/node@22.19.9)(tsx@4.21.0)(yaml@2.8.2)
 
+  segment-remake:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9
+        version: 9.39.2
+      '@types/node':
+        specifier: ^22.10.1
+        version: 22.19.9
+      eslint:
+        specifier: ^9
+        version: 9.39.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.54.0
+        version: 8.54.0(eslint@9.39.2)(typescript@5.9.3)
+
   server:
     dependencies:
       '@aws-sdk/client-s3':
@@ -161,6 +179,9 @@ importers:
       '@harborfm/episode-render':
         specifier: workspace:*
         version: link:../episode-render
+      '@harborfm/segment-remake':
+        specifier: workspace:*
+        version: link:../segment-remake
       '@harborfm/shared':
         specifier: workspace:*
         version: link:../shared
@@ -499,6 +520,9 @@ importers:
       '@harborfm/episode-render':
         specifier: workspace:*
         version: link:../episode-render
+      '@harborfm/segment-remake':
+        specifier: workspace:*
+        version: link:../segment-remake
       '@harborfm/shared':
         specifier: workspace:*
         version: link:../shared

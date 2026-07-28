@@ -40,6 +40,7 @@
     "@fastify/websocket": "^11.2.0",
     "@harborfm/shared": "workspace:*",
     "@harborfm/episode-render": "workspace:*",
+    "@harborfm/segment-remake": "workspace:*",
     "@harborfm/video-gen": "workspace:*",
     "@maxmind/geoip2-node": "6.3.4",
     "@node-saml/node-saml": "5.1.0",

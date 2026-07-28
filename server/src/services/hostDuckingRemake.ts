@@ -14,9 +14,9 @@ import * as audioService from "./audio.js";
 import {
   pruneMarkersForDuration,
   pruneTrimRangesForDuration,
-  remakeMixFromMultitrackDir,
   type MultitrackManifest,
 } from "./multitrackRemake.js";
+import { remakeMixWithOptionalWorker } from "./segmentRemakeWorker.js";
 import {
   buildManifestForRemake,
   generateAndWriteHostDucking,
@@ -73,6 +73,8 @@ export async function remakeSegmentWithHostDucking(opts: {
   setEnabledFlag?: boolean;
   /** Regenerate host_ducking.json even if present. */
   regenerateDucking?: boolean;
+  apiBase?: string | null;
+  userId?: string | null;
 }): Promise<{ durationSec: number; ducking: HostDuckingFile | null }> {
   const {
     podcastId,
@@ -81,6 +83,8 @@ export async function remakeSegmentWithHostDucking(opts: {
     applyDucking,
     setEnabledFlag,
     regenerateDucking,
+    apiBase,
+    userId,
   } = opts;
 
   const mtDir = findMultitrackDir(podcastId, episodeId, segmentId);
@@ -110,12 +114,17 @@ export async function remakeSegmentWithHostDucking(opts: {
   const remakeManifest = buildManifestForRemake(manifest, ducking, mtDir);
   const episodeUploads = uploadsDir(podcastId, episodeId);
   const mixDest = segmentPath(podcastId, episodeId, segmentId, "wav");
-  const remade = await remakeMixFromMultitrackDir(
+  const remade = await remakeMixWithOptionalWorker({
+    podcastId,
+    episodeId,
+    segmentId,
     mtDir,
     remakeManifest,
     mixDest,
-    episodeUploads,
-  );
+    allowedBaseDir: episodeUploads,
+    apiBase,
+    userId,
+  });
 
   const existing = getSegmentById(segmentId, episodeId);
   let markers: unknown = existing?.markers ?? [];
@@ -190,9 +199,19 @@ export function startHostDuckingJob(opts: {
   episodeId: string;
   segmentId: string;
   enabled: boolean;
+  apiBase?: string | null;
+  userId?: string | null;
   onSuccess?: () => void;
 }): boolean {
-  const { podcastId, episodeId, segmentId, enabled, onSuccess } = opts;
+  const {
+    podcastId,
+    episodeId,
+    segmentId,
+    enabled,
+    apiBase,
+    userId,
+    onSuccess,
+  } = opts;
   if (jobStatusBySegment.get(segmentId) === "remaking") return false;
   jobStatusBySegment.set(segmentId, "remaking");
   jobErrorBySegment.delete(segmentId);
@@ -204,6 +223,8 @@ export function startHostDuckingJob(opts: {
       applyDucking: enabled,
       setEnabledFlag: enabled,
       regenerateDucking: enabled,
+      apiBase,
+      userId,
     })
       .then(() => {
         jobStatusBySegment.set(segmentId, "done");

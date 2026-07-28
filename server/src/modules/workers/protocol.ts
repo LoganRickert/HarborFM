@@ -1,5 +1,9 @@
 /** Extensible compute job kinds. Add new kinds without changing the wire shape. */
-export type ComputeJobKind = "video_generate" | "transcribe" | "episode_render";
+export type ComputeJobKind =
+  | "video_generate"
+  | "transcribe"
+  | "episode_render"
+  | "segment_remake";
 
 /** Per-job CPU/memory from the worker (cgroup or process tree; not host-global). */
 export type WorkerJobResourceStats = {

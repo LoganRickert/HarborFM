@@ -26,6 +26,7 @@ import {
   BootstrapMultitrackError,
   bootstrapSegmentMultitrackFromMix,
 } from "../../services/bootstrapSegmentMultitrackFromMix.js";
+import { workerApiBaseFromRequest } from "../workers/index.js";
 
 export async function registerTracksRoutes(app: FastifyInstance) {
   app.get(
@@ -589,6 +590,8 @@ export async function registerTracksRoutes(app: FastifyInstance) {
         podcastId: access.podcastId,
         episodeId,
         segmentId,
+        apiBase: workerApiBaseFromRequest(request),
+        userId: request.userId,
         onSuccess: () => {
           broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
         },

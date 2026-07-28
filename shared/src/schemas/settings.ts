@@ -162,6 +162,7 @@ export const settingsPatchBodySchema = z.object({
   workersUseForTranscripts: z.boolean().optional(),
   workersUseForVideos: z.boolean().optional(),
   workersUseForFinalEpisodes: z.boolean().optional(),
+  workersUseForSegmentRemakes: z.boolean().optional(),
 });
 
 export type SettingsPatchBody = z.infer<typeof settingsPatchBodySchema>;
@@ -266,6 +267,7 @@ export const settingsResponseSchema = z.object({
   workersUseForTranscripts: z.boolean(),
   workersUseForVideos: z.boolean(),
   workersUseForFinalEpisodes: z.boolean(),
+  workersUseForSegmentRemakes: z.boolean(),
 });
 
 export type SettingsResponse = z.infer<typeof settingsResponseSchema>;

@@ -13,6 +13,7 @@
   "dependencies": {
     "@harborfm/shared": "workspace:*",
     "@harborfm/episode-render": "workspace:*",
+    "@harborfm/segment-remake": "workspace:*",
     "@harborfm/video-gen": "workspace:*",
     "dotenv": "^17.2.4",
     "nanoid": "^5.1.6",

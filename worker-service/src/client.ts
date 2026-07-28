@@ -19,6 +19,7 @@ import {
   runEpisodeRenderWorkerJob,
   episodeRenderOutPath,
 } from "./jobs/episodeRender.js";
+import { runSegmentRemakeWorkerJob } from "./jobs/segmentRemake.js";
 import { startJobResourceSampler } from "./jobResourceSampler.js";
 import type { JobResourceStatsPayload } from "./protocol.js";
 
@@ -249,6 +250,17 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
       const outName =
         msg.outputs[0]?.name ??
         (msg.params.format === "m4a" ? "final.m4a" : "final.mp3");
+      outputPaths.set(outName, out);
+    } else if (msg.kind === "segment_remake") {
+      const out = join(workDir, "mix.wav");
+      await runSegmentRemakeWorkerJob({
+        workDir,
+        inputPaths,
+        outPath: out,
+        params: msg.params,
+      });
+      assertNotCancelled();
+      const outName = msg.outputs[0]?.name ?? "mix.wav";
       outputPaths.set(outName, out);
     } else {
       throw new Error(`Unsupported job kind: ${(msg as { kind: string }).kind}`);

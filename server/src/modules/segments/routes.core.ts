@@ -48,6 +48,7 @@ import {
 } from "../../services/restoreOriginalMixRemake.js";
 import { TRACKS_MANIFEST_ORIGINAL_NAME } from "../episodes/projectSegmentShared.js";
 import { canBootstrapAdvancedEditorFromMix } from "../../services/bootstrapSegmentMultitrackFromMix.js";
+import { workerApiBaseFromRequest } from "../workers/index.js";
 import { join } from "path";
 
 function segmentHasOriginalTracksManifest(
@@ -702,6 +703,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episodeId,
         segmentId,
         enabled: bodyParsed.data.enabled,
+        apiBase: workerApiBaseFromRequest(request),
+        userId: request.userId,
         onSuccess: () => {
           broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
         },

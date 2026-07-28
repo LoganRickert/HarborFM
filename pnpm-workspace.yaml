@@ -4,6 +4,7 @@ packages:
   - shared
   - video-gen
   - episode-render
+  - segment-remake
   - docs
   - webrtc-service
   - worker-service

@@ -12,6 +12,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY shared/package.json ./shared/
 COPY video-gen/package.json ./video-gen/
 COPY episode-render/package.json ./episode-render/
+COPY segment-remake/package.json ./segment-remake/
 COPY worker-service/package.json ./worker-service/
 
 RUN pnpm install --frozen-lockfile --filter worker-service...
@@ -19,11 +20,13 @@ RUN pnpm install --frozen-lockfile --filter worker-service...
 COPY shared ./shared
 COPY video-gen ./video-gen
 COPY episode-render ./episode-render
+COPY segment-remake ./segment-remake
 COPY worker-service ./worker-service
 
 RUN pnpm --filter shared run build \
   && pnpm --filter @harborfm/video-gen run build \
   && pnpm --filter @harborfm/episode-render run build \
+  && pnpm --filter @harborfm/segment-remake run build \
   && pnpm --filter worker-service run build
 
 FROM node:22-bookworm-slim
@@ -57,6 +60,8 @@ COPY --from=builder /app/video-gen/package.json ./video-gen/
 COPY --from=builder /app/video-gen/dist ./video-gen/dist
 COPY --from=builder /app/episode-render/package.json ./episode-render/
 COPY --from=builder /app/episode-render/dist ./episode-render/dist
+COPY --from=builder /app/segment-remake/package.json ./segment-remake/
+COPY --from=builder /app/segment-remake/dist ./segment-remake/dist
 COPY --from=builder /app/worker-service/package.json ./worker-service/
 
 RUN useradd -m -u 10001 appuser \

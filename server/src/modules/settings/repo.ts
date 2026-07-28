@@ -279,6 +279,10 @@ export function writeSettings(settings: AppSettings): void {
     "workers_use_for_final_episodes",
     String(settings.workers_use_for_final_episodes !== false),
   );
+  upsert(
+    "workers_use_for_segment_remakes",
+    String(settings.workers_use_for_segment_remakes !== false),
+  );
 }
 
 /**

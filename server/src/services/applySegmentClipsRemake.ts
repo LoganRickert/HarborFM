@@ -5,11 +5,11 @@ import * as audioService from "./audio.js";
 import {
   pruneMarkersForDuration,
   pruneTrimRangesForDuration,
-  remakeMixFromMultitrackDir,
   trimOverlappingSoundboardEntries,
   type MultitrackManifest,
   type MultitrackSegmentEntry,
 } from "./multitrackRemake.js";
+import { remakeMixWithOptionalWorker } from "./segmentRemakeWorker.js";
 import {
   buildManifestForRemake,
   readHostDuckingFile,
@@ -335,8 +335,10 @@ export async function applySegmentClipsAndRemake(opts: {
   episodeId: string;
   segmentId: string;
   clips: SegmentTrackClip[];
+  apiBase?: string | null;
+  userId?: string | null;
 }): Promise<{ durationSec: number }> {
-  const { podcastId, episodeId, segmentId, clips } = opts;
+  const { podcastId, episodeId, segmentId, clips, apiBase, userId } = opts;
 
   const mtDir = findMultitrackDir(podcastId, episodeId, segmentId);
   if (!mtDir) {
@@ -366,6 +368,8 @@ export async function applySegmentClipsAndRemake(opts: {
     segmentId,
     mtDir,
     manifest,
+    apiBase,
+    userId,
   });
 }
 
@@ -376,8 +380,10 @@ export async function remakeSegmentMixFromSavedTracks(opts: {
   podcastId: string;
   episodeId: string;
   segmentId: string;
+  apiBase?: string | null;
+  userId?: string | null;
 }): Promise<{ durationSec: number }> {
-  const { podcastId, episodeId, segmentId } = opts;
+  const { podcastId, episodeId, segmentId, apiBase, userId } = opts;
   const mtDir = findMultitrackDir(podcastId, episodeId, segmentId);
   if (!mtDir) {
     throw new Error("No multitrack recordings for this segment");
@@ -396,6 +402,8 @@ export async function remakeSegmentMixFromSavedTracks(opts: {
     segmentId,
     mtDir,
     manifest,
+    apiBase,
+    userId,
   });
 }
 
@@ -405,8 +413,11 @@ async function remakeSegmentMixFromManifest(opts: {
   segmentId: string;
   mtDir: string;
   manifest: MultitrackManifest;
+  apiBase?: string | null;
+  userId?: string | null;
 }): Promise<{ durationSec: number }> {
-  const { podcastId, episodeId, segmentId, mtDir, manifest } = opts;
+  const { podcastId, episodeId, segmentId, mtDir, manifest, apiBase, userId } =
+    opts;
 
   await refreshMultitrackTrackSidecars(mtDir, manifest, {
     generateWaveforms: false,
@@ -419,12 +430,17 @@ async function remakeSegmentMixFromManifest(opts: {
 
   const episodeUploads = uploadsDir(podcastId, episodeId);
   const mixDest = segmentPath(podcastId, episodeId, segmentId, "wav");
-  const remade = await remakeMixFromMultitrackDir(
+  const remade = await remakeMixWithOptionalWorker({
+    podcastId,
+    episodeId,
+    segmentId,
     mtDir,
     remakeManifest,
     mixDest,
-    episodeUploads,
-  );
+    allowedBaseDir: episodeUploads,
+    apiBase,
+    userId,
+  });
 
   let markers: unknown = existing?.markers ?? [];
   if (typeof markers === "string" && markers) {
@@ -501,9 +517,12 @@ export function startRemakeSegmentTracksJob(opts: {
   segmentId: string;
   /** When omitted, remake from tracks_manifest.json on disk. */
   clips?: SegmentTrackClip[];
+  apiBase?: string | null;
+  userId?: string | null;
   onSuccess?: () => void;
 }): boolean {
-  const { podcastId, episodeId, segmentId, clips, onSuccess } = opts;
+  const { podcastId, episodeId, segmentId, clips, apiBase, userId, onSuccess } =
+    opts;
   if (jobStatusBySegment.get(segmentId) === "remaking") return false;
   jobStatusBySegment.set(segmentId, "remaking");
   jobErrorBySegment.delete(segmentId);
@@ -517,12 +536,16 @@ export function startRemakeSegmentTracksJob(opts: {
             podcastId,
             episodeId,
             segmentId,
+            apiBase,
+            userId,
           })
         : applySegmentClipsAndRemake({
             podcastId,
             episodeId,
             segmentId,
             clips: pending,
+            apiBase,
+            userId,
           });
     void run
       .then(() => {

@@ -52,6 +52,7 @@ function kindLabel(kind: string): string {
   if (kind === 'video_generate') return 'Video';
   if (kind === 'transcribe') return 'Transcribe';
   if (kind === 'episode_render') return 'Final episode';
+  if (kind === 'segment_remake') return 'Multi-track segment';
   return kind;
 }
 
@@ -262,7 +263,7 @@ export function WorkersSection({ form, onFormChange }: SettingsFormProps) {
   return (
     <SectionCard
       title="Compute Workers"
-      subtitle="Offload video generation, self-hosted Whisper transcription, and Build Final Episode to one or more worker machines. Workers connect over a secret WebSocket path."
+      subtitle="Offload video generation, self-hosted Whisper transcription, Build Final Episode, and Build Multi-Track Segment to one or more worker machines. Workers connect over a secret WebSocket path."
     >
       <CancelWorkerJobConfirmDialog
         open={cancelTarget != null}
@@ -511,6 +512,20 @@ export function WorkersSection({ form, onFormChange }: SettingsFormProps) {
             />
             <span className="toggle__track" aria-hidden="true" />
             <span>Build Final Episode</span>
+          </label>
+          <label
+            className="toggle"
+            data-settings-label="Offload multi-track segment builds to workers"
+          >
+            <input
+              type="checkbox"
+              checked={form.workersUseForSegmentRemakes !== false}
+              onChange={(e) =>
+                onFormChange({ workersUseForSegmentRemakes: e.target.checked })
+              }
+            />
+            <span className="toggle__track" aria-hidden="true" />
+            <span>Build Multi-Track Segment</span>
           </label>
 
           <div className={styles.workerJobStatsBlock}>

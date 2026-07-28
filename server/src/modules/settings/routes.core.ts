@@ -669,6 +669,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.workersUseForFinalEpisodes !== undefined
           ? Boolean(body.workersUseForFinalEpisodes)
           : current.workers_use_for_final_episodes;
+      const workers_use_for_segment_remakes =
+        body.workersUseForSegmentRemakes !== undefined
+          ? Boolean(body.workersUseForSegmentRemakes)
+          : current.workers_use_for_segment_remakes;
       if (workers_enabled && (!workers_ws_path || !workers_shared_secret)) {
         const generated = generateWorkerSecrets();
         if (!workers_ws_path) workers_ws_path = generated.path;
@@ -777,6 +781,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         workers_use_for_transcripts,
         workers_use_for_videos,
         workers_use_for_final_episodes,
+        workers_use_for_segment_remakes,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||

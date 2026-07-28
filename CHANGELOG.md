@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.23.0 - 7-28-2026
+
+- **Compute workers:** Settings > Compute Workers adds a **Build Multi-Track Segment** toggle. Advanced editor Remake and post-recording multi-track remakes can run on remote workers via a shared `@harborfm/segment-remake` mixer (same local fallback as other offloads).
+
 ## v1.22.0 - 7-27-2026
 
 - **Dial-in audio:** Phone callers no longer lose the outbound mix when a stale room producer is present. Mix-minus skips/prunes dead producers, rebuilds immediately when another phone joins, and avoids overlapping mix rebuild races.

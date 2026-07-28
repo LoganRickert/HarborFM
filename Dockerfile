@@ -13,6 +13,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY shared/package.json ./shared/
 COPY video-gen/package.json ./video-gen/
 COPY episode-render/package.json ./episode-render/
+COPY segment-remake/package.json ./segment-remake/
 COPY server/package.json ./server/
 COPY web/package.json ./web/
 
@@ -21,6 +22,7 @@ RUN pnpm install --frozen-lockfile
 COPY shared ./shared
 COPY video-gen ./video-gen
 COPY episode-render ./episode-render
+COPY segment-remake ./segment-remake
 COPY server ./server
 COPY web ./web
 COPY scripts ./scripts
@@ -66,7 +68,7 @@ RUN set -eux; \
 RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 WORKDIR /app
 
-# Copy workspace and built artifacts so pnpm can link @harborfm/shared, video-gen, episode-render
+# Copy workspace and built artifacts so pnpm can link @harborfm/shared, video-gen, episode-render, segment-remake
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/shared/package.json ./shared/
 COPY --from=builder /app/shared/dist ./shared/dist
@@ -74,6 +76,8 @@ COPY --from=builder /app/video-gen/package.json ./video-gen/
 COPY --from=builder /app/video-gen/dist ./video-gen/dist
 COPY --from=builder /app/episode-render/package.json ./episode-render/
 COPY --from=builder /app/episode-render/dist ./episode-render/dist
+COPY --from=builder /app/segment-remake/package.json ./segment-remake/
+COPY --from=builder /app/segment-remake/dist ./segment-remake/dist
 COPY --from=builder /app/server/package.json ./server/
 COPY --from=builder /app/web/package.json ./web/
 

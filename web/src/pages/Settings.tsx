@@ -255,6 +255,7 @@ export function Settings() {
         workersUseForTranscripts: form.workersUseForTranscripts,
         workersUseForVideos: form.workersUseForVideos,
         workersUseForFinalEpisodes: form.workersUseForFinalEpisodes,
+        workersUseForSegmentRemakes: form.workersUseForSegmentRemakes,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });

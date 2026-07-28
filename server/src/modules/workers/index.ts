@@ -15,7 +15,10 @@ import {
 import { listWorkerJobStats } from "./statsRepo.js";
 
 export { dispatchComputeJob, cancelComputeJob } from "./dispatch.js";
-export { workerApiBaseFromRequest } from "./apiBase.js";
+export {
+  workerApiBaseFromRequest,
+  workerApiBaseFromSettings,
+} from "./apiBase.js";
 export { generateWorkerSecrets } from "./routes.ws.js";
 export { workerStatusSummary } from "./registry.js";
 export { invalidateAllWorkerSessions } from "./dispatch.js";

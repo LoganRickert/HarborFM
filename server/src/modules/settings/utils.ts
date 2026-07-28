@@ -193,6 +193,8 @@ export interface AppSettings {
   workers_use_for_videos: boolean;
   /** Offload Build Final Episode audio encode to workers. */
   workers_use_for_final_episodes: boolean;
+  /** Offload multi-track segment remake (Advanced Remake / post-recording) to workers. */
+  workers_use_for_segment_remakes: boolean;
 }
 
 export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -294,6 +296,7 @@ export const DEFAULTS: AppSettings = {
   workers_use_for_transcripts: true,
   workers_use_for_videos: true,
   workers_use_for_final_episodes: true,
+  workers_use_for_segment_remakes: true,
 };
 
 export const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -557,6 +560,9 @@ export function buildAppSettingsFromRows(
     else if (row.key === "workers_use_for_final_episodes")
       (settings as Partial<AppSettings>).workers_use_for_final_episodes =
         row.value === "true";
+    else if (row.key === "workers_use_for_segment_remakes")
+      (settings as Partial<AppSettings>).workers_use_for_segment_remakes =
+        row.value === "true";
   }
 
   return {
@@ -757,6 +763,9 @@ export function buildAppSettingsFromRows(
     workers_use_for_final_episodes:
       (settings as Partial<AppSettings>).workers_use_for_final_episodes ??
       DEFAULTS.workers_use_for_final_episodes,
+    workers_use_for_segment_remakes:
+      (settings as Partial<AppSettings>).workers_use_for_segment_remakes ??
+      DEFAULTS.workers_use_for_segment_remakes,
   };
 }
 
@@ -897,5 +906,7 @@ export function settingsToApiResponse(
     workersUseForVideos: settings.workers_use_for_videos !== false,
     workersUseForFinalEpisodes:
       settings.workers_use_for_final_episodes !== false,
+    workersUseForSegmentRemakes:
+      settings.workers_use_for_segment_remakes !== false,
   };
 }

@@ -101,6 +101,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   workersUseForTranscripts: true,
   workersUseForVideos: true,
   workersUseForFinalEpisodes: true,
+  workersUseForSegmentRemakes: true,
 };
 
 export function useSettingsForm(initialSettings?: SettingsResponse) {

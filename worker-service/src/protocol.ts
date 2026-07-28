@@ -1,4 +1,8 @@
-export type ComputeJobKind = "video_generate" | "transcribe" | "episode_render";
+export type ComputeJobKind =
+  | "video_generate"
+  | "transcribe"
+  | "episode_render"
+  | "segment_remake";
 
 /** Per-job CPU/memory samples from this worker (not host-global). */
 export type JobResourceStatsPayload = {
