@@ -27,6 +27,8 @@ export type ActiveSegment = {
   lastPacketAtMs: number;
   /** e.g. "soundboard" – used to apply start-time corrections */
   source?: string;
+  /** Library asset id when source is soundboard (snapshotted at attach time). */
+  soundboardAssetId?: string;
 };
 
 export type FinalizedSegmentInfo = {
@@ -35,6 +37,7 @@ export type FinalizedSegmentInfo = {
   filePathRelative: string;
   startedAt: number;
   source?: string;
+  soundboardAssetId?: string;
   /** Soundboard segment volume 0..1 applied at finalization (default 1) */
   volume?: number;
 };
@@ -136,17 +139,10 @@ export class RecordingManager {
 
     const source = this.deps.getProducerSource?.(producerId);
     const isSoundboard = source === "soundboard";
-    const warmupMs = isSoundboard ? 50 : RECORDING_WARMUP_MS;
-    const postConnectMs = isSoundboard ? 50 : 200;
-    await new Promise((r) => setTimeout(r, warmupMs));
-    await plainTransport.connect({
-      ip: "127.0.0.1",
-      port: rtpPort,
-      rtcpPort,
-    });
-    await new Promise((r) => setTimeout(r, postConnectMs));
-    await consumer.resume();
-
+    // Snapshot before any await: short SFX producers close and clear the asset map quickly.
+    const soundboardAssetId = isSoundboard
+      ? this.deps.getProducerSoundboardAsset?.(producerId)
+      : undefined;
     const filePathRelative = join("recordings", recordingDirName, `segment_${segmentId}.mp3`);
 
     const now = Date.now();
@@ -162,7 +158,12 @@ export class RecordingManager {
       lastPacketCount: 0,
       lastPacketAtMs: now,
       ...(source ? { source } : {}),
+      ...(soundboardAssetId ? { soundboardAssetId } : {}),
     };
+
+    // Register before warmup so producerclose during connect still finalizes
+    // (short soundboard one-shots often end within ~100ms of produce).
+    state.activeSegmentsByProducerId.set(producerId, activeSegment);
 
     let pauseFinalizeTimer: ReturnType<typeof setTimeout> | undefined;
     const finalize = (reason: string, permanent: boolean) =>
@@ -189,6 +190,24 @@ export class RecordingManager {
       if (pauseFinalizeTimer) clearTimeout(pauseFinalizeTimer);
       finalize("transport closed", true);
     });
+
+    const warmupMs = isSoundboard ? 50 : RECORDING_WARMUP_MS;
+    const postConnectMs = isSoundboard ? 50 : 200;
+    await new Promise((r) => setTimeout(r, warmupMs));
+    // Producer may have already closed (very short SFX); finalize handles cleanup.
+    if (!state.activeSegmentsByProducerId.has(producerId)) {
+      return null;
+    }
+    await plainTransport.connect({
+      ip: "127.0.0.1",
+      port: rtpPort,
+      rtcpPort,
+    });
+    await new Promise((r) => setTimeout(r, postConnectMs));
+    if (!state.activeSegmentsByProducerId.has(producerId)) {
+      return null;
+    }
+    await consumer.resume();
 
     return activeSegment;
   }
@@ -261,6 +280,9 @@ export class RecordingManager {
         filePathRelative: result.filePath,
         startedAt: seg.startedAt,
         ...(seg.source ? { source: seg.source } : {}),
+        ...(seg.soundboardAssetId
+          ? { soundboardAssetId: seg.soundboardAssetId }
+          : {}),
         ...(volume !== undefined ? { volume } : {}),
       });
       appendSegmentLog(state.jsonlPath, {
@@ -304,7 +326,9 @@ export class RecordingManager {
     const segmentsOut = allSegments.map((s) => {
       const source = s.source ?? this.deps.getProducerSource?.(s.producerId);
       const participant = this.deps.getProducerParticipant?.(s.producerId);
-      const soundboardAssetId = this.deps.getProducerSoundboardAsset?.(s.producerId);
+      const soundboardAssetId =
+        s.soundboardAssetId ??
+        this.deps.getProducerSoundboardAsset?.(s.producerId);
       const seg: Record<string, unknown> = {
         segmentId: s.segmentId,
         producerId: s.producerId,
@@ -316,7 +340,11 @@ export class RecordingManager {
       };
       if (participant?.participantName) seg.participantName = participant.participantName;
       if (source === "soundboard" || source === "phone") seg.source = source;
-      if (source === "soundboard" && soundboardAssetId) seg.soundboardAssetId = soundboardAssetId;
+      if (source === "soundboard") {
+        if (soundboardAssetId) seg.soundboardAssetId = soundboardAssetId;
+        // Explicit lane label; server may refine to "Soundboard: <asset name>" on ingest.
+        if (!seg.participantName) seg.participantName = "Soundboard";
+      }
       if (s.volume != null && s.volume !== 1) seg.volume = s.volume;
       return seg;
     });

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.22.0 - 7-27-2026
+
+- **Dial-in audio:** Phone callers no longer lose the outbound mix when a stale room producer is present. Mix-minus skips/prunes dead producers, rebuilds immediately when another phone joins, and avoids overlapping mix rebuild races.
+- **Advanced editor scrubbing:** Take audio stream (`tracks/stream`) is exempt from the global API rate limit so scrubbing does not 429. Load failures show "Too many audio requests" when the server returns 429 instead of a misleading not-found message.
+- **Show cast email:** Add a private email on Show Cast (backend only, not public). Meeting Calendar can quick-invite hosts/guests with an email and send the invite automatically.
+- **Compute workers:** Build Final Episode can run on remote workers (named segment file downloads, no zip). Settings > Compute Workers adds toggles to offload transcripts, episode videos, and final episodes independently. Busy workers show a Cancel job control that aborts the in-flight job.
+- **Episode Unlisted:** On Overview, Publishing, and Build Final Episode Publishing (when status is scheduled or published), mark an episode Unlisted. Anyone with the link can open the episode page and listen when it is released, but the episode stays off the public feed list, RSS, and sitemap. Switching back to draft clears Unlisted.
+- **Advanced editor Track / Clip Settings:** Open Track Settings from the lane controls, or double-click a clip (or use footer Settings) for Clip Settings. Mute, volume, EQ, compressor, and gate apply in preview and remake. Clip edits override the track until you click Reset all FX on that clip.
+- **Advanced editor Add Track:** Redesigned upload / library dialog with a drop zone, clearer tabs, and a cleaner layout.
+- **Advanced editor Remake:** Clicking Remake pauses preview playback if it was playing.
+- **Soundboard in Advanced editor:** Mid-call soundboard clips are attached to the recording right away, labeled as Soundboard (with the asset name when available), share one timeline lane, and overlapping one-shots are trimmed so earlier clips end when the next starts.
+- **Group calls:** If your mic stays silent for about 10 seconds after joining, HarborFM shows a one-time tip so you can check permissions or mute state.
+- **Simple editor:** Space no longer accidentally opens Advanced Editor from the segment dialog (it plays/pauses instead).
+- **Analytics:** Draft and scheduled episodes are excluded from the Analytics episode list and related per-episode stats (published only).
+
 ## v1.21.0 - 7-26-2026
 
 - **Meeting topics:** Guests can suggest Topic To Discuss / Topic To Avoid items from a public topics page linked from invite and reminder emails and from the join page. Show Notes adds Submitted Topics with Add To Notes (promotes a discuss suggestion into the run-of-show list). Guests see an Added to Show Notes state and cannot edit promoted topics. Topics are locked when the meeting is cancelled, ended, or expired.
@@ -13,11 +28,11 @@
 
 - **Meeting emails:** Calendar invites use a proper `text/calendar` MIME part (including `method=REQUEST` / `CANCEL` / `PUBLISH`), match the envelope From as ICS organizer, and include schema.org `EventReservation` JSON-LD so Gmail can load the event chip. Host confirmation emails use `PUBLISH` (add to calendar) instead of a self-RSVP.
 - **Meeting reminders:** When a group call was scheduled at least 5 hours ahead, invitees with email get a **REMINDER** about 4 hours before start (“In just 4 hours”) with the host-local time called out, so time zones are harder to misread. Rescheduling clears the flag so a new reminder can send.
-- **Compute workers:** Each job reports average and peak CPU (percent of one core) and memory from that worker’s container/process tree (not host-wide), shown in Settings → Workers → Recent jobs.
+- **Compute workers:** Each job reports average and peak CPU (percent of one core) and memory from that worker’s container/process tree (not host-wide), shown in Settings > Workers > Recent jobs.
 
 ## v1.20.0 - 7-25-2026
 
-- **Compute workers:** Offload video generation and Whisper transcription to remote machines via authenticated WebSocket workers, with uploads in 50 MiB chunks and configurable settings and stats shown in Settings → Workers. Failed path/secret guesses are banned per IP (`WORKER_WS_FAILURE_THRESHOLD`). Includes new `worker-service` image (`harborfm-worker`) with Docker Compose support, plus e2e coverage for auth, status, regenerate, and bans.
+- **Compute workers:** Offload video generation and Whisper transcription to remote machines via authenticated WebSocket workers, with uploads in 50 MiB chunks and configurable settings and stats shown in Settings > Workers. Failed path/secret guesses are banned per IP (`WORKER_WS_FAILURE_THRESHOLD`). Includes new `worker-service` image (`harborfm-worker`) with Docker Compose support, plus e2e coverage for auth, status, regenerate, and bans.
 
 ## v1.19.2 - 7-25-2026
 

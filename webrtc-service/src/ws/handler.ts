@@ -22,6 +22,7 @@ import {
 } from "../config.js";
 import { assertSafeId, sanitizeParticipantName } from "../validation.js";
 import { setSocketRoom, deleteSocketRoom, forEachSocketInRoom } from "./roomBroadcast.js";
+import { maybeAddProducerToActiveRecording } from "../recording/bridge.js";
 
 function getClientIpFromRequest(req: { socket?: { remoteAddress?: string }; headers?: Record<string, string | string[] | undefined> }): string {
   const forwarded = req.headers?.["x-forwarded-for"];
@@ -486,6 +487,8 @@ export const wsHandler = async (socket: any, req: any) => {
               roomState.producers.delete(producer.id);
               soundboardByRoom.delete(roomId);
             });
+            // Short one-shots finish before the 2.5s recording poll; attach now.
+            void maybeAddProducerToActiveRecording(roomId, producer);
             socket.send(JSON.stringify({ type: "soundboardPlaying", producerId: producer.id }));
             forEachSocketInRoom(roomId, (s) => {
               if ((s as { readyState?: number }).readyState === 1) {
@@ -527,7 +530,16 @@ export const wsHandler = async (socket: any, req: any) => {
       }
 
       if (type === "getProducers") {
-        const ids = Array.from(roomState.producers.keys());
+        const ids: string[] = [];
+        for (const [id, p] of [...roomState.producers.entries()]) {
+          if (p.closed) {
+            roomState.producers.delete(id);
+            producerSourceMapRef.delete(id);
+            producerParticipantMapRef.delete(id);
+            continue;
+          }
+          ids.push(id);
+        }
         const soundboardVol = soundboardVolumeByRoomRef.get(roomId);
         socket.send(
           JSON.stringify({

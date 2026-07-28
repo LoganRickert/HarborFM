@@ -111,6 +111,77 @@ export type MultitrackManifest = {
   [key: string]: unknown;
 };
 
+function soundboardEntryStartMs(entry: MultitrackSegmentEntry): number {
+  const raw =
+    typeof entry.startMs === "number" && Number.isFinite(entry.startMs)
+      ? entry.startMs
+      : 0;
+  return Math.max(0, raw);
+}
+
+function soundboardEntryEndMs(entry: MultitrackSegmentEntry): number {
+  const startMs = soundboardEntryStartMs(entry);
+  if (typeof entry.lengthMs === "number" && entry.lengthMs > 0) {
+    return startMs + entry.lengthMs;
+  }
+  if (typeof entry.endMs === "number" && entry.endMs > startMs) {
+    return entry.endMs;
+  }
+  return startMs;
+}
+
+function isSoundboardEntry(entry: MultitrackSegmentEntry): boolean {
+  if (entry.source === "soundboard") return true;
+  return (
+    typeof entry.soundboardAssetId === "string" &&
+    entry.soundboardAssetId.trim().length > 0
+  );
+}
+
+/**
+ * Shared soundboard lane: trim earlier clip ends when a later play overlaps.
+ */
+export function trimOverlappingSoundboardEntries(
+  clips: MultitrackSegmentEntry[],
+): MultitrackSegmentEntry[] {
+  const sbIndices: number[] = [];
+  for (let i = 0; i < clips.length; i++) {
+    if (isSoundboardEntry(clips[i]!)) sbIndices.push(i);
+  }
+  if (sbIndices.length < 2) return clips;
+
+  const ordered = [...sbIndices].sort(
+    (a, b) =>
+      soundboardEntryStartMs(clips[a]!) - soundboardEntryStartMs(clips[b]!) ||
+      a - b,
+  );
+
+  const next = clips.map((c) => ({ ...c }));
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const curI = ordered[i]!;
+    const nxtI = ordered[i + 1]!;
+    const cur = next[curI]!;
+    const nextStart = soundboardEntryStartMs(next[nxtI]!);
+    const curStart = soundboardEntryStartMs(cur);
+    const curEnd = soundboardEntryEndMs(cur);
+    if (curEnd <= nextStart) continue;
+    if (nextStart <= curStart) {
+      next[curI] = { ...cur, lengthMs: 0, endMs: curStart };
+      continue;
+    }
+    next[curI] = {
+      ...cur,
+      lengthMs: nextStart - curStart,
+      endMs: nextStart,
+    };
+  }
+
+  return next.filter((c) => {
+    if (!isSoundboardEntry(c)) return true;
+    return soundboardEntryEndMs(c) - soundboardEntryStartMs(c) >= 1;
+  });
+}
+
 function resolveTrackPath(
   mtDir: string,
   entry: MultitrackSegmentEntry,
@@ -647,7 +718,9 @@ export async function remakeMixFromMultitrackDir(
   assertResolvedPathUnder(outWavPath, allowedBaseDir);
   const safeOut = resolve(outWavPath);
   mkdirSync(join(safeOut, ".."), { recursive: true });
-  const segments = Array.isArray(manifest.segments) ? manifest.segments : [];
+  const segments = trimOverlappingSoundboardEntries(
+    Array.isArray(manifest.segments) ? manifest.segments : [],
+  );
   if (segments.length === 0) {
     throw new Error("tracks_manifest has no segments to mix");
   }

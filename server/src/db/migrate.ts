@@ -97,6 +97,9 @@ import * as m095 from "./migrations/095_worker_job_stats.js";
 import * as m096 from "./migrations/096_worker_job_stats_resources.js";
 import * as m097 from "./migrations/097_meeting_reminder_sent_at.js";
 import * as m098 from "./migrations/098_show_notes_tag_submitted_by.js";
+import * as m099 from "./migrations/099_episodes_unlisted.js";
+import * as m100 from "./migrations/100_worker_job_stats_subject.js";
+import * as m101 from "./migrations/101_podcast_cast_email.js";
 import { syncServerThemesFromDisk } from "../modules/themes/builtins.js";
 
 const migrations = [
@@ -198,6 +201,9 @@ const migrations = [
   { name: "096_worker_job_stats_resources", ...m096 },
   { name: "097_meeting_reminder_sent_at", ...m097 },
   { name: "098_show_notes_tag_submitted_by", ...m098 },
+  { name: "099_episodes_unlisted", ...m099 },
+  { name: "100_worker_job_stats_subject", ...m100 },
+  { name: "101_podcast_cast_email", ...m101 },
 ];
 
 const MIGRATIONS_TABLE = `

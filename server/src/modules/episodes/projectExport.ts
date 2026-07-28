@@ -234,6 +234,7 @@ async function buildZipToPath(
       subscriberOnly: episode.subscriberOnly,
       subscriberOnlyStartsAt: episode.subscriberOnlyStartsAt,
       subscriberOnlyEndsAt: episode.subscriberOnlyEndsAt,
+      unlisted: episode.unlisted,
       showNotesGuestVisible: episode.showNotesGuestVisible,
       finalMarkers: parseJsonField(episode.finalMarkers),
       finalSoundbites: parseJsonField(episode.finalSoundbites),

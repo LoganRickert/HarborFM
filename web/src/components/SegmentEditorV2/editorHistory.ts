@@ -1,5 +1,6 @@
 import type { Marker } from '@harborfm/shared';
 import type { EditorClip } from './clipOps';
+import type { TrackSettingsUi } from './trackFx';
 
 export type EditorHistorySnapshot = {
   clips: EditorClip[];
@@ -7,6 +8,8 @@ export type EditorHistorySnapshot = {
   markers: Marker[];
   selectedId: string | null;
   rippleStartSec: number | null;
+  /** Per-lane track FX defaults (clip overrides do not update these). */
+  laneFxDefaults: Record<string, TrackSettingsUi>;
 };
 
 const MAX_HISTORY = 50;
@@ -14,12 +17,20 @@ const MAX_HISTORY = 50;
 export function cloneEditorSnapshot(
   snap: EditorHistorySnapshot,
 ): EditorHistorySnapshot {
+  const laneFxDefaults: EditorHistorySnapshot['laneFxDefaults'] = {};
+  for (const [key, value] of Object.entries(snap.laneFxDefaults ?? {})) {
+    laneFxDefaults[key] = {
+      ...value,
+      eq: { ...value.eq },
+    };
+  }
   return {
     clips: snap.clips.map((c) => ({ ...c })),
     trimRanges: snap.trimRanges.map(([a, b]) => [a, b] as [number, number]),
     markers: snap.markers.map((m) => ({ ...m })),
     selectedId: snap.selectedId,
     rippleStartSec: snap.rippleStartSec,
+    laneFxDefaults,
   };
 }
 

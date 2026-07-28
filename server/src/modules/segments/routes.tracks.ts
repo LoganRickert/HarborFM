@@ -17,6 +17,7 @@ import {
   getApplySegmentClipsJobStatus,
   readSegmentTracks,
   readTakeWaveformJson,
+  ensureTakeWaveformJson,
   resolveTakeAudioAbsPath,
   saveSegmentTracksClips,
   startRemakeSegmentTracksJob,
@@ -119,7 +120,17 @@ export async function registerTracksRoutes(app: FastifyInstance) {
       if (!file.trim()) {
         return reply.status(400).send({ error: "file query is required" });
       }
-      const json = readTakeWaveformJson({
+      // Prefer existing sidecar; only generate when missing.
+      const existing = readTakeWaveformJson({
+        podcastId: access.podcastId,
+        episodeId,
+        segmentId,
+        filePath: file,
+      });
+      if (existing) {
+        return reply.type("application/json").send(existing);
+      }
+      const json = await ensureTakeWaveformJson({
         podcastId: access.podcastId,
         episodeId,
         segmentId,
@@ -135,12 +146,16 @@ export async function registerTracksRoutes(app: FastifyInstance) {
   app.get(
     "/episodes/:episodeId/segments/:segmentId/tracks/stream",
     {
+      // Scrubbing issues many Range GETs; do not share the global API budget.
+      config: {
+        rateLimit: false,
+      },
       preHandler: [requireAuth],
       schema: {
         tags: ["Segments"],
         summary: "Stream take audio",
         description:
-          "Stream a take file from the segment recordings folder. Query file=host.mp3. Supports Range requests.",
+          "Stream a take file from the segment recordings folder. Query file=host.mp3. Supports Range requests. Not subject to the global API rate limit (authenticated editor scrubbing).",
         params: {
           type: "object",
           properties: {

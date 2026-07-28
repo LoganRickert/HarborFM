@@ -421,12 +421,14 @@ function classifyReaperTrack(
     };
   }
 
-  if (trackName.startsWith("soundboard_")) {
+  if (trackName === "soundboard" || trackName.startsWith("soundboard_")) {
     return {
       source: "soundboard",
       soundboardAssetId:
-        trackName.slice("soundboard_".length).trim() ||
-        mediaStem(mediaBasename),
+        trackName.startsWith("soundboard_")
+          ? trackName.slice("soundboard_".length).trim() ||
+            mediaStem(mediaBasename)
+          : mediaStem(mediaBasename),
       participantName: null,
       participantId: null,
     };

@@ -52,6 +52,8 @@ export interface GenerateFinalBarProps {
   onPublishSave: (values: PublishFormFields) => void | Promise<void>;
   publishSaving?: boolean;
   publishSaveError?: string | null;
+  /** Public episode URL when scheduled or published. */
+  episodeUrl?: string | null;
   onFinalPlayStart?: () => void;
   pauseAndResetRef?: React.MutableRefObject<(() => void) | null>;
   hasTranscript?: boolean;
@@ -88,6 +90,7 @@ export function GenerateFinalBar({
   onPublishSave,
   publishSaving = false,
   publishSaveError,
+  episodeUrl,
   onFinalPlayStart,
   pauseAndResetRef,
   hasTranscript = false,
@@ -354,6 +357,7 @@ export function GenerateFinalBar({
         isSaving={publishSaving}
         saveError={publishSaveError}
         hasFinalAudio={hasFinalAudio}
+        episodeUrl={episodeUrl}
       />
 
       {(error || buildMessage) && (

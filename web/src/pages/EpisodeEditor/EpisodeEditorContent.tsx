@@ -780,6 +780,7 @@ export function EpisodeEditorContent({
         open={scheduleMeetingOpen}
         onOpenChange={setScheduleMeetingOpen}
         episodeId={id}
+        podcastId={podcastId}
         onMeetingChanged={() => {
           queryClient.invalidateQueries({ queryKey: ['call-meeting', id] });
         }}
@@ -890,6 +891,7 @@ export function EpisodeEditorContent({
           episodeNumber: episodeForm.episodeNumber,
           publishAt: episodeForm.publishAt,
           expiresAt: episodeForm.expiresAt,
+          unlisted: episodeForm.unlisted,
         }}
         onPublishSave={handlePublishSave}
         publishSaving={publishUpdateMutation.isPending}
@@ -898,6 +900,22 @@ export function EpisodeEditorContent({
             ? (publishUpdateMutation.error as Error)?.message ?? 'Failed to save'
             : null
         }
+        episodeUrl={(() => {
+          const status = episodeForm.status || episode.status;
+          const slug = (episode.slug || episodeForm.slug || '').trim();
+          if (
+            !podcast ||
+            !slug ||
+            (status !== 'scheduled' && status !== 'published')
+          ) {
+            return null;
+          }
+          if (podcast.canonicalFeedUrl) {
+            return `${podcast.canonicalFeedUrl.replace(/\/$/, '')}/${slug}`;
+          }
+          if (typeof window === 'undefined' || !podcast.slug) return null;
+          return `${window.location.origin}/feed/${podcast.slug}/${slug}`;
+        })()}
         onFinalPlayStart={pauseCurrentSegment}
         pauseAndResetRef={finalPauseRef}
         hasTranscript={episode.hasTranscript === true}

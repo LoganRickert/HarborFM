@@ -105,6 +105,7 @@ export function castRowToDto(r: {
   photoPath?: string | null;
   photoUrl?: string | null;
   socialLinkText?: string | null;
+  email?: string | null;
   isPublic?: number | boolean;
   createdAt: string;
 } & { photoFilename?: string | null }) {
@@ -118,6 +119,7 @@ export function castRowToDto(r: {
     photoUrl: r.photoUrl ?? null,
     photoFilename: r.photoFilename ?? null,
     socialLinkText: r.socialLinkText ?? null,
+    email: r.email?.trim() || null,
     isPublic: Number(r.isPublic ?? 1) === 1,
     createdAt: r.createdAt,
   };

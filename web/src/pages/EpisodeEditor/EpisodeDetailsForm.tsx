@@ -375,6 +375,25 @@ export function EpisodeDetailsForm({
             )}
           </label>
         </div>
+        {form.status !== 'draft' ? (
+          <div className={styles.overviewFieldBlock}>
+            <label className="toggle" aria-describedby="episode-overview-unlisted-desc">
+              <input
+                type="checkbox"
+                checked={form.unlisted}
+                onChange={(e) => setForm((prev) => ({ ...prev, unlisted: e.target.checked }))}
+              />
+              <span className="toggle__track" aria-hidden="true" />
+              <span>Unlisted</span>
+            </label>
+            <p
+              id="episode-overview-unlisted-desc"
+              style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}
+            >
+              Hidden from the feed list, RSS, and sitemap. Anyone with the link can open the episode page.
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <div
@@ -391,6 +410,7 @@ export function EpisodeDetailsForm({
               episodeNumber: form.episodeNumber,
               publishAt: form.publishAt,
               expiresAt: form.expiresAt,
+              unlisted: form.unlisted,
             }}
             onChange={(fields) => setForm((prev) => ({ ...prev, ...fields }))}
             variant="form"

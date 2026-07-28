@@ -454,6 +454,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         subscriberOnly: data.subscriberOnly,
         subscriberOnlyStartsAt: data.subscriberOnlyStartsAt,
         subscriberOnlyEndsAt: data.subscriberOnlyEndsAt,
+        unlisted: data.unlisted,
         updatedAt: sqlNow(),
       };
       const guidPayload = data.guid;
@@ -510,6 +511,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       const cleanSet: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(set)) {
         if (v !== undefined || v === null) cleanSet[k] = v;
+      }
+      const resultingStatus =
+        data.status !== undefined ? data.status : currentEpisode.status;
+      if (resultingStatus === "draft") {
+        cleanSet.unlisted = 0;
       }
       if (Object.keys(cleanSet).length > 0) {
         repo.updateEpisode(id, cleanSet);

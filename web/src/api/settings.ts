@@ -119,6 +119,14 @@ export function regenerateWorkerSecrets(): Promise<{
   }>('/settings/workers-regenerate-secrets', { method: 'POST' });
 }
 
+/** Cancel an in-flight compute worker job (admin). */
+export function cancelWorkerJob(jobId: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>(
+    `/settings/workers-jobs/${encodeURIComponent(jobId)}/cancel`,
+    { method: 'POST' },
+  );
+}
+
 export type WorkerJobStat = {
   id: string;
   workerId: string | null;
@@ -135,6 +143,14 @@ export type WorkerJobStat = {
   peakMemoryBytes: number | null;
   resourceSampleCount: number | null;
   resourceSource: string | null;
+  podcastId: string | null;
+  episodeId: string | null;
+  segmentId: string | null;
+  podcastTitle: string | null;
+  episodeTitle: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  userUsername: string | null;
   startedAt: string;
   finishedAt: string | null;
   createdAt: string;

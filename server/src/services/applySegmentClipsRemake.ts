@@ -1,11 +1,12 @@
 import { existsSync, unlinkSync, writeFileSync, readFileSync, statSync } from "fs";
-import { basename, join } from "path";
+import { basename, dirname, join } from "path";
 import { resolveDataPath, segmentPath, uploadsDir } from "./paths.js";
 import * as audioService from "./audio.js";
 import {
   pruneMarkersForDuration,
   pruneTrimRangesForDuration,
   remakeMixFromMultitrackDir,
+  trimOverlappingSoundboardEntries,
   type MultitrackManifest,
   type MultitrackSegmentEntry,
 } from "./multitrackRemake.js";
@@ -134,7 +135,8 @@ function normalizeClipsForEditor(
   mtDir: string,
   clips: MultitrackSegmentEntry[],
 ): MultitrackSegmentEntry[] {
-  return clips.map((c) => clampClipToMediaDuration(mtDir, c));
+  const clamped = clips.map((c) => clampClipToMediaDuration(mtDir, c));
+  return trimOverlappingSoundboardEntries(clamped);
 }
 
 function clipTimelineEndMs(entry: MultitrackSegmentEntry): number {
@@ -280,7 +282,7 @@ function sanitizeClips(
   if (out.length === 0) {
     throw new Error("At least one clip is required");
   }
-  return out;
+  return trimOverlappingSoundboardEntries(out);
 }
 
 /**
@@ -597,6 +599,41 @@ export function readTakeWaveformJson(opts: {
   const abs = resolveTakeAudioAbsPath(opts);
   if (!abs) return null;
   const wf = waveformPath(abs);
+  if (!existsSync(wf)) return null;
+  return readFileSync(wf, "utf8");
+}
+
+/**
+ * Return take waveform JSON, generating the audiowaveform sidecar only when
+ * missing. Existing `*.waveform.json` files are read as-is and never rewritten.
+ */
+export async function ensureTakeWaveformJson(opts: {
+  podcastId: string;
+  episodeId: string;
+  segmentId: string;
+  filePath: string;
+}): Promise<string | null> {
+  const existing = readTakeWaveformJson(opts);
+  if (existing != null) return existing;
+
+  const abs = resolveTakeAudioAbsPath(opts);
+  if (!abs) return null;
+  const mtDir = dirname(abs);
+  const wf = waveformPath(abs);
+  // Re-check after resolve in case of a race; never overwrite an existing file.
+  if (existsSync(wf)) {
+    return readFileSync(wf, "utf8");
+  }
+  try {
+    await audioService.generateWaveformFile(abs, mtDir);
+  } catch (err) {
+    console.warn(
+      "[tracks] Failed to generate take waveform",
+      opts.filePath,
+      err,
+    );
+    return null;
+  }
   if (!existsSync(wf)) return null;
   return readFileSync(wf, "utf8");
 }

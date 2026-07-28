@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import styles from '../EpisodeEditor.module.css';
 import {
   EXPIRES_AT_BEFORE_PUBLISH_AT_MESSAGE,
@@ -40,6 +41,7 @@ export function EpisodePublishControls({
   const isCompact = variant === 'compact';
   const publicStatusBlocked = !hasFinalAudio;
   const expiresInvalid = isExpiresAtBeforePublishAt(values);
+  const unlistedDescId = useId();
 
   if (readOnly) {
     const metaParts: string[] = [];
@@ -86,7 +88,9 @@ export function EpisodePublishControls({
           className={values.status === s ? activeClass : idleClass}
           onClick={() => {
             if (blocked) return;
-            onChange({ status: s });
+            onChange(
+              s === 'draft' ? { status: s, unlisted: false } : { status: s },
+            );
           }}
           disabled={blocked}
           aria-pressed={values.status === s}
@@ -117,6 +121,50 @@ export function EpisodePublishControls({
     </div>
   );
 
+  const unlistedToggle =
+    values.status !== 'draft' ? (
+      <div className={styles.publishSetting}>
+        <div className={styles.publishSettingText}>
+          <span className={styles.publishSettingLabel}>Unlisted</span>
+          <span id={unlistedDescId} className={styles.publishSettingHint}>
+            Hidden from the feed list, RSS, and sitemap. Anyone with the link can
+            open the episode page.
+          </span>
+        </div>
+        <div
+          className={styles.publishSettingSegmented}
+          role="group"
+          aria-label="Unlisted"
+          aria-describedby={unlistedDescId}
+        >
+          <button
+            type="button"
+            className={
+              !values.unlisted
+                ? styles.publishSettingSegmentedActive
+                : styles.publishSettingSegmentedBtn
+            }
+            aria-pressed={!values.unlisted}
+            onClick={() => onChange({ unlisted: false })}
+          >
+            Off
+          </button>
+          <button
+            type="button"
+            className={
+              values.unlisted
+                ? styles.publishSettingSegmentedOn
+                : styles.publishSettingSegmentedBtn
+            }
+            aria-pressed={values.unlisted}
+            onClick={() => onChange({ unlisted: true })}
+          >
+            On
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   if (isCompact) {
     return (
       <div className={styles.publishControlsCompact}>
@@ -127,6 +175,7 @@ export function EpisodePublishControls({
             {statusHint}
           </div>
         </div>
+        {unlistedToggle}
         <div className={styles.publishControlsRow}>
           <span className={styles.publishControlsFieldLabel}>Season & Episode</span>
           <div className={styles.publishSeasonEpisodeGroup}>
@@ -193,6 +242,7 @@ export function EpisodePublishControls({
         </div>
         {statusHint}
       </label>
+      {unlistedToggle}
       <label className={styles.label}>
         Publish at (optional)
         <input

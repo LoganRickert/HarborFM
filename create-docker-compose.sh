@@ -65,6 +65,7 @@ mkdir -p harborfm-data/{data,secrets,webrtc,proxy/certbot/webroot,proxy/certbot/
 
 # Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
 touch harborfm-data/proxy/caddy/logs/access.log 2>/dev/null || true
+touch harborfm-data/proxy/caddy/logs/caddy.log 2>/dev/null || true
 
 # Placeholder so nginx include sites-enabled/*.conf does not fail when no extra sites exist
 placeholder="harborfm-data/proxy/nginx/sites-enabled/00-placeholder.conf"

@@ -1,4 +1,4 @@
-export type ComputeJobKind = "video_generate" | "transcribe";
+export type ComputeJobKind = "video_generate" | "transcribe" | "episode_render";
 
 /** Per-job CPU/memory samples from this worker (not host-global). */
 export type JobResourceStatsPayload = {
@@ -24,7 +24,8 @@ export type ServerMessage =
       inputs: Array<{ name: string; filename?: string }>;
       outputs: Array<{ name: string }>;
       params: Record<string, unknown>;
-    };
+    }
+  | { type: "cancel"; jobId: string };
 
 export type ClientMessage =
   | { type: "auth"; secret: string; name?: string }

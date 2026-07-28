@@ -262,6 +262,7 @@ fi
 
 # Fail2ban caddy-scanner jail requires this file; create so fail2ban starts when only nginx is used
 touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || true
+touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/caddy.log" 2>/dev/null || true
 touch "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
 
 # Caddy: use WebRTC-enabled Caddyfile when webrtc profile is used

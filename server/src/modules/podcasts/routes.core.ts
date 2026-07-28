@@ -561,7 +561,12 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           slug: episodes.slug,
         })
         .from(episodes)
-        .where(eq(episodes.podcastId, podcastId))
+        .where(
+          and(
+            eq(episodes.podcastId, podcastId),
+            eq(episodes.status, "published"),
+          ),
+        )
         .orderBy(desc(sql`COALESCE(${episodes.publishAt}, ${episodes.updatedAt})`))
         .all();
       const episodeIds = episodeList.map((e: { id: string }) => e.id);

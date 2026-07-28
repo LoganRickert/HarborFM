@@ -132,6 +132,7 @@ export const episodeUpdateSchema = episodeCreateObjectSchema
     subscriberOnly: subscriberOnlySchema,
     subscriberOnlyStartsAt: z.string().datetime({ offset: true }).nullable().optional(),
     subscriberOnlyEndsAt: z.string().datetime({ offset: true }).nullable().optional(),
+    unlisted: subscriberOnlySchema,
     /** Chapter markers for the final audio. Overwrites markers from render. */
     finalMarkers: z.array(finalMarkerSchema).optional().nullable(),
     /** Soundbite markers for the final audio. Overwrites markers from render. */
@@ -188,6 +189,7 @@ export const episodeResponseSchema = z.object({
   subscriberOnlyStartsAt: z.string().nullable().optional(),
   /** When subscriberOnly is on: gating ends at this time (null = never ends). */
   subscriberOnlyEndsAt: z.string().nullable().optional(),
+  unlisted: z.boolean().optional(),
   /** Chapter markers from segments (marker_type === 'chapter'); time in seconds of final audio. */
   finalMarkers: z.array(z.object({ time: z.number(), title: z.string().optional(), color: z.string().optional() })).optional().nullable(),
   /** Soundbite markers from segments (marker_type === 'soundbite'); time/duration in seconds of final audio. */

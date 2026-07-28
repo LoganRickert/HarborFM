@@ -41,8 +41,23 @@ type CastRow = {
   photoPath: string | null;
   photoUrl: string | null;
   socialLinkText: string | null;
+  email: string | null;
   isPublic: number;
   createdAt: string;
+};
+
+const castSelectFields = {
+  id: podcastCast.id,
+  podcastId: podcastCast.podcastId,
+  name: podcastCast.name,
+  role: podcastCast.role,
+  description: podcastCast.description,
+  photoPath: podcastCast.photoPath,
+  photoUrl: podcastCast.photoUrl,
+  socialLinkText: podcastCast.socialLinkText,
+  email: podcastCast.email,
+  isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
+  createdAt: podcastCast.createdAt,
 };
 
 function castRowToResponse(row: CastRow): Record<string, unknown> {
@@ -60,6 +75,7 @@ function castRowToResponse(row: CastRow): Record<string, unknown> {
     photoUrl: row.photoUrl,
     photoFilename,
     socialLinkText: row.socialLinkText,
+    email: row.email?.trim() || null,
     isPublic: row.isPublic,
     createdAt: row.createdAt,
   };
@@ -237,18 +253,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
           ? asc(podcastCast.createdAt)
           : desc(podcastCast.createdAt);
       const rows = drizzleDb
-        .select({
-          id: podcastCast.id,
-          podcastId: podcastCast.podcastId,
-          name: podcastCast.name,
-          role: podcastCast.role,
-          description: podcastCast.description,
-          photoPath: podcastCast.photoPath,
-          photoUrl: podcastCast.photoUrl,
-          socialLinkText: podcastCast.socialLinkText,
-          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
-          createdAt: podcastCast.createdAt,
-        })
+        .select(castSelectFields)
         .from(podcastCast)
         .where(whereClause)
         .orderBy(orderBy)
@@ -312,6 +317,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
       const description = parsed.data.description?.trim() || null;
       const photoUrl = parsed.data.photoUrl?.trim() || null;
       const socialLinkText = parsed.data.socialLinkText?.trim() || null;
+      const email = parsed.data.email?.trim().toLowerCase() || null;
       const isPublic = parsed.data.isPublic ?? 1;
 
       drizzleDb
@@ -324,23 +330,13 @@ export async function registerCastRoutes(app: FastifyInstance) {
           description,
           photoUrl,
           socialLinkText,
+          email,
           isPublic: isPublic !== 0,
         })
         .run();
 
       const row = drizzleDb
-        .select({
-          id: podcastCast.id,
-          podcastId: podcastCast.podcastId,
-          name: podcastCast.name,
-          role: podcastCast.role,
-          description: podcastCast.description,
-          photoPath: podcastCast.photoPath,
-          photoUrl: podcastCast.photoUrl,
-          socialLinkText: podcastCast.socialLinkText,
-          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
-          createdAt: podcastCast.createdAt,
-        })
+        .select(castSelectFields)
         .from(podcastCast)
         .where(eq(podcastCast.id, id))
         .limit(1)
@@ -415,6 +411,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         description: string | null;
         photoUrl: string | null;
         socialLinkText: string | null;
+        email: string | null;
         isPublic: boolean;
       }> = {};
       if (parsed.data.name !== undefined) {
@@ -440,12 +437,26 @@ export async function registerCastRoutes(app: FastifyInstance) {
       if (parsed.data.socialLinkText !== undefined) {
         set.socialLinkText = parsed.data.socialLinkText?.trim() || null;
       }
+      if (parsed.data.email !== undefined) {
+        set.email = parsed.data.email?.trim().toLowerCase() || null;
+      }
       if (parsed.data.isPublic !== undefined) {
         set.isPublic = parsed.data.isPublic !== 0;
       }
 
       if (Object.keys(set).length === 0) {
-        return castRowToResponse(existing);
+        const current = drizzleDb
+          .select(castSelectFields)
+          .from(podcastCast)
+          .where(
+            and(
+              eq(podcastCast.id, castId),
+              eq(podcastCast.podcastId, podcastId),
+            ),
+          )
+          .limit(1)
+          .get() as CastRow;
+        return castRowToResponse(current);
       }
       drizzleDb
         .update(podcastCast)
@@ -461,18 +472,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
       afterUpdatePodcast(podcastId);
       const row = drizzleDb
-        .select({
-          id: podcastCast.id,
-          podcastId: podcastCast.podcastId,
-          name: podcastCast.name,
-          role: podcastCast.role,
-          description: podcastCast.description,
-          photoPath: podcastCast.photoPath,
-          photoUrl: podcastCast.photoUrl,
-          socialLinkText: podcastCast.socialLinkText,
-          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
-          createdAt: podcastCast.createdAt,
-        })
+        .select(castSelectFields)
         .from(podcastCast)
         .where(eq(podcastCast.id, castId))
         .limit(1)
@@ -643,18 +643,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         }
       }
       const row = drizzleDb
-        .select({
-          id: podcastCast.id,
-          podcastId: podcastCast.podcastId,
-          name: podcastCast.name,
-          role: podcastCast.role,
-          description: podcastCast.description,
-          photoPath: podcastCast.photoPath,
-          photoUrl: podcastCast.photoUrl,
-          socialLinkText: podcastCast.socialLinkText,
-          isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
-          createdAt: podcastCast.createdAt,
-        })
+        .select(castSelectFields)
         .from(podcastCast)
         .where(eq(podcastCast.id, castId))
         .limit(1)

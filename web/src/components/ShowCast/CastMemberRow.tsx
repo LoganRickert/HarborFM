@@ -24,6 +24,8 @@ export interface CastMemberRowMember {
   id: string;
   name: string;
   role: string;
+  /** Private invite email (backend only). */
+  email?: string | null;
   /** @deprecated use photoFilename */
   photo_filename?: string | null;
   /** Prefer photoFilename for derived URL; fallback to photo_url for external URLs */

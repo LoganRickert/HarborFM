@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getSegmentTranscript,
@@ -100,6 +100,37 @@ export function SegmentModal({
     initialTimelineMode: 'drag',
     isEditTabVisible: activeTab === 'edit',
   });
+
+  // Space toggles playback (same as Advanced Editor). Without this, Radix autofocuses
+  // "Advanced Editor" and Space activates that button instead of play/pause.
+  const toggleSegmentPlayRef = useRef(edit.toggleSegmentPlay);
+  toggleSegmentPlayRef.current = edit.toggleSegmentPlay;
+  useEffect(() => {
+    const isTypingTarget = (t: EventTarget | null) => {
+      if (!(t instanceof HTMLElement)) return false;
+      return (
+        t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.tagName === 'SELECT' ||
+        t.isContentEditable
+      );
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key !== ' ' && e.code !== 'Space') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target instanceof HTMLElement && e.target.closest('button')) {
+        e.target.blur();
+      }
+      toggleSegmentPlayRef.current();
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
 
   const trimActions = useTranscriptTrimActions({
     srtEntries: transcript.srtEntries,
@@ -449,6 +480,7 @@ export function SegmentModal({
           <Dialog.Content
             className={`${styles.dialogContent} ${styles.dialogContentWide} ${styles.segmentTranscriptDialog} ${sharedStyles.dialogContentScrollable} ${sharedStyles.dialogShowDetailsGrid}`}
             aria-describedby={undefined}
+            onOpenAutoFocus={(e) => e.preventDefault()}
             {...closeGuardContentProps}
           >
             <div className={styles.dialogHeaderRow}>
@@ -461,7 +493,7 @@ export function SegmentModal({
                     onClick={onSwitchToAdvanced}
                     disabled={advancedBootstrapPending}
                   >
-                    {advancedBootstrapPending ? 'Opening...' : 'Advanced editor'}
+                    {advancedBootstrapPending ? 'Opening...' : 'Advanced Editor'}
                   </button>
                 )}
                 <button type="button" className={styles.dialogClose} aria-label="Close" onClick={requestClose}>

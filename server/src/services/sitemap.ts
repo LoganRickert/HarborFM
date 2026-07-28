@@ -246,6 +246,7 @@ export function generatePodcastSitemapXml(
       and(
         eq(episodes.podcastId, podcastId),
         eq(episodes.status, "published"),
+        sql`COALESCE(${episodes.unlisted}, 0) = 0`,
         or(
           sql`${episodes.publishAt} IS NULL`,
           lte(sql`datetime(${episodes.publishAt})`, sql`datetime('now')`),

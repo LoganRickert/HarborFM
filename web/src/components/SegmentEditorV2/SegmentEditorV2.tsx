@@ -11,9 +11,8 @@ import {
   Play,
   Pause,
   RefreshCw,
-  Volume2,
-  VolumeX,
   Headphones,
+  SlidersHorizontal,
   Plus,
   MousePointer2,
   Split,
@@ -23,6 +22,7 @@ import {
   Redo2,
   CircleAlert,
   MapPin,
+  Settings,
 } from 'lucide-react';
 import type { Marker } from '@harborfm/shared';
 import type { EpisodeSegment } from '../../api/segments';
@@ -61,6 +61,21 @@ import { ClipPreviewEngine } from './clipPreviewEngine';
 import { ClipWaveform } from './ClipWaveform';
 import { AddTrackDialog } from './AddTrackDialog';
 import { MarkerEditDialog, MARKER_COLORS } from './MarkerEditDialog';
+import { TrackSettingsDialog } from './TrackSettingsDialog';
+import {
+  applyTrackSettingsToClip,
+  applyTrackSettingsToLane,
+  buildLaneFxDefaults,
+  clipToTrackSettings,
+  readLaneTrackSettings,
+  resetClipFxToTrackSettings,
+  type TrackSettingsUi,
+} from './trackFx';
+import {
+  collectClipPeaks,
+  collectLanePeaks,
+  MIN_AUTO_PEAKS,
+} from './trackFxAnalyze';
 import {
   cloneEditorSnapshot,
   createEditorHistory,
@@ -235,6 +250,16 @@ export function SegmentEditorV2({
   const renameOriginalRef = useRef('');
   const [addTrackOpen, setAddTrackOpen] = useState(false);
   const [addingTrack, setAddingTrack] = useState(false);
+  const [trackSettingsLaneKey, setTrackSettingsLaneKey] = useState<string | null>(
+    null,
+  );
+  const [clipSettingsUiId, setClipSettingsUiId] = useState<string | null>(null);
+  /** Per-lane track FX; clip overrides do not update these. */
+  const [laneFxDefaults, setLaneFxDefaults] = useState<
+    Record<string, TrackSettingsUi>
+  >({});
+  const laneFxDefaultsRef = useRef(laneFxDefaults);
+  laneFxDefaultsRef.current = laneFxDefaults;
   const [viewStartMs, setViewStartMs] = useState(0);
   const [viewWindowMs, setViewWindowMs] = useState(DEFAULT_VIEW_MS);
   const [tracksColWidth, setTracksColWidth] = useState(800);
@@ -280,6 +305,7 @@ export function SegmentEditorV2({
       markers: markersRef.current,
       selectedId: selectedIdRef.current,
       rippleStartSec: rippleStartSecRef.current,
+      laneFxDefaults: laneFxDefaultsRef.current,
     });
   }, []);
 
@@ -294,6 +320,7 @@ export function SegmentEditorV2({
     setMarkers(snap.markers);
     setSelectedId(snap.selectedId);
     setRippleStartSec(snap.rippleStartSec);
+    setLaneFxDefaults(snap.laneFxDefaults ?? {});
     setEditMarkerIndex(null);
     setError(null);
   }, [setError]);
@@ -321,6 +348,7 @@ export function SegmentEditorV2({
     if (!data) return;
     const next = toEditorClips(data.clips);
     setClips(next);
+    setLaneFxDefaults(buildLaneFxDefaults(next));
     setBaseline(JSON.stringify(toApiClips(next)));
     setLoadError(null);
     historyRef.current.clear();
@@ -390,28 +418,44 @@ export function SegmentEditorV2({
     segmentWaveformData,
   ]);
 
-  // Load take waveforms once we know which files exist.
+  const trackTakeFilesKey = useMemo(() => {
+    const files = new Set<string>();
+    for (const t of data?.takes ?? []) {
+      const base = t.filePath.replace(/\\/g, '/').split('/').pop() || t.filePath;
+      if (base) files.add(base);
+    }
+    for (const c of clips) {
+      const base = c.filePath.replace(/\\/g, '/').split('/').pop() || c.filePath;
+      if (base) files.add(base);
+    }
+    return [...files].sort().join('\0');
+  }, [data?.takes, clips]);
+
+  // Load take waveforms for every clip file (generate on server if missing).
   useEffect(() => {
-    const takes = data?.takes ?? [];
-    if (takes.length === 0) return;
+    const files = trackTakeFilesKey ? trackTakeFilesKey.split('\0') : [];
+    if (files.length === 0) return;
     let cancelled = false;
     void Promise.all(
-      takes.map(async (t) => {
-        if (!t.waveformExists) return [t.filePath, null] as const;
-        const wf = await fetchTakeWaveform(episodeId, segmentId, t.filePath);
-        if (!wf?.data?.length) return [t.filePath, null] as const;
-        return [t.filePath, wf] as const;
+      files.map(async (filePath) => {
+        const wf = await fetchTakeWaveform(episodeId, segmentId, filePath);
+        if (!wf?.data?.length) return [filePath, null] as const;
+        return [filePath, wf] as const;
       }),
     ).then((entries) => {
       if (cancelled) return;
       const map: Record<string, WaveformData | null> = {};
-      for (const [path, wf] of entries) map[path] = wf;
-      setWaveforms(map);
+      for (const [path, wf] of entries) {
+        map[path] = wf;
+        const base = path.replace(/\\/g, '/').split('/').pop() || path;
+        if (base !== path) map[base] = wf;
+      }
+      setWaveforms((prev) => ({ ...prev, ...map }));
     });
     return () => {
       cancelled = true;
     };
-  }, [data?.takes, episodeId, segmentId]);
+  }, [trackTakeFilesKey, episodeId, segmentId]);
 
   const clipsDirty = useMemo(
     () => JSON.stringify(toApiClips(clips)) !== baseline,
@@ -604,12 +648,6 @@ export function SegmentEditorV2({
           ? fromClip.participantName.trim()
           : '') ||
         '';
-      const soundboard =
-        meta?.soundboardAssetId?.trim() ||
-        (typeof fromClip?.soundboardAssetId === 'string'
-          ? fromClip.soundboardAssetId.trim()
-          : '') ||
-        '';
       const isSoundboard =
         meta?.source === 'soundboard' || fromClip?.source === 'soundboard';
       // Named call hosts (and take-meta names) stay above imports / soundboard.
@@ -618,14 +656,16 @@ export function SegmentEditorV2({
         participantLabel: participant,
         isSoundboard,
       });
-      const label =
-        participant ||
-        soundboard ||
-        (isSoundboard ? 'Soundboard' : '') ||
-        (fromClip
-          ? fromClip.filePath.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ||
-            fromClip.filePath
-          : laneKey);
+      // Prefer a single "Soundboard" lane label; keep a custom rename if the user set one.
+      const label = isSoundboard
+        ? participant && !/^soundboard(\s*:|$)/i.test(participant)
+          ? participant
+          : 'Soundboard'
+        : participant ||
+          (fromClip
+            ? fromClip.filePath.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ||
+              fromClip.filePath
+            : laneKey);
       return {
         laneKey,
         label,
@@ -1101,26 +1141,237 @@ export function SegmentEditorV2({
     [readOnly, busy, tool, pushHistory, setError],
   );
 
-  const toggleLaneMute = useCallback(
-    (laneKey: string) => {
-      if (readOnly) return;
-      const laneClips = clipsRef.current.filter((c) => editorLaneKey(c) === laneKey);
-      if (!laneClips.length) return;
-      pushHistory();
-      setClips((prev) => {
-        const allMuted = laneClips.every((c) => c.muted === true);
-        const nextMuted = !allMuted;
-        return prev.map((c) =>
-          editorLaneKey(c) === laneKey ? { ...c, muted: nextMuted } : c,
-        );
-      });
-    },
-    [readOnly, pushHistory],
-  );
-
   const toggleLaneSolo = useCallback((laneKey: string) => {
     setLaneSolo((prev) => ({ ...prev, [laneKey]: !prev[laneKey] }));
   }, []);
+
+  const trackSettingsLane = useMemo(() => {
+    if (!trackSettingsLaneKey) return null;
+    return lanes.find((l) => l.laneKey === trackSettingsLaneKey) ?? null;
+  }, [lanes, trackSettingsLaneKey]);
+
+  const trackSettings = useMemo(() => {
+    if (!trackSettingsLaneKey) return null;
+    return (
+      laneFxDefaults[trackSettingsLaneKey] ??
+      readLaneTrackSettings(clips, trackSettingsLaneKey)
+    );
+  }, [clips, trackSettingsLaneKey, laneFxDefaults]);
+
+  const trackSettingsLanePeaks = useMemo(() => {
+    if (!trackSettingsLaneKey) return null;
+    const peaks = collectLanePeaks(clips, trackSettingsLaneKey, waveforms);
+    return peaks.length >= MIN_AUTO_PEAKS ? peaks : null;
+  }, [clips, trackSettingsLaneKey, waveforms]);
+
+  // If Track Settings opens without peaks, force-fetch/generate that lane's takes.
+  useEffect(() => {
+    if (!trackSettingsLaneKey || trackSettingsLanePeaks) return;
+    const laneClips = clips.filter(
+      (c) => editorLaneKey(c) === trackSettingsLaneKey,
+    );
+    const files = [
+      ...new Set(
+        laneClips.map(
+          (c) =>
+            c.filePath.replace(/\\/g, '/').split('/').pop() || c.filePath,
+        ),
+      ),
+    ].filter(Boolean);
+    if (!files.length) return;
+    let cancelled = false;
+    void Promise.all(
+      files.map(async (filePath) => {
+        const wf = await fetchTakeWaveform(episodeId, segmentId, filePath);
+        return [filePath, wf?.data?.length ? wf : null] as const;
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setWaveforms((prev) => {
+        const next = { ...prev };
+        for (const [path, wf] of entries) {
+          next[path] = wf;
+          const base = path.replace(/\\/g, '/').split('/').pop() || path;
+          if (base !== path) next[base] = wf;
+        }
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    trackSettingsLaneKey,
+    trackSettingsLanePeaks,
+    clips,
+    episodeId,
+    segmentId,
+  ]);
+
+  const applyLaneTrackSettings = useCallback(
+    (next: TrackSettingsUi) => {
+      if (readOnly || !trackSettingsLaneKey) return;
+      const laneKey = trackSettingsLaneKey;
+      setLaneFxDefaults((prev) => ({ ...prev, [laneKey]: { ...next, eq: { ...next.eq } } }));
+      setClips((prev) => applyTrackSettingsToLane(prev, laneKey, next));
+    },
+    [readOnly, trackSettingsLaneKey],
+  );
+
+  const clipSettingsClip = useMemo(() => {
+    if (!clipSettingsUiId) return null;
+    return clips.find((c) => c.uiId === clipSettingsUiId) ?? null;
+  }, [clips, clipSettingsUiId]);
+
+  const clipSettings = useMemo(() => {
+    if (!clipSettingsClip) return null;
+    return clipToTrackSettings(clipSettingsClip);
+  }, [clipSettingsClip]);
+
+  const clipSettingsPeaks = useMemo(() => {
+    if (!clipSettingsClip) return null;
+    const peaks = collectClipPeaks(clipSettingsClip, waveforms);
+    return peaks.length >= MIN_AUTO_PEAKS ? peaks : null;
+  }, [clipSettingsClip, waveforms]);
+
+  const clipSettingsLabel = useMemo(() => {
+    if (!clipSettingsClip) return '';
+    const lane = lanes.find((l) =>
+      l.clips.some((c) => c.uiId === clipSettingsClip.uiId),
+    );
+    const laneLabel = lane?.label?.trim() || 'Clip';
+    const start = clipStartMs(clipSettingsClip);
+    const end = clipEndMs(clipSettingsClip);
+    return `${laneLabel} ${formatTime(start)}-${formatTime(end)}`;
+  }, [clipSettingsClip, lanes]);
+
+  useEffect(() => {
+    if (!clipSettingsUiId || clipSettingsPeaks) return;
+    const clip = clips.find((c) => c.uiId === clipSettingsUiId);
+    if (!clip) return;
+    const filePath =
+      clip.filePath.replace(/\\/g, '/').split('/').pop() || clip.filePath;
+    if (!filePath) return;
+    let cancelled = false;
+    void fetchTakeWaveform(episodeId, segmentId, filePath).then((wf) => {
+      if (cancelled) return;
+      setWaveforms((prev) => {
+        const next = { ...prev };
+        const data = wf?.data?.length ? wf : null;
+        next[filePath] = data;
+        const base = filePath.replace(/\\/g, '/').split('/').pop() || filePath;
+        if (base !== filePath) next[base] = data;
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    clipSettingsUiId,
+    clipSettingsPeaks,
+    clips,
+    episodeId,
+    segmentId,
+  ]);
+
+  const applyClipTrackSettings = useCallback(
+    (next: TrackSettingsUi) => {
+      if (readOnly || !clipSettingsUiId) return;
+      const uiId = clipSettingsUiId;
+      const clip = clipsRef.current.find((c) => c.uiId === uiId);
+      if (clip && clip.fxOverride !== true) {
+        // Capture track baseline before the first manual clip override.
+        const laneKey = editorLaneKey(clip);
+        setLaneFxDefaults((prev) => {
+          if (prev[laneKey]) return prev;
+          return {
+            ...prev,
+            [laneKey]: readLaneTrackSettings(clipsRef.current, laneKey),
+          };
+        });
+      }
+      setClips((prev) => applyTrackSettingsToClip(prev, uiId, next));
+    },
+    [readOnly, clipSettingsUiId],
+  );
+
+  const resetClipSettingsToTrack = useCallback(() => {
+    if (readOnly || !clipSettingsUiId) return;
+    const uiId = clipSettingsUiId;
+    const clip = clipsRef.current.find((c) => c.uiId === uiId);
+    if (!clip) return;
+    const laneKey = editorLaneKey(clip);
+    const trackFx =
+      laneFxDefaultsRef.current[laneKey] ??
+      readLaneTrackSettings(clipsRef.current, laneKey);
+    setClips((prev) => resetClipFxToTrackSettings(prev, uiId, trackFx));
+  }, [readOnly, clipSettingsUiId]);
+
+  const canDeleteClipSettings = useMemo(
+    () => clips.length > 1 && Boolean(clipSettingsUiId),
+    [clips.length, clipSettingsUiId],
+  );
+
+  const handleDeleteClipSettings = useCallback(() => {
+    if (readOnly || !clipSettingsUiId) return;
+    if (!clipsRef.current.some((c) => c.uiId === clipSettingsUiId)) {
+      setClipSettingsUiId(null);
+      return;
+    }
+    if (!clipsRef.current.some((c) => c.uiId !== clipSettingsUiId)) {
+      setError('Keep at least one clip on the timeline.');
+      return;
+    }
+    pushHistory();
+    const uiId = clipSettingsUiId;
+    setClips((prev) => prev.filter((c) => c.uiId !== uiId));
+    setSelectedId((cur) => (cur === uiId ? null : cur));
+    setClipSettingsUiId(null);
+  }, [readOnly, clipSettingsUiId, pushHistory, setError]);
+
+  const openClipSettings = useCallback(
+    (clip: EditorClip) => {
+      if (readOnly) return;
+      setTrackSettingsLaneKey(null);
+      setSelectedId(clip.uiId);
+      setClipSettingsUiId(clip.uiId);
+    },
+    [readOnly],
+  );
+
+  const canDeleteTrackSettingsLane = useMemo(() => {
+    if (!trackSettingsLaneKey) return false;
+    return clips.some((c) => editorLaneKey(c) !== trackSettingsLaneKey);
+  }, [clips, trackSettingsLaneKey]);
+
+  const handleDeleteTrackSettingsLane = useCallback(() => {
+    if (readOnly || !trackSettingsLaneKey) return;
+    if (!clipsRef.current.some((c) => editorLaneKey(c) !== trackSettingsLaneKey)) {
+      return;
+    }
+    const laneKey = trackSettingsLaneKey;
+    pushHistory();
+    const next = clipsRef.current.filter((c) => editorLaneKey(c) !== laneKey);
+    setClips(next);
+    setSelectedId((sel) => {
+      if (!sel) return sel;
+      return next.some((c) => c.uiId === sel) ? sel : null;
+    });
+    setLaneSolo((prev) => {
+      if (!(laneKey in prev)) return prev;
+      const { [laneKey]: _removed, ...rest } = prev;
+      void _removed;
+      return rest;
+    });
+    setLaneFxDefaults((prev) => {
+      if (!(laneKey in prev)) return prev;
+      const { [laneKey]: _removed, ...rest } = prev;
+      void _removed;
+      return rest;
+    });
+    setTrackSettingsLaneKey(null);
+  }, [readOnly, trackSettingsLaneKey, pushHistory]);
 
   const beginRenameLane = (laneKey: string, label: string) => {
     if (readOnly) return;
@@ -1171,12 +1422,24 @@ export function SegmentEditorV2({
         };
         pushHistory();
         setClips((prev) => [...prev, clip]);
+        setLaneFxDefaults((prev) => {
+          const key = editorLaneKey(clip);
+          if (prev[key]) return prev;
+          return { ...prev, [key]: clipToTrackSettings(clip) };
+        });
         setSelectedId(uiId);
         // Load waveform for the new take without refetching clips (that would
         // wipe unsaved local edits).
         void fetchTakeWaveform(episodeId, segmentId, media.filePath).then((wf) => {
           if (wf?.data?.length) {
-            setWaveforms((prev) => ({ ...prev, [media.filePath]: wf }));
+            const base =
+              media.filePath.replace(/\\/g, '/').split('/').pop() ||
+              media.filePath;
+            setWaveforms((prev) => ({
+              ...prev,
+              [media.filePath]: wf,
+              [base]: wf,
+            }));
           }
         });
       } finally {
@@ -1288,6 +1551,18 @@ export function SegmentEditorV2({
         );
         const next = toEditorClips(saved.clips);
         setClips(next);
+        setLaneFxDefaults((prev) => {
+          const built = buildLaneFxDefaults(next);
+          // Keep sticky track defaults for lanes that are fully overridden.
+          const merged = { ...built };
+          for (const [key, value] of Object.entries(prev)) {
+            const laneHasInherited = next.some(
+              (c) => editorLaneKey(c) === key && c.fxOverride !== true,
+            );
+            if (!laneHasInherited && value) merged[key] = value;
+          }
+          return merged;
+        });
         setBaseline(JSON.stringify(toApiClips(next)));
       }
       if (trimsDirty || markersDirty) {
@@ -1512,10 +1787,11 @@ export function SegmentEditorV2({
 
   const handleRemake = async () => {
     if (readOnly || busy) return;
-    if (clipsDirty) {
-      setError('Save clip changes before remaking the mix.');
+    if (dirty) {
+      setError('Save changes before remaking the mix.');
       return;
     }
+    if (previewRef.current?.isPlaying) previewRef.current.pause();
     setRemaking(true);
     setError(null);
     try {
@@ -1637,7 +1913,7 @@ export function SegmentEditorV2({
                 onClick={requestSwitchSimple}
                 disabled={busy}
               >
-                Simple editor
+                Simple Editor
               </button>
               <button
                 type="button"
@@ -1709,17 +1985,6 @@ export function SegmentEditorV2({
                   >
                     <Split size={14} aria-hidden />
                     Blade at Playhead
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.segmentEditorV2Tool}
-                    onClick={handleDeleteSelected}
-                    disabled={readOnly || busy || !selected}
-                    title="Delete selected clip"
-                    aria-label="Delete selected clip"
-                  >
-                    <Trash2 size={14} aria-hidden />
-                    Delete
                   </button>
                 </div>
                 <div className={styles.segmentEditorV2ToolGroup} role="group" aria-label="Soft trims">
@@ -1826,10 +2091,10 @@ export function SegmentEditorV2({
                       type="button"
                       className={styles.segmentEditorV2Tool}
                       onClick={() => void handleRemake()}
-                      disabled={busy || clipsDirty}
+                      disabled={busy || dirty}
                       title={
-                        clipsDirty
-                          ? 'Save clip changes before remaking the mix'
+                        dirty
+                          ? 'Save changes before remaking the mix'
                           : 'Remake segment mix from the saved clip layout'
                       }
                     >
@@ -2085,20 +2350,16 @@ export function SegmentEditorV2({
                                   ? styles.segmentEditorV2LaneCtrlActive
                                   : styles.segmentEditorV2LaneCtrl
                               }
-                              title={muted ? 'Unmute track' : 'Mute track'}
-                              aria-label={muted ? 'Unmute track' : 'Mute track'}
-                              aria-pressed={muted}
-                              disabled={readOnly || busy}
+                              title="Track settings"
+                              aria-label="Track settings"
+                              disabled={busy}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleLaneMute(lane.laneKey);
+                                setClipSettingsUiId(null);
+                                setTrackSettingsLaneKey(lane.laneKey);
                               }}
                             >
-                              {muted ? (
-                                <VolumeX size={14} aria-hidden />
-                              ) : (
-                                <Volume2 size={14} aria-hidden />
-                              )}
+                              <SlidersHorizontal size={14} aria-hidden />
                             </button>
                             <button
                               type="button"
@@ -2240,6 +2501,12 @@ export function SegmentEditorV2({
                                 width: `${Math.max(width, 0.15)}%`,
                               }}
                               onClick={(e) => handleClipClick(clip, e)}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                if (tool !== 'select' || readOnly) return;
+                                openClipSettings(clip);
+                              }}
                               onPointerDown={(e) => {
                                 if (e.button === 1) return; // allow middle-pan to bubble
                                 if (!readOnly && tool === 'select' && e.button === 0) {
@@ -2305,6 +2572,43 @@ export function SegmentEditorV2({
                 }
               />
 
+              {trackSettingsLane && trackSettings ? (
+                <TrackSettingsDialog
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) setTrackSettingsLaneKey(null);
+                  }}
+                  trackName={trackSettingsLane.label}
+                  settings={trackSettings}
+                  onChange={applyLaneTrackSettings}
+                  onBeforeFirstEdit={pushHistory}
+                  onDeleteTrack={handleDeleteTrackSettingsLane}
+                  canDeleteTrack={canDeleteTrackSettingsLane}
+                  lanePeaks={trackSettingsLanePeaks}
+                  readOnly={readOnly}
+                  scope="track"
+                />
+              ) : null}
+
+              {clipSettingsClip && clipSettings ? (
+                <TrackSettingsDialog
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) setClipSettingsUiId(null);
+                  }}
+                  trackName={clipSettingsLabel}
+                  settings={clipSettings}
+                  onChange={applyClipTrackSettings}
+                  onBeforeFirstEdit={pushHistory}
+                  onDeleteTrack={handleDeleteClipSettings}
+                  canDeleteTrack={canDeleteClipSettings}
+                  lanePeaks={clipSettingsPeaks}
+                  readOnly={readOnly}
+                  scope="clip"
+                  onReset={resetClipSettingsToTrack}
+                />
+              ) : null}
+
               <MarkerEditDialog
                 open={editMarkerIndex != null && markers[editMarkerIndex] != null}
                 onOpenChange={(open) => {
@@ -2328,7 +2632,7 @@ export function SegmentEditorV2({
               }
             }}
           >
-            <div className={styles.segmentEditorV2FooterLeft} role="group" aria-label="History">
+            <div className={styles.segmentEditorV2FooterLeft} role="group" aria-label="Edit actions">
               <button
                 type="button"
                 className={styles.segmentEditorV2Tool}
@@ -2350,6 +2654,30 @@ export function SegmentEditorV2({
               >
                 <Redo2 size={14} aria-hidden />
                 Redo
+              </button>
+              <button
+                type="button"
+                className={styles.segmentEditorV2Tool}
+                onClick={handleDeleteSelected}
+                disabled={readOnly || busy || !selected}
+                title="Delete selected clip (X)"
+                aria-label="Delete selected clip"
+              >
+                <Trash2 size={14} aria-hidden />
+                Delete
+              </button>
+              <button
+                type="button"
+                className={styles.segmentEditorV2Tool}
+                onClick={() => {
+                  if (selected) openClipSettings(selected);
+                }}
+                disabled={readOnly || busy || !selected}
+                title="Clip settings for the selected clip"
+                aria-label="Clip settings"
+              >
+                <Settings size={14} aria-hidden />
+                Settings
               </button>
             </div>
             <p className={styles.segmentEditorV2Hotkeys}>

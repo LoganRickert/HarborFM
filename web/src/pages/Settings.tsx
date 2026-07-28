@@ -252,6 +252,9 @@ export function Settings() {
         workersDispatchAttempts: form.workersDispatchAttempts,
         workersDispatchRetrySec: form.workersDispatchRetrySec,
         workersFallbackLocal: form.workersFallbackLocal,
+        workersUseForTranscripts: form.workersUseForTranscripts,
+        workersUseForVideos: form.workersUseForVideos,
+        workersUseForFinalEpisodes: form.workersUseForFinalEpisodes,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });

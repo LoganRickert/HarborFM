@@ -35,6 +35,7 @@ import {
   broadcastToSession,
   CALL_JOIN_CONTEXT,
 } from "./shared.js";
+import { labelSoundboardSegmentsInManifest } from "./soundboardManifestLabels.js";
 
 async function requireRecordingSecret(
   request: FastifyRequest,
@@ -372,10 +373,11 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
         // Source file is deleted by the WebRTC service after successful callback (same process that created it).
         if (body.tracksManifest && Array.isArray(body.perTrackFilePaths) && body.perTrackFilePaths.length > 0) {
           try {
-            const manifest = body.tracksManifest as { recordingEpochMs?: number } | undefined;
+            const labeledManifest = labelSoundboardSegmentsInManifest(body.tracksManifest);
+            const manifest = labeledManifest as { recordingEpochMs?: number } | undefined;
             const recordingEpochMs = typeof manifest?.recordingEpochMs === "number" ? manifest.recordingEpochMs : undefined;
             const mtDir = multitrackRecordingsDir(body.podcastId, body.episodeId, body.segmentId, recordingEpochMs);
-            writeFileSync(join(mtDir, "tracks_manifest.json"), JSON.stringify(body.tracksManifest, null, 2));
+            writeFileSync(join(mtDir, "tracks_manifest.json"), JSON.stringify(labeledManifest, null, 2));
             ensureOriginalTracksManifest(mtDir);
             const webrtcDir = getWebrtcRecordingsDir();
             const copiedBases: string[] = [];

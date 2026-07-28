@@ -42,6 +42,7 @@ import {
 } from "./utils.js";
 import {
   dispatchComputeJob,
+  resolveWorkerJobSubject,
   workerApiBaseFromRequest,
 } from "../workers/index.js";
 
@@ -200,7 +201,8 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
       const apiBase = workerApiBaseFromRequest(request);
       const useWorker =
         settings.transcription_provider === "self_hosted" &&
-        settings.workers_enabled;
+        settings.workers_enabled &&
+        settings.workers_use_for_transcripts !== false;
       setImmediate(() => {
         (async () => {
           try {
@@ -212,6 +214,12 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
                 inputs: [{ name: "audio", absolutePath: audioPath }],
                 outputs: [{ name: "transcript.srt", absolutePath: txtPath }],
                 params: {},
+                subject: resolveWorkerJobSubject({
+                  podcastId: access.podcastId,
+                  episodeId,
+                  segmentId,
+                  userId: request.userId,
+                }),
                 runLocal: async () => {
                   const text = await runTranscription(
                     audioPath,
@@ -808,7 +816,8 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
       const apiBase = workerApiBaseFromRequest(request);
       const useWorker =
         settings.transcription_provider === "self_hosted" &&
-        settings.workers_enabled;
+        settings.workers_enabled &&
+        settings.workers_use_for_transcripts !== false;
       setImmediate(() => {
         (async () => {
           try {
@@ -821,6 +830,11 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
                 inputs: [{ name: "audio", absolutePath: audioPath }],
                 outputs: [{ name: "transcript.srt", absolutePath: srtPath }],
                 params: {},
+                subject: resolveWorkerJobSubject({
+                  podcastId,
+                  episodeId,
+                  userId: request.userId,
+                }),
                 runLocal: async () => {
                   const text = await runTranscription(
                     audioPath,

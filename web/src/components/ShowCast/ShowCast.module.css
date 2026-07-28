@@ -293,6 +293,13 @@
   margin-bottom: 0.625rem;
 }
 
+.castDialogHint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .castDialogRequired {
   color: var(--error);
   margin-left: 0.125rem;

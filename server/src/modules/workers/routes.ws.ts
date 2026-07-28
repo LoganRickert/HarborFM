@@ -127,7 +127,7 @@ export async function registerWorkerWsRoutes(
             typeof msg.name === "string" && msg.name.trim()
               ? msg.name.trim().slice(0, 64)
               : `worker-${workerId.slice(0, 6)}`;
-          registerWorker(workerId, socket, name);
+          registerWorker(workerId, socket, name, ip);
           const reclaimed = reclaimJobsForWorkerName(name, workerId);
           socket.send(
             JSON.stringify({ type: "auth_ok", workerId }),

@@ -14,6 +14,7 @@ import { createHash } from "crypto";
 import { nanoid } from "nanoid";
 import { getDataDir } from "../../services/paths.js";
 import type { ComputeJobKind, WorkerJobResourceStats } from "./protocol.js";
+import type { WorkerJobSubject } from "./subject.js";
 
 export type JobFileRef = {
   name: string;
@@ -35,6 +36,8 @@ export type ActiveJob = {
   inputs: JobFileRef[];
   outputs: JobFileRef[];
   params: Record<string, unknown>;
+  /** Optional podcast/episode context for admin status UI. */
+  subject: WorkerJobSubject | null;
   workDir: string;
   workerId: string | null;
   /** Worker display name used to reclaim jobs after a brief reconnect. */
@@ -43,6 +46,8 @@ export type ActiveJob = {
   acceptResolve: ((ok: boolean) => void) | null;
   doneResolve: (() => void) | null;
   doneReject: ((err: Error) => void) | null;
+  /** Set when admin cancels before done waiters are wired. */
+  cancelRequested: boolean;
   /** Timer that fails the job if the worker does not reconnect in time. */
   disconnectGraceTimer: ReturnType<typeof setTimeout> | null;
   /** In-progress chunked output uploads, keyed by output name. */
@@ -70,6 +75,7 @@ export function createJob(opts: {
   inputs: JobFileRef[];
   outputs: JobFileRef[];
   params: Record<string, unknown>;
+  subject?: WorkerJobSubject | null;
 }): ActiveJob {
   const id = nanoid();
   const token = nanoid(48);
@@ -83,6 +89,7 @@ export function createJob(opts: {
     inputs: opts.inputs,
     outputs: opts.outputs,
     params: opts.params,
+    subject: opts.subject ?? null,
     workDir,
     workerId: null,
     workerName: null,
@@ -90,6 +97,7 @@ export function createJob(opts: {
     acceptResolve: null,
     doneResolve: null,
     doneReject: null,
+    cancelRequested: false,
     disconnectGraceTimer: null,
     chunkUploads: new Map(),
     bytesDownloaded: 0,

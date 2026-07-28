@@ -59,6 +59,7 @@ export function CastMemberDialog({
   const [description, setDescription] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [socialLinkText, setSocialLinkText] = useState('');
+  const [email, setEmail] = useState('');
   const [isPublic, setIsPublic] = useState(1);
   const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -80,6 +81,7 @@ export function CastMemberDialog({
             description: cast.description ?? '',
             photoUrl: cast.photoUrl ?? '',
             socialLinkText: cast.socialLinkText ?? '',
+            email: cast.email ?? '',
             isPublic: cast.isPublic ?? 1,
             coverMode: (cast.photoFilename ? 'upload' : 'url') as 'url' | 'upload',
           }
@@ -89,6 +91,7 @@ export function CastMemberDialog({
             description: '',
             photoUrl: '',
             socialLinkText: '',
+            email: '',
             isPublic: 1,
             coverMode: 'url' as const,
           };
@@ -97,6 +100,7 @@ export function CastMemberDialog({
       setDescription(next.description);
       setPhotoUrl(next.photoUrl);
       setSocialLinkText(next.socialLinkText);
+      setEmail(next.email);
       setIsPublic(next.isPublic);
       setCoverMode(next.coverMode);
       setPendingFile(null);
@@ -165,6 +169,7 @@ export function CastMemberDialog({
       description: description.trim() || undefined,
       photoUrl: coverMode === 'url' ? (photoUrl.trim() || undefined) : undefined,
       socialLinkText: socialLinkText.trim() || undefined,
+      email: email.trim() || undefined,
       isPublic: isPublic as 0 | 1,
     };
     if (isEdit) {
@@ -184,8 +189,8 @@ export function CastMemberDialog({
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   const currentForm = useMemo(
-    () => ({ name, role, description, photoUrl, socialLinkText, isPublic, coverMode }),
-    [name, role, description, photoUrl, socialLinkText, isPublic, coverMode],
+    () => ({ name, role, description, photoUrl, socialLinkText, email, isPublic, coverMode }),
+    [name, role, description, photoUrl, socialLinkText, email, isPublic, coverMode],
   );
   const isDirty = useBaselineDirty(formBaseline, currentForm) || pendingFile != null;
   const {
@@ -246,6 +251,23 @@ export function CastMemberDialog({
                     required
                   />
                 </label>
+              </div>
+
+              <div className={styles.castDialogFormGroup}>
+                <label className={styles.castDialogFormLabel}>
+                  Email
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={styles.castDialogFormInput}
+                    placeholder="jane@example.com"
+                    autoComplete="off"
+                  />
+                </label>
+                <p className={styles.castDialogHint}>
+                  Used for meeting invites. Not shown on public pages.
+                </p>
               </div>
 
               <div className={styles.castDialogFormGroup}>

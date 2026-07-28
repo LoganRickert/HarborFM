@@ -20,6 +20,14 @@ export type WorkerJobStatRow = {
   peakMemoryBytes: number | null;
   resourceSampleCount: number | null;
   resourceSource: string | null;
+  podcastId: string | null;
+  episodeId: string | null;
+  segmentId: string | null;
+  podcastTitle: string | null;
+  episodeTitle: string | null;
+  userId: string | null;
+  userEmail: string | null;
+  userUsername: string | null;
   startedAt: string;
   finishedAt: string | null;
   createdAt: string;
@@ -41,6 +49,14 @@ export type InsertWorkerJobStat = {
   peakMemoryBytes?: number | null;
   resourceSampleCount?: number | null;
   resourceSource?: string | null;
+  podcastId?: string | null;
+  episodeId?: string | null;
+  segmentId?: string | null;
+  podcastTitle?: string | null;
+  episodeTitle?: string | null;
+  userId?: string | null;
+  userEmail?: string | null;
+  userUsername?: string | null;
   startedAt: string;
   finishedAt: string;
 };
@@ -82,6 +98,14 @@ export function insertWorkerJobStat(row: InsertWorkerJobStat): void {
       peakMemoryBytes: row.peakMemoryBytes ?? null,
       resourceSampleCount: row.resourceSampleCount ?? null,
       resourceSource: row.resourceSource ?? null,
+      podcastId: row.podcastId ?? null,
+      episodeId: row.episodeId ?? null,
+      segmentId: row.segmentId ?? null,
+      podcastTitle: row.podcastTitle ?? null,
+      episodeTitle: row.episodeTitle ?? null,
+      userId: row.userId ?? null,
+      userEmail: row.userEmail ?? null,
+      userUsername: row.userUsername ?? null,
       startedAt: row.startedAt,
       finishedAt: row.finishedAt,
     })
@@ -112,6 +136,14 @@ export function listWorkerJobStats(limit = 50): WorkerJobStatRow[] {
       peakMemoryBytes: workerJobStats.peakMemoryBytes,
       resourceSampleCount: workerJobStats.resourceSampleCount,
       resourceSource: workerJobStats.resourceSource,
+      podcastId: workerJobStats.podcastId,
+      episodeId: workerJobStats.episodeId,
+      segmentId: workerJobStats.segmentId,
+      podcastTitle: workerJobStats.podcastTitle,
+      episodeTitle: workerJobStats.episodeTitle,
+      userId: workerJobStats.userId,
+      userEmail: workerJobStats.userEmail,
+      userUsername: workerJobStats.userUsername,
       startedAt: workerJobStats.startedAt,
       finishedAt: workerJobStats.finishedAt,
       createdAt: workerJobStats.createdAt,
@@ -132,5 +164,13 @@ export function listWorkerJobStats(limit = 50): WorkerJobStatRow[] {
       peakMemoryBytes: asOptionalNumber(r.peakMemoryBytes),
       resourceSampleCount: asOptionalNumber(r.resourceSampleCount),
       resourceSource: r.resourceSource ?? null,
+      podcastId: r.podcastId ?? null,
+      episodeId: r.episodeId ?? null,
+      segmentId: r.segmentId ?? null,
+      podcastTitle: r.podcastTitle ?? null,
+      episodeTitle: r.episodeTitle ?? null,
+      userId: r.userId ?? null,
+      userEmail: r.userEmail ?? null,
+      userUsername: r.userUsername ?? null,
     }));
 }

@@ -300,6 +300,48 @@ export type SegmentRestoreOriginalMixStatusResponse = z.infer<
   typeof segmentRestoreOriginalMixStatusResponseSchema
 >;
 
+/** ReaEQ-style band for advanced editor / remake (matches MultitrackEqBand). */
+export const segmentTrackEqBandSchema = z.object({
+  type: z.enum([
+    'hipass',
+    'loshelf',
+    'band',
+    'notch',
+    'hishelf',
+    'lopass',
+    'bandpass',
+  ]),
+  freqHz: z.number().finite(),
+  gainDb: z.number().finite(),
+  q: z.number().finite(),
+  enabled: z.boolean().optional(),
+});
+
+export type SegmentTrackEqBand = z.infer<typeof segmentTrackEqBandSchema>;
+
+/** ReaGate-style params (linear threshold 0..1 for ffmpeg agate). */
+export const segmentTrackGateSchema = z.object({
+  threshold: z.number().finite(),
+  attackMs: z.number().finite(),
+  holdMs: z.number().finite().optional(),
+  releaseMs: z.number().finite(),
+  range: z.number().finite().optional(),
+});
+
+export type SegmentTrackGate = z.infer<typeof segmentTrackGateSchema>;
+
+/** ReaComp-style params (linear threshold 0..1 for ffmpeg acompressor). */
+export const segmentTrackCompSchema = z.object({
+  threshold: z.number().finite(),
+  ratio: z.number().finite(),
+  attackMs: z.number().finite(),
+  releaseMs: z.number().finite(),
+  makeupDb: z.number().finite().optional(),
+  kneeDb: z.number().finite().optional(),
+});
+
+export type SegmentTrackComp = z.infer<typeof segmentTrackCompSchema>;
+
 /** Clip entry for advanced multitrack editor (tracks_manifest segment). */
 export const segmentTrackClipSchema = z
   .object({
@@ -325,6 +367,18 @@ export const segmentTrackClipSchema = z
     muteSec: z
       .array(z.tuple([z.number(), z.number()]))
       .optional(),
+    eqBands: z.array(segmentTrackEqBandSchema).optional(),
+    gate: segmentTrackGateSchema.optional(),
+    comp: segmentTrackCompSchema.optional(),
+    /**
+     * When true, this clip's mute / volume / EQ / dynamics were set in Clip
+     * Settings and should not be overwritten by Track Settings. Clear via
+     * Clip Settings "Reset all FX" to follow the track again.
+     */
+    fxOverride: z.boolean().optional(),
+    reaEqChunkBase64: z.string().optional(),
+    reaGateChunkBase64: z.string().optional(),
+    reaCompChunkBase64: z.string().optional(),
   })
   .passthrough();
 

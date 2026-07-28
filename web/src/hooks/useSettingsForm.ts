@@ -98,6 +98,9 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   workersDispatchAttempts: 3,
   workersDispatchRetrySec: 60,
   workersFallbackLocal: true,
+  workersUseForTranscripts: true,
+  workersUseForVideos: true,
+  workersUseForFinalEpisodes: true,
 };
 
 export function useSettingsForm(initialSettings?: SettingsResponse) {

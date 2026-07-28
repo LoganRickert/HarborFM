@@ -1,5 +1,5 @@
 /** Extensible compute job kinds. Add new kinds without changing the wire shape. */
-export type ComputeJobKind = "video_generate" | "transcribe";
+export type ComputeJobKind = "video_generate" | "transcribe" | "episode_render";
 
 /** Per-job CPU/memory from the worker (cgroup or process tree; not host-global). */
 export type WorkerJobResourceStats = {
@@ -45,7 +45,8 @@ export type WorkerWsServerMessage =
       inputs: Array<{ name: string; filename?: string }>;
       outputs: Array<{ name: string }>;
       params: Record<string, unknown>;
-    };
+    }
+  | { type: "cancel"; jobId: string };
 
 export {
   WORKER_FILE_BODY_LIMIT,

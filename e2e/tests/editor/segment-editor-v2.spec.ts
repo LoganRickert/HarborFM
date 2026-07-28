@@ -25,12 +25,52 @@ test.describe('SegmentEditorV2 advanced editor', () => {
       advanced.getByText(/No multitrack recordings for this segment/i),
     ).toHaveCount(0);
 
+    // Track settings: mute via dialog and verify it sticks
+    await advanced.getByRole('button', { name: 'Track settings' }).first().click();
+    const trackSettings = page.getByRole('dialog').filter({
+      has: page.getByRole('heading', { name: 'Track Settings' }),
+    });
+    await expect(trackSettings).toBeVisible();
+    await trackSettings.getByRole('button', { name: 'Mute' }).click();
+    await trackSettings.getByRole('button', { name: 'Close' }).click();
+    await expect(trackSettings).toHaveCount(0);
+    await advanced.getByRole('button', { name: 'Track settings' }).first().click();
+    await expect(trackSettings).toBeVisible();
+    await expect(trackSettings.getByRole('button', { name: 'Unmute' })).toBeVisible();
+    await trackSettings.getByRole('button', { name: 'Unmute' }).click();
+    await trackSettings.getByRole('button', { name: 'Close' }).click();
+
+    // Clip settings: double-click a clip for per-clip mute / FX (overrides track)
+    const firstClip = advanced.locator('button[class*="segmentEditorV2Clip"]').first();
+    await firstClip.dblclick();
+    const clipSettings = page.getByRole('dialog').filter({
+      has: page.getByRole('heading', { name: 'Clip Settings' }),
+    });
+    await expect(clipSettings).toBeVisible();
+    await clipSettings.getByRole('button', { name: 'Mute' }).click();
+    await clipSettings.getByRole('button', { name: 'Close' }).click();
+    await expect(clipSettings).toHaveCount(0);
+
+    // Track settings stay unmuted while the clip override is muted
+    await advanced.getByRole('button', { name: 'Track settings' }).first().click();
+    await expect(trackSettings).toBeVisible();
+    await expect(trackSettings.getByRole('button', { name: 'Mute' })).toBeVisible();
+    await trackSettings.getByRole('button', { name: 'Close' }).click();
+
+    // Clip still has its override; Reset all FX follows the track again
+    await firstClip.dblclick();
+    await expect(clipSettings).toBeVisible();
+    await expect(clipSettings.getByRole('button', { name: 'Unmute' })).toBeVisible();
+    await clipSettings.getByRole('button', { name: 'Reset all FX' }).click();
+    await expect(clipSettings.getByRole('button', { name: 'Mute' })).toBeVisible();
+    await clipSettings.getByRole('button', { name: 'Close' }).click();
+
     // Simple editor round-trip
-    await advanced.getByRole('button', { name: 'Simple editor' }).click();
-    await expect(page.getByRole('button', { name: 'Advanced editor' })).toBeVisible({
+    await advanced.getByRole('button', { name: 'Simple Editor' }).click();
+    await expect(page.getByRole('button', { name: 'Advanced Editor' })).toBeVisible({
       timeout: 10000,
     });
-    await page.getByRole('button', { name: 'Advanced editor' }).click();
+    await page.getByRole('button', { name: 'Advanced Editor' }).click();
     await expect(advanced.getByRole('heading', { name: /Advanced Editor:/i })).toBeVisible();
 
     // Seek into the clip so blade at playhead is valid, select first clip, blade.

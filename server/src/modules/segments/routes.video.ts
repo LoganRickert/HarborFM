@@ -28,8 +28,10 @@ import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB, ALLOW_VIDEO_GENERATION } from "../..
 import { MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import {
   dispatchComputeJob,
+  resolveWorkerJobSubject,
   workerApiBaseFromRequest,
 } from "../workers/index.js";
+import { readSettings } from "../settings/repo.js";
 
 const VIDEO_COVER_EXTS = ["jpg", "jpeg", "png", "webp"];
 
@@ -339,6 +341,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
       videoGenErrorByEpisode.delete(episodeId);
       const log = request.log;
       const apiBase = workerApiBaseFromRequest(request);
+      const settings = readSettings();
       broadcastToEpisode(episodeId, { type: "videoGenerationStarted" });
       setImmediate(() => {
         (async () => {
@@ -366,32 +369,42 @@ export async function registerVideoRoutes(app: FastifyInstance) {
               waveformType: options.waveformType,
               color: options.color,
             };
-            await dispatchComputeJob({
-              kind: "video_generate",
-              apiBase,
-              inputs: [
-                { name: "audio", absolutePath: audioPath },
-                { name: "image", absolutePath: imagePathForVideo },
-              ],
-              outputs: [{ name: "video.mp4", absolutePath: outPath }],
-              params: {
-                x: options.x,
-                y: options.y,
-                width: options.width,
-                amplitude: options.amplitude,
-                style: options.style,
-                strokeWidth: options.strokeWidth,
-                smoothing: options.smoothing,
-                resolution: options.resolution,
-                orientation: options.orientation,
-                waveformType: options.waveformType,
-                color: options.color,
-              },
-              runLocal: () =>
-                generateEpisodeVideo(podcastId, episodeId, videoOpts).then(
-                  () => undefined,
-                ),
-            });
+            const runLocalVideo = () =>
+              generateEpisodeVideo(podcastId, episodeId, videoOpts).then(
+                () => undefined,
+              );
+            if (settings.workers_use_for_videos !== false) {
+              await dispatchComputeJob({
+                kind: "video_generate",
+                apiBase,
+                inputs: [
+                  { name: "audio", absolutePath: audioPath },
+                  { name: "image", absolutePath: imagePathForVideo },
+                ],
+                outputs: [{ name: "video.mp4", absolutePath: outPath }],
+                params: {
+                  x: options.x,
+                  y: options.y,
+                  width: options.width,
+                  amplitude: options.amplitude,
+                  style: options.style,
+                  strokeWidth: options.strokeWidth,
+                  smoothing: options.smoothing,
+                  resolution: options.resolution,
+                  orientation: options.orientation,
+                  waveformType: options.waveformType,
+                  color: options.color,
+                },
+                subject: resolveWorkerJobSubject({
+                  podcastId,
+                  episodeId,
+                  userId: request.userId,
+                }),
+                runLocal: runLocalVideo,
+              });
+            } else {
+              await runLocalVideo();
+            }
             const actualSize = statSync(outPath).size;
             if (ownerId) {
               const delta = actualSize - estimatedBytesForTask;

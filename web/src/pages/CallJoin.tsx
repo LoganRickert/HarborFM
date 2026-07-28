@@ -7,6 +7,7 @@ import { getJoinInfo, callWebSocketUrl } from '../api/call';
 import { getPublicConfig } from '../api/public';
 import { getAgcKey, getMicVolumeKey } from '../constants/micSettings';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
+import { useMicSilenceWarning } from '../hooks/useMicSilenceWarning';
 import { useMeta } from '../hooks/useMeta';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { RemoteAudio, AudioUnlockBanner } from '../components/GroupCall/RemoteAudio';
@@ -188,6 +189,7 @@ export function CallJoin() {
     micBackgroundNotice,
     livePublisherIds,
     publishersTracked,
+    ready: producerReady,
   } = useMediasoupRoom(
     webrtcUrl,
     webrtcRoomId,
@@ -200,6 +202,11 @@ export function CallJoin() {
   );
   // When in-call, show the mediasoup send-path level (what remotes hear), not the pre-join preview mic.
   const displayMicLevel = joined ? sendMicLevel : micLevel;
+  const micSilenceWarning = useMicSilenceWarning(
+    sendMicLevel,
+    joined && producerReady,
+    muted || mutedByHost,
+  );
   const setMutedRef = useRef(setMuted);
   setMutedRef.current = setMuted;
 
@@ -744,6 +751,11 @@ export function CallJoin() {
           {audioUnavailable && (
             <p className={styles.audioUnavailable} role="status">
               Audio is unavailable - the host&apos;s WebRTC service is not running. You can stay in the call but won&apos;t hear or be heard until it&apos;s started.
+            </p>
+          )}
+          {micSilenceWarning && (
+            <p className={styles.micSilenceWarning} role="alert" data-testid="mic-silence-warning">
+              {micSilenceWarning}
             </p>
           )}
           {mutedByHost && (

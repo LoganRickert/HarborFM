@@ -5,6 +5,7 @@ import { callWebSocketUrl, getActiveSession } from '../../api/call';
 import { DEVICE_ID_KEY, getAgcKey, getMicVolumeKey } from '../../constants/micSettings';
 import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
+import { useMicSilenceWarning } from '../../hooks/useMicSilenceWarning';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { RemoteAudio, AudioUnlockBanner } from './RemoteAudio';
 import { AudioUnlockProvider } from './AudioUnlockContext';
@@ -212,6 +213,9 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
     autoGainControl,
     micVolume,
   );
+
+  const hostMuted = Boolean(myParticipant?.muted);
+  const micSilenceWarning = useMicSilenceWarning(micLevel, producerReady, hostMuted);
 
   const debouncedSetProducerVolume = useDebouncedCallback(setProducerVolume, 300);
   useWakeLock(true);
@@ -742,7 +746,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
           {minimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
         </button>
       </div>
-      {!minimized && (showMediaUnavailable || mediaError || recordingError || soundboardError) && (
+      {!minimized && (showMediaUnavailable || mediaError || recordingError || soundboardError || micSilenceWarning) && (
         <div className={styles.errorCard} role="alert">
           {showMediaUnavailable && (
             <p className={styles.errorCardMessage}>
@@ -752,6 +756,11 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
           {mediaError && <p className={styles.errorCardMessage}>{mediaError}</p>}
           {recordingError && <p className={styles.errorCardMessage}>{recordingError}</p>}
           {soundboardError && <p className={styles.errorCardMessage}>{soundboardError}</p>}
+          {micSilenceWarning && (
+            <p className={styles.errorCardMessage} data-testid="mic-silence-warning">
+              {micSilenceWarning}
+            </p>
+          )}
         </div>
       )}
       {!minimized && micBackgroundNotice && (

@@ -307,6 +307,7 @@ export function generateRss(
           OR (${episodes.subscriberOnlyStartsAt} IS NOT NULL AND datetime(${episodes.subscriberOnlyStartsAt}) > datetime('now'))
           OR (${episodes.subscriberOnlyEndsAt} IS NOT NULL AND datetime(${episodes.subscriberOnlyEndsAt}) <= datetime('now'))
         )`,
+        sql`COALESCE(${episodes.unlisted}, 0) = 0`,
         releasedSql,
         notExpiredSql,
       );

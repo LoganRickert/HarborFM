@@ -3,9 +3,13 @@
 # Use this when docker compose --profile webrtc is used.
 
 {
-	# Access log to file for fail2ban (caddy-scanner jail)
+	# Server / TLS / ACME logs (not HTTP access). Keep separate from access.log
+	# so fail2ban and analytics only see request lines.
 	log {
-		output file /var/log/caddy/access.log
+		output file /var/log/caddy/caddy.log {
+			roll_size 50mb
+			roll_keep 5
+		}
 		format json
 	}
 	# Required for on-demand TLS in Caddy 2.10+: permission module prevents abuse.
@@ -17,11 +21,30 @@
 
 # Port 80: health check (no TLS). Must respond on 80 for docker healthcheck.
 :80 {
+	# HTTP access log for fail2ban (caddy-scanner) and offline analytics
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 100mb
+			roll_keep 10
+		}
+		format json
+	}
+	log_skip /caddy-health
 	respond /caddy-health 200
 }
 
 # Accept any hostname: cert is obtained on first request (on_demand).
 :443 {
+	# Same access log file as :80 (fail2ban + analytics)
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 100mb
+			roll_keep 10
+		}
+		format json
+	}
+	log_skip /caddy-health
+
 	tls {
 		on_demand
 	}

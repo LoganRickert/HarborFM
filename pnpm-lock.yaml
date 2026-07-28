@@ -44,6 +44,24 @@ importers:
         specifier: ^22.19.9
         version: 22.19.9
 
+  episode-render:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9
+        version: 9.39.2
+      '@types/node':
+        specifier: ^22.10.1
+        version: 22.19.9
+      eslint:
+        specifier: ^9
+        version: 9.39.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.54.0
+        version: 8.54.0(eslint@9.39.2)(typescript@5.9.3)
+
   infrastructure/instance-manager:
     dependencies:
       '@fastify/cors':
@@ -140,6 +158,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.2.0
         version: 11.2.0
+      '@harborfm/episode-render':
+        specifier: workspace:*
+        version: link:../episode-render
       '@harborfm/shared':
         specifier: workspace:*
         version: link:../shared
@@ -475,6 +496,9 @@ importers:
 
   worker-service:
     dependencies:
+      '@harborfm/episode-render':
+        specifier: workspace:*
+        version: link:../episode-render
       '@harborfm/shared':
         specifier: workspace:*
         version: link:../shared

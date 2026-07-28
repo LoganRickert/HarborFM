@@ -159,6 +159,9 @@ export const settingsPatchBodySchema = z.object({
   workersDispatchAttempts: z.coerce.number().int().min(1).max(30).optional(),
   workersDispatchRetrySec: z.coerce.number().int().min(1).max(3600).optional(),
   workersFallbackLocal: z.boolean().optional(),
+  workersUseForTranscripts: z.boolean().optional(),
+  workersUseForVideos: z.boolean().optional(),
+  workersUseForFinalEpisodes: z.boolean().optional(),
 });
 
 export type SettingsPatchBody = z.infer<typeof settingsPatchBodySchema>;
@@ -260,6 +263,9 @@ export const settingsResponseSchema = z.object({
   workersDispatchAttempts: z.number(),
   workersDispatchRetrySec: z.number(),
   workersFallbackLocal: z.boolean(),
+  workersUseForTranscripts: z.boolean(),
+  workersUseForVideos: z.boolean(),
+  workersUseForFinalEpisodes: z.boolean(),
 });
 
 export type SettingsResponse = z.infer<typeof settingsResponseSchema>;

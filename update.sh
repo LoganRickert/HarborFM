@@ -174,6 +174,7 @@ fi
 mkdir -p "$INSTALL_DIR/harborfm-data/proxy/caddy/logs"
 touch "$INSTALL_DIR/harborfm-data/proxy/nginx/logs/access.log" 2>/dev/null || true
 touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/access.log" 2>/dev/null || true
+touch "$INSTALL_DIR/harborfm-data/proxy/caddy/logs/caddy.log" 2>/dev/null || true
 
 # Caddy on-demand TLS: ensure CADDY_TLS_CHECK_SECRET exists
 if [ "$REVERSE_PROXY" = "caddy" ] && ! grep -q '^CADDY_TLS_CHECK_SECRET=' "$INSTALL_DIR/.env" 2>/dev/null; then

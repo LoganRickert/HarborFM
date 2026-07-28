@@ -92,7 +92,7 @@ are applied on remake. Other sidecars (\`audacity.lof\`,
 1. Unzip the project.
 2. Open that segment's \`segment.rpp\` (paths relative to the
    segment folder). Tracks are named \`Name_0\` /
-   \`soundboard_<id>\`; reconnects share one track. Items use
+   \`soundboard\`; reconnects share one track. Items use
    \`startMs\`. Stubs under 2KB are omitted.
 3. Edit layout (move, trim, duplicate, or add clips), track or
    item volume, play rate, loop, fades, pitch, and track ReaEQ /
@@ -120,7 +120,7 @@ are applied on remake. Other sidecars (\`audacity.lof\`,
    timeline import). Media paths are relative to that folder
    (\`recordings/…\` or \`audio.*\`). If Resolve asks for media
    location, point it at that same segment folder.
-3. Tracks match Reaper (\`Logan_0\`, \`soundboard_<assetId>\`),
+3. Tracks match Reaper (\`Logan_0\`, \`soundboard\`),
    participants above soundboard, sorted by start; reconnects
    share a track. Stubs under 2KB are omitted.
 4. Edit cuts and trims in Resolve, then **overwrite**
@@ -295,7 +295,7 @@ on remake. Other sidecars (\`.lof\`, labels) are ignored on import.
 ### Reaper
 
 1. Open \`segment/segment.rpp\`. Tracks are \`Name_0\` /
-   \`soundboard_<id>\` (reconnects combined); item \`POSITION\` is
+   \`soundboard\` (reconnects combined); item \`POSITION\` is
    \`startMs\`. Stubs under 2KB are omitted.
 2. Edit layout (move, trim, duplicate, or add clips), track or
    item volume, play rate, loop, fades, pitch, and track ReaEQ /

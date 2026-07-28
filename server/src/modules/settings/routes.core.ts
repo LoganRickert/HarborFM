@@ -657,6 +657,18 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.workersFallbackLocal !== undefined
           ? Boolean(body.workersFallbackLocal)
           : current.workers_fallback_local;
+      const workers_use_for_transcripts =
+        body.workersUseForTranscripts !== undefined
+          ? Boolean(body.workersUseForTranscripts)
+          : current.workers_use_for_transcripts;
+      const workers_use_for_videos =
+        body.workersUseForVideos !== undefined
+          ? Boolean(body.workersUseForVideos)
+          : current.workers_use_for_videos;
+      const workers_use_for_final_episodes =
+        body.workersUseForFinalEpisodes !== undefined
+          ? Boolean(body.workersUseForFinalEpisodes)
+          : current.workers_use_for_final_episodes;
       if (workers_enabled && (!workers_ws_path || !workers_shared_secret)) {
         const generated = generateWorkerSecrets();
         if (!workers_ws_path) workers_ws_path = generated.path;
@@ -762,6 +774,9 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         workers_dispatch_attempts,
         workers_dispatch_retry_sec,
         workers_fallback_local,
+        workers_use_for_transcripts,
+        workers_use_for_videos,
+        workers_use_for_final_episodes,
       };
       const maxmindKeysChanged =
         next.maxmind_account_id !== current.maxmind_account_id ||

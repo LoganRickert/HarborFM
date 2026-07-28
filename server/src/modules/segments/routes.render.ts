@@ -1,29 +1,33 @@
 import type { FastifyInstance } from "fastify";
-import { existsSync, statSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, rmSync, statSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { nanoid } from "nanoid";
+import { runEpisodeRenderJob } from "@harborfm/episode-render";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { canAccessEpisode, canEditSegments, getPodcastOwnerId } from "../../services/access.js";
 import {
   getDataDir,
-  libraryDir,
   processedDir,
   assertPathUnder,
   transcriptSrtPath,
   episodeVideoPath,
   resolveDataPath,
-  uploadsDir,
 } from "../../services/paths.js";
 import * as audioService from "../../services/audio.js";
 import { deleteTokenFeedTemplateFile, writeRssFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
-import { RENDER_RATE_LIMIT_WINDOW_MS } from "../../config.js";
+import { FFMPEG_PATH, FFPROBE_PATH, RENDER_RATE_LIMIT_WINDOW_MS } from "../../config.js";
 import { segmentEpisodeIdParamSchema } from "@harborfm/shared";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { writeEpisodeChaptersJson } from "../../services/episodeChapters.js";
 import { readSettings } from "../settings/index.js";
+import {
+  dispatchComputeJob,
+  resolveWorkerJobSubject,
+  workerApiBaseFromRequest,
+} from "../workers/index.js";
 import * as repo from "./repo.js";
 import {
   renderStatusByEpisode,
@@ -223,11 +227,22 @@ export async function registerRenderRoutes(app: FastifyInstance) {
       repo.clearEpisodeVideoPath(episodeId);
 
       const log = request.log;
+      const apiBase = workerApiBaseFromRequest(request);
+      const requestedByUserId = request.userId;
       setImmediate(() => {
         (async () => {
-          const tempPathsToClean: string[] = [];
           try {
-            const paths: string[] = [];
+            type JobSegParam = {
+              input: string;
+              trimRanges: Array<[number, number]> | null;
+              audioEq: {
+                lowDb?: number;
+                midDb?: number;
+                highDb?: number;
+              } | null;
+            };
+            const jobInputs: Array<{ name: string; absolutePath: string }> = [];
+            const jobSegParams: JobSegParam[] = [];
             const finalMarkers: Array<{ time: number; title?: string; color?: string }> = [];
             const finalSoundbites: Array<{
               time: number;
@@ -236,16 +251,15 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               color?: string;
             }> = [];
             let offsetSec = 0;
+            let segIndex = 0;
             for (const s of segments) {
               if (s.disabled || s.inProgress || s.recordFailed) continue;
               let sourcePath: string | null = null;
-              let baseDir: string = uploadsDir(podcastId, episodeId);
               if (s.type === "recorded" && s.audioPath) {
                 const segPath = resolveDataPath(s.audioPath as string);
                 if (existsSync(segPath)) {
                   assertPathUnder(segPath, DATA_DIR);
                   sourcePath = segPath;
-                  baseDir = uploadsDir(podcastId, episodeId);
                 }
               } else if (s.type === "reusable" && s.reusableAssetId) {
                 const asset = repo.getReusableAssetAudio(s.reusableAssetId as string);
@@ -254,7 +268,6 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                   if (existsSync(assetPath)) {
                     assertPathUnder(assetPath, DATA_DIR);
                     sourcePath = assetPath;
-                    baseDir = libraryDir(asset.ownerUserId);
                   }
                 }
               }
@@ -268,7 +281,10 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                   if (Array.isArray(parsed) && parsed.length > 0) {
                     const raw = parsed.filter(
                       (r): r is [number, number] =>
-                        Array.isArray(r) && r.length === 2 && typeof r[0] === "number" && typeof r[1] === "number"
+                        Array.isArray(r) &&
+                        r.length === 2 &&
+                        typeof r[0] === "number" &&
+                        typeof r[1] === "number",
                     );
                     trimRanges = raw.length > 0 ? raw : null;
                   }
@@ -279,10 +295,14 @@ export async function registerRenderRoutes(app: FastifyInstance) {
 
               const durationSec = Number(s.durationSec) || 0;
               const rawRanges = trimRanges ?? [];
-              const ranges = rawRanges.length > 0 ? mergeTrimRanges(rawRanges, durationSec) : [];
+              const ranges =
+                rawRanges.length > 0
+                  ? mergeTrimRanges(rawRanges, durationSec)
+                  : [];
               const effectiveDuration =
                 ranges.length > 0
-                  ? durationSec - ranges.reduce((sum, [a, b]) => sum + (b - a), 0)
+                  ? durationSec -
+                    ranges.reduce((sum, [a, b]) => sum + (b - a), 0)
                   : durationSec;
 
               const markersRaw = s.markers;
@@ -321,14 +341,16 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               for (const m of markers) {
                 const markerType = m.marker_type ?? m.markerType;
                 if (markerType === "chapter") {
-                  const effTime = ranges.length > 0 ? toEffectiveTime(m.time, ranges) : m.time;
+                  const effTime =
+                    ranges.length > 0 ? toEffectiveTime(m.time, ranges) : m.time;
                   finalMarkers.push({
                     time: offsetSec + effTime,
                     title: m.title,
                     color: m.color,
                   });
                 } else if (markerType === "soundbite") {
-                  const effTime = ranges.length > 0 ? toEffectiveTime(m.time, ranges) : m.time;
+                  const effTime =
+                    ranges.length > 0 ? toEffectiveTime(m.time, ranges) : m.time;
                   let duration =
                     typeof m.duration === "number" && Number.isFinite(m.duration)
                       ? m.duration
@@ -345,23 +367,12 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               }
               offsetSec += effectiveDuration;
 
-              let segmentPath: string;
-              if (ranges.length > 0) {
-                const tempPath = join(tmpdir(), `render_trim_${nanoid()}.wav`);
-                tempPathsToClean.push(tempPath);
-                await audioService.removeRangesAndExportToWav(
-                  sourcePath,
-                  baseDir,
-                  ranges,
-                  tempPath,
-                );
-                segmentPath = tempPath;
-              } else {
-                segmentPath = sourcePath;
-              }
-
               const audioEqRaw = s.audioEq;
-              let audioEq: { lowDb?: number; midDb?: number; highDb?: number } | null = null;
+              let audioEq: {
+                lowDb?: number;
+                midDb?: number;
+                highDb?: number;
+              } | null = null;
               if (typeof audioEqRaw === "string" && audioEqRaw) {
                 try {
                   const parsed = JSON.parse(audioEqRaw) as unknown;
@@ -378,28 +389,86 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                   /* ignore invalid JSON */
                 }
               }
-              if (audioEq) {
-                const eqPath = join(tmpdir(), `render_eq_${nanoid()}.wav`);
-                tempPathsToClean.push(eqPath);
-                const segmentBaseDir = segmentPath.startsWith(tmpdir()) ? tmpdir() : baseDir;
-                await audioService.applyEqToWav(segmentPath, eqPath, segmentBaseDir, audioEq);
-                paths.push(eqPath);
-              } else {
-                paths.push(segmentPath);
-              }
+
+              const inputName = `seg_${segIndex}`;
+              segIndex += 1;
+              jobInputs.push({ name: inputName, absolutePath: sourcePath });
+              jobSegParams.push({
+                input: inputName,
+                trimRanges: ranges.length > 0 ? ranges : null,
+                audioEq,
+              });
             }
-            if (paths.length === 0) {
+            if (jobInputs.length === 0) {
               renderStatusByEpisode.set(episodeId, "failed");
               renderErrorByEpisode.set(episodeId, "No valid segment audio found.");
               broadcastToEpisode(episodeId, { type: "renderFailed" });
               return;
             }
-            await audioService.concatToFinal(paths, outPath, {
+
+            const finalName =
+              settings.final_format === "m4a" ? "final.m4a" : "final.mp3";
+            const encodeParams = {
               format: settings.final_format,
               bitrateKbps: settings.final_bitrate_kbps,
               channels: settings.final_channels,
               loudnessTargetLufs: settings.loudness_target_lufs,
-            });
+              segments: jobSegParams,
+            };
+
+            const runLocal = async () => {
+              const workDir = join(tmpdir(), `episode_render_${nanoid()}`);
+              mkdirSync(workDir, { recursive: true });
+              try {
+                mkdirSync(dirname(outPath), { recursive: true });
+                await runEpisodeRenderJob({
+                  workDir,
+                  segments: jobInputs.map((inp, i) => ({
+                    inputPath: inp.absolutePath,
+                    trimRanges: jobSegParams[i]!.trimRanges,
+                    audioEq: jobSegParams[i]!.audioEq,
+                  })),
+                  outPath,
+                  format: settings.final_format,
+                  bitrateKbps: settings.final_bitrate_kbps,
+                  channels: settings.final_channels,
+                  loudnessTargetLufs: settings.loudness_target_lufs,
+                  tools: {
+                    ffmpegPath: FFMPEG_PATH,
+                    ffprobePath: FFPROBE_PATH,
+                  },
+                });
+              } finally {
+                try {
+                  rmSync(workDir, { recursive: true, force: true });
+                } catch {
+                  /* ignore */
+                }
+              }
+            };
+
+            if (
+              settings.workers_enabled &&
+              settings.workers_use_for_final_episodes !== false
+            ) {
+              mkdirSync(dirname(outPath), { recursive: true });
+              await dispatchComputeJob({
+                kind: "episode_render",
+                apiBase,
+                inputs: jobInputs,
+                outputs: [{ name: finalName, absolutePath: outPath }],
+                params: encodeParams,
+                subject: resolveWorkerJobSubject({
+                  podcastId,
+                  episodeId,
+                  userId: requestedByUserId,
+                }),
+                runLocal,
+              });
+            } else {
+              await runLocal();
+            }
+
             const meta = await audioService.getAudioMetaAfterProcess(
               podcastId,
               episodeId,
@@ -465,14 +534,6 @@ export async function registerRenderRoutes(app: FastifyInstance) {
               status: "failed",
               error: errMsg,
             });
-          } finally {
-            for (const p of tempPathsToClean) {
-              try {
-                if (existsSync(p)) unlinkSync(p);
-              } catch {
-                /* ignore */
-              }
-            }
           }
         })();
       });

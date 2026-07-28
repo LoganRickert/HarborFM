@@ -35,10 +35,16 @@ function newUiId(): string {
 }
 
 export function toEditorClips(clips: SegmentTrackClip[]): EditorClip[] {
-  return clips.map((c) => ({
-    ...c,
-    uiId: typeof c.segmentId === 'string' && c.segmentId ? c.segmentId : newUiId(),
-  }));
+  const seen = new Set<string>();
+  const mapped = clips.map((c) => {
+    let uiId =
+      typeof c.segmentId === 'string' && c.segmentId ? c.segmentId : newUiId();
+    // Clip Settings / selection keys must be unique even if segmentIds collide.
+    if (seen.has(uiId)) uiId = newUiId();
+    seen.add(uiId);
+    return { ...c, uiId };
+  });
+  return trimOverlappingSoundboardClips(mapped);
 }
 
 export function toApiClips(clips: EditorClip[]): SegmentTrackClip[] {
@@ -181,12 +187,17 @@ function takeBasename(filePath: string): string {
 
 /**
  * Lane key for the advanced editor: named call hosts (with participantId)
- * share one lane so reconnects combine. Soundboard / unnamed / renamed file
- * takes stay one lane per media file so renaming a stub does not jump it
- * into the host group.
+ * share one lane so reconnects combine. All soundboard plays share one lane
+ * (one-shots should not overlap). Unnamed / renamed file takes stay one lane
+ * per media file so renaming a stub does not jump it into the host group.
  */
 export function editorLaneKey(clip: EditorClip): string {
-  const isSoundboard = clip.source === 'soundboard';
+  const sbId =
+    typeof clip.soundboardAssetId === 'string'
+      ? clip.soundboardAssetId.trim()
+      : '';
+  const isSoundboard = clip.source === 'soundboard' || Boolean(sbId);
+  if (isSoundboard) return 'sb:soundboard';
   const name =
     typeof clip.participantName === 'string' ? clip.participantName.trim() : '';
   const participantId =
@@ -194,16 +205,10 @@ export function editorLaneKey(clip: EditorClip): string {
   if (
     name &&
     participantId &&
-    !isSoundboard &&
     !looksLikeOpaqueTakeLabel(name)
   ) {
     return `host:${name.toLowerCase()}`;
   }
-  const sb =
-    typeof clip.soundboardAssetId === 'string'
-      ? clip.soundboardAssetId.trim()
-      : '';
-  if (isSoundboard && sb) return `sb:${sb.toLowerCase()}`;
   return `file:${takeBasename(clip.filePath)}`;
 }
 
@@ -223,6 +228,50 @@ export function clipIsCallHost(clip: EditorClip): boolean {
   const pid =
     typeof clip.participantId === 'string' ? clip.participantId.trim() : '';
   return Boolean(pid);
+}
+
+export function isSoundboardClip(clip: SegmentTrackClip): boolean {
+  if (clip.source === 'soundboard') return true;
+  return (
+    typeof clip.soundboardAssetId === 'string' &&
+    clip.soundboardAssetId.trim().length > 0
+  );
+}
+
+/**
+ * Shared soundboard lane: when a later play starts before an earlier one ends,
+ * trim the earlier clip's end to the later start (drop near-empty leftovers).
+ */
+export function trimOverlappingSoundboardClips(
+  clips: EditorClip[],
+): EditorClip[] {
+  const sbIndices: number[] = [];
+  for (let i = 0; i < clips.length; i++) {
+    if (isSoundboardClip(clips[i]!)) sbIndices.push(i);
+  }
+  if (sbIndices.length < 2) return clips;
+
+  const ordered = [...sbIndices].sort(
+    (a, b) =>
+      clipStartMs(clips[a]!) - clipStartMs(clips[b]!) || a - b,
+  );
+
+  const next = clips.map((c) => ({ ...c }));
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const curI = ordered[i]!;
+    const nxtI = ordered[i + 1]!;
+    const cur = next[curI]!;
+    const nextStart = clipStartMs(next[nxtI]!);
+    const curStart = clipStartMs(cur);
+    if (clipEndMs(cur) <= nextStart) continue;
+    if (nextStart <= curStart) {
+      next[curI] = { ...cur, lengthMs: 0, endMs: curStart };
+      continue;
+    }
+    next[curI] = trimClipRight(cur, nextStart);
+  }
+
+  return next.filter((c) => !isSoundboardClip(c) || clipLengthMs(c) >= 1);
 }
 
 /** Lane sorts with call hosts (above soundboard / unnamed files / imports). */

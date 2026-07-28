@@ -655,6 +655,160 @@
   color: var(--text);
 }
 
+.workerJobStatsHeadingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.workerRefreshBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.workerRefreshBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+.workerRefreshBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.workerRefreshBtnSpinning {
+  animation: worker-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes worker-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.workerListBlock {
+  margin: 0.5rem 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.workerListSummary {
+  margin: 0;
+}
+
+.workerList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.workerListItem {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.workerListItemTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.workerCancelBtn {
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, #ef4444 45%, var(--border) 55%);
+  background: color-mix(in srgb, #ef4444 12%, var(--bg) 88%);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.workerCancelBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, #ef4444 22%, var(--bg) 78%);
+}
+
+.workerCancelBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.workerListNameRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.workerListName {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workerStateIdle,
+.workerStateBusy {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.workerStateIdle {
+  color: var(--text);
+  background: color-mix(in srgb, #22c55e 18%, var(--bg) 82%);
+  border-color: color-mix(in srgb, #22c55e 40%, var(--border) 60%);
+}
+
+.workerStateBusy {
+  color: var(--text);
+  background: color-mix(in srgb, #f59e0b 18%, var(--bg) 82%);
+  border-color: color-mix(in srgb, #f59e0b 40%, var(--border) 60%);
+}
+
+.workerListMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.workerListCurrent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8125rem;
+  color: var(--text);
+}
+
+.workerListCurrentLabel {
+  color: var(--text-muted);
+}
+
 .workerJobKind,
 .workerJobStatusOk,
 .workerJobStatusFail {
@@ -667,7 +821,7 @@
 
 .workerJobKind {
   color: var(--text-muted);
-  background: var(--bg-elevated);
+  background: var(--bg);
 }
 
 .workerJobStatusOk {
@@ -682,30 +836,182 @@
   border-color: color-mix(in srgb, #ef4444 40%, var(--border) 60%);
 }
 
-.workerJobWhen {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.workerJobFeed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  overflow: hidden;
 }
 
-.workerJobMetaRow {
-  margin-top: 0.5rem;
+.workerJobFeedItem {
+  display: grid;
+  grid-template-columns: 0.65rem 1fr;
+  column-gap: 0.65rem;
+  align-items: start;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.workerJobFeedItem:last-child {
+  border-bottom: none;
+}
+
+.workerJobDotOk,
+.workerJobDotBusy,
+.workerJobDotFail {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.4rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.workerJobDotOk {
+  background: #22c55e;
+}
+
+.workerJobDotBusy {
+  background: #f59e0b;
+}
+
+.workerJobDotFail {
+  background: #ef4444;
+}
+
+.workerJobFeedBody {
+  min-width: 0;
   display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.workerJobFeedTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.workerJobFeedTitle {
+  display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.workerJobFeedKind {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workerJobFeedStatus {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.workerJobWhen {
+  flex-shrink: 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.workerJobFeedSubject {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.workerJobShowLink {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.workerJobFeedContext {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.workerJobFeedMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.workerJobFeedMetrics + .workerJobFeedMetrics {
+  margin-top: 0.35rem;
+}
+
+.workerJobFeedMetric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.28rem 0.55rem;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-muted) 55%, var(--bg-elevated) 45%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bg) 35%, transparent);
+}
+
+.workerJobFeedMetricLabel {
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.workerJobFeedMetricValue {
+  color: var(--text);
+  font-weight: 600;
+  padding-left: 0.45rem;
+  border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.workerJobAvgMax {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-left: 0.45rem;
+  border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.workerJobAvgMaxReading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+}
+
+.workerJobAvgMaxReading .workerJobFeedMetricValue {
+  padding-left: 0;
+  border-left: none;
+}
+
+.workerJobAvgMaxHint {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .workerJobError {
-  margin: 0.5rem 0 0;
+  margin: 0.1rem 0 0;
   font-size: 0.75rem;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: color-mix(in srgb, #ef4444 85%, var(--text) 15%);
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .dialInHintNote {

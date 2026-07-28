@@ -76,6 +76,7 @@ mkdir -p \
 
 # Fail2Ban expects this log file to exist
 touch harborfm-data/proxy/caddy/logs/access.log
+touch harborfm-data/proxy/caddy/logs/caddy.log
 ```
 
 ### 4. Write `.env` (Caddy)

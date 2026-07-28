@@ -420,6 +420,8 @@ const publishedEpisodeWhereBase = and(
   episodeNotExpiredSql,
 );
 
+const episodeNotUnlistedSql = sql`COALESCE(${episodes.unlisted}, 0) = 0`;
+
 /** List published episodes for a podcast. */
 export function listPublishedEpisodes(
   podcastId: string,
@@ -430,10 +432,15 @@ export function listPublishedEpisodes(
     eq(episodes.podcastId, podcastId),
     inArray(episodes.status, ["scheduled", "published"]),
     episodeNotExpiredSql,
+    episodeNotUnlistedSql,
   );
   const baseWhere = includeScheduledEpisodes
     ? scheduledOrPublishedBase
-    : and(eq(episodes.podcastId, podcastId), publishedEpisodeWhereBase);
+    : and(
+        eq(episodes.podcastId, podcastId),
+        publishedEpisodeWhereBase,
+        episodeNotUnlistedSql,
+      );
   const episodeWhereSubscriber = includeSubscriberOnly
     ? baseWhere
     : and(baseWhere, episodeNotCurrentlySubscriberOnlySql);
@@ -544,7 +551,7 @@ export function getPublishedEpisodeBySlug(podcastId: string, episodeSlug: string
     .get();
 }
 
-/** Get a single episode by slug for public page; when includeScheduled is true, includes scheduled/published with future publishAt. */
+/** Get a single episode by slug for public page; when includeScheduled is true, includes scheduled/published with future publishAt. Unlisted scheduled/published episodes are always reachable by direct slug. */
 export function getPublicEpisodeBySlug(
   podcastId: string,
   episodeSlug: string,
@@ -556,13 +563,23 @@ export function getPublicEpisodeBySlug(
     eq(episodes.status, "published"),
     sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
     episodeNotExpiredSql,
+    episodeNotUnlistedSql,
   );
   const relaxedWhere = and(
     eq(episodes.podcastId, podcastId),
     eq(episodes.slug, episodeSlug),
     inArray(episodes.status, ["scheduled", "published"]),
     episodeNotExpiredSql,
+    episodeNotUnlistedSql,
   );
+  const unlistedDirectWhere = and(
+    eq(episodes.podcastId, podcastId),
+    eq(episodes.slug, episodeSlug),
+    inArray(episodes.status, ["scheduled", "published"]),
+    episodeNotExpiredSql,
+    sql`COALESCE(${episodes.unlisted}, 0) = 1`,
+  );
+  const listedWhere = includeScheduled ? relaxedWhere : strictWhere;
   return drizzleDb
     .select({
       id: episodes.id,
@@ -594,7 +611,7 @@ export function getPublicEpisodeBySlug(
       fundingLinks: episodes.fundingLinks,
     })
     .from(episodes)
-    .where(includeScheduled ? relaxedWhere : strictWhere)
+    .where(or(listedWhere, unlistedDirectWhere))
     .limit(1)
     .get();
 }

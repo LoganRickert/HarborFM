@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, unlinkSync, mkdirSync, writeFileSync, readdirSync } from 'fs';
+import { readFileSync, existsSync, unlinkSync, mkdirSync, writeFileSync, readdirSync, rmSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -65,11 +65,24 @@ export function getSetupToken() {
   return readFileSync(path, 'utf8').trim();
 }
 
-/** Delete cached sitemap index so the next request generates a fresh sitemap. Uses E2E_DATA_DIR (server DATA_DIR). */
+/** Delete cached sitemap index and per-podcast sitemaps so the next request regenerates. Uses E2E_DATA_DIR (server DATA_DIR). */
 export function deleteSitemapCache() {
   const dataDir = process.env.E2E_DATA_DIR || join(E2E_DIR, 'data');
-  const path = join(dataDir, 'sitemap', 'index.xml');
-  if (existsSync(path)) unlinkSync(path);
+  const sitemapRoot = join(dataDir, 'sitemap');
+  if (!existsSync(sitemapRoot)) return;
+  for (const entry of readdirSync(sitemapRoot)) {
+    const full = join(sitemapRoot, entry);
+    try {
+      const st = statSync(full);
+      if (st.isDirectory()) {
+        rmSync(full, { recursive: true, force: true });
+      } else {
+        unlinkSync(full);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**

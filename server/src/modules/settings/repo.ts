@@ -267,6 +267,18 @@ export function writeSettings(settings: AppSettings): void {
     "workers_fallback_local",
     String(settings.workers_fallback_local !== false),
   );
+  upsert(
+    "workers_use_for_transcripts",
+    String(settings.workers_use_for_transcripts !== false),
+  );
+  upsert(
+    "workers_use_for_videos",
+    String(settings.workers_use_for_videos !== false),
+  );
+  upsert(
+    "workers_use_for_final_episodes",
+    String(settings.workers_use_for_final_episodes !== false),
+  );
 }
 
 /**

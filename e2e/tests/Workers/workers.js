@@ -70,6 +70,57 @@ export async function run({ runOne }) {
   );
 
   results.push(
+    await runOne('Worker feature toggles round-trip', async () => {
+      const patch = await apiFetch(
+        '/settings',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workersUseForTranscripts: false,
+            workersUseForVideos: false,
+            workersUseForFinalEpisodes: true,
+          }),
+        },
+        adminJar,
+      );
+      if (!patch.ok) {
+        const t = await patch.text();
+        throw new Error(`PATCH worker toggles failed: ${patch.status} ${t}`);
+      }
+      const get = await apiFetch('/settings', {}, adminJar);
+      if (!get.ok) throw new Error(`GET /settings failed: ${get.status}`);
+      const settings = await get.json();
+      if (settings.workersUseForTranscripts !== false) {
+        throw new Error('workersUseForTranscripts expected false');
+      }
+      if (settings.workersUseForVideos !== false) {
+        throw new Error('workersUseForVideos expected false');
+      }
+      if (settings.workersUseForFinalEpisodes !== true) {
+        throw new Error('workersUseForFinalEpisodes expected true');
+      }
+      const restore = await apiFetch(
+        '/settings',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workersUseForTranscripts: true,
+            workersUseForVideos: true,
+            workersUseForFinalEpisodes: true,
+          }),
+        },
+        adminJar,
+      );
+      if (!restore.ok) {
+        const t = await restore.text();
+        throw new Error(`Restore worker toggles failed: ${restore.status} ${t}`);
+      }
+    }),
+  );
+
+  results.push(
     await runOne('Worker auth_ok and workers-status shows connected', async () => {
       if (!creds) throw new Error('missing credentials from prior step');
       const name = 'e2e-worker-main';
@@ -270,5 +321,30 @@ export async function run({ runOne }) {
   );
 
   await unbanLoopback(adminJar);
+
+  results.push(
+    await runOne('Disable workers so later suites are unaffected', async () => {
+      const patch = await apiFetch(
+        '/settings',
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workersEnabled: false }),
+        },
+        adminJar,
+      );
+      if (!patch.ok) {
+        const t = await patch.text();
+        throw new Error(`Disable workers failed: ${patch.status} ${t}`);
+      }
+      const get = await apiFetch('/settings', {}, adminJar);
+      if (!get.ok) throw new Error(`GET /settings failed: ${get.status}`);
+      const settings = await get.json();
+      if (settings.workersEnabled) {
+        throw new Error('workersEnabled still true after disable');
+      }
+    }),
+  );
+
   return results;
 }

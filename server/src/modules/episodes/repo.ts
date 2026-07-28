@@ -191,6 +191,7 @@ export type CastRowWithFilename = {
   photoPath: string | null;
   photoUrl: string | null;
   socialLinkText: string | null;
+  email: string | null;
   isPublic: boolean;
   createdAt: string;
   photoFilename: string | null;
@@ -208,6 +209,7 @@ export function getEpisodeCast(episodeId: string): CastRowWithFilename[] {
       photoPath: podcastCast.photoPath,
       photoUrl: podcastCast.photoUrl,
       socialLinkText: podcastCast.socialLinkText,
+      email: podcastCast.email,
       isPublic: podcastCast.isPublic,
       createdAt: podcastCast.createdAt,
     })

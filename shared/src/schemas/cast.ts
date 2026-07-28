@@ -13,6 +13,14 @@ export const castCreateSchema = z.object({
   description: nullableOptionalString,
   photoUrl: emptyStringToNull(z.string().nullable().optional()),
   socialLinkText: nullableOptionalString,
+  /** Private invite email; backend only, not shown on public feeds. */
+  email: emptyStringToNull(
+    z
+      .string()
+      .email({ error: 'Enter a valid email' })
+      .nullable()
+      .optional(),
+  ),
   isPublic: z.union([z.literal(0), z.literal(1)]).default(1),
 });
 
@@ -36,6 +44,7 @@ export const castResponseSchema = z.object({
   photoPath: z.string().nullable(),
   photoUrl: z.string().nullable(),
   socialLinkText: z.string().nullable(),
+  email: z.string().nullable(),
   isPublic: z.union([z.literal(0), z.literal(1)]),
   createdAt: z.string(),
 });

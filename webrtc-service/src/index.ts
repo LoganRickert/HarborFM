@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import fastifyWebsocket from "@fastify/websocket";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { RecordingManager } from "./recording/RecordingManager.js";
+import { setRecordingManager } from "./recording/bridge.js";
 import {
   recoverPartFiles,
   markInterruptedSegments,
@@ -55,6 +56,7 @@ const recordingManager = new RecordingManager({
   getProducerVolumeForSegment: (producerId) =>
     producerVolumeByProducerId.get(producerId) ?? 1,
 });
+setRecordingManager(recordingManager);
 
 function finalizeProducerStream(
   roomId: string,

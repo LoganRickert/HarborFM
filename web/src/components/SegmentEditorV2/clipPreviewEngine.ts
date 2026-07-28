@@ -6,10 +6,19 @@
  * Soft trims jump the playhead; clip blade/edge edits are heard immediately
  * without remaking the master mix.
  *
+ * Each take routes through a Web Audio graph for live track FX:
+ * MediaElementSource → Gate gain → EQ (3× Biquad) → DynamicsCompressor →
+ * Makeup gain → Volume gain → destination.
+ *
  * Takes free-run once started. We only seek on user seek, soft-trim jump,
  * clip enter, or large drift. Calling currentTime / play() every frame is
  * what made early builds choppy.
  */
+import type {
+  SegmentTrackComp,
+  SegmentTrackEqBand,
+  SegmentTrackGate,
+} from '@harborfm/shared';
 import {
   clipEndMs,
   clipStartMs,
@@ -17,14 +26,32 @@ import {
   type EditorClip,
 } from './clipOps';
 import { takeStreamUrl } from '../../api/segments';
+import {
+  EQ_HIGH_HZ,
+  EQ_LOW_HZ,
+  EQ_MID_HZ,
+  EQ_MID_Q,
+  eqBandsToUi,
+} from './trackFx';
 
 /** Only re-seek when wall clock and element diverge this far (seconds). */
 const DRIFT_SEC = 0.25;
 
 export type ClipPreviewClip = Pick<
   EditorClip,
-  'uiId' | 'filePath' | 'startMs' | 'endMs' | 'lengthMs' | 'sourceOffsetMs' | 'volume' | 'muted'
->;
+  | 'uiId'
+  | 'filePath'
+  | 'startMs'
+  | 'endMs'
+  | 'lengthMs'
+  | 'sourceOffsetMs'
+  | 'volume'
+  | 'muted'
+> & {
+  eqBands?: SegmentTrackEqBand[];
+  gate?: SegmentTrackGate;
+  comp?: SegmentTrackComp;
+};
 
 function takeBasename(filePath: string): string {
   return filePath.replace(/\\/g, '/').split('/').pop() || filePath;
@@ -63,11 +90,46 @@ type ActiveTakeState = {
   clipUiId: string;
   sourceSec: number;
   volume: number;
+  eqBands?: SegmentTrackEqBand[];
+  gate?: SegmentTrackGate;
+  comp?: SegmentTrackComp;
 };
+
+type TakeFxGraph = {
+  source: MediaElementAudioSourceNode;
+  gateGain: GainNode;
+  analyser: AnalyserNode;
+  lowShelf: BiquadFilterNode;
+  peaking: BiquadFilterNode;
+  highShelf: BiquadFilterNode;
+  compressor: DynamicsCompressorNode;
+  makeupGain: GainNode;
+  volumeGain: GainNode;
+  /** Gate envelope state (preview approximation of ffmpeg agate). */
+  gateOpen: boolean;
+  gateHoldUntil: number;
+  gateRaf: number;
+  gateParams: SegmentTrackGate | null;
+};
+
+type TakeEntry = {
+  el: HTMLAudioElement;
+  fx: TakeFxGraph | null;
+};
+
+function dbToLinearGain(db: number): number {
+  if (!Number.isFinite(db)) return 1;
+  return Math.pow(10, db / 20);
+}
+
+function linearToDbSafe(linear: number): number {
+  if (!Number.isFinite(linear) || linear <= 0) return -100;
+  return 20 * Math.log10(linear);
+}
 
 export class ClipPreviewEngine {
   private opts: ClipPreviewEngineOpts;
-  private takes = new Map<string, HTMLAudioElement>();
+  private takes = new Map<string, TakeEntry>();
   /** Take basename -> clip uiId currently driving that element. */
   private activeClipByTake = new Map<string, string>();
   private playing = false;
@@ -76,6 +138,9 @@ export class ClipPreviewEngine {
   private raf = 0;
   private lastTickPerf = 0;
   private disposed = false;
+  private audioCtx: AudioContext | null = null;
+  /** Avoid spamming probes/toasts when many takes fail at once (e.g. rate limit). */
+  private lastTakeLoadErrorAt = 0;
 
   constructor(opts: ClipPreviewEngineOpts) {
     this.opts = opts;
@@ -97,21 +162,26 @@ export class ClipPreviewEngine {
     const next =
       Number.isFinite(rate) && rate > 0 ? Math.min(4, Math.max(0.25, rate)) : 1;
     this.playbackRate = next;
-    for (const el of this.takes.values()) {
-      el.playbackRate = next;
+    for (const entry of this.takes.values()) {
+      entry.el.playbackRate = next;
     }
   }
 
   dispose(): void {
     this.disposed = true;
     this.pause();
-    for (const el of this.takes.values()) {
-      el.pause();
-      el.removeAttribute('src');
-      el.load();
+    for (const entry of this.takes.values()) {
+      this.teardownFx(entry);
+      entry.el.pause();
+      entry.el.removeAttribute('src');
+      entry.el.load();
     }
     this.takes.clear();
     this.activeClipByTake.clear();
+    if (this.audioCtx) {
+      void this.audioCtx.close().catch(() => {});
+      this.audioCtx = null;
+    }
   }
 
   setPlayheadMs(ms: number, opts?: { resumeIfPlaying?: boolean }): void {
@@ -140,6 +210,7 @@ export class ClipPreviewEngine {
     this.playing = true;
     this.opts.onPlayingChange(true);
     this.lastTickPerf = performance.now();
+    void this.resumeAudioCtx();
     this.preloadTakes(this.opts.getClips());
     this.syncTakes({ forceSeek: true, allowPlay: true });
     this.startRaf();
@@ -149,8 +220,9 @@ export class ClipPreviewEngine {
     this.playing = false;
     this.opts.onPlayingChange(false);
     this.stopRaf();
-    for (const el of this.takes.values()) {
-      if (!el.paused) el.pause();
+    for (const entry of this.takes.values()) {
+      if (!entry.el.paused) entry.el.pause();
+      this.stopGateRaf(entry);
     }
     this.activeClipByTake.clear();
     this.opts.onPlayheadMs(this.playheadMs);
@@ -166,6 +238,214 @@ export class ClipPreviewEngine {
     if (this.disposed) return;
     this.preloadTakes(this.opts.getClips());
     this.setPlayheadMs(this.playheadMs, { resumeIfPlaying: this.playing });
+  }
+
+  private ensureAudioCtx(): AudioContext | null {
+    if (this.audioCtx) return this.audioCtx;
+    const Ctx =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return null;
+    this.audioCtx = new Ctx();
+    return this.audioCtx;
+  }
+
+  private async resumeAudioCtx(): Promise<void> {
+    const ctx = this.ensureAudioCtx();
+    if (ctx && ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  private teardownFx(entry: TakeEntry): void {
+    this.stopGateRaf(entry);
+    if (!entry.fx) return;
+    try {
+      entry.fx.source.disconnect();
+      entry.fx.gateGain.disconnect();
+      entry.fx.analyser.disconnect();
+      entry.fx.lowShelf.disconnect();
+      entry.fx.peaking.disconnect();
+      entry.fx.highShelf.disconnect();
+      entry.fx.compressor.disconnect();
+      entry.fx.makeupGain.disconnect();
+      entry.fx.volumeGain.disconnect();
+    } catch {
+      // already disconnected
+    }
+    entry.fx = null;
+  }
+
+  private stopGateRaf(entry: TakeEntry): void {
+    if (entry.fx?.gateRaf) {
+      cancelAnimationFrame(entry.fx.gateRaf);
+      entry.fx.gateRaf = 0;
+    }
+  }
+
+  private ensureFx(entry: TakeEntry): TakeFxGraph | null {
+    if (entry.fx) return entry.fx;
+    const ctx = this.ensureAudioCtx();
+    if (!ctx) return null;
+    try {
+      const source = ctx.createMediaElementSource(entry.el);
+      const gateGain = ctx.createGain();
+      gateGain.gain.value = 1;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.3;
+      const lowShelf = ctx.createBiquadFilter();
+      lowShelf.type = 'lowshelf';
+      lowShelf.frequency.value = EQ_LOW_HZ;
+      const peaking = ctx.createBiquadFilter();
+      peaking.type = 'peaking';
+      peaking.frequency.value = EQ_MID_HZ;
+      peaking.Q.value = EQ_MID_Q;
+      const highShelf = ctx.createBiquadFilter();
+      highShelf.type = 'highshelf';
+      highShelf.frequency.value = EQ_HIGH_HZ;
+      const compressor = ctx.createDynamicsCompressor();
+      const makeupGain = ctx.createGain();
+      makeupGain.gain.value = 1;
+      const volumeGain = ctx.createGain();
+      volumeGain.gain.value = 1;
+
+      // Parallel tap for level metering; main chain carries audio.
+      source.connect(analyser);
+      source.connect(gateGain);
+      gateGain.connect(lowShelf);
+      lowShelf.connect(peaking);
+      peaking.connect(highShelf);
+      highShelf.connect(compressor);
+      compressor.connect(makeupGain);
+      makeupGain.connect(volumeGain);
+      volumeGain.connect(ctx.destination);
+
+      entry.fx = {
+        source,
+        gateGain,
+        analyser,
+        lowShelf,
+        peaking,
+        highShelf,
+        compressor,
+        makeupGain,
+        volumeGain,
+        gateOpen: true,
+        gateHoldUntil: 0,
+        gateRaf: 0,
+        gateParams: null,
+      };
+      // MediaElementSource owns output; keep element volume at unity.
+      entry.el.volume = 1;
+      return entry.fx;
+    } catch (err) {
+      this.opts.onError?.(
+        err instanceof Error
+          ? err.message
+          : 'Could not create track audio preview graph',
+      );
+      return null;
+    }
+  }
+
+  private applyFxParams(fx: TakeFxGraph, state: ActiveTakeState): void {
+    const eq = eqBandsToUi(state.eqBands);
+    fx.lowShelf.gain.value = eq.lowDb;
+    fx.peaking.gain.value = eq.midDb;
+    fx.highShelf.gain.value = eq.highDb;
+
+    const comp = state.comp;
+    if (comp) {
+      fx.compressor.threshold.value = linearToDbSafe(comp.threshold);
+      fx.compressor.ratio.value = Math.min(20, Math.max(1, comp.ratio));
+      fx.compressor.attack.value = Math.min(1, Math.max(0, comp.attackMs / 1000));
+      fx.compressor.release.value = Math.min(
+        1,
+        Math.max(0, comp.releaseMs / 1000),
+      );
+      fx.compressor.knee.value = Math.min(40, Math.max(0, comp.kneeDb ?? 2.828));
+      fx.makeupGain.gain.value = dbToLinearGain(comp.makeupDb ?? 0);
+    } else {
+      // Bypass-ish: high threshold, 1:1 ratio
+      fx.compressor.threshold.value = 0;
+      fx.compressor.ratio.value = 1;
+      fx.compressor.knee.value = 0;
+      fx.compressor.attack.value = 0.003;
+      fx.compressor.release.value = 0.25;
+      fx.makeupGain.gain.value = 1;
+    }
+
+    fx.volumeGain.gain.value = Math.max(0, state.volume);
+
+    if (state.gate) {
+      fx.gateParams = state.gate;
+      this.startGateFollower(fx);
+    } else {
+      fx.gateParams = null;
+      this.stopGateFollower(fx);
+      fx.gateGain.gain.value = 1;
+    }
+  }
+
+  private stopGateFollower(fx: TakeFxGraph): void {
+    if (fx.gateRaf) {
+      cancelAnimationFrame(fx.gateRaf);
+      fx.gateRaf = 0;
+    }
+    fx.gateOpen = true;
+    fx.gateHoldUntil = 0;
+  }
+
+  private startGateFollower(fx: TakeFxGraph): void {
+    if (fx.gateRaf) return;
+    const data = new Float32Array(fx.analyser.fftSize);
+
+    const tick = () => {
+      if (this.disposed || !this.playing || !fx.gateParams) {
+        fx.gateRaf = 0;
+        return;
+      }
+      const gate = fx.gateParams;
+      const thresholdDb = linearToDbSafe(gate.threshold);
+      const attackSec = Math.max(0.0005, gate.attackMs / 1000);
+      const releaseSec = Math.max(0.001, gate.releaseMs / 1000);
+      const holdMs = Math.max(0, gate.holdMs ?? 0);
+      const closedGain = Math.max(0, Math.min(1, gate.range ?? 0));
+
+      fx.analyser.getFloatTimeDomainData(data);
+      let peak = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = Math.abs(data[i]!);
+        if (v > peak) peak = v;
+      }
+      const levelDb = linearToDbSafe(peak);
+      const now = performance.now();
+      const above = levelDb >= thresholdDb;
+
+      if (above) {
+        fx.gateOpen = true;
+        fx.gateHoldUntil = now + holdMs;
+        const t = fx.gateGain.context.currentTime;
+        fx.gateGain.gain.cancelScheduledValues(t);
+        fx.gateGain.gain.setTargetAtTime(1, t, attackSec / 3);
+      } else if (fx.gateOpen && now < fx.gateHoldUntil) {
+        // hold open
+      } else if (fx.gateOpen) {
+        fx.gateOpen = false;
+        const t = fx.gateGain.context.currentTime;
+        fx.gateGain.gain.cancelScheduledValues(t);
+        fx.gateGain.gain.setTargetAtTime(closedGain, t, releaseSec / 3);
+      }
+
+      fx.gateRaf = requestAnimationFrame(tick);
+    };
+    fx.gateRaf = requestAnimationFrame(tick);
   }
 
   private preloadTakes(clips: ClipPreviewClip[]): void {
@@ -217,11 +497,11 @@ export class ClipPreviewEngine {
     }
   }
 
-  private ensureTake(filePath: string): HTMLAudioElement {
+  private ensureTake(filePath: string): TakeEntry {
     const key = takeBasename(filePath);
-    let el = this.takes.get(key);
-    if (el) return el;
-    el = new Audio();
+    let entry = this.takes.get(key);
+    if (entry) return entry;
+    const el = new Audio();
     el.preload = 'auto';
     // Same-origin / proxied /api: cookies send without CORS crossOrigin.
     el.src = takeStreamUrl(
@@ -231,10 +511,40 @@ export class ClipPreviewEngine {
     );
     el.playbackRate = this.playbackRate;
     el.addEventListener('error', () => {
-      this.opts.onError?.(`Could not load take audio: ${key}`);
+      void this.reportTakeLoadError(key, el.src);
     });
-    this.takes.set(key, el);
-    return el;
+    entry = { el, fx: null };
+    this.takes.set(key, entry);
+    return entry;
+  }
+
+  /** Classify media load failures (429 vs missing) so scrubbing rate limits are not shown as "not found". */
+  private async reportTakeLoadError(key: string, url: string): Promise<void> {
+    if (this.disposed) return;
+    const now = Date.now();
+    if (now - this.lastTakeLoadErrorAt < 2500) return;
+    this.lastTakeLoadErrorAt = now;
+
+    let message = `Could not load take audio: ${key}`;
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Range: 'bytes=0-0' },
+        cache: 'no-store',
+      });
+      if (this.disposed) return;
+      if (res.status === 429) {
+        message = 'Too many audio requests. Wait a moment, then try again.';
+      } else if (res.status === 404) {
+        message = `Take audio not found: ${key}`;
+      } else if (!res.ok) {
+        message = `Could not load take audio (${res.status}): ${key}`;
+      }
+    } catch {
+      /* keep default */
+    }
+    this.opts.onError?.(message);
   }
 
   private syncTakes(opts: { forceSeek: boolean; allowPlay: boolean }): void {
@@ -242,8 +552,9 @@ export class ClipPreviewEngine {
     const tSec = tMs / 1000;
     const trims = this.opts.getTrimRanges();
     if (isInTrim(tSec, trims)) {
-      for (const el of this.takes.values()) {
-        if (!el.paused) el.pause();
+      for (const entry of this.takes.values()) {
+        if (!entry.el.paused) entry.el.pause();
+        this.stopGateRaf(entry);
       }
       this.activeClipByTake.clear();
       return;
@@ -262,7 +573,7 @@ export class ClipPreviewEngine {
         sourceOffsetMsOf(clip) / 1000 + (tMs - start) / 1000;
       const volume =
         typeof clip.volume === 'number' && Number.isFinite(clip.volume)
-          ? Math.max(0, Math.min(1, clip.volume))
+          ? Math.max(0, clip.volume)
           : 1;
       const prev = activeByTake.get(key);
       if (!prev || volume >= prev.volume) {
@@ -270,22 +581,34 @@ export class ClipPreviewEngine {
           clipUiId: clip.uiId,
           sourceSec,
           volume,
+          eqBands: clip.eqBands,
+          gate: clip.gate,
+          comp: clip.comp,
         });
       }
     }
 
     const needed = new Set(activeByTake.keys());
-    for (const [key, el] of this.takes) {
+    for (const [key, entry] of this.takes) {
       if (!needed.has(key)) {
-        if (!el.paused) el.pause();
+        if (!entry.el.paused) entry.el.pause();
+        this.stopGateRaf(entry);
         this.activeClipByTake.delete(key);
       }
     }
 
     for (const [key, state] of activeByTake) {
-      const el = this.ensureTake(key);
+      const entry = this.ensureTake(key);
+      const el = entry.el;
       if (el.playbackRate !== this.playbackRate) el.playbackRate = this.playbackRate;
-      if (el.volume !== state.volume) el.volume = state.volume;
+
+      const fx = this.ensureFx(entry);
+      if (fx) {
+        this.applyFxParams(fx, state);
+      } else {
+        // Fallback without Web Audio (rare): clamp element volume to 0..1
+        el.volume = Math.max(0, Math.min(1, state.volume));
+      }
 
       const prevClipId = this.activeClipByTake.get(key);
       const enteredNewClip = prevClipId !== state.clipUiId;
@@ -317,6 +640,7 @@ export class ClipPreviewEngine {
         }
       } else if (!el.paused) {
         el.pause();
+        this.stopGateRaf(entry);
       }
     }
   }

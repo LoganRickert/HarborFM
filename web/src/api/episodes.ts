@@ -102,6 +102,7 @@ export interface EpisodeCastMember {
   photoUrl: string | null;
   photoFilename?: string | null;
   socialLinkText: string | null;
+  email: string | null;
   isPublic: boolean;
   createdAt: string;
 }

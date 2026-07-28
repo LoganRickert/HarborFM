@@ -10,6 +10,8 @@ import {
   getEpisodeMeeting,
   rescheduleEpisodeMeeting,
 } from '../../api/call';
+import { getEpisodeCast } from '../../api/episodes';
+import { listCast } from '../../api/podcasts';
 import editorStyles from '../EpisodeEditor.module.css';
 import styles from './ScheduleMeetingDialog.module.css';
 
@@ -63,6 +65,7 @@ export interface ScheduleMeetingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   episodeId: string;
+  podcastId: string;
   /** Called after a meeting is created or cancelled so the parent can refresh. */
   onMeetingChanged?: () => void;
 }
@@ -71,6 +74,7 @@ export function ScheduleMeetingDialog({
   open,
   onOpenChange,
   episodeId,
+  podcastId,
   onMeetingChanged,
 }: ScheduleMeetingDialogProps) {
   const queryClient = useQueryClient();
@@ -78,6 +82,18 @@ export function ScheduleMeetingDialog({
     queryKey: ['call-meeting', episodeId],
     queryFn: () => getEpisodeMeeting(episodeId),
     enabled: open,
+  });
+
+  const { data: episodeCastData } = useQuery({
+    queryKey: ['episode-cast', podcastId, episodeId],
+    queryFn: () => getEpisodeCast(podcastId, episodeId),
+    enabled: open && Boolean(podcastId),
+  });
+
+  const { data: showCastData } = useQuery({
+    queryKey: ['podcast-cast', podcastId, 'meeting-invite'],
+    queryFn: () => listCast(podcastId, { limit: 100 }),
+    enabled: open && Boolean(podcastId),
   });
 
   const meeting = data?.meeting ?? null;
@@ -201,6 +217,39 @@ export function ScheduleMeetingDialog({
     }
   };
 
+  const handleQuickInvite = async (member: {
+    name: string;
+    email: string;
+  }) => {
+    if (!meeting) return;
+    const email = member.email.trim();
+    if (!isValidInviteEmail(email)) {
+      setError('Cast member email is invalid');
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await createMeetingInvite(meeting.id, {
+        name: member.name.trim() || null,
+        email,
+      });
+      invalidate();
+      await refetch();
+      if (res.invite && res.invite.emailSent === false) {
+        setError(
+          res.invite.emailError?.trim()
+            ? `Invite saved for ${member.name}, but email was not sent: ${res.invite.emailError}`
+            : `Invite saved for ${member.name}, but email was not sent. Check email settings.`,
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send invite');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleCopyShareLink = async () => {
     if (!meeting) return;
     setError(null);
@@ -282,6 +331,31 @@ export function ScheduleMeetingDialog({
     .filter((inv) => !inv.email?.trim())
     .slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const invitedEmails = new Set(
+    emailedInvites.map((inv) => inv.email!.trim().toLowerCase()),
+  );
+  const episodeCastWithEmail = (episodeCastData?.cast ?? [])
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      role: c.role,
+      email: c.email?.trim() || '',
+    }))
+    .filter((c) => isValidInviteEmail(c.email));
+  const showCastWithEmail = (showCastData?.cast ?? [])
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      role: c.role as 'host' | 'guest',
+      email: c.email?.trim() || '',
+    }))
+    .filter((c) => isValidInviteEmail(c.email));
+  const quickInviteSource =
+    episodeCastWithEmail.length > 0 ? episodeCastWithEmail : showCastWithEmail;
+  const quickInviteCandidates = quickInviteSource.filter(
+    (c) => !invitedEmails.has(c.email.toLowerCase()),
+  );
 
   const renderInviteRow = (inv: (typeof emailedInvites)[number], detail: string) => (
     <li key={inv.id} className={styles.inviteItem}>
@@ -492,6 +566,37 @@ export function ScheduleMeetingDialog({
                           </ul>
                         </div>
                       )}
+
+                      {quickInviteCandidates.length > 0 ? (
+                        <div className={styles.inviteGroup}>
+                          <span className={styles.label}>Quick invite</span>
+                          <div className={styles.quickInviteList}>
+                            {quickInviteCandidates.map((member) => (
+                              <button
+                                key={member.id}
+                                type="button"
+                                className={styles.quickInviteBtn}
+                                onClick={() =>
+                                  void handleQuickInvite({
+                                    name: member.name,
+                                    email: member.email,
+                                  })
+                                }
+                                disabled={busy}
+                                title={`Invite ${member.name} (${member.email})`}
+                              >
+                                <Mail size={14} aria-hidden />
+                                <span className={styles.quickInviteName}>
+                                  {member.name}
+                                </span>
+                                <span className={styles.quickInviteRole}>
+                                  {member.role === 'host' ? 'Host' : 'Guest'}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
 
                       {linkOnlyInvites.length > 0 && (
                         <div className={styles.inviteGroup}>

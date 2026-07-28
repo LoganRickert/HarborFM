@@ -24,11 +24,13 @@ import {
   disconnectAllWorkers,
   getWorker,
   listWorkers,
+  recordWorkerJobFinished,
   setWorkerBusy,
   setWorkerIdle,
   takeIdleWorkersRoundRobin,
   type ConnectedWorker,
 } from "./registry.js";
+import type { WorkerJobSubject } from "./subject.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -62,6 +64,8 @@ export type DispatchComputeJobOpts = {
   /** Public API base including /api (no trailing slash), used by workers for file URLs. */
   apiBase: string;
   runLocal: () => Promise<void>;
+  /** Optional podcast/episode context for Settings → Workers status. */
+  subject?: WorkerJobSubject | null;
 };
 
 /**
@@ -124,6 +128,7 @@ async function offerAndAwaitWorker(
     inputs: opts.inputs,
     outputs: opts.outputs,
     params: opts.params,
+    subject: opts.subject ?? null,
   });
 
   const accepted = await new Promise<boolean>((resolve) => {
@@ -194,6 +199,10 @@ async function offerAndAwaitWorker(
               : new WorkerExecutionError(message),
           );
         };
+
+        if (job.cancelRequested) {
+          job.doneReject(new WorkerExecutionError("Job cancelled by admin"));
+        }
       });
 
       promoteJobOutputs(job);
@@ -261,12 +270,52 @@ function persistWorkerJobStat(
       peakMemoryBytes: rs?.peakMemoryBytes ?? null,
       resourceSampleCount: rs?.sampleCount ?? null,
       resourceSource: rs?.source ?? null,
+      podcastId: job.subject?.podcastId ?? null,
+      episodeId: job.subject?.episodeId ?? null,
+      segmentId: job.subject?.segmentId ?? null,
+      podcastTitle: job.subject?.podcastTitle ?? null,
+      episodeTitle: job.subject?.episodeTitle ?? null,
+      userId: job.subject?.userId ?? null,
+      userEmail: job.subject?.userEmail ?? null,
+      userUsername: job.subject?.userUsername ?? null,
       startedAt: new Date(startedMs).toISOString(),
       finishedAt: new Date(finishedMs).toISOString(),
+    });
+    recordWorkerJobFinished(job.workerId, {
+      kind: job.kind,
+      status: outcome.status,
+      finishedAt: finishedMs,
     });
   } catch {
     /* stats must not break job cleanup */
   }
+}
+
+/** Fail an accepted in-flight job and ask the worker to stop. Returns false if unknown. */
+export function cancelComputeJob(jobId: string): boolean {
+  const job = getJob(jobId);
+  if (!job) return false;
+
+  job.cancelRequested = true;
+
+  if (job.workerId) {
+    const worker = getWorker(job.workerId);
+    if (worker?.socket) {
+      send(worker.socket, { type: "cancel", jobId });
+    }
+  }
+
+  clearJobDisconnectGrace(job);
+  if (job.acceptResolve) {
+    job.acceptResolve(false);
+    return true;
+  }
+  if (job.doneReject) {
+    job.doneReject(new WorkerExecutionError("Job cancelled by admin"));
+    return true;
+  }
+  // Waiters not wired yet; dispatch will reject once doneReject is set.
+  return true;
 }
 
 /** Called from WS handlers when a worker replies about a job. */

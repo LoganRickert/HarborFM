@@ -25,6 +25,7 @@ export interface EpisodeForm {
   subscriberOnly: boolean;
   subscriberOnlyStartsAt: string;
   subscriberOnlyEndsAt: string;
+  unlisted: boolean;
   contentLinks: Array<{ href: string; text: string }>;
   podcastTxts: Array<{ purpose: string; value: string }>;
   socialInteracts: Array<{
@@ -175,6 +176,7 @@ export function episodeToForm(episode: Episode): EpisodeForm {
     subscriberOnlyEndsAt: episode.subscriberOnlyEndsAt
       ? toDateTimeLocalValue(episode.subscriberOnlyEndsAt)
       : '',
+    unlisted: !!(episode.unlisted) && episode.status !== 'draft',
     contentLinks,
     podcastTxts,
     socialInteracts,
@@ -189,7 +191,7 @@ export function episodeToForm(episode: Episode): EpisodeForm {
 
 export type PublishFormFields = Pick<
   EpisodeForm,
-  'status' | 'seasonNumber' | 'episodeNumber' | 'publishAt' | 'expiresAt'
+  'status' | 'seasonNumber' | 'episodeNumber' | 'publishAt' | 'expiresAt' | 'unlisted'
 >;
 
 /** True when both dates are set and expiresAt is not strictly after publishAt. */
@@ -226,12 +228,14 @@ export function publishFieldsToApiPayload(fields: PublishFormFields) {
   if (isExpiresAtBeforePublishAt(fields)) {
     throw new Error(EXPIRES_AT_BEFORE_PUBLISH_AT_MESSAGE);
   }
+  const status = fields.status as 'draft' | 'scheduled' | 'published';
   return {
-    status: fields.status as 'draft' | 'scheduled' | 'published',
+    status,
     seasonNumber: fields.seasonNumber === '' ? null : parseInt(fields.seasonNumber, 10),
     episodeNumber: fields.episodeNumber === '' ? null : parseInt(fields.episodeNumber, 10),
     publishAt: fields.publishAt ? new Date(fields.publishAt).toISOString() : null,
     expiresAt: fields.expiresAt ? new Date(fields.expiresAt).toISOString() : null,
+    unlisted: (status === 'draft' ? 0 : fields.unlisted ? 1 : 0) as 0 | 1,
   };
 }
 
@@ -384,6 +388,7 @@ export function formToApiPayload(form: EpisodeForm) {
     subscriberOnlyEndsAt: form.subscriberOnlyEndsAt
       ? new Date(form.subscriberOnlyEndsAt).toISOString()
       : null,
+    unlisted: (form.status === 'draft' ? 0 : form.unlisted ? 1 : 0) as 0 | 1,
     contentLinks: contentLinks.length > 0 ? contentLinks : null,
     podcastTxts: podcastTxts.length > 0 ? podcastTxts : null,
     socialInteracts: socialInteracts.length > 0 ? socialInteracts : null,

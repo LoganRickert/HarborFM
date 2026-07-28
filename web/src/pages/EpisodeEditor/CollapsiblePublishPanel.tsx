@@ -1,5 +1,5 @@
 import { useState, useEffect, useId } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { Check, ChevronRight, Copy } from 'lucide-react';
 import { EpisodePublishControls, type PublishFormFields } from './EpisodePublishControls';
 import { isExpiresAtBeforePublishAt } from './utils';
 import styles from '../EpisodeEditor.module.css';
@@ -21,6 +21,8 @@ export interface CollapsiblePublishPanelProps {
   isSaving?: boolean;
   saveError?: string | null;
   hasFinalAudio: boolean;
+  /** Public episode URL when scheduled or published. */
+  episodeUrl?: string | null;
 }
 
 export function CollapsiblePublishPanel({
@@ -30,11 +32,13 @@ export function CollapsiblePublishPanel({
   isSaving = false,
   saveError,
   hasFinalAudio,
+  episodeUrl,
 }: CollapsiblePublishPanelProps) {
   const panelId = useId();
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState<PublishFormFields>(savedValues);
   const [dirty, setDirty] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!expanded) {
@@ -74,7 +78,43 @@ export function CollapsiblePublishPanel({
     }
   }
 
+  async function handleCopyUrl() {
+    if (!episodeUrl) return;
+    try {
+      await navigator.clipboard.writeText(episodeUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      /* ignore */
+    }
+  }
+
   const saveBlocked = isExpiresAtBeforePublishAt(draft);
+  const showEpisodeLink =
+    Boolean(episodeUrl?.trim()) &&
+    (savedValues.status === 'scheduled' || savedValues.status === 'published');
+
+  const episodeLinkRow = showEpisodeLink ? (
+    <div className={styles.publishEpisodeLinkRow}>
+      <a
+        href={episodeUrl!}
+        className={styles.publishEpisodeLink}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {episodeUrl}
+      </a>
+      <button
+        type="button"
+        className={styles.publishEpisodeCopyBtn}
+        onClick={() => void handleCopyUrl()}
+        aria-label={copied ? 'Copied' : 'Copy episode link'}
+        title={copied ? 'Copied' : 'Copy link'}
+      >
+        {copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
+      </button>
+    </div>
+  ) : null;
 
   if (readOnly) {
     return (
@@ -85,6 +125,7 @@ export function CollapsiblePublishPanel({
             {statusLabel(savedValues.status)}
           </span>
         </div>
+        {episodeLinkRow}
       </div>
     );
   }
@@ -107,6 +148,8 @@ export function CollapsiblePublishPanel({
             aria-hidden
           />
         </button>
+
+        {episodeLinkRow}
 
         <div
           id={panelId}
@@ -144,7 +187,7 @@ export function CollapsiblePublishPanel({
                 onClick={handleSave}
                 disabled={isSaving || !dirty || saveBlocked}
               >
-                {isSaving ? 'Saving…' : 'Save'}
+                {isSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>

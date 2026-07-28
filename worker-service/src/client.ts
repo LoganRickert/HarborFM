@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { execFileSync } from "child_process";
 import { mkdirSync, rmSync, existsSync } from "fs";
 import { extname, join } from "path";
 import { nanoid } from "nanoid";
@@ -14,6 +15,10 @@ import { downloadJobFile, uploadJobFile } from "./transfer.js";
 import { ensureInputHasExtension } from "./ensureInputExt.js";
 import { runTranscribeJob } from "./jobs/transcribe.js";
 import { runVideoJob } from "./jobs/videoGenerationCore.js";
+import {
+  runEpisodeRenderWorkerJob,
+  episodeRenderOutPath,
+} from "./jobs/episodeRender.js";
 import { startJobResourceSampler } from "./jobResourceSampler.js";
 import type { JobResourceStatsPayload } from "./protocol.js";
 
@@ -34,6 +39,8 @@ function send(ws: WebSocket, msg: ClientMessage): void {
 let currentSocket: WebSocket | null = null;
 /** True while a job is running locally (survives brief WS drops). */
 let busy = false;
+let runningJobId: string | null = null;
+let cancelRequested = false;
 let reconnectDelayMs = 2000;
 /** Terminal job message to send once the socket is back. */
 let pendingTerminal: Extract<
@@ -120,6 +127,18 @@ function sendReliable(msg: ClientMessage): void {
   }
 }
 
+function killToolChildren(): void {
+  try {
+    execFileSync("pkill", ["-P", String(process.pid)], { stdio: "ignore" });
+  } catch {
+    /* no children or pkill unavailable */
+  }
+}
+
+function assertNotCancelled(): void {
+  if (cancelRequested) throw new Error("Cancelled");
+}
+
 async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
   if (msg.type === "auth_ok") {
     currentSocket = ws;
@@ -142,6 +161,14 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
   if (msg.type === "pong") {
     return;
   }
+  if (msg.type === "cancel") {
+    if (runningJobId && msg.jobId === runningJobId) {
+      console.log(`[worker] cancel requested for job ${msg.jobId}`);
+      cancelRequested = true;
+      killToolChildren();
+    }
+    return;
+  }
   if (msg.type !== "job") return;
 
   if (busy) {
@@ -150,6 +177,8 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
   }
 
   busy = true;
+  runningJobId = msg.jobId;
+  cancelRequested = false;
   currentSocket = ws;
   sendReliable({ type: "accepted", jobId: msg.jobId });
   const workDir = join(WORK_DIR, msg.jobId || nanoid());
@@ -166,6 +195,7 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
 
     const inputPaths = new Map<string, string>();
     for (const input of msg.inputs) {
+      assertNotCancelled();
       let dest = localInputPath(workDir, input);
       await downloadJobFile({
         apiBase: msg.apiBase,
@@ -178,6 +208,7 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
       inputPaths.set(input.name, dest);
     }
 
+    assertNotCancelled();
     sendReliable({
       type: "progress",
       jobId: msg.jobId,
@@ -190,6 +221,7 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
       if (!audio) throw new Error("Missing audio input");
       const out = join(workDir, "transcript.srt");
       await runTranscribeJob(audio, out);
+      assertNotCancelled();
       outputPaths.set("transcript.srt", out);
     } else if (msg.kind === "video_generate") {
       const audio = inputPaths.get("audio");
@@ -203,17 +235,33 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
         outPath: out,
         params: msg.params,
       });
+      assertNotCancelled();
       outputPaths.set("video.mp4", out);
+    } else if (msg.kind === "episode_render") {
+      const out = episodeRenderOutPath(workDir, msg.params.format);
+      await runEpisodeRenderWorkerJob({
+        workDir,
+        inputPaths,
+        outPath: out,
+        params: msg.params,
+      });
+      assertNotCancelled();
+      const outName =
+        msg.outputs[0]?.name ??
+        (msg.params.format === "m4a" ? "final.m4a" : "final.mp3");
+      outputPaths.set(outName, out);
     } else {
       throw new Error(`Unsupported job kind: ${(msg as { kind: string }).kind}`);
     }
 
+    assertNotCancelled();
     sendReliable({
       type: "progress",
       jobId: msg.jobId,
       message: "Uploading outputs",
     });
     for (const output of msg.outputs) {
+      assertNotCancelled();
       const src = outputPaths.get(output.name);
       if (!src || !existsSync(src)) {
         throw new Error(`Missing output ${output.name}`);
@@ -235,7 +283,12 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
     });
     console.log(`[worker] job ${msg.jobId} completed`);
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const wasCancelled = cancelRequested;
+    const error = wasCancelled
+      ? "Cancelled"
+      : err instanceof Error
+        ? err.message
+        : String(err);
     console.error(`[worker] job ${msg.jobId} failed:`, error);
     if (!resourceStats) {
       try {
@@ -257,5 +310,7 @@ async function handleMessage(ws: WebSocket, msg: ServerMessage): Promise<void> {
       /* ignore */
     }
     busy = false;
+    runningJobId = null;
+    cancelRequested = false;
   }
 }

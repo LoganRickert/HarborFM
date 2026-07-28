@@ -150,7 +150,7 @@ function escapeRppString(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/** Safe track label for Reaper / Resolve (Logan_0, soundboard_abc). */
+/** Safe track label for Reaper / Resolve (Logan_0, soundboard). */
 function sanitizeTrackLabel(s: string): string {
   const t = s
     .trim()
@@ -597,11 +597,8 @@ function laneGroupKey(clip: SegmentTrackClip): {
   key: string;
 } {
   if (clip.source === "soundboard") {
-    const asset =
-      (clip.soundboardAssetId && clip.soundboardAssetId.trim()) ||
-      clip.name ||
-      "soundboard";
-    return { kind: "soundboard", key: `sb:${asset}` };
+    // All soundboard one-shots share one track (they should not overlap).
+    return { kind: "soundboard", key: "sb:soundboard" };
   }
   const pid =
     (clip.participantId && String(clip.participantId).trim()) ||
@@ -613,9 +610,7 @@ function laneGroupKey(clip: SegmentTrackClip): {
 
 function laneDisplayBase(clip: SegmentTrackClip, kind: DawLane["kind"]): string {
   if (kind === "soundboard") {
-    const asset =
-      (clip.soundboardAssetId && clip.soundboardAssetId.trim()) || "soundboard";
-    return `soundboard_${sanitizeTrackLabel(asset)}`;
+    return "soundboard";
   }
   if (kind === "participant") {
     const raw =
@@ -671,9 +666,7 @@ export function buildDawLanes(clips: SegmentTrackClip[]): DawLane[] {
       name = `${g.base}_${participantIdx}`;
       participantIdx += 1;
     } else if (g.kind === "soundboard") {
-      name = g.base.startsWith("soundboard_")
-        ? g.base
-        : `soundboard_${sanitizeTrackLabel(g.base)}`;
+      name = "soundboard";
     } else {
       name = g.base;
     }
@@ -1075,7 +1068,7 @@ function otioLaneChildren(clips: SegmentTrackClip[]): unknown[] {
 
 /**
  * Segment OTIO: one audio Track per lane (participant / soundboard), named
- * Logan_0 / soundboard_<assetId>. Markers live on the timeline Stack (not clips).
+ * Logan_0 / soundboard. Markers live on the timeline Stack (not clips).
  */
 export function buildSegmentOtioTimeline(
   timelineName: string,

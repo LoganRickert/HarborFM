@@ -175,7 +175,7 @@ export interface AppSettings {
   telnyx_public_key: string;
   /** Telnyx Call Control connection / application id. */
   telnyx_connection_id: string;
-  /** When true, dispatch video/transcript jobs to connected compute workers. */
+  /** When true, dispatch eligible jobs to connected compute workers. */
   workers_enabled: boolean;
   /** Secret path segment for worker WebSocket: /api/workers/ws/{path}. */
   workers_ws_path: string;
@@ -187,6 +187,12 @@ export interface AppSettings {
   workers_dispatch_retry_sec: number;
   /** After attempts exhausted, run the job on the HarborFM server. */
   workers_fallback_local: boolean;
+  /** Offload self-hosted Whisper transcription to workers. */
+  workers_use_for_transcripts: boolean;
+  /** Offload episode video generation to workers. */
+  workers_use_for_videos: boolean;
+  /** Offload Build Final Episode audio encode to workers. */
+  workers_use_for_final_episodes: boolean;
 }
 
 export const OPENAI_TRANSCRIPTION_DEFAULT_URL =
@@ -285,6 +291,9 @@ export const DEFAULTS: AppSettings = {
   workers_dispatch_attempts: 3,
   workers_dispatch_retry_sec: 60,
   workers_fallback_local: true,
+  workers_use_for_transcripts: true,
+  workers_use_for_videos: true,
+  workers_use_for_final_episodes: true,
 };
 
 export const OPENAI_DEFAULT_MODEL = "gpt5-mini";
@@ -539,6 +548,15 @@ export function buildAppSettingsFromRows(
     } else if (row.key === "workers_fallback_local")
       (settings as Partial<AppSettings>).workers_fallback_local =
         row.value === "true";
+    else if (row.key === "workers_use_for_transcripts")
+      (settings as Partial<AppSettings>).workers_use_for_transcripts =
+        row.value === "true";
+    else if (row.key === "workers_use_for_videos")
+      (settings as Partial<AppSettings>).workers_use_for_videos =
+        row.value === "true";
+    else if (row.key === "workers_use_for_final_episodes")
+      (settings as Partial<AppSettings>).workers_use_for_final_episodes =
+        row.value === "true";
   }
 
   return {
@@ -730,6 +748,15 @@ export function buildAppSettingsFromRows(
     workers_fallback_local:
       (settings as Partial<AppSettings>).workers_fallback_local ??
       DEFAULTS.workers_fallback_local,
+    workers_use_for_transcripts:
+      (settings as Partial<AppSettings>).workers_use_for_transcripts ??
+      DEFAULTS.workers_use_for_transcripts,
+    workers_use_for_videos:
+      (settings as Partial<AppSettings>).workers_use_for_videos ??
+      DEFAULTS.workers_use_for_videos,
+    workers_use_for_final_episodes:
+      (settings as Partial<AppSettings>).workers_use_for_final_episodes ??
+      DEFAULTS.workers_use_for_final_episodes,
   };
 }
 
@@ -866,5 +893,9 @@ export function settingsToApiResponse(
     workersDispatchAttempts: settings.workers_dispatch_attempts ?? 3,
     workersDispatchRetrySec: settings.workers_dispatch_retry_sec ?? 60,
     workersFallbackLocal: settings.workers_fallback_local !== false,
+    workersUseForTranscripts: settings.workers_use_for_transcripts !== false,
+    workersUseForVideos: settings.workers_use_for_videos !== false,
+    workersUseForFinalEpisodes:
+      settings.workers_use_for_final_episodes !== false,
   };
 }

@@ -3,8 +3,10 @@ import { requireAuth, requireAdmin } from "../../plugins/auth.js";
 import * as settingsRepo from "../settings/repo.js";
 import {
   invalidateAllWorkerSessions,
+  cancelComputeJob,
 } from "./dispatch.js";
 import { workerStatusSummary } from "./registry.js";
+import { getJob } from "./jobs.js";
 import { registerWorkerFileRoutes } from "./routes.files.js";
 import {
   generateWorkerSecrets,
@@ -12,11 +14,13 @@ import {
 } from "./routes.ws.js";
 import { listWorkerJobStats } from "./statsRepo.js";
 
-export { dispatchComputeJob } from "./dispatch.js";
+export { dispatchComputeJob, cancelComputeJob } from "./dispatch.js";
 export { workerApiBaseFromRequest } from "./apiBase.js";
 export { generateWorkerSecrets } from "./routes.ws.js";
 export { workerStatusSummary } from "./registry.js";
 export { invalidateAllWorkerSessions } from "./dispatch.js";
+export { resolveWorkerJobSubject } from "./subject.js";
+export type { WorkerJobSubject } from "./subject.js";
 
 export async function workerRoutes(app: FastifyInstance): Promise<void> {
   await registerWorkerWsRoutes(app);
@@ -56,6 +60,42 @@ export async function workerRoutes(app: FastifyInstance): Promise<void> {
             ? Number(q.limit)
             : 50;
       return reply.send({ jobs: listWorkerJobStats(limit) });
+    },
+  );
+
+  app.post(
+    "/settings/workers-jobs/:jobId/cancel",
+    {
+      preHandler: [requireAuth, requireAdmin],
+      schema: {
+        tags: ["Settings"],
+        summary: "Cancel an in-flight compute worker job",
+        params: {
+          type: "object",
+          properties: { jobId: { type: "string" } },
+          required: ["jobId"],
+        },
+        response: {
+          200: {
+            description: "Cancel requested",
+            type: "object",
+            properties: { ok: { type: "boolean" } },
+            required: ["ok"],
+          },
+          404: { description: "Job not found or already finished" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { jobId } = request.params as { jobId: string };
+      if (!jobId?.trim() || !getJob(jobId)) {
+        return reply.status(404).send({ error: "Job not found" });
+      }
+      const ok = cancelComputeJob(jobId);
+      if (!ok) {
+        return reply.status(404).send({ error: "Job not found" });
+      }
+      return reply.send({ ok: true });
     },
   );
 

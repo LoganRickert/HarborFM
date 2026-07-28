@@ -108,6 +108,7 @@ type EpisodeProjectJson = {
   subscriberOnly?: boolean | null;
   subscriberOnlyStartsAt?: string | null;
   subscriberOnlyEndsAt?: string | null;
+  unlisted?: boolean | null;
   showNotesGuestVisible?: boolean | null;
   finalMarkers?: unknown;
   finalSoundbites?: unknown;
@@ -217,6 +218,7 @@ export async function importProjectZip(
       subscriberOnly: Boolean(episodeData.subscriberOnly),
       subscriberOnlyStartsAt: episodeData.subscriberOnlyStartsAt ?? null,
       subscriberOnlyEndsAt: episodeData.subscriberOnlyEndsAt ?? null,
+      unlisted: false,
       showNotesGuestVisible: Boolean(episodeData.showNotesGuestVisible),
       finalMarkers: stringifyJsonField(episodeData.finalMarkers),
       finalSoundbites: stringifyJsonField(episodeData.finalSoundbites),

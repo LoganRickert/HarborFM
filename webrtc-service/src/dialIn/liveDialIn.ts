@@ -67,6 +67,7 @@ export type LiveDialInState = {
   mixTimer: ReturnType<typeof setInterval> | null;
   silenceTimer: ReturnType<typeof setInterval> | null;
   closing: boolean;
+  mixGeneration: number;
 };
 
 type OutboundMix = {
@@ -99,6 +100,45 @@ function untrackFromRoom(roomId: string, dialInId: string): void {
   if (!set) return;
   set.delete(dialInId);
   if (set.size === 0) dialInsByRoom.delete(roomId);
+}
+
+function pruneStaleProducer(room: RoomState, producerId: string, reason: string): void {
+  room.producers.delete(producerId);
+  producerSourceMapRef.delete(producerId);
+  producerParticipantMapRef.delete(producerId);
+  console.warn(`[dial-in live] pruned stale producer ${producerId} (${reason})`);
+}
+
+/** Audio producer ids in the room excluding self; drops closed/stale map entries. */
+function listOtherAudioProducerIds(room: RoomState, excludeProducerId: string): string[] {
+  const ids: string[] = [];
+  for (const [id, p] of [...room.producers.entries()]) {
+    if (id === excludeProducerId) continue;
+    if (p.kind !== "audio") continue;
+    if (p.closed) {
+      pruneStaleProducer(room, id, "closed");
+      continue;
+    }
+    ids.push(id);
+  }
+  return ids;
+}
+
+function isProducerNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const name = String((err as { name?: unknown }).name ?? "");
+  const message = String((err as { message?: unknown }).message ?? "");
+  return name === "NotFoundError" || /producer with id .* not found/i.test(message);
+}
+
+function refreshOutboundMixForRoom(roomId: string, exceptDialInId?: string): void {
+  const set = dialInsByRoom.get(roomId);
+  if (!set || set.size === 0) return;
+  for (const id of set) {
+    if (exceptDialInId && id === exceptDialInId) continue;
+    const peer = dialInsById.get(id);
+    if (peer && !peer.closing) void refreshOutboundMix(peer);
+  }
 }
 
 /**
@@ -267,6 +307,7 @@ export function leaveLiveDialIn(dialInId: string): boolean {
   const roomId = state.roomId;
   stopLiveDialIn(state);
   broadcastToRoom(roomId, { type: "producerClosed", producerId });
+  refreshOutboundMixForRoom(roomId);
   return true;
 }
 
@@ -326,9 +367,7 @@ async function buildOutboundMix(
   excludeProducerId: string,
   format: TelnyxWireFormat,
 ): Promise<OutboundMix | null> {
-  const otherIds = [...room.producers.entries()]
-    .filter(([id, p]) => id !== excludeProducerId && p.kind === "audio")
-    .map(([id]) => id);
+  const otherIds = listOtherAudioProducerIds(room, excludeProducerId);
   if (otherIds.length === 0) return null;
 
   const routerCodec = room.router.rtpCapabilities.codecs?.find(
@@ -343,6 +382,7 @@ async function buildOutboundMix(
   const consumers: Consumer[] = [];
   const sdpPaths: string[] = [];
   const ports: { rtpPort: number; rtcpPort: number }[] = [];
+  const consumedProducerIds: string[] = [];
   const tempDir = join(RECORDING_DATA_DIR, "dial-in-temp");
   mkdirSync(tempDir, { recursive: true });
 
@@ -352,24 +392,42 @@ async function buildOutboundMix(
       const rtpPort = OUTBOUND_PORT_BASE + (portIdx % 2000) * 4;
       const rtcpPort = rtpPort + 1;
 
-      const plainTransport = await room.router.createPlainTransport({
-        listenIp: { ip: "127.0.0.1" },
-        rtcpMux: false,
-        comedia: false,
-      });
-      const consumer = await plainTransport.consume({
-        producerId,
-        rtpCapabilities,
-        paused: true,
-      });
-      const payloadType = consumer.rtpParameters.codecs?.[0]?.payloadType ?? 111;
-      const sdpPath = join(tempDir, `mix_${nanoid(8)}.sdp`);
-      writeFileSync(sdpPath, createOpusSdp(rtpPort, rtcpPort, payloadType), "utf8");
+      let plainTransport: PlainTransport | null = null;
+      try {
+        plainTransport = await room.router.createPlainTransport({
+          listenIp: { ip: "127.0.0.1" },
+          rtcpMux: false,
+          comedia: false,
+        });
+        const consumer = await plainTransport.consume({
+          producerId,
+          rtpCapabilities,
+          paused: true,
+        });
+        const payloadType = consumer.rtpParameters.codecs?.[0]?.payloadType ?? 111;
+        const sdpPath = join(tempDir, `mix_${nanoid(8)}.sdp`);
+        writeFileSync(sdpPath, createOpusSdp(rtpPort, rtcpPort, payloadType), "utf8");
 
-      transports.push(plainTransport);
-      consumers.push(consumer);
-      sdpPaths.push(sdpPath);
-      ports.push({ rtpPort, rtcpPort });
+        transports.push(plainTransport);
+        consumers.push(consumer);
+        sdpPaths.push(sdpPath);
+        ports.push({ rtpPort, rtcpPort });
+        consumedProducerIds.push(producerId);
+        plainTransport = null;
+      } catch (err) {
+        if (plainTransport) {
+          try {
+            plainTransport.close();
+          } catch {
+            /* ignore */
+          }
+        }
+        if (isProducerNotFoundError(err)) {
+          pruneStaleProducer(room, producerId, "NotFoundError on consume");
+          continue;
+        }
+        throw err;
+      }
     }
 
     if (consumers.length === 0) return null;
@@ -449,7 +507,7 @@ async function buildOutboundMix(
       ffmpeg,
       transports,
       consumers,
-      producerIds: [...otherIds],
+      producerIds: [...consumedProducerIds],
       sdpPaths,
       stdoutBuf: Buffer.alloc(0),
       sendQueue: [],
@@ -529,23 +587,21 @@ async function refreshOutboundMix(state: LiveDialInState): Promise<void> {
   const room = getRoom(state.roomId);
   if (!room) return;
 
-  const wanted = [...room.producers.entries()]
-    .filter(([id, p]) => id !== state.producer.id && p.kind === "audio")
-    .map(([id]) => id)
-    .sort()
-    .join(",");
+  const wanted = listOtherAudioProducerIds(room, state.producer.id).slice().sort().join(",");
   const current = (state.outbound?.producerIds ?? []).slice().sort().join(",");
   if (wanted === current && state.outbound) return;
 
+  const generation = ++state.mixGeneration;
   stopOutbound(state.outbound);
   state.outbound = null;
   if (!wanted) return;
 
   const mix = await buildOutboundMix(room, state.producer.id, state.format);
-  if (!mix || state.closing) {
+  if (generation !== state.mixGeneration || state.closing) {
     stopOutbound(mix);
     return;
   }
+  if (!mix) return;
   state.outbound = mix;
   attachOutboundReader(state);
 }
@@ -675,6 +731,7 @@ async function startBridgeAfterFormat(
     mixTimer: null,
     silenceTimer: null,
     closing: false,
+    mixGeneration: 0,
   };
 
   producerSourceMapRef.set(producer.id, "phone");
@@ -693,6 +750,7 @@ async function startBridgeAfterFormat(
     if (dialInsById.get(dialInId) === state) {
       stopLiveDialIn(state);
       broadcastToRoom(roomId, { type: "producerClosed", producerId: producer.id });
+      refreshOutboundMixForRoom(roomId);
     }
   });
 
@@ -717,6 +775,7 @@ async function startBridgeAfterFormat(
   }
 
   void refreshOutboundMix(state);
+  refreshOutboundMixForRoom(roomId, dialInId);
   state.mixTimer = setInterval(() => {
     void refreshOutboundMix(state);
   }, MIX_REFRESH_MS);

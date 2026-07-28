@@ -119,6 +119,6 @@ export async function createAdvancedEditorFixture(page: Page): Promise<EditorFix
 export async function openAdvancedEditor(page: Page, episodeId: string): Promise<void> {
   await page.goto(`/episodes/${episodeId}`);
   await page.getByRole('button', { name: 'Edit segment timeline' }).click({ timeout: 25000 });
-  await page.getByRole('button', { name: 'Advanced editor' }).click({ timeout: 15000 });
+  await page.getByRole('button', { name: 'Advanced Editor' }).click({ timeout: 15000 });
   await page.getByRole('heading', { name: /Advanced Editor:/i }).waitFor({ timeout: 15000 });
 }
