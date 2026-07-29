@@ -107,6 +107,9 @@ export const segmentUpdateBodySchema = z.object({
   markers: markersSchema.optional().nullable(),
   audioEq: audioEqSchema,
   disabled: z.boolean().optional(),
+  loudnessTargetingEnabled: z.boolean().optional(),
+  /** Fixed dB gain on Generate Final (-24..+6). Default 0. */
+  finalGainDb: z.number().min(-24).max(6).optional(),
 });
 
 /** Body for POST /episodes/:episodeId/segments/:segmentId/host-ducking. */
@@ -205,6 +208,16 @@ export const segmentResponseSchema = z.object({
   disabled: z.boolean().optional(),
   /** When true, exclusive host gates from host_ducking.json are applied on remake. */
   hostDuckingEnabled: z.boolean().optional(),
+  /**
+   * When false, Generate Final Episode skips loudnorm for this segment
+   * (mixed path). Default true.
+   */
+  loudnessTargetingEnabled: z.boolean().optional(),
+  /**
+   * Fixed dB gain applied on Generate Final Episode (after trim/EQ, before
+   * loudnorm). Default 0. Useful when loudness targeting is disabled.
+   */
+  finalGainDb: z.number().min(-24).max(6).optional(),
   /** True when multitrack recordings exist for this segment. */
   hasRecordings: z.boolean().optional(),
   /** True when tracks_manifest.json.original exists (Restore Original Mix). */
@@ -254,6 +267,19 @@ export type VideoOrientation = z.infer<typeof videoOrientationSchema>;
 export const videoWaveformTypeSchema = z.enum(['sine', 'bars', 'circle', 'dots']);
 export type VideoWaveformType = z.infer<typeof videoWaveformTypeSchema>;
 
+/** Optional chapter-title overlay layout for video generation (center x/y, size as fractions of frame). */
+export const videoChapterTitleLayoutSchema = z.object({
+  /** X center of title overlay, 0–1. */
+  x: z.coerce.number().min(0).max(1),
+  /** Y center of title overlay, 0–1. */
+  y: z.coerce.number().min(0).max(1),
+  /** Width of title overlay, 0–1 (fraction of video width). */
+  width: z.coerce.number().min(0).max(1),
+  /** Height of title overlay, 0–1 (fraction of video height); drives font size. */
+  height: z.coerce.number().min(0).max(1),
+});
+export type VideoChapterTitleLayout = z.infer<typeof videoChapterTitleLayoutSchema>;
+
 /** JSON body for POST /episodes/:id/generate-video (x, y 0–1 relative, width, amplitude, style). Image is optional multipart. */
 export const generateVideoBodySchema = z.object({
   /** X position of waveform overlay, 0–1 (0=left, 0.5=center, 1=right). */
@@ -264,8 +290,8 @@ export const generateVideoBodySchema = z.object({
   width: z.coerce.number().min(0).max(1),
   amplitude: z.coerce.number().min(0).max(2),
   style: videoSpectrumStyleSchema.optional(),
-  /** Integer 1–30: for sine/circle = stroke width (px); for bars/dots = bar/dot count. Optional; default 3. */
-  strokeWidth: z.coerce.number().int().min(1).max(30).optional(),
+  /** Integer 1+: for sine/circle = stroke width (px); for bars/dots = bar/dot count. Optional; default 3. */
+  strokeWidth: z.coerce.number().int().min(1).optional(),
   /** Smoothing 0–1 (0=instant, 1=very smooth). Optional; default 0.7. */
   smoothing: z.coerce.number().min(0).max(1).optional(),
   /** Output resolution. Optional; default 720p. */
@@ -276,6 +302,8 @@ export const generateVideoBodySchema = z.object({
   waveformType: videoWaveformTypeSchema.optional(),
   /** Waveform color: any CSS color (hex, rgb, rgba, or gradient). Optional; overrides style when set. Max length 100. */
   color: z.string().max(100).optional(),
+  /** Optional chapter-title overlay layout. Chapter list is loaded server-side from episode finalMarkers. */
+  chapterTitle: videoChapterTitleLayoutSchema.optional(),
 });
 
 /** Response for GET /episodes/:id/video-status. */

@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libid3tag0 libboost-program-options1.74.0 geoipupdate smbclient \
     libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 \
     libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev \
+    fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \

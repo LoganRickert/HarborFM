@@ -1,6 +1,7 @@
 export * from './constants/twoFactor.js';
 export * from './constants/username.js';
 export * from './schemas/auth.js';
+export * from './castSocialLinks.js';
 export * from './schemas/cast.js';
 export * from './schemas/contact.js';
 export * from './schemas/review.js';
@@ -23,3 +24,4 @@ export * from './schemas/poll.js';
 export * from './schemas/stripe.js';
 export * from './schemas/episodeAlerts.js';
 export * from './spaMeta.js';
+export * from './projectZip.js';

@@ -1,7 +1,25 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useAutoResizeTextarea';
 import { useMutation } from '@tanstack/react-query';
-import { X, User } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Plus, Trash2, User, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   createCast,
@@ -10,7 +28,11 @@ import {
   castPhotoUrl,
   type CastMember,
 } from '../../api/podcasts';
-import type { CastCreate } from '@harborfm/shared';
+import {
+  CAST_SOCIAL_LINKS_MAX,
+  normalizeCastSocialLinks,
+  type CastCreate,
+} from '@harborfm/shared';
 import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { useBaselineDirty, snapshotForDirty } from '../../hooks/useBaselineDirty';
@@ -18,6 +40,21 @@ import sharedStyles from '../PodcastDetail/shared.module.css';
 import localStyles from './ShowCast.module.css';
 
 const styles = { ...sharedStyles, ...localStyles };
+
+type SocialLinkRow = { id: string; url: string };
+
+function newSocialRow(url = ''): SocialLinkRow {
+  const id =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `link-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return { id, url };
+}
+
+function rowsFromUrls(urls: string[]): SocialLinkRow[] {
+  const normalized = normalizeCastSocialLinks(urls);
+  return normalized.length > 0 ? normalized.map((url) => newSocialRow(url)) : [];
+}
 
 function safeImageSrc(url: string | null | undefined): string {
   if (!url) return '';
@@ -32,6 +69,64 @@ function safeImageSrc(url: string | null | undefined): string {
     // ignore
   }
   return '';
+}
+
+function SortableSocialLinkRow({
+  row,
+  index,
+  disabled,
+  onChange,
+  onRemove,
+}: {
+  row: SocialLinkRow;
+  index: number;
+  disabled: boolean;
+  onChange: (id: string, url: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.id,
+    disabled,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.85 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={styles.castSocialLinkRow}>
+      <button
+        type="button"
+        className={styles.castSocialLinkDrag}
+        aria-label={`Drag to reorder link ${index + 1}`}
+        disabled={disabled}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical size={16} aria-hidden />
+      </button>
+      <input
+        type="url"
+        value={row.url}
+        onChange={(e) => onChange(row.id, e.target.value)}
+        className={styles.castDialogFormInput}
+        placeholder="https://instagram.com/username"
+        disabled={disabled}
+        aria-label={`Social link ${index + 1}`}
+      />
+      <button
+        type="button"
+        className={styles.castSocialLinkRemove}
+        onClick={() => onRemove(row.id)}
+        disabled={disabled}
+        aria-label={`Remove link ${index + 1}`}
+        title="Remove"
+      >
+        <Trash2 size={16} strokeWidth={2} aria-hidden />
+      </button>
+    </div>
+  );
 }
 
 export interface CastMemberDialogProps {
@@ -58,7 +153,7 @@ export function CastMemberDialog({
   const [role, setRole] = useState<'host' | 'guest'>('guest');
   const [description, setDescription] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
-  const [socialLinkText, setSocialLinkText] = useState('');
+  const [socialLinkRows, setSocialLinkRows] = useState<SocialLinkRow[]>([]);
   const [email, setEmail] = useState('');
   const [isPublic, setIsPublic] = useState(1);
   const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
@@ -71,16 +166,23 @@ export function CastMemberDialog({
 
   useAutoResizeTextarea(descriptionRef, description, { minHeight: 80 });
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   useEffect(() => {
     if (open) {
       setError(null);
+      const socialLinks = Array.isArray(cast?.socialLinks) ? cast.socialLinks : [];
       const next = cast
         ? {
             name: cast.name,
             role: cast.role as 'host' | 'guest',
             description: cast.description ?? '',
             photoUrl: cast.photoUrl ?? '',
-            socialLinkText: cast.socialLinkText ?? '',
+            socialLinks,
             email: cast.email ?? '',
             isPublic: cast.isPublic ?? 1,
             coverMode: (cast.photoFilename ? 'upload' : 'url') as 'url' | 'upload',
@@ -90,7 +192,7 @@ export function CastMemberDialog({
             role: (isFirstEntry ? 'host' : 'guest') as 'host' | 'guest',
             description: '',
             photoUrl: '',
-            socialLinkText: '',
+            socialLinks: [] as string[],
             email: '',
             isPublic: 1,
             coverMode: 'url' as const,
@@ -99,7 +201,7 @@ export function CastMemberDialog({
       setRole(next.role);
       setDescription(next.description);
       setPhotoUrl(next.photoUrl);
-      setSocialLinkText(next.socialLinkText);
+      setSocialLinkRows(rowsFromUrls(next.socialLinks));
       setEmail(next.email);
       setIsPublic(next.isPublic);
       setCoverMode(next.coverMode);
@@ -163,12 +265,13 @@ export function CastMemberDialog({
       setError('Only owners and managers can add hosts.');
       return;
     }
+    const socialLinks = normalizeCastSocialLinks(socialLinkRows.map((r) => r.url));
     const body: CastCreate = {
       name: trimName,
       role,
       description: description.trim() || undefined,
       photoUrl: coverMode === 'url' ? (photoUrl.trim() || undefined) : undefined,
-      socialLinkText: socialLinkText.trim() || undefined,
+      socialLinks,
       email: email.trim() || undefined,
       isPublic: isPublic as 0 | 1,
     };
@@ -189,8 +292,17 @@ export function CastMemberDialog({
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   const currentForm = useMemo(
-    () => ({ name, role, description, photoUrl, socialLinkText, email, isPublic, coverMode }),
-    [name, role, description, photoUrl, socialLinkText, email, isPublic, coverMode],
+    () => ({
+      name,
+      role,
+      description,
+      photoUrl,
+      socialLinks: normalizeCastSocialLinks(socialLinkRows.map((r) => r.url)),
+      email,
+      isPublic,
+      coverMode,
+    }),
+    [name, role, description, photoUrl, socialLinkRows, email, isPublic, coverMode],
   );
   const isDirty = useBaselineDirty(formBaseline, currentForm) || pendingFile != null;
   const {
@@ -201,6 +313,19 @@ export function CastMemberDialog({
     handleDiscard,
     dialogContentProps,
   } = useDialogCloseGuard({ isDirty, onClose });
+
+  const onSocialDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setSocialLinkRows((rows) => {
+      const oldIndex = rows.findIndex((r) => r.id === active.id);
+      const newIndex = rows.findIndex((r) => r.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return rows;
+      return arrayMove(rows, oldIndex, newIndex);
+    });
+  };
+
+  const canAddSocialLink = socialLinkRows.length < CAST_SOCIAL_LINKS_MAX;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -364,16 +489,48 @@ export function CastMemberDialog({
               </div>
 
               <div className={styles.castDialogFormGroup}>
-                <label className={styles.castDialogFormLabel}>
-                  Social Link
-                  <input
-                    type="url"
-                    value={socialLinkText}
-                    onChange={(e) => setSocialLinkText(e.target.value)}
-                    className={styles.castDialogFormInput}
-                    placeholder="e.g. https://instagram.com/username"
-                  />
-                </label>
+                <div className={styles.castDialogFormLabel}>Social links</div>
+                <p className={styles.castDialogHint}>
+                  First link is used for RSS and as the primary theme URL. Drag to reorder.
+                </p>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={onSocialDragEnd}
+                >
+                  <SortableContext
+                    items={socialLinkRows.map((r) => r.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className={styles.castSocialLinkList}>
+                      {socialLinkRows.map((row, index) => (
+                        <SortableSocialLinkRow
+                          key={row.id}
+                          row={row}
+                          index={index}
+                          disabled={isPending}
+                          onChange={(id, url) =>
+                            setSocialLinkRows((rows) =>
+                              rows.map((r) => (r.id === id ? { ...r, url } : r)),
+                            )
+                          }
+                          onRemove={(id) =>
+                            setSocialLinkRows((rows) => rows.filter((r) => r.id !== id))
+                          }
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+                <button
+                  type="button"
+                  className={styles.castSocialLinkAdd}
+                  onClick={() => setSocialLinkRows((rows) => [...rows, newSocialRow()])}
+                  disabled={isPending || !canAddSocialLink}
+                >
+                  <Plus size={16} strokeWidth={2.25} aria-hidden />
+                  Add link
+                </button>
               </div>
 
               <div className={styles.castDialogFormGroup}>

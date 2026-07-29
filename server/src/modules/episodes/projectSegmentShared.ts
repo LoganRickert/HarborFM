@@ -82,6 +82,8 @@ export type SegmentProjectJson = {
   timelineOtioSha256?: string | null;
   hostDuckingEnabled?: boolean;
   hostDuckingSha256?: string | null;
+  loudnessTargetingEnabled?: boolean;
+  finalGainDb?: number;
 };
 
 export function readJsonFile<T>(path: string): T {

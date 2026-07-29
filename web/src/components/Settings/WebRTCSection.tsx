@@ -1,7 +1,14 @@
 import { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Check, Copy, RefreshCw } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SettingsFormProps } from '../../types/settings';
 import { SectionCard } from './SectionCard';
+import {
+  fetchDialInCallLogs,
+  type DialInCallLog,
+} from '../../api/settings';
+import { formatDurationMs } from '../../utils/format';
 import styles from '../../pages/Settings.module.css';
 
 const WEBRTC_SUBTITLE = (
@@ -46,8 +53,53 @@ function sipSubdomainFromHostname(raw: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+function formatFinishedAt(iso: string | null): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+}
+
+function formatRelativeAgo(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return iso;
+  const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 48) return `${hr}h ago`;
+  return formatFinishedAt(iso);
+}
+
+function dialInOutcomeLabel(outcome: string | null | undefined): string {
+  switch (outcome) {
+    case 'bridged':
+      return 'Bridged';
+    case 'rejected_no_call':
+      return 'No live call';
+    case 'rejected_disabled':
+      return 'Dial-in disabled';
+    case 'rate_limited':
+      return 'Rate limited';
+    case 'busy':
+      return 'Busy';
+    case 'pin_failed':
+      return 'Wrong PIN';
+    case 'join_failed':
+      return 'Join failed';
+    case 'abandoned':
+      return 'Abandoned';
+    default:
+      return outcome?.trim() || 'Unknown';
+  }
+}
+
 export function WebRTCSection({ form, onFormChange }: SettingsFormProps) {
   const [webhookCopied, setWebhookCopied] = useState(false);
+  const [logsRefreshing, setLogsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const hostname = (form.hostname || '').trim();
   const publicBase = hostname
     ? hostname.startsWith('http')
@@ -62,6 +114,26 @@ export function WebRTCSection({ form, onFormChange }: SettingsFormProps) {
   const recommendedSipSubdomain = sipSubdomainFromHostname(
     hostname || (typeof window !== 'undefined' ? window.location.hostname : ''),
   );
+
+  const { data: dialInLogs, isFetching: dialInLogsFetching } = useQuery({
+    queryKey: ['settings', 'dial-in-call-logs'],
+    queryFn: () => fetchDialInCallLogs(10),
+    refetchInterval: 10000,
+  });
+
+  const refreshDialInLogs = async () => {
+    setLogsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({
+        queryKey: ['settings', 'dial-in-call-logs'],
+      });
+      await queryClient.refetchQueries({
+        queryKey: ['settings', 'dial-in-call-logs'],
+      });
+    } finally {
+      setLogsRefreshing(false);
+    }
+  };
 
   const copyWebhookUrl = () => {
     void navigator.clipboard.writeText(dialInWebhookUrl);
@@ -367,6 +439,124 @@ export function WebRTCSection({ form, onFormChange }: SettingsFormProps) {
           </div>
         </>
       )}
+
+      <div
+        className={styles.workerJobStatsBlock}
+        data-testid="dial-in-call-logs"
+        style={{ marginTop: '1.5rem' }}
+      >
+        <div className={styles.workerJobStatsHeadingRow}>
+          <div className={styles.workerJobStatsHeading}>Recent dial-in calls</div>
+          <button
+            type="button"
+            className={styles.workerRefreshBtn}
+            onClick={() => void refreshDialInLogs()}
+            disabled={logsRefreshing || dialInLogsFetching}
+            aria-label="Refresh recent dial-in calls"
+            title="Refresh"
+            data-testid="dial-in-call-logs-refresh"
+          >
+            <RefreshCw
+              size={14}
+              className={
+                logsRefreshing || dialInLogsFetching
+                  ? styles.workerRefreshBtnSpinning
+                  : undefined
+              }
+              aria-hidden
+            />
+          </button>
+        </div>
+        {(dialInLogs?.calls?.length ?? 0) === 0 ? (
+          <p className={styles.inputHelp}>No dial-in calls recorded yet.</p>
+        ) : (
+          <ul className={styles.workerJobFeed}>
+            {(dialInLogs?.calls ?? []).map((call: DialInCallLog) => {
+              const ok = call.outcome === 'bridged';
+              const whenIso = call.endedAt || call.bridgedAt || call.startedAt;
+              const fromLabel = call.fromNumber?.trim() || 'Unknown';
+              const toLabel = call.toNumber?.trim() || null;
+              const episodeHref = call.episodeId
+                ? `/episodes/${call.episodeId}`
+                : null;
+              return (
+                <li
+                  key={call.id}
+                  className={styles.workerJobFeedItem}
+                  data-testid="dial-in-call-log-item"
+                  data-call-control-id={call.callControlId}
+                  data-outcome={call.outcome ?? ''}
+                >
+                  <span
+                    className={ok ? styles.workerJobDotOk : styles.workerJobDotFail}
+                    aria-hidden
+                  />
+                  <div className={styles.workerJobFeedBody}>
+                    <div className={styles.workerJobFeedTop}>
+                      <div className={styles.workerJobFeedTitle}>
+                        <span className={styles.workerJobFeedKind}>
+                          {dialInOutcomeLabel(call.outcome)}
+                        </span>
+                        <span className={styles.workerJobFeedStatus}>
+                          {fromLabel}
+                          {toLabel ? ` → ${toLabel}` : ''}
+                        </span>
+                      </div>
+                      <span className={styles.workerJobFeedContext}>
+                        {formatRelativeAgo(whenIso)}
+                      </span>
+                    </div>
+                    <div className={styles.workerJobFeedMetrics}>
+                      {call.durationMs != null ? (
+                        <span className={styles.workerJobFeedMetric}>
+                          <span className={styles.workerJobFeedMetricLabel}>
+                            Duration
+                          </span>
+                          <span className={styles.workerJobFeedMetricValue}>
+                            {formatDurationMs(call.durationMs)}
+                          </span>
+                        </span>
+                      ) : null}
+                      {call.joinCode ? (
+                        <span className={styles.workerJobFeedMetric}>
+                          <span className={styles.workerJobFeedMetricLabel}>
+                            Code
+                          </span>
+                          <span className={styles.workerJobFeedMetricValue}>
+                            {call.joinCode}
+                          </span>
+                        </span>
+                      ) : null}
+                      {episodeHref ? (
+                        <span className={styles.workerJobFeedMetric}>
+                          <span className={styles.workerJobFeedMetricLabel}>
+                            Episode
+                          </span>
+                          <span className={styles.workerJobFeedMetricValue}>
+                            <Link to={episodeHref}>
+                              {call.episodeId!.slice(0, 8)}
+                            </Link>
+                          </span>
+                        </span>
+                      ) : null}
+                      {call.hangupCause ? (
+                        <span className={styles.workerJobFeedMetric}>
+                          <span className={styles.workerJobFeedMetricLabel}>
+                            Hangup
+                          </span>
+                          <span className={styles.workerJobFeedMetricValue}>
+                            {call.hangupCause}
+                          </span>
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </SectionCard>
   );
 }

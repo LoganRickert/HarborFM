@@ -5,8 +5,8 @@ import * as audioService from "./audio.js";
 import {
   pruneMarkersForDuration,
   pruneTrimRangesForDuration,
-  remakeMixFromMultitrackDir,
 } from "./multitrackRemake.js";
+import { remakeMixWithOptionalWorker } from "./segmentRemakeWorker.js";
 import {
   buildManifestForRemake,
   readHostDuckingFile,
@@ -55,12 +55,15 @@ export async function remakeSegmentFromOriginalManifest(opts: {
 
   const episodeUploads = uploadsDir(podcastId, episodeId);
   const mixDest = segmentPath(podcastId, episodeId, segmentId, "wav");
-  const remade = await remakeMixFromMultitrackDir(
+  const remade = await remakeMixWithOptionalWorker({
+    podcastId,
+    episodeId,
+    segmentId,
     mtDir,
     remakeManifest,
     mixDest,
-    episodeUploads,
-  );
+    allowedBaseDir: episodeUploads,
+  });
 
   let markers: unknown = existing?.markers ?? [];
   if (typeof markers === "string" && markers) {

@@ -160,6 +160,9 @@ export function EpisodeEditorContent({
   const [segmentZipImportOpen, setSegmentZipImportOpen] = useState(false);
   const [segmentZipImportError, setSegmentZipImportError] = useState<string | null>(null);
   const [segmentZipImportWarning, setSegmentZipImportWarning] = useState<string | null>(null);
+  const [segmentZipImportPhase, setSegmentZipImportPhase] = useState<
+    'validating' | 'uploading' | 'importing'
+  >('validating');
   const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [dialogFormBaseline, setDialogFormBaseline] = useState<string | null>(null);
@@ -515,6 +518,7 @@ export function EpisodeEditorContent({
     if (segmentZipImportOpen && !segmentZipImportError && !segmentZipImportWarning) return;
     setSegmentZipImportError(null);
     setSegmentZipImportWarning(null);
+    setSegmentZipImportPhase('validating');
     setSegmentZipImportOpen(true);
     let createdSegmentId: string | null = null;
     try {
@@ -525,7 +529,10 @@ export function EpisodeEditorContent({
         nameFromUploadFilename(file.name),
       );
       createdSegmentId = created.id;
-      await startImportSegmentProject(id, created.id, file);
+      await startImportSegmentProject(id, created.id, file, {
+        onPhase: setSegmentZipImportPhase,
+      });
+      setSegmentZipImportPhase('importing');
       const result = await pollUntil(
         () => getSegmentProjectImportStatus(id, created.id),
         {
@@ -970,6 +977,7 @@ export function EpisodeEditorContent({
                 ? `/api/podcasts/${podcastId}/episodes/${id}/artwork/${encodeURIComponent(episode.artworkFilename)}`
                 : null
           }
+          finalMarkers={episode.finalMarkers ?? []}
           onClose={() => setShowGenerateVideoModal(false)}
           onSuccess={() => setShowGenerateVideoModal(false)}
         />
@@ -1180,7 +1188,13 @@ export function EpisodeEditorContent({
       <PleaseWaitDialog
         open={segmentZipImportOpen}
         title="Please wait"
-        description="Importing segment zip..."
+        description={
+          segmentZipImportPhase === 'validating'
+            ? 'Validating zip...'
+            : segmentZipImportPhase === 'uploading'
+              ? 'Uploading...'
+              : 'Importing segment zip...'
+        }
         error={segmentZipImportError}
         errorTitle="Import failed"
         warning={segmentZipImportWarning}

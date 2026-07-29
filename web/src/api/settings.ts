@@ -162,3 +162,39 @@ export function fetchWorkerJobStats(limit = 50): Promise<{ jobs: WorkerJobStat[]
     `/settings/workers-job-stats?limit=${encodeURIComponent(String(limit))}`,
   );
 }
+
+export type DialInCallLog = {
+  id: string;
+  callControlId: string;
+  callLegId: string | null;
+  callSessionId: string | null;
+  connectionId: string | null;
+  fromNumber: string | null;
+  toNumber: string | null;
+  direction: string | null;
+  callerIdName: string | null;
+  telnyxState: string | null;
+  outcome: string | null;
+  joinCode: string | null;
+  sessionId: string | null;
+  episodeId: string | null;
+  podcastId: string | null;
+  hangupCause: string | null;
+  sipHangupCause: string | null;
+  hangupSource: string | null;
+  startedAt: string;
+  answeredAt: string | null;
+  bridgedAt: string | null;
+  endedAt: string | null;
+  durationMs: number | null;
+  pinAttempts: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Recent inbound Telnyx dial-in attempts (admin). */
+export function fetchDialInCallLogs(limit = 10): Promise<{ calls: DialInCallLog[] }> {
+  return apiGet<{ calls: DialInCallLog[] }>(
+    `/settings/dial-in-call-logs?limit=${encodeURIComponent(String(limit))}`,
+  );
+}

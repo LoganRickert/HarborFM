@@ -73,6 +73,11 @@ function clampClipToMediaDuration(
   entry: MultitrackSegmentEntry,
 ): MultitrackSegmentEntry {
   if (entry.loop === true) return entry;
+  // Editor / saved clips already carry intentional lengthMs; skip expensive
+  // sync waveform parse (can stall the event loop on large takes).
+  if (typeof entry.lengthMs === "number" && Number.isFinite(entry.lengthMs) && entry.lengthMs > 0) {
+    return entry;
+  }
   const base = clipFileBasename(entry);
   if (!base) return entry;
   const wfAbs = waveformPath(join(mtDir, base));
@@ -102,21 +107,17 @@ function clampClipToMediaDuration(
   const lengthMs = endMs - startMs;
   if (lengthMs <= 0) return entry;
   const prevLen =
-    typeof entry.lengthMs === "number" && entry.lengthMs > 0
-      ? entry.lengthMs
-      : typeof entry.endMs === "number" &&
-          typeof entry.startMs === "number" &&
-          entry.endMs > entry.startMs
-        ? entry.endMs - entry.startMs
-        : null;
+    typeof entry.endMs === "number" &&
+    typeof entry.startMs === "number" &&
+    entry.endMs > entry.startMs
+      ? entry.endMs - entry.startMs
+      : null;
   // Already within ~50ms of media length: keep as-is.
   if (prevLen != null && Math.abs(prevLen - lengthMs) <= 50) {
-    if (typeof entry.lengthMs === "number" && entry.lengthMs > 0) return entry;
     return { ...entry, lengthMs, endMs: startMs + lengthMs };
   }
   if (prevLen != null && prevLen <= lengthMs + 50) {
     // Explicit shorter trim than media: keep editor/intentional length.
-    if (typeof entry.lengthMs === "number" && entry.lengthMs > 0) return entry;
     return {
       ...entry,
       lengthMs: prevLen,
@@ -273,10 +274,12 @@ function sanitizeClips(
     }
     // Ignore stubs the client may still send; do not fail the whole save.
     if (!isUsableTakeMedia(abs)) continue;
-    const entry: MultitrackSegmentEntry = clampClipToMediaDuration(mtDir, {
+    // Trust editor lengths on save; do not sync-parse waveform.json here
+    // (that stalls the API when many large takes are present).
+    const entry: MultitrackSegmentEntry = {
       ...(raw as MultitrackSegmentEntry),
       filePath: base,
-    });
+    };
     out.push(entry);
   }
   if (out.length === 0) {

@@ -415,7 +415,9 @@ All environment variables supported by the server work the same in Docker. Set t
 | `EPISODE_AUDIO_UPLOAD_MAX_MB` | `500` | Max episode source audio upload size |
 | `SEGMENT_UPLOAD_MAX_MB` | `100` | Max recorded segment upload size |
 | `LIBRARY_UPLOAD_MAX_MB` | `50` | Max library asset upload size |
-| `MULTIPART_MAX_MB` | `500` | Max multipart body size for Fastify |
+| `MULTIPART_MAX_MB` | `500` | Max multipart body size for Fastify (legacy single-shot uploads) |
+| `PROJECT_IMPORT_CHUNK_MB` | `50` | Project/segment import upload chunk size (MB). Keep under nginx `client_max_body_size` |
+| `PROJECT_IMPORT_CHUNK_BODY_LIMIT_MB` | `chunk+1` | Max accepted import chunk body (MB); never below chunk size + 1 |
 | `ARTWORK_MAX_MB` | `5` | Max podcast/episode artwork upload size |
 | **Compute workers** | | |
 | `WORKER_FILE_BODY_LIMIT_MB` | `8192` | Max single-shot worker file body (MB); prefer chunked uploads |
@@ -468,7 +470,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | `RATE_LIMIT_MAX` | `200` | Global rate limit: max requests per time window |
 | `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
 | `REGISTRATION_RATE_LIMIT_MAX` | `5` | Max registration requests per IP per minute. Set higher (e.g. 100) for e2e tests. |
-| `RENDER_RATE_LIMIT_WINDOW_MS` | `60000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |
+| `RENDER_RATE_LIMIT_WINDOW_MS` | `30000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |
 | `MEETING_INVITE_RATE_LIMIT_WINDOW_MS` | `300000` | Window for meeting invite creates (share links / emails) per user. Set to `0` to disable (e.g. for e2e tests). |
 | `MEETING_INVITE_RATE_LIMIT_MAX` | `5` | Max meeting invite creates per user per window. |
 | **Podcast stats** | | |

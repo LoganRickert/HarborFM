@@ -26,9 +26,9 @@ import * as audioService from "../../services/audio.js";
 import {
   pruneMarkersForDuration,
   pruneTrimRangesForDuration,
-  remakeMixFromMultitrackDir,
   type MultitrackManifest,
 } from "../../services/multitrackRemake.js";
+import { remakeMixWithOptionalWorker } from "../../services/segmentRemakeWorker.js";
 import {
   addUserDiskBytes,
   getSegmentById,
@@ -168,12 +168,16 @@ export async function importSegmentOtioTimeline(
     );
 
     const mixDest = segmentPath(podcastId, episodeId, segmentId, "wav");
-    const remade = await remakeMixFromMultitrackDir(
-      mtDest,
-      manifest,
+    const remade = await remakeMixWithOptionalWorker({
+      podcastId,
+      episodeId,
+      segmentId,
+      mtDir: mtDest,
+      remakeManifest: manifest,
       mixDest,
-      episodeUploads,
-    );
+      allowedBaseDir: episodeUploads,
+      userId: importerUserId,
+    });
 
     if (audioAbs && audioAbs !== mixDest && existsSync(audioAbs)) {
       try {

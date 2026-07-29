@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Play, Pencil, Trash2, Plus, TriangleAlert } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { formatDuration } from './utils';
+import { formatTimeInput, parseTimeInput } from './utils';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
 import styles from '../EpisodeEditor.module.css';
@@ -34,31 +34,6 @@ export interface ChaptersCardProps {
   hideHeader?: boolean;
 }
 
-/** Parse "m:ss" or "mm:ss" or plain seconds number. Returns seconds or NaN. */
-function parseTimeInput(s: string): number {
-  const trimmed = s.trim();
-  if (!trimmed) return NaN;
-  const num = Number(trimmed);
-  if (!Number.isNaN(num)) return num >= 0 ? num : NaN;
-  const parts = trimmed.split(':');
-  if (parts.length === 2) {
-    const m = parseInt(parts[0]!, 10);
-    const sec = parseFloat(parts[1]!);
-    if (!Number.isNaN(m) && !Number.isNaN(sec) && m >= 0 && sec >= 0) {
-      return m * 60 + sec;
-    }
-  }
-  if (parts.length === 3) {
-    const h = parseInt(parts[0]!, 10);
-    const m = parseInt(parts[1]!, 10);
-    const sec = parseFloat(parts[2]!);
-    if (!Number.isNaN(h) && !Number.isNaN(m) && !Number.isNaN(sec) && h >= 0 && m >= 0 && sec >= 0) {
-      return h * 3600 + m * 60 + sec;
-    }
-  }
-  return NaN;
-}
-
 function clampPlayheadTime(playheadTimeSec: number | undefined, maxTimeSec: number): number {
   const t = Math.floor(playheadTimeSec ?? 0);
   if (!Number.isFinite(t) || t < 0) return 0;
@@ -87,9 +62,9 @@ function ChapterEditDialog({
   const initialTitle = marker?.title ?? '';
   const initialTimeStr =
     mode === 'add' && defaultTimeSec !== undefined
-      ? formatDuration(Math.floor(defaultTimeSec))
+      ? formatTimeInput(defaultTimeSec)
       : marker != null
-        ? formatDuration(Math.floor(marker.time))
+        ? formatTimeInput(marker.time)
         : '0:00';
   const initialColor = marker?.color ?? CHAPTER_COLORS[0];
 
@@ -107,9 +82,9 @@ function ChapterEditDialog({
     if (open) {
       const timeStrVal =
         mode === 'add' && defaultTimeSec !== undefined
-          ? formatDuration(Math.floor(defaultTimeSec))
+          ? formatTimeInput(defaultTimeSec)
           : marker != null
-            ? formatDuration(Math.floor(marker.time))
+            ? formatTimeInput(marker.time)
             : '0:00';
       const nextTitle = marker?.title ?? '';
       const nextColor = marker?.color ?? CHAPTER_COLORS[0];
@@ -139,11 +114,11 @@ function ChapterEditDialog({
   const handleSave = () => {
     const timeSec = parseTimeInput(timeStr);
     if (Number.isNaN(timeSec) || timeSec < 0) {
-      setError('Enter a valid time (e.g. 1:30 or 90)');
+      setError('Enter a valid time (e.g. 1:20.5 or 90)');
       return;
     }
     if (maxTimeSec > 0 && timeSec > maxTimeSec) {
-      setError(`Time cannot exceed ${formatDuration(Math.floor(maxTimeSec))}`);
+      setError(`Time cannot exceed ${formatTimeInput(maxTimeSec)}`);
       return;
     }
     const t = (title ?? '').trim();
@@ -207,7 +182,7 @@ function ChapterEditDialog({
                   type="text"
                   value={timeStr}
                   onChange={(e) => setTimeStr(e.target.value)}
-                  placeholder="0:00 or 90"
+                  placeholder="1:20.5 or 90"
                   className={styles.chapterEditInput}
                 />
               </label>
@@ -392,8 +367,8 @@ export function ChaptersCard({
                           type="button"
                           className={styles.chapterPlayBtn}
                           onClick={() => onSeekTo(m.time)}
-                          aria-label={`Play from ${m.title ?? 'chapter'} at ${formatDuration(Math.floor(m.time))}`}
-                          title={`Play from ${formatDuration(Math.floor(m.time))}`}
+                          aria-label={`Play from ${m.title ?? 'chapter'} at ${formatTimeInput(m.time)}`}
+                          title={`Play from ${formatTimeInput(m.time)}`}
                         >
                           <Play size={16} strokeWidth={2} aria-hidden />
                         </button>
@@ -410,7 +385,7 @@ export function ChaptersCard({
                       />
                     </td>
                     <td className={styles.chaptersTableNameCol}>{m.title ?? 'Untitled'}</td>
-                    <td className={styles.chaptersTableTimeCol}>{formatDuration(Math.floor(m.time))}</td>
+                    <td className={styles.chaptersTableTimeCol}>{formatTimeInput(m.time)}</td>
                     {canEdit && (
                       <td className={styles.chaptersTableActionsCol}>
                         <div className={styles.chaptersTableActionsWrap}>

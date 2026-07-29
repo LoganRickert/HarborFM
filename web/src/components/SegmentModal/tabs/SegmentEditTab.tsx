@@ -334,12 +334,14 @@ export function SegmentEditTab({
         <div className={styles.segmentEditorToolbar}>
           <div className={styles.markerTitleEditRow}>
             <input
+              key={selectedMarkerIndex}
               type="text"
               className={styles.input}
               value={markerDraft.title}
               onChange={(e) => onMarkerTitleChange(selectedMarkerIndex, e.target.value)}
               placeholder="Marker label"
               aria-label="Marker label"
+              autoFocus
             />
             <button
               type="button"

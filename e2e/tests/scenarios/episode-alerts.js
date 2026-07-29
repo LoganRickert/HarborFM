@@ -625,6 +625,71 @@ export async function run({ runOne }) {
         }
       }),
     );
+
+    results.push(
+      await runOne('Unlisted publish: no alert until Unlisted is cleared', async () => {
+        catcher.reset();
+        const ep = await createEpisode(adminJar, show.id, {
+          title: `E2E Alerts Unlisted Ep ${ts}`,
+          status: 'draft',
+        });
+
+        const unlistedRes = await apiFetch(
+          `/episodes/${ep.id}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'published',
+              publishAt: null,
+              unlisted: 1,
+            }),
+          },
+          adminJar,
+        );
+        if (unlistedRes.status !== 200) {
+          throw new Error(`Expected 200 unlisted publish, got ${unlistedRes.status}`);
+        }
+        const unlistedEp = await unlistedRes.json();
+        if (!(unlistedEp.unlisted === true || unlistedEp.unlisted === 1)) {
+          throw new Error(
+            `Expected unlisted true after publish, got ${JSON.stringify(unlistedEp.unlisted)}`,
+          );
+        }
+        if (unlistedEp.episodeAlertsSentAt) {
+          throw new Error(
+            `Expected episodeAlertsSentAt null while unlisted, got ${unlistedEp.episodeAlertsSentAt}`,
+          );
+        }
+
+        await sleep(800);
+        if (jsonWebhookPayloads(catcher).length > 0) {
+          throw new Error('Expected no json_webhook while episode is unlisted');
+        }
+
+        const listRes = await apiFetch(
+          `/episodes/${ep.id}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ unlisted: 0 }),
+          },
+          adminJar,
+        );
+        if (listRes.status !== 200) {
+          throw new Error(`Expected 200 clearing unlisted, got ${listRes.status}`);
+        }
+
+        await catcher.waitFor(1, 10000);
+        const payloads = jsonWebhookPayloads(catcher);
+        if (payloads.length < 1) {
+          throw new Error('Expected json_webhook after clearing Unlisted');
+        }
+        if (payloads[0].title !== `E2E Alerts Unlisted Ep ${ts}`) {
+          throw new Error(`Unexpected unlisted-clear payload title ${payloads[0].title}`);
+        }
+      }),
+    );
   } finally {
     await apiFetch(
       '/settings',

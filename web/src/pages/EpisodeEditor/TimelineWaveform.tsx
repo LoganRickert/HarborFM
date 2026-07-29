@@ -292,25 +292,62 @@ export function TimelineWaveform({
     if (!el || !onViewChange) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const playhead = currentTime;
-      const factor = e.deltaY > 0 ? 1.2 : 0.8;
-      let newWindow = viewWindow * factor;
-      newWindow = Math.max(1, Math.min(durationSec, newWindow));
-      let newStart = playhead - newWindow / 2;
-      let newEnd = playhead + newWindow / 2;
+      // Pinch / ctrl+wheel zooms (same as Advanced Editor). Plain scroll pans.
+      if (e.ctrlKey || e.metaKey) {
+        const playhead = currentTime;
+        const factor = e.deltaY > 0 ? 1.2 : 0.8;
+        let newWindow = viewWindow * factor;
+        newWindow = Math.max(1, Math.min(durationSec, newWindow));
+        let newStart = playhead - newWindow / 2;
+        let newEnd = playhead + newWindow / 2;
+        if (newStart < 0) {
+          newStart = 0;
+          newEnd = Math.min(newWindow, durationSec);
+        }
+        if (newEnd > durationSec) {
+          newEnd = durationSec;
+          newStart = Math.max(0, durationSec - newWindow);
+        }
+        onViewChange(newStart, newEnd);
+        return;
+      }
+
+      const width = el.getBoundingClientRect().width || 1;
+      const deltaPx =
+        Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey
+          ? e.shiftKey
+            ? e.deltaY
+            : e.deltaX
+          : e.deltaY;
+      const deltaSec = (deltaPx / width) * viewWindow;
+      let newStart = viewStartSec + deltaSec;
+      let newEnd = viewEndSec + deltaSec;
       if (newStart < 0) {
+        newEnd -= newStart;
         newStart = 0;
-        newEnd = Math.min(newWindow, durationSec);
       }
       if (newEnd > durationSec) {
+        const over = newEnd - durationSec;
+        newStart = Math.max(0, newStart - over);
         newEnd = durationSec;
-        newStart = Math.max(0, durationSec - newWindow);
+      }
+      if (newEnd - newStart < viewWindow - 0.001) {
+        // Keep window size if we hit both edges on a short clip.
+        newStart = 0;
+        newEnd = Math.min(viewWindow, durationSec);
       }
       onViewChange(newStart, newEnd);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [viewStartSec, viewWindow, durationSec, currentTime, onViewChange]);
+  }, [
+    viewStartSec,
+    viewEndSec,
+    viewWindow,
+    durationSec,
+    currentTime,
+    onViewChange,
+  ]);
 
   return (
     <div

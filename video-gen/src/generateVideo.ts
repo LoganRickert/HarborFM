@@ -424,13 +424,103 @@ const TARGET_FPS = 24;
 
 /** Integer thickness -> stroke width in px for sine/circle. Scaled up so the line is clearly visible in the video. */
 function strokeWidthToPx(thickness: number): number {
-  const t = Math.max(1, Math.min(8, Math.round(thickness)));
-  return Math.max(2, Math.min(24, t * 3));
+  const t = Math.max(1, Math.round(thickness));
+  return Math.max(2, t * 3);
 }
 
 /** Smoothing 0-1 -> EMA alpha (higher smoothing = lower alpha = slower change). */
 function smoothingToAlpha(smoothing: number): number {
   return Math.max(0.05, Math.min(0.95, 1 - smoothing));
+}
+
+export type VideoChapterMarker = { startTime: number; title: string };
+
+export type VideoChapterTitleLayout = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/** Resolve the chapter active at time t (last marker with startTime <= t). */
+function chapterAtTime(
+  chapters: VideoChapterMarker[],
+  t: number,
+  durationSec: number,
+): { index: number; start: number; end: number; title: string } | null {
+  if (chapters.length === 0) return null;
+  let idx = -1;
+  for (let i = 0; i < chapters.length; i++) {
+    if ((chapters[i]?.startTime ?? Infinity) <= t) idx = i;
+    else break;
+  }
+  if (idx < 0) return null;
+  const current = chapters[idx]!;
+  const next = chapters[idx + 1];
+  const end = next != null ? next.startTime : durationSec;
+  return {
+    index: idx + 1,
+    start: current.startTime,
+    end: Math.max(current.startTime, end),
+    title: current.title,
+  };
+}
+
+function truncateTextToWidth(
+  ctx: { measureText: (text: string) => { width: number } },
+  text: string,
+  maxWidth: number,
+): string {
+  if (maxWidth <= 0) return "";
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  const ellipsis = "...";
+  if (ctx.measureText(ellipsis).width > maxWidth) return "";
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (ctx.measureText(text.slice(0, mid) + ellipsis).width <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + ellipsis;
+}
+
+function parseChapterTitleLayout(v: unknown): VideoChapterTitleLayout | undefined {
+  if (v == null || typeof v !== "object") return undefined;
+  const rec = v as Record<string, unknown>;
+  const x = Number(rec.x);
+  const y = Number(rec.y);
+  const width = Number(rec.width);
+  const height = Number(rec.height);
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
+  ) {
+    return undefined;
+  }
+  return {
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+    width: Math.max(0, Math.min(1, width)),
+    height: Math.max(0, Math.min(1, height)),
+  };
+}
+
+function parseVideoChapters(v: unknown): VideoChapterMarker[] {
+  if (!Array.isArray(v)) return [];
+  const out: VideoChapterMarker[] = [];
+  for (const item of v) {
+    if (item == null || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const startTime = Number(rec.startTime);
+    const title = typeof rec.title === "string" ? rec.title.trim() : "";
+    if (!Number.isFinite(startTime) || startTime < 0 || title.length === 0) continue;
+    out.push({ startTime, title });
+  }
+  out.sort((a, b) => a.startTime - b.startTime);
+  return out;
 }
 
 /**
@@ -453,6 +543,8 @@ export async function generateVideoToPath(opts: {
   orientation?: string;
   waveformType?: string;
   color?: string;
+  chapterTitle?: VideoChapterTitleLayout;
+  chapters?: VideoChapterMarker[];
   /** Optional binary paths; defaults to ffmpeg/ffprobe/audiowaveform on PATH. */
   tools?: Partial<VideoGenTools>;
 }): Promise<string> {
@@ -474,10 +566,10 @@ export async function generateVideoToPath(opts: {
     asResolution(opts.resolution),
     asOrientation(opts.orientation),
   );
-  const thicknessParam = Math.max(1, Math.min(30, Math.round(opts.strokeWidth ?? 3)));
+  const thicknessParam = Math.max(1, Math.round(opts.strokeWidth ?? 3));
   const strokeWidthPx = strokeWidthToPx(thicknessParam);
-  const barCount = Math.max(1, Math.min(30, thicknessParam));
-  const dotCount = Math.max(1, Math.min(30, thicknessParam));
+  const barCount = thicknessParam;
+  const dotCount = thicknessParam;
   const smoothingAlpha = smoothingToAlpha(opts.smoothing ?? 0.7);
   const style = asSpectrumStyle(opts.style) ?? "spectrum-rainbow";
   const lineColor =
@@ -496,9 +588,43 @@ export async function generateVideoToPath(opts: {
   const centerPxX = Number.isFinite(xNum) ? xNum * VIDEO_WIDTH : VIDEO_WIDTH / 2;
   const centerPxY = Number.isFinite(yNum) ? yNum * VIDEO_HEIGHT : VIDEO_HEIGHT / 2;
   const xPx = Math.round(centerPxX - w / 2);
-  const x = Math.max(0, Math.min(xPx, VIDEO_WIDTH - w));
+  const waveX = Math.max(0, Math.min(xPx, VIDEO_WIDTH - w));
   const yPx = Math.round(centerPxY - vizHeight / 2);
-  const y = Math.max(0, Math.min(yPx, VIDEO_HEIGHT - vizHeight));
+  const waveY = Math.max(0, Math.min(yPx, VIDEO_HEIGHT - vizHeight));
+
+  const chapters = (opts.chapters ?? []).slice().sort((a, b) => a.startTime - b.startTime);
+  const chapterTitleLayout = opts.chapterTitle;
+  const titleEnabled =
+    chapterTitleLayout != null &&
+    chapters.length > 0 &&
+    chapterTitleLayout.width > 0 &&
+    chapterTitleLayout.height > 0;
+
+  let titleW = 0;
+  let titleH = 0;
+  let titleX = 0;
+  let titleY = 0;
+  if (titleEnabled && chapterTitleLayout) {
+    titleW = Math.max(1, Math.min(VIDEO_WIDTH, Math.round(chapterTitleLayout.width * VIDEO_WIDTH)));
+    titleH = Math.max(1, Math.min(VIDEO_HEIGHT, Math.round(chapterTitleLayout.height * VIDEO_HEIGHT)));
+    const tCenterX = chapterTitleLayout.x * VIDEO_WIDTH;
+    const tCenterY = chapterTitleLayout.y * VIDEO_HEIGHT;
+    titleX = Math.max(0, Math.min(Math.round(tCenterX - titleW / 2), VIDEO_WIDTH - titleW));
+    titleY = Math.max(0, Math.min(Math.round(tCenterY - titleH / 2), VIDEO_HEIGHT - titleH));
+  }
+
+  const overlayLeft = titleEnabled ? Math.min(waveX, titleX) : waveX;
+  const overlayTop = titleEnabled ? Math.min(waveY, titleY) : waveY;
+  const overlayRight = titleEnabled ? Math.max(waveX + w, titleX + titleW) : waveX + w;
+  const overlayBottom = titleEnabled
+    ? Math.max(waveY + vizHeight, titleY + titleH)
+    : waveY + vizHeight;
+  const canvasW = Math.max(1, overlayRight - overlayLeft);
+  const canvasH = Math.max(1, overlayBottom - overlayTop);
+  const waveOx = waveX - overlayLeft;
+  const waveOy = waveY - overlayTop;
+  const titleOx = titleX - overlayLeft;
+  const titleOy = titleY - overlayTop;
 
   const wf = await generateWaveformDataForVideo(audioPath, workDir, tools, {
     pixelsPerSecond: TARGET_FPS,
@@ -506,12 +632,20 @@ export async function generateVideoToPath(opts: {
   const totalFrames = Math.ceil(durationSec * TARGET_FPS);
   const maxAmplitudeInData = getMaxAmplitudeFromWaveform(wf);
   const { createCanvas } = await import("canvas");
-  const canvas = createCanvas(w, vizHeight);
+  const waveCanvas = createCanvas(w, vizHeight);
+  const waveCtx = waveCanvas.getContext("2d");
+  const canvas = createCanvas(canvasW, canvasH);
   const ctx = canvas.getContext("2d");
   const halfH = vizHeight / 2;
   const ampScale = halfH / Math.max(maxAmplitudeInData, 0.05);
   /** Amplitude scaled to [0, halfH]; max loudness maps to full strip height. */
   const effectiveAmp = (amp: number) => amp * ampScale;
+
+  const titleFontSize = titleEnabled
+    ? Math.max(10, Math.min(titleH * 0.55, Math.floor(titleH * 0.7)))
+    : 0;
+  const titleBarH = titleEnabled ? Math.max(2, Math.round(titleH * 0.12)) : 0;
+  const titleFont = `600 ${titleFontSize}px "DejaVu Sans", "Liberation Sans", sans-serif`;
 
   let prevAmp = 0;
 
@@ -519,7 +653,7 @@ export async function generateVideoToPath(opts: {
     `[0:v]scale=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:force_original_aspect_ratio=decrease,` +
       `pad=${VIDEO_WIDTH}:${VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2[bg]`,
     `[1:v]colorkey=${keyColor.ffmpeg}:0.01:0.0[viz]`,
-    `[bg][viz]overlay=${x}:${y}[outv]`,
+    `[bg][viz]overlay=${overlayLeft}:${overlayTop}[outv]`,
   ].join(";");
 
   const args = [
@@ -534,7 +668,7 @@ export async function generateVideoToPath(opts: {
     "-pix_fmt",
     "rgba",
     "-s",
-    `${w}x${vizHeight}`,
+    `${canvasW}x${canvasH}`,
     "-r",
     String(TARGET_FPS),
     "-i",
@@ -568,27 +702,27 @@ export async function generateVideoToPath(opts: {
 
   console.log("[video] FFmpeg args (pipe input)", args.slice(0, 20), "...");
 
-  const drawFrame = (amp: number, frameIndex: number) => {
-    ctx.fillStyle = keyColor.canvas;
-    ctx.fillRect(0, 0, w, vizHeight);
-    ctx.strokeStyle = lineColor;
-    ctx.fillStyle = lineColor;
-    ctx.lineWidth = strokeWidthPx;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+  const drawWaveform = (amp: number, frameIndex: number) => {
+    waveCtx.fillStyle = keyColor.canvas;
+    waveCtx.fillRect(0, 0, w, vizHeight);
+    waveCtx.strokeStyle = lineColor;
+    waveCtx.fillStyle = lineColor;
+    waveCtx.lineWidth = strokeWidthPx;
+    waveCtx.lineCap = "round";
+    waveCtx.lineJoin = "round";
 
     const eff = effectiveAmp(amp);
     const phaseOffset = frameIndex * WAVEFORM_ENTROPY_SPEED;
     switch (waveformType) {
       case "sine": {
-        ctx.beginPath();
-        ctx.moveTo(0.5, halfH + eff * Math.sin(phaseOffset));
+        waveCtx.beginPath();
+        waveCtx.moveTo(0.5, halfH + eff * Math.sin(phaseOffset));
         for (let xi = 1; xi <= w; xi++) {
           const yy =
             halfH + eff * Math.sin((2 * Math.PI * WAVEFORM_COSINE_CYCLES * xi) / w + phaseOffset);
-          ctx.lineTo(xi + 0.5, yy);
+          waveCtx.lineTo(xi + 0.5, yy);
         }
-        ctx.stroke();
+        waveCtx.stroke();
         break;
       }
       case "bars": {
@@ -599,7 +733,7 @@ export async function generateVideoToPath(opts: {
           const barH = Math.max(2, Math.min(vizHeight - 2, eff * (1 + Math.sin(phase))));
           const by = vizHeight - barH;
           const bx = b * (barWidth + barGap);
-          ctx.fillRect(bx, by, barWidth, barH);
+          waveCtx.fillRect(bx, by, barWidth, barH);
         }
         break;
       }
@@ -611,9 +745,9 @@ export async function generateVideoToPath(opts: {
           2,
           Math.min(maxRadius, eff * (0.92 + 0.08 * Math.sin(phaseOffset))),
         );
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-        ctx.stroke();
+        waveCtx.beginPath();
+        waveCtx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        waveCtx.stroke();
         break;
       }
       case "dots": {
@@ -634,26 +768,48 @@ export async function generateVideoToPath(opts: {
             1,
             Math.min(maxR, baseRadius + eff * amplitudeScale * (1 + Math.sin(phase))),
           );
-          ctx.beginPath();
-          ctx.arc(dx, centerY, r, 0, 2 * Math.PI);
-          ctx.fill();
+          waveCtx.beginPath();
+          waveCtx.arc(dx, centerY, r, 0, 2 * Math.PI);
+          waveCtx.fill();
         }
         break;
       }
       default: {
-        ctx.beginPath();
-        ctx.moveTo(0.5, halfH + eff * Math.sin(phaseOffset));
+        waveCtx.beginPath();
+        waveCtx.moveTo(0.5, halfH + eff * Math.sin(phaseOffset));
         for (let xi = 1; xi <= w; xi++) {
           const yy =
             halfH + eff * Math.sin((2 * Math.PI * WAVEFORM_COSINE_CYCLES * xi) / w + phaseOffset);
-          ctx.lineTo(xi + 0.5, yy);
+          waveCtx.lineTo(xi + 0.5, yy);
         }
-        ctx.stroke();
+        waveCtx.stroke();
       }
     }
   };
 
-  const frameBuffer = Buffer.alloc(w * vizHeight * 4);
+  const drawTitle = (t: number) => {
+    if (!titleEnabled) return;
+    const chapter = chapterAtTime(chapters, t, durationSec);
+    if (chapter == null) return;
+
+    const padX = Math.max(2, Math.round(titleW * 0.02));
+    const textMaxW = Math.max(1, titleW - padX * 2);
+    const label = `${chapter.index}. ${chapter.title}`;
+    ctx.font = titleFont;
+    ctx.fillStyle = lineColor;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    const truncated = truncateTextToWidth(ctx, label, textMaxW);
+    const textY = titleOy + (titleH - titleBarH) / 2;
+    ctx.fillText(truncated, titleOx + padX, textY);
+
+    const span = Math.max(0.001, chapter.end - chapter.start);
+    const progress = Math.max(0, Math.min(1, (t - chapter.start) / span));
+    const barY = titleOy + titleH - titleBarH;
+    ctx.fillRect(titleOx, barY, Math.round(titleW * progress), titleBarH);
+  };
+
+  const frameBuffer = Buffer.alloc(canvasW * canvasH * 4);
 
   return runFfmpegWithStdin(tools, args, outPath, async (stdin) => {
     for (let i = 0; i < totalFrames; i++) {
@@ -662,9 +818,14 @@ export async function generateVideoToPath(opts: {
       const amp = smoothingAlpha * currentAmp + (1 - smoothingAlpha) * prevAmp;
       prevAmp = amp;
 
-      drawFrame(amp, i);
+      drawWaveform(amp, i);
 
-      const imageData = ctx.getImageData(0, 0, w, vizHeight);
+      ctx.fillStyle = keyColor.canvas;
+      ctx.fillRect(0, 0, canvasW, canvasH);
+      ctx.drawImage(waveCanvas, waveOx, waveOy);
+      drawTitle(t);
+
+      const imageData = ctx.getImageData(0, 0, canvasW, canvasH);
       frameBuffer.set(imageData.data);
       await writeFrameSync(stdin, frameBuffer);
     }
@@ -715,6 +876,8 @@ export async function runVideoJob(opts: {
     orientation: asOptionalString(params.orientation),
     waveformType: asOptionalString(params.waveformType),
     color: asOptionalString(params.color),
+    chapterTitle: parseChapterTitleLayout(params.chapterTitle),
+    chapters: parseVideoChapters(params.chapters),
     tools: opts.tools,
   });
 }

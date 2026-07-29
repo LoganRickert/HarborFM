@@ -49,6 +49,56 @@ export async function run({ runOne }) {
   );
 
   results.push(
+    await runOne('loudnessTargetingEnabled defaults true and PATCH toggles', async () => {
+      const patchEp = await createEpisode(jar, podcast.id, {
+        title: 'E2E Loudness Targeting Ep',
+        status: 'draft',
+      });
+      const seg = await addRecordedSegment(jar, patchEp.id);
+      if (seg.loudnessTargetingEnabled !== true) {
+        throw new Error(
+          `Expected loudnessTargetingEnabled true, got ${JSON.stringify(seg.loudnessTargetingEnabled)}`,
+        );
+      }
+
+      let res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loudnessTargetingEnabled: false }),
+      }, jar);
+      if (res.status !== 200) {
+        throw new Error(`PATCH loudness off failed: ${res.status} ${await res.text()}`);
+      }
+      let patched = await res.json();
+      if (patched.loudnessTargetingEnabled !== false) {
+        throw new Error(
+          `Expected loudnessTargetingEnabled false, got ${JSON.stringify(patched.loudnessTargetingEnabled)}`,
+        );
+      }
+
+      const listRes = await apiFetch(`/episodes/${patchEp.id}/segments`, {}, jar);
+      if (listRes.status !== 200) throw new Error(`GET segments failed: ${listRes.status}`);
+      const found = ((await listRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (!found || found.loudnessTargetingEnabled !== false) {
+        throw new Error('Persisted loudnessTargetingEnabled should be false');
+      }
+
+      res = await apiFetch(`/episodes/${patchEp.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loudnessTargetingEnabled: true }),
+      }, jar);
+      if (res.status !== 200) {
+        throw new Error(`PATCH loudness on failed: ${res.status} ${await res.text()}`);
+      }
+      patched = await res.json();
+      if (patched.loudnessTargetingEnabled !== true) {
+        throw new Error('Expected loudnessTargetingEnabled true after re-enable');
+      }
+    })
+  );
+
+  results.push(
     await runOne('PATCH segment invalid trimRanges returns 400', async () => {
       const patchEp = await createEpisode(jar, podcast.id, { title: 'E2E Invalid Trim Ep', status: 'draft' });
       const seg = await addRecordedSegment(jar, patchEp.id);
@@ -241,6 +291,64 @@ export async function run({ runOne }) {
 
       res = await apiFetch(`/episodes/${renderEp.id}/final-waveform`, {}, jar);
       if (res.status !== 200) throw new Error(`Expected final-waveform 200 after render, got ${res.status}`);
+    })
+  );
+
+  results.push(
+    await runOne('Mixed loudness render completes with one segment opted out', async () => {
+      await new Promise((r) => setTimeout(r, 1100));
+      const settingsRes = await apiFetch('/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loudnessTargetLufs: -16 }),
+      }, jar);
+      if (settingsRes.status !== 200) {
+        throw new Error(
+          `PATCH settings loudness failed: ${settingsRes.status} ${await settingsRes.text()}`,
+        );
+      }
+
+      const renderEp = await createEpisode(jar, podcast.id, {
+        title: 'E2E Mixed Loudness Ep',
+        status: 'draft',
+      });
+      const segA = await addRecordedSegment(jar, renderEp.id);
+      const segB = await addRecordedSegment(jar, renderEp.id);
+
+      const patchRes = await apiFetch(`/episodes/${renderEp.id}/segments/${segB.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loudnessTargetingEnabled: false }),
+      }, jar);
+      if (patchRes.status !== 200) {
+        throw new Error(`PATCH opt-out failed: ${patchRes.status} ${await patchRes.text()}`);
+      }
+      if (segA.id === segB.id) throw new Error('Expected two distinct segments');
+
+      let res = await apiFetch(`/episodes/${renderEp.id}/render`, { method: 'POST' }, jar);
+      if (res.status !== 202) {
+        throw new Error(`Mixed render expected 202, got ${res.status} ${await res.text()}`);
+      }
+
+      const timeoutMs = 120_000;
+      const pollIntervalMs = 2000;
+      const start = Date.now();
+      let statusData;
+      while (Date.now() - start < timeoutMs) {
+        res = await apiFetch(`/episodes/${renderEp.id}/render-status`, {}, jar);
+        statusData = await res.json();
+        if (statusData.status === 'done') break;
+        if (statusData.status === 'failed') {
+          throw new Error(`Mixed render failed: ${statusData.error || 'unknown'}`);
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+      }
+      if (statusData?.status !== 'done') throw new Error('Mixed render timeout');
+
+      res = await apiFetch(`/episodes/${renderEp.id}/final-waveform`, {}, jar);
+      if (res.status !== 200) {
+        throw new Error(`Expected final-waveform 200 after mixed render, got ${res.status}`);
+      }
     })
   );
 

@@ -39,6 +39,8 @@ export type SegmentListRow = {
   assetName: string | null;
   disabled: boolean;
   hostDuckingEnabled: boolean;
+  loudnessTargetingEnabled: boolean;
+  finalGainDb: number;
 };
 
 /** List segments for episode with leftJoin reusableAssets for assetName. */
@@ -62,6 +64,8 @@ export function listSegmentsForEpisode(episodeId: string): SegmentListRow[] {
       assetName: reusableAssets.name,
       disabled: episodeSegments.disabled,
       hostDuckingEnabled: episodeSegments.hostDuckingEnabled,
+      loudnessTargetingEnabled: episodeSegments.loudnessTargetingEnabled,
+      finalGainDb: episodeSegments.finalGainDb,
     })
     .from(episodeSegments)
     .leftJoin(
@@ -392,6 +396,30 @@ export function updateSegmentHostDuckingEnabled(
   drizzleDb
     .update(episodeSegments)
     .set({ hostDuckingEnabled })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentLoudnessTargetingEnabled(
+  segmentId: string,
+  episodeId: string,
+  loudnessTargetingEnabled: boolean,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ loudnessTargetingEnabled })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentFinalGainDb(
+  segmentId: string,
+  episodeId: string,
+  finalGainDb: number,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ finalGainDb })
     .where(updateWhere(segmentId, episodeId))
     .run();
 }

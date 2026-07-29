@@ -8,6 +8,8 @@ import {
   castCreateSchema,
   castUpdateSchema,
   castListQuerySchema,
+  parseCastSocialLinks,
+  serializeCastSocialLinks,
 } from "@harborfm/shared";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { drizzleDb } from "../../db/index.js";
@@ -40,7 +42,7 @@ type CastRow = {
   description: string | null;
   photoPath: string | null;
   photoUrl: string | null;
-  socialLinkText: string | null;
+  socialLinks: string | null;
   email: string | null;
   isPublic: number;
   createdAt: string;
@@ -54,7 +56,7 @@ const castSelectFields = {
   description: podcastCast.description,
   photoPath: podcastCast.photoPath,
   photoUrl: podcastCast.photoUrl,
-  socialLinkText: podcastCast.socialLinkText,
+  socialLinks: podcastCast.socialLinks,
   email: podcastCast.email,
   isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
   createdAt: podcastCast.createdAt,
@@ -74,7 +76,7 @@ function castRowToResponse(row: CastRow): Record<string, unknown> {
     photoPath: row.photoPath,
     photoUrl: row.photoUrl,
     photoFilename,
-    socialLinkText: row.socialLinkText,
+    socialLinks: parseCastSocialLinks(row.socialLinks),
     email: row.email?.trim() || null,
     isPublic: row.isPublic,
     createdAt: row.createdAt,
@@ -316,7 +318,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
       const id = nanoid();
       const description = parsed.data.description?.trim() || null;
       const photoUrl = parsed.data.photoUrl?.trim() || null;
-      const socialLinkText = parsed.data.socialLinkText?.trim() || null;
+      const socialLinks = serializeCastSocialLinks(parsed.data.socialLinks ?? []);
       const email = parsed.data.email?.trim().toLowerCase() || null;
       const isPublic = parsed.data.isPublic ?? 1;
 
@@ -329,7 +331,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
           role: castRole,
           description,
           photoUrl,
-          socialLinkText,
+          socialLinks,
           email,
           isPublic: isPublic !== 0,
         })
@@ -410,7 +412,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         role: "host" | "guest";
         description: string | null;
         photoUrl: string | null;
-        socialLinkText: string | null;
+        socialLinks: string;
         email: string | null;
         isPublic: boolean;
       }> = {};
@@ -434,8 +436,8 @@ export async function registerCastRoutes(app: FastifyInstance) {
       if (parsed.data.photoUrl !== undefined) {
         set.photoUrl = parsed.data.photoUrl?.trim() || null;
       }
-      if (parsed.data.socialLinkText !== undefined) {
-        set.socialLinkText = parsed.data.socialLinkText?.trim() || null;
+      if (parsed.data.socialLinks !== undefined) {
+        set.socialLinks = serializeCastSocialLinks(parsed.data.socialLinks);
       }
       if (parsed.data.email !== undefined) {
         set.email = parsed.data.email?.trim().toLowerCase() || null;

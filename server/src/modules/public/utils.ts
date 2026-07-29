@@ -1,5 +1,6 @@
 import { existsSync } from "fs";
 import { basename } from "path";
+import { parseCastSocialLinks } from "@harborfm/shared";
 import { readSettings } from "../settings/index.js";
 import {
   assertPathUnder,
@@ -358,7 +359,7 @@ export function publicCastDto(
     id: string;
     photoPath?: string | null;
     photoUrl?: string | null;
-    socialLinkText?: string | null;
+    socialLinks?: string | string[] | null;
   },
   podcastId: string,
 ) {
@@ -375,13 +376,14 @@ export function publicCastDto(
       photo_url = row.photoUrl as string | null;
     }
   }
+  const social_links = parseCastSocialLinks(row.socialLinks ?? null);
   return {
     id: row.id,
     name: row.name,
     role: row.role,
     description: row.description ?? null,
     photo_url: photo_url ?? null,
-    social_link_text: row.socialLinkText ?? null,
+    social_links,
   };
 }
 

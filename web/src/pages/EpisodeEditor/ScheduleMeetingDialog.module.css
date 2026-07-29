@@ -110,6 +110,7 @@
 
 .input {
   width: 100%;
+  max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
   padding: 0.65rem 0.75rem;
@@ -121,10 +122,48 @@
   font-size: 0.9375rem;
 }
 
+/* datetime-local: native control has a large intrinsic width; keep it inside the dialog. */
+.input[type='datetime-local'] {
+  position: relative;
+  display: block;
+  color-scheme: dark;
+  line-height: 1.35;
+  /* Room for the calendar icon without clipping the value. */
+  padding-right: 2.5rem;
+}
+
+.input[type='datetime-local']::-webkit-datetime-edit {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem 0;
+  max-width: 100%;
+  padding: 0;
+  min-width: 0;
+}
+
+.input[type='datetime-local']::-webkit-datetime-edit-fields-wrapper {
+  min-width: 0;
+}
+
+/* iOS centers the value in a wide box; left-align so it fits narrow dialogs. */
+.input[type='datetime-local']::-webkit-date-and-time-value {
+  text-align: left;
+  min-width: 0;
+}
+
 .input[type='datetime-local']::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-  opacity: 0.9;
+  position: absolute;
+  right: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  margin: 0;
+  /* color-scheme: dark already draws a light icon; invert would make it black. */
   cursor: pointer;
+  opacity: 1;
 }
 
 .input:focus {
@@ -147,16 +186,18 @@
 }
 
 .quickInviteList {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
   gap: 0.4rem;
+  min-width: 0;
 }
 
 .quickInviteBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 0.35rem;
-  max-width: 100%;
+  min-width: 0;
   min-height: 2rem;
   padding: 0.3rem 0.55rem;
   border-radius: var(--radius);
@@ -166,6 +207,7 @@
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -179,7 +221,13 @@
   cursor: not-allowed;
 }
 
+.quickInviteBtn > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
 .quickInviteName {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -535,5 +583,20 @@
   .codeValue {
     font-size: 1.2rem;
     letter-spacing: 0.14em;
+  }
+
+  .input[type='datetime-local'] {
+    min-height: 2.75rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .input[type='datetime-local']::-webkit-calendar-picker-indicator {
+    width: 1.5rem;
+    height: 1.5rem;
+    /* Larger tap target without expanding layout. */
+    padding: 0.35rem;
+    box-sizing: content-box;
+    right: 0.35rem;
   }
 }

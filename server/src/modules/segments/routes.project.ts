@@ -1,9 +1,13 @@
 import type { FastifyInstance } from "fastify";
+import type { Readable } from "stream";
 import { createReadStream, existsSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import { nanoid } from "nanoid";
 import {
   IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+  MULTIPART_MAX_BYTES,
+  PROJECT_IMPORT_CHUNK_BODY_LIMIT,
+  PROJECT_IMPORT_CHUNK_BYTES,
   SEGMENT_UPLOAD_MAX_BYTES,
 } from "../../config.js";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
@@ -18,12 +22,19 @@ import {
   streamToFileWithLimit,
 } from "../../services/uploads.js";
 import {
+  appendChunkedUpload,
+  ChunkTooLargeError,
+  createChunkedUpload,
+  finalizeChunkedUpload,
+  getChunkedUpload,
+} from "../../services/chunkedUpload.js";
+import {
   cleanupImportUpload,
   importSegmentMixAudio,
 } from "../../services/importSegmentMixAudio.js";
 import {
   removeTempPath,
-  writeTempZip,
+  streamTempZip,
 } from "../episodes/projectImport.js";
 import {
   getOrBuildSegmentProjectZip,
@@ -136,6 +147,22 @@ function segmentMp3Filename(
 }
 
 export async function registerSegmentProjectRoutes(app: FastifyInstance) {
+  app.addContentTypeParser(
+    "application/octet-stream",
+    function (_request, payload, done) {
+      done(null, payload);
+    },
+  );
+
+  function parsePositiveInt(raw: unknown): number | null {
+    if (typeof raw === "number" && Number.isFinite(raw)) return Math.trunc(raw);
+    if (typeof raw === "string" && raw.trim() !== "") {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return Math.trunc(n);
+    }
+    return null;
+  }
+
   app.get(
     "/episodes/:episodeId/segments/:segmentId/download-mp3",
     {
@@ -750,6 +777,322 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
   );
 
   app.post(
+    "/episodes/:episodeId/segments/:segmentId/import-project/upload",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Segments"],
+        summary: "Start chunked segment project upload",
+        description:
+          "Create a chunked upload session for a large segment project zip. Then PUT chunks and POST finish.",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            totalBytes: { type: "number" },
+            totalChunks: { type: "number" },
+            filename: { type: "string" },
+          },
+          required: ["totalBytes", "totalChunks"],
+        },
+        response: {
+          200: {
+            description: "Upload session created",
+            type: "object",
+            properties: {
+              uploadId: { type: "string" },
+              chunkBytes: { type: "number" },
+            },
+            required: ["uploadId", "chunkBytes"],
+          },
+          400: { description: "Invalid request" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can import segment projects" });
+      }
+      const segment = repo.getSegmentById(segmentId, episodeId);
+      if (!segment) {
+        return reply.status(404).send({ error: "Segment not found" });
+      }
+      const body = request.body as {
+        totalBytes?: number;
+        totalChunks?: number;
+        filename?: string;
+      };
+      const totalBytes = parsePositiveInt(body.totalBytes);
+      const totalChunks = parsePositiveInt(body.totalChunks);
+      if (totalBytes == null || totalChunks == null) {
+        return reply.status(400).send({
+          error: "totalBytes and totalChunks are required",
+        });
+      }
+      try {
+        const { uploadId } = createChunkedUpload({
+          userId: request.userId!,
+          purpose: `segment-import:${episodeId}:${segmentId}`,
+          totalBytes,
+          totalChunks,
+          filename: body.filename,
+        });
+        return reply.send({
+          uploadId,
+          chunkBytes: PROJECT_IMPORT_CHUNK_BYTES,
+        });
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : "Failed to start upload",
+        });
+      }
+    },
+  );
+
+  app.put(
+    "/episodes/:episodeId/segments/:segmentId/import-project/upload/:uploadId/chunks/:chunkIndex",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      bodyLimit: PROJECT_IMPORT_CHUNK_BODY_LIMIT,
+      schema: {
+        tags: ["Segments"],
+        summary: "Upload one segment project zip chunk",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+            uploadId: { type: "string" },
+            chunkIndex: { type: "string" },
+          },
+          required: ["episodeId", "segmentId", "uploadId", "chunkIndex"],
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            totalChunks: { type: "string" },
+            totalBytes: { type: "string" },
+          },
+          required: ["totalChunks", "totalBytes"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const {
+        episodeId,
+        segmentId,
+        uploadId,
+        chunkIndex: chunkIndexRaw,
+      } = request.params as {
+        episodeId: string;
+        segmentId: string;
+        uploadId: string;
+        chunkIndex: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can import segment projects" });
+      }
+      const session = getChunkedUpload(uploadId, request.userId!);
+      if (
+        !session ||
+        session.purpose !== `segment-import:${episodeId}:${segmentId}`
+      ) {
+        return reply.status(404).send({ error: "Upload not found or expired" });
+      }
+      const chunkIndex = parsePositiveInt(chunkIndexRaw);
+      const q = request.query as { totalChunks?: string; totalBytes?: string };
+      const totalChunks = parsePositiveInt(q.totalChunks);
+      const totalBytes = parsePositiveInt(q.totalBytes);
+      if (chunkIndex == null || totalChunks == null || totalBytes == null) {
+        return reply.status(400).send({
+          error: "chunkIndex, totalChunks, and totalBytes are required",
+        });
+      }
+      const lenHeader = request.headers["content-length"];
+      const chunkLength =
+        typeof lenHeader === "string" && Number.isFinite(Number(lenHeader))
+          ? Number(lenHeader)
+          : undefined;
+      const stream = request.body as Readable;
+      if (!stream || typeof stream.pipe !== "function") {
+        return reply
+          .status(400)
+          .send({ error: "Expected application/octet-stream body" });
+      }
+      try {
+        const result = await appendChunkedUpload(uploadId, request.userId!, {
+          chunkIndex,
+          totalChunks,
+          totalBytes,
+          body: stream,
+          chunkLength,
+          maxChunkBytes: PROJECT_IMPORT_CHUNK_BODY_LIMIT,
+        });
+        return reply.send({
+          ok: true,
+          bytes: result.bytes,
+          receivedBytes: result.receivedBytes,
+          complete: result.complete,
+        });
+      } catch (err) {
+        if (err instanceof ChunkTooLargeError) {
+          return reply.status(413).send({ error: err.message });
+        }
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : "Chunk upload failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/episodes/:episodeId/segments/:segmentId/import-project/upload/:uploadId/finish",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "import-segment-project",
+          windowMs: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+          max: 1,
+        }),
+      ],
+      schema: {
+        tags: ["Segments"],
+        summary: "Finish chunked segment project upload and start import",
+        params: {
+          type: "object",
+          properties: {
+            episodeId: { type: "string" },
+            segmentId: { type: "string" },
+            uploadId: { type: "string" },
+          },
+          required: ["episodeId", "segmentId", "uploadId"],
+        },
+        response: {
+          202: {
+            description: "Import started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["importing"] } },
+            required: ["status"],
+          },
+          409: { description: "Import already in progress" },
+          400: { description: "Invalid upload" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+          429: { description: "Rate limited" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { episodeId, segmentId, uploadId } = request.params as {
+        episodeId: string;
+        segmentId: string;
+        uploadId: string;
+      };
+      try {
+        assertSafeId(episodeId, "episodeId");
+        assertSafeId(segmentId, "segmentId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid id" });
+      }
+      const access = canAccessEpisode(request.userId, episodeId);
+      if (!access) {
+        return reply.status(404).send({ error: "Episode not found" });
+      }
+      if (!canEditSegments(access.role)) {
+        return reply
+          .status(403)
+          .send({ error: "Editors and above can import segment projects" });
+      }
+      const segment = repo.getSegmentById(segmentId, episodeId);
+      if (!segment) {
+        return reply.status(404).send({ error: "Segment not found" });
+      }
+      const session = getChunkedUpload(uploadId, request.userId!);
+      if (
+        !session ||
+        session.purpose !== `segment-import:${episodeId}:${segmentId}`
+      ) {
+        return reply.status(404).send({ error: "Upload not found or expired" });
+      }
+      let tmpZip: string;
+      try {
+        tmpZip = finalizeChunkedUpload(uploadId, request.userId!);
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : "Upload incomplete",
+        });
+      }
+      if (!existsSync(tmpZip) || statSync(tmpZip).size === 0) {
+        removeTempPath(tmpZip);
+        return reply.status(400).send({ error: "Empty zip file" });
+      }
+      const started = startSegmentProjectImport(
+        access.podcastId,
+        episodeId,
+        segmentId,
+        tmpZip,
+        request.userId!,
+        () => {
+          broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });
+        },
+      );
+      if (!started) {
+        removeTempPath(tmpZip);
+        return reply.status(409).send({
+          status: "importing",
+          message: "Segment import already in progress",
+        });
+      }
+      return reply.status(202).send({ status: "importing" });
+    },
+  );
+
+  app.post(
     "/episodes/:episodeId/segments/:segmentId/import-project",
     {
       preHandler: [
@@ -765,7 +1108,7 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
         tags: ["Segments"],
         summary: "Import segment project zip (overwrite)",
         description:
-          "Upload a HarborFM segment project zip and overwrite this segment in place. Returns 202; poll GET import-project/status until done or failed. Editors and above only. Rate limited to once per 30 seconds per user.",
+          "Upload a HarborFM segment project zip and overwrite this segment in place. Returns 202; poll GET import-project/status until done or failed. Editors and above only. Rate limited to once per 30 seconds per user. Prefer chunked upload routes for large zips.",
         params: {
           type: "object",
           properties: {
@@ -792,6 +1135,7 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
           400: { description: "Invalid zip" },
           403: { description: "Forbidden" },
           404: { description: "Not found" },
+          413: { description: "File too large for single-shot upload" },
           429: { description: "Rate limited" },
           500: { description: "Import failed" },
         },
@@ -839,11 +1183,11 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
       }
 
       try {
-        const buffer = await data.toBuffer();
-        if (!buffer.length) {
+        const tmpZip = await streamTempZip(data.file, MULTIPART_MAX_BYTES);
+        if (!existsSync(tmpZip) || statSync(tmpZip).size === 0) {
+          removeTempPath(tmpZip);
           return reply.status(400).send({ error: "Empty zip file" });
         }
-        const tmpZip = writeTempZip(buffer);
         const started = startSegmentProjectImport(
           access.podcastId,
           episodeId,
@@ -863,6 +1207,12 @@ export async function registerSegmentProjectRoutes(app: FastifyInstance) {
         }
         return reply.status(202).send({ status: "importing" });
       } catch (err) {
+        if (err instanceof FileTooLargeError) {
+          return reply.status(413).send({
+            error:
+              "This project zip is too large to upload all at once. Refresh the page and try again.",
+          });
+        }
         request.log.error({ err }, "segment import-project failed to start");
         return reply.status(500).send({
           error: err instanceof Error ? err.message : "Failed to import project",

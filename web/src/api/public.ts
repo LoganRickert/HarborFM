@@ -367,7 +367,7 @@ export interface PublicCastMember {
   role: 'host' | 'guest';
   description: string | null;
   photo_url: string | null;
-  social_link_text: string | null;
+  social_links: string[];
 }
 
 export function getPublicEpisodeCast(podcastSlug: string, episodeSlug: string) {

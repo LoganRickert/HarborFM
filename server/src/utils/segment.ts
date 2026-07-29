@@ -29,6 +29,8 @@ export function redactSegmentForClient(
     waveformExists: segment.waveformExists,
     disabled: segment.disabled,
     hostDuckingEnabled: segment.hostDuckingEnabled,
+    loudnessTargetingEnabled: segment.loudnessTargetingEnabled,
+    finalGainDb: segment.finalGainDb,
     hasRecordings: segment.hasRecordings,
     hasOriginalTracksManifest: segment.hasOriginalTracksManifest,
     canBootstrapAdvancedEditor: segment.canBootstrapAdvancedEditor,

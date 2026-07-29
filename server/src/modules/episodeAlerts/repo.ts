@@ -475,6 +475,7 @@ export type EpisodeForAlert = {
   slug: string | null;
   publishAt: string | null;
   status: string;
+  unlisted: boolean;
   subscriberOnly: boolean;
   subscriberOnlyStartsAt: string | null;
   subscriberOnlyEndsAt: string | null;
@@ -487,35 +488,29 @@ export type EpisodeForAlert = {
   podcastArtworkUrl: string | null;
 };
 
-export function getEpisodeForAlert(episodeId: string): EpisodeForAlert | null {
-  const row = drizzleDb
-    .select({
-      id: episodes.id,
-      podcastId: episodes.podcastId,
-      title: episodes.title,
-      description: episodes.description,
-      slug: episodes.slug,
-      publishAt: episodes.publishAt,
-      status: episodes.status,
-      subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`,
-      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
-      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
-      episodeAlertsSentAt: episodes.episodeAlertsSentAt,
-      seasonNumber: episodes.seasonNumber,
-      episodeNumber: episodes.episodeNumber,
-      artworkPath: episodes.artworkPath,
-      artworkUrl: episodes.artworkUrl,
-      podcastArtworkPath: podcasts.artworkPath,
-      podcastArtworkUrl: podcasts.artworkUrl,
-    })
-    .from(episodes)
-    .innerJoin(podcasts, eq(episodes.podcastId, podcasts.id))
-    .where(eq(episodes.id, episodeId))
-    .limit(1)
-    .get();
-  if (!row) return null;
+function mapEpisodeForAlert(row: {
+  id: string;
+  podcastId: string;
+  title: string;
+  description: string | null;
+  slug: string | null;
+  publishAt: string | null;
+  status: string;
+  unlisted: number | boolean | null;
+  subscriberOnly: number;
+  subscriberOnlyStartsAt: string | null;
+  subscriberOnlyEndsAt: string | null;
+  episodeAlertsSentAt: string | null;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  artworkPath: string | null;
+  artworkUrl: string | null;
+  podcastArtworkPath: string | null;
+  podcastArtworkUrl: string | null;
+}): EpisodeForAlert {
   return {
     ...row,
+    unlisted: asBoolFlag(row.unlisted),
     subscriberOnly: asBoolFlag(row.subscriberOnly),
     subscriberOnlyStartsAt: row.subscriberOnlyStartsAt ?? null,
     subscriberOnlyEndsAt: row.subscriberOnlyEndsAt ?? null,
@@ -528,6 +523,39 @@ export function getEpisodeForAlert(episodeId: string): EpisodeForAlert | null {
   };
 }
 
+const episodeForAlertSelect = {
+  id: episodes.id,
+  podcastId: episodes.podcastId,
+  title: episodes.title,
+  description: episodes.description,
+  slug: episodes.slug,
+  publishAt: episodes.publishAt,
+  status: episodes.status,
+  unlisted: sql<number>`COALESCE(${episodes.unlisted}, 0)`,
+  subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`,
+  subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+  subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
+  episodeAlertsSentAt: episodes.episodeAlertsSentAt,
+  seasonNumber: episodes.seasonNumber,
+  episodeNumber: episodes.episodeNumber,
+  artworkPath: episodes.artworkPath,
+  artworkUrl: episodes.artworkUrl,
+  podcastArtworkPath: podcasts.artworkPath,
+  podcastArtworkUrl: podcasts.artworkUrl,
+};
+
+export function getEpisodeForAlert(episodeId: string): EpisodeForAlert | null {
+  const row = drizzleDb
+    .select(episodeForAlertSelect)
+    .from(episodes)
+    .innerJoin(podcasts, eq(episodes.podcastId, podcasts.id))
+    .where(eq(episodes.id, episodeId))
+    .limit(1)
+    .get();
+  if (!row) return null;
+  return mapEpisodeForAlert(row);
+}
+
 export function isEpisodeReleased(ep: {
   status: string;
   publishAt: string | null;
@@ -535,6 +563,17 @@ export function isEpisodeReleased(ep: {
   if (ep.status !== "published") return false;
   if (!ep.publishAt) return true;
   return new Date(ep.publishAt).getTime() <= Date.now();
+}
+
+/** Released and listed: eligible for Episode Alerts / publish notifications. */
+export function isEpisodeAlertable(ep: {
+  status: string;
+  publishAt: string | null;
+  unlisted?: boolean | number | null;
+}): boolean {
+  if (!isEpisodeReleased(ep)) return false;
+  if (asBoolFlag(ep.unlisted)) return false;
+  return true;
 }
 
 /**
@@ -554,28 +593,10 @@ export function claimEpisodeAlertsSend(episodeId: string): boolean {
   return (result.changes ?? 0) > 0;
 }
 
-/** Episodes that are released, alerts enabled on show, and not yet sent. */
+/** Episodes that are released, listed, alerts enabled on show, and not yet sent. */
 export function listDueAlertEpisodes(limit = 50): EpisodeForAlert[] {
   const rows = drizzleDb
-    .select({
-      id: episodes.id,
-      podcastId: episodes.podcastId,
-      title: episodes.title,
-      description: episodes.description,
-      slug: episodes.slug,
-      publishAt: episodes.publishAt,
-      status: episodes.status,
-      subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`,
-      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
-      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
-      episodeAlertsSentAt: episodes.episodeAlertsSentAt,
-      seasonNumber: episodes.seasonNumber,
-      episodeNumber: episodes.episodeNumber,
-      artworkPath: episodes.artworkPath,
-      artworkUrl: episodes.artworkUrl,
-      podcastArtworkPath: podcasts.artworkPath,
-      podcastArtworkUrl: podcasts.artworkUrl,
-    })
+    .select(episodeForAlertSelect)
     .from(episodes)
     .innerJoin(podcasts, eq(episodes.podcastId, podcasts.id))
     .where(
@@ -583,23 +604,13 @@ export function listDueAlertEpisodes(limit = 50): EpisodeForAlert[] {
         eq(episodes.status, "published"),
         isNull(episodes.episodeAlertsSentAt),
         sql`COALESCE(${podcasts.episodeAlertsEnabled}, 0) = 1`,
+        sql`COALESCE(${episodes.unlisted}, 0) = 0`,
         sql`(${episodes.publishAt} IS NULL OR datetime(${episodes.publishAt}) <= datetime('now'))`,
       ),
     )
     .limit(limit)
     .all();
-  return rows.map((r) => ({
-    ...r,
-    subscriberOnly: asBoolFlag(r.subscriberOnly),
-    subscriberOnlyStartsAt: r.subscriberOnlyStartsAt ?? null,
-    subscriberOnlyEndsAt: r.subscriberOnlyEndsAt ?? null,
-    seasonNumber: r.seasonNumber ?? null,
-    episodeNumber: r.episodeNumber ?? null,
-    artworkPath: r.artworkPath ?? null,
-    artworkUrl: r.artworkUrl ?? null,
-    podcastArtworkPath: r.podcastArtworkPath ?? null,
-    podcastArtworkUrl: r.podcastArtworkUrl ?? null,
-  }));
+  return rows.map((r) => mapEpisodeForAlert(r));
 }
 
 export function getPodcastSlugById(podcastId: string): string | null {

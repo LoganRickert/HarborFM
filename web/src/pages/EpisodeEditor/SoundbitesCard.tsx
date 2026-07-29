@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Play, Pencil, Trash2, Plus, Download, TriangleAlert } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { formatDuration } from './utils';
+import { formatTimeInput, parseTimeInput } from './utils';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
 import { downloadSoundbiteUrl } from '../../api/audio';
@@ -33,31 +33,6 @@ export interface SoundbitesCardProps {
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   hideHeader?: boolean;
-}
-
-/** Parse "m:ss" or "mm:ss" or plain seconds number. Returns seconds or NaN. */
-function parseTimeInput(s: string): number {
-  const trimmed = s.trim();
-  if (!trimmed) return NaN;
-  const num = Number(trimmed);
-  if (!Number.isNaN(num)) return num >= 0 ? num : NaN;
-  const parts = trimmed.split(':');
-  if (parts.length === 2) {
-    const m = parseInt(parts[0]!, 10);
-    const sec = parseFloat(parts[1]!);
-    if (!Number.isNaN(m) && !Number.isNaN(sec) && m >= 0 && sec >= 0) {
-      return m * 60 + sec;
-    }
-  }
-  if (parts.length === 3) {
-    const h = parseInt(parts[0]!, 10);
-    const m = parseInt(parts[1]!, 10);
-    const sec = parseFloat(parts[2]!);
-    if (!Number.isNaN(h) && !Number.isNaN(m) && !Number.isNaN(sec) && h >= 0 && m >= 0 && sec >= 0) {
-      return h * 3600 + m * 60 + sec;
-    }
-  }
-  return NaN;
 }
 
 function clampDuration(n: number): number {
@@ -94,9 +69,9 @@ function SoundbiteEditDialog({
   const initialTitle = marker?.title ?? '';
   const initialTimeStr =
     mode === 'add' && defaultTimeSec !== undefined
-      ? formatDuration(Math.floor(defaultTimeSec))
+      ? formatTimeInput(defaultTimeSec)
       : marker != null
-        ? formatDuration(Math.floor(marker.time))
+        ? formatTimeInput(marker.time)
         : '0:00';
   const initialDurationStr = String(
     marker != null ? clampDuration(marker.duration) : SOUNDBITE_DEFAULT_DURATION,
@@ -119,9 +94,9 @@ function SoundbiteEditDialog({
     if (open) {
       const timeStrVal =
         mode === 'add' && defaultTimeSec !== undefined
-          ? formatDuration(Math.floor(defaultTimeSec))
+          ? formatTimeInput(defaultTimeSec)
           : marker != null
-            ? formatDuration(Math.floor(marker.time))
+            ? formatTimeInput(marker.time)
             : '0:00';
       const nextTitle = marker?.title ?? '';
       const nextDurationStr = String(
@@ -164,11 +139,11 @@ function SoundbiteEditDialog({
   const handleSave = () => {
     const timeSec = parseTimeInput(timeStr);
     if (Number.isNaN(timeSec) || timeSec < 0) {
-      setError('Enter a valid time (e.g. 1:30 or 90)');
+      setError('Enter a valid time (e.g. 1:20.5 or 90)');
       return;
     }
     if (maxTimeSec > 0 && timeSec > maxTimeSec) {
-      setError(`Time cannot exceed ${formatDuration(Math.floor(maxTimeSec))}`);
+      setError(`Time cannot exceed ${formatTimeInput(maxTimeSec)}`);
       return;
     }
     const durationNum = Number(durationStr);
@@ -247,7 +222,7 @@ function SoundbiteEditDialog({
                   type="text"
                   value={timeStr}
                   onChange={(e) => setTimeStr(e.target.value)}
-                  placeholder="0:00 or 90"
+                  placeholder="1:20.5 or 90"
                   className={styles.chapterEditInput}
                 />
               </label>
@@ -486,7 +461,7 @@ export function SoundbitesCard({
                           className={styles.chapterPlayBtn}
                           onClick={() => onSeekTo(m.time, clampDuration(m.duration))}
                           aria-label={`Play ${m.title ?? 'soundbite'} for ${clampDuration(m.duration)} seconds`}
-                          title={`Play ${clampDuration(m.duration)}s from ${formatDuration(Math.floor(m.time))}`}
+                          title={`Play ${clampDuration(m.duration)}s from ${formatTimeInput(m.time)}`}
                         >
                           <Play size={16} strokeWidth={2} aria-hidden />
                         </button>
@@ -503,7 +478,7 @@ export function SoundbitesCard({
                       />
                     </td>
                     <td className={styles.chaptersTableNameCol}>{m.title ?? 'Untitled'}</td>
-                    <td className={styles.chaptersTableTimeCol}>{formatDuration(Math.floor(m.time))}</td>
+                    <td className={styles.chaptersTableTimeCol}>{formatTimeInput(m.time)}</td>
                     <td className={styles.chaptersTableTimeCol}>{clampDuration(m.duration)}s</td>
                     <td className={styles.chaptersTableActionsCol}>
                       <div className={styles.chaptersTableActionsWrap}>

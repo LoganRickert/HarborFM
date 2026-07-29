@@ -119,7 +119,7 @@ export function insertCastMember(row: {
   name: string;
   role: "host" | "guest";
   photoUrl: string | null;
-  socialLinkText: string | null;
+  socialLinks: string;
   isPublic: boolean;
 }): void {
   drizzleDb.insert(podcastCast).values(row).run();

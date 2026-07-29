@@ -41,9 +41,9 @@ import * as audioService from "../../services/audio.js";
 import {
   pruneMarkersForDuration,
   pruneTrimRangesForDuration,
-  remakeMixFromMultitrackDir,
   type MultitrackManifest,
 } from "../../services/multitrackRemake.js";
+import { remakeMixWithOptionalWorker } from "../../services/segmentRemakeWorker.js";
 import { sha256FileSync } from "../../utils/hash.js";
 import { waveformPath } from "../segments/utils.js";
 import * as episodeRepo from "./repo.js";
@@ -56,6 +56,7 @@ import {
 } from "../segments/repo.js";
 import { upsertPoll } from "../polls/repo.js";
 import { PROJECT_FORMAT_VERSION } from "./projectExport.js";
+import { streamToFileWithLimit } from "../../services/uploads.js";
 import {
   applyTimelineSidecarToManifest,
   REAPER_IGNORED_WARNING,
@@ -626,6 +627,12 @@ export async function importProjectZip(
           audioEq: stringifyJsonField(segMeta.audioEq),
           disabled: Boolean(segMeta.disabled),
           hostDuckingEnabled: Boolean(segMeta.hostDuckingEnabled),
+          loudnessTargetingEnabled: segMeta.loudnessTargetingEnabled !== false,
+          finalGainDb:
+            typeof segMeta.finalGainDb === "number" &&
+            Number.isFinite(segMeta.finalGainDb)
+              ? Math.min(6, Math.max(-24, segMeta.finalGainDb))
+              : 0,
           inProgress: false,
           recordFailed: false,
         })
@@ -749,12 +756,16 @@ export async function importProjectZip(
           const duckingEnabled = Boolean(segMeta.hostDuckingEnabled);
           const ducking = duckingEnabled ? readHostDuckingFile(mtDest) : null;
           const remakeManifest = buildManifestForRemake(manifest, ducking, mtDest);
-          const remade = await remakeMixFromMultitrackDir(
-            mtDest,
+          const remade = await remakeMixWithOptionalWorker({
+            podcastId,
+            episodeId: id,
+            segmentId: newSegId,
+            mtDir: mtDest,
             remakeManifest,
             mixDest,
-            episodeUploads,
-          );
+            allowedBaseDir: episodeUploads,
+            userId: importerUserId,
+          });
           audioAbsDest = mixDest;
           audioPathRel = pathRelativeToData(mixDest);
           durationSec = remade.durationSec;
@@ -831,10 +842,20 @@ export async function importProjectZip(
   }
 }
 
-/** Write uploaded buffer/stream path helper for routes. */
+/** Write uploaded buffer to a temp zip path for routes. */
 export function writeTempZip(buffer: Buffer): string {
   const path = join(tmpdir(), `harborfm-import-upload-${nanoid()}.zip`);
   writeFileSync(path, buffer);
+  return path;
+}
+
+/** Stream an upload to a temp zip with a size limit. Returns the path. */
+export async function streamTempZip(
+  input: NodeJS.ReadableStream,
+  maxBytes: number,
+): Promise<string> {
+  const path = join(tmpdir(), `harborfm-import-upload-${nanoid()}.zip`);
+  await streamToFileWithLimit(input, path, maxBytes);
   return path;
 }
 

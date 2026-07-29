@@ -450,3 +450,91 @@
   color: var(--text-muted);
   font-size: 1.5rem;
 }
+
+.castSocialLinkList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  min-width: 0;
+}
+
+.castSocialLinkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.castSocialLinkRow .castDialogFormInput {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.castSocialLinkDrag,
+.castSocialLinkRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.castSocialLinkDrag:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.castSocialLinkRemove {
+  color: #f07178;
+  border-color: color-mix(in srgb, #f07178 35%, var(--border));
+}
+
+.castSocialLinkRemove:hover:not(:disabled) {
+  color: #f07178;
+  background: color-mix(in srgb, #f07178 12%, transparent);
+  border-color: color-mix(in srgb, #f07178 55%, var(--border));
+}
+
+.castSocialLinkDrag:disabled,
+.castSocialLinkRemove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.castSocialLinkAdd {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: fit-content;
+  margin: 0.5rem auto 0;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.castSocialLinkAdd:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border) 45%);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.castSocialLinkAdd:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

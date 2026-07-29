@@ -179,7 +179,7 @@ Gate optional blocks with the show toggles from Page Customizations:
 {% endif %}
 ```
 
-On episode pages use `{% render 'harborfm/episode_cast' %}` (or loop `episode_cast.hosts` / `episode_cast.guests`). `harborfm/cast` and `cast.*` are the show cast.
+On episode pages use `{% render 'harborfm/episode_cast' %}` (or loop `episode_cast.hosts` / `episode_cast.guests`). `harborfm/cast` and `cast.*` are the show cast. Cast members expose `url` (first link), `urls`, and `links` (`key`, `label`, `url`, `icon_url`).
 
 For custom layout, you can loop Liquid data yourself (`cast`, `episode_cast`, `funding_links`, `links`, `podroll`, `reviews`) and only keep `harborfm/episodes` for the interactive archive.
 

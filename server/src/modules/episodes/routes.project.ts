@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { Readable } from "stream";
 import { createReadStream, existsSync, statSync } from "fs";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import {
@@ -8,11 +9,24 @@ import {
   canEditSegments,
   getPodcastRole,
 } from "../../services/access.js";
-import { IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS } from "../../config.js";
+import {
+  IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+  MULTIPART_MAX_BYTES,
+  PROJECT_IMPORT_CHUNK_BODY_LIMIT,
+  PROJECT_IMPORT_CHUNK_BYTES,
+} from "../../config.js";
 import { assertSafeId } from "../../services/paths.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { writeRssFile, deleteTokenFeedTemplateFile } from "../../services/rss.js";
 import { notifyWebSubHub } from "../../services/websub.js";
+import {
+  appendChunkedUpload,
+  ChunkTooLargeError,
+  createChunkedUpload,
+  finalizeChunkedUpload,
+  getChunkedUpload,
+} from "../../services/chunkedUpload.js";
+import { FileTooLargeError } from "../../services/uploads.js";
 import * as repo from "./repo.js";
 import {
   getOrBuildProjectZip,
@@ -23,10 +37,65 @@ import {
   getProjectImportStatus,
   removeTempPath,
   startProjectImport,
-  writeTempZip,
+  streamTempZip,
 } from "./projectImport.js";
 
+function parsePositiveInt(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) return Math.trunc(raw);
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.trunc(n);
+  }
+  return null;
+}
+
+function afterEpisodeImportRss(podcastId: string): void {
+  try {
+    writeRssFile(podcastId, null);
+    deleteTokenFeedTemplateFile(podcastId);
+    notifyWebSubHub(podcastId, null);
+  } catch {
+    // non-fatal
+  }
+}
+
+function assertCanImportEpisodeProject(
+  userId: string | undefined,
+  podcastId: string,
+): { ok: true } | { ok: false; status: 403 | 404; error: string } {
+  if (!userId || !canAccessPodcast(userId, podcastId)) {
+    return { ok: false, status: 404, error: "Podcast not found" };
+  }
+  const role = getPodcastRole(userId, podcastId);
+  if (!canEditEpisodeOrPodcastMetadata(role)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Only managers and the owner can import project zips",
+    };
+  }
+  const { maxEpisodes } = repo.getCreateLimit(podcastId);
+  if (maxEpisodes != null && maxEpisodes > 0) {
+    const count = repo.countByPodcastId(podcastId);
+    if (count >= maxEpisodes) {
+      return {
+        ok: false,
+        status: 403,
+        error: `This show has reached its limit of ${maxEpisodes} episode${maxEpisodes === 1 ? "" : "s"}. You cannot import more.`,
+      };
+    }
+  }
+  return { ok: true };
+}
+
 export async function registerProjectRoutes(app: FastifyInstance) {
+  app.addContentTypeParser(
+    "application/octet-stream",
+    function (_request, payload, done) {
+      done(null, payload);
+    },
+  );
+
   app.post(
     "/episodes/:episodeId/project-export/prepare",
     {
@@ -275,6 +344,272 @@ export async function registerProjectRoutes(app: FastifyInstance) {
   );
 
   app.post(
+    "/podcasts/:podcastId/episodes/import-project/upload",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Episodes"],
+        summary: "Start chunked episode project upload",
+        description:
+          "Create a chunked upload session for a large project zip. Then PUT chunks and POST finish. Prefer this over single-shot POST import-project for large files.",
+        params: {
+          type: "object",
+          properties: { podcastId: { type: "string" } },
+          required: ["podcastId"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            totalBytes: { type: "number" },
+            totalChunks: { type: "number" },
+            filename: { type: "string" },
+          },
+          required: ["totalBytes", "totalChunks"],
+        },
+        response: {
+          200: {
+            description: "Upload session created",
+            type: "object",
+            properties: {
+              uploadId: { type: "string" },
+              chunkBytes: { type: "number" },
+            },
+            required: ["uploadId", "chunkBytes"],
+          },
+          400: { description: "Invalid request" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId } = request.params as { podcastId: string };
+      try {
+        assertSafeId(podcastId, "podcastId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid podcastId" });
+      }
+      const gate = assertCanImportEpisodeProject(request.userId, podcastId);
+      if (!gate.ok) {
+        return reply.status(gate.status).send({ error: gate.error });
+      }
+      const body = request.body as {
+        totalBytes?: number;
+        totalChunks?: number;
+        filename?: string;
+      };
+      const totalBytes = parsePositiveInt(body.totalBytes);
+      const totalChunks = parsePositiveInt(body.totalChunks);
+      if (totalBytes == null || totalChunks == null) {
+        return reply.status(400).send({
+          error: "totalBytes and totalChunks are required",
+        });
+      }
+      try {
+        const { uploadId } = createChunkedUpload({
+          userId: request.userId!,
+          purpose: `episode-import:${podcastId}`,
+          totalBytes,
+          totalChunks,
+          filename: body.filename,
+        });
+        return reply.send({
+          uploadId,
+          chunkBytes: PROJECT_IMPORT_CHUNK_BYTES,
+        });
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : "Failed to start upload",
+        });
+      }
+    },
+  );
+
+  app.put(
+    "/podcasts/:podcastId/episodes/import-project/upload/:uploadId/chunks/:chunkIndex",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      bodyLimit: PROJECT_IMPORT_CHUNK_BODY_LIMIT,
+      schema: {
+        tags: ["Episodes"],
+        summary: "Upload one episode project zip chunk",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            uploadId: { type: "string" },
+            chunkIndex: { type: "string" },
+          },
+          required: ["podcastId", "uploadId", "chunkIndex"],
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            totalChunks: { type: "string" },
+            totalBytes: { type: "string" },
+          },
+          required: ["totalChunks", "totalBytes"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, uploadId, chunkIndex: chunkIndexRaw } =
+        request.params as {
+          podcastId: string;
+          uploadId: string;
+          chunkIndex: string;
+        };
+      try {
+        assertSafeId(podcastId, "podcastId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid podcastId" });
+      }
+      const gate = assertCanImportEpisodeProject(request.userId, podcastId);
+      if (!gate.ok) {
+        return reply.status(gate.status).send({ error: gate.error });
+      }
+      const session = getChunkedUpload(uploadId, request.userId!);
+      if (!session || session.purpose !== `episode-import:${podcastId}`) {
+        return reply.status(404).send({ error: "Upload not found or expired" });
+      }
+      const chunkIndex = parsePositiveInt(chunkIndexRaw);
+      const q = request.query as { totalChunks?: string; totalBytes?: string };
+      const totalChunks = parsePositiveInt(q.totalChunks);
+      const totalBytes = parsePositiveInt(q.totalBytes);
+      if (chunkIndex == null || totalChunks == null || totalBytes == null) {
+        return reply.status(400).send({
+          error: "chunkIndex, totalChunks, and totalBytes are required",
+        });
+      }
+      const lenHeader = request.headers["content-length"];
+      const chunkLength =
+        typeof lenHeader === "string" && Number.isFinite(Number(lenHeader))
+          ? Number(lenHeader)
+          : undefined;
+      const stream = request.body as Readable;
+      if (!stream || typeof stream.pipe !== "function") {
+        return reply
+          .status(400)
+          .send({ error: "Expected application/octet-stream body" });
+      }
+      try {
+        const result = await appendChunkedUpload(uploadId, request.userId!, {
+          chunkIndex,
+          totalChunks,
+          totalBytes,
+          body: stream,
+          chunkLength,
+          maxChunkBytes: PROJECT_IMPORT_CHUNK_BODY_LIMIT,
+        });
+        return reply.send({
+          ok: true,
+          bytes: result.bytes,
+          receivedBytes: result.receivedBytes,
+          complete: result.complete,
+        });
+      } catch (err) {
+        if (err instanceof ChunkTooLargeError) {
+          return reply.status(413).send({ error: err.message });
+        }
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : "Chunk upload failed",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/podcasts/:podcastId/episodes/import-project/upload/:uploadId/finish",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "import-project",
+          windowMs: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS,
+          max: 1,
+        }),
+      ],
+      schema: {
+        tags: ["Episodes"],
+        summary: "Finish chunked episode project upload and start import",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            uploadId: { type: "string" },
+          },
+          required: ["podcastId", "uploadId"],
+        },
+        response: {
+          202: {
+            description: "Import started",
+            type: "object",
+            properties: { status: { type: "string", enum: ["importing"] } },
+            required: ["status"],
+          },
+          409: { description: "Import already in progress" },
+          400: { description: "Invalid upload" },
+          403: { description: "Forbidden" },
+          404: { description: "Not found" },
+          429: { description: "Rate limited" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, uploadId } = request.params as {
+        podcastId: string;
+        uploadId: string;
+      };
+      try {
+        assertSafeId(podcastId, "podcastId");
+      } catch (err) {
+        return reply
+          .status(400)
+          .send({ error: err instanceof Error ? err.message : "Invalid podcastId" });
+      }
+      const gate = assertCanImportEpisodeProject(request.userId, podcastId);
+      if (!gate.ok) {
+        return reply.status(gate.status).send({ error: gate.error });
+      }
+      const session = getChunkedUpload(uploadId, request.userId!);
+      if (!session || session.purpose !== `episode-import:${podcastId}`) {
+        return reply.status(404).send({ error: "Upload not found or expired" });
+      }
+      let tmpZip: string;
+      try {
+        tmpZip = finalizeChunkedUpload(uploadId, request.userId!);
+      } catch (err) {
+        return reply.status(400).send({
+          error: err instanceof Error ? err.message : "Upload incomplete",
+        });
+      }
+      if (!existsSync(tmpZip) || statSync(tmpZip).size === 0) {
+        removeTempPath(tmpZip);
+        return reply.status(400).send({ error: "Empty zip file" });
+      }
+      const started = startProjectImport(
+        podcastId,
+        tmpZip,
+        request.userId!,
+        () => afterEpisodeImportRss(podcastId),
+      );
+      if (!started) {
+        removeTempPath(tmpZip);
+        return reply.status(409).send({
+          status: "importing",
+          message: "Project import already in progress",
+        });
+      }
+      return reply.status(202).send({ status: "importing" });
+    },
+  );
+
+  app.post(
     "/podcasts/:podcastId/episodes/import-project",
     {
       preHandler: [
@@ -290,7 +625,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         tags: ["Episodes"],
         summary: "Import episode project zip",
         description:
-          "Upload a HarborFM project zip and recreate a draft episode (new ids). Returns 202; poll GET import-project/status until done or failed. Managers and the owner only. Rate limited to once per 30 seconds per user.",
+          "Upload a HarborFM project zip and recreate a draft episode (new ids). Returns 202; poll GET import-project/status until done or failed. Managers and the owner only. Rate limited to once per 30 seconds per user. Prefer chunked upload routes for large zips.",
         params: {
           type: "object",
           properties: { podcastId: { type: "string" } },
@@ -314,6 +649,7 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           400: { description: "Invalid zip" },
           403: { description: "Forbidden or at episode limit" },
           404: { description: "Podcast not found" },
+          413: { description: "File too large for single-shot upload" },
           429: { description: "Rate limited" },
           500: { description: "Import failed" },
         },
@@ -328,24 +664,9 @@ export async function registerProjectRoutes(app: FastifyInstance) {
           .status(400)
           .send({ error: err instanceof Error ? err.message : "Invalid podcastId" });
       }
-      if (!canAccessPodcast(request.userId, podcastId)) {
-        return reply.status(404).send({ error: "Podcast not found" });
-      }
-      const role = getPodcastRole(request.userId, podcastId);
-      if (!canEditEpisodeOrPodcastMetadata(role)) {
-        return reply.status(403).send({
-          error: "Only managers and the owner can import project zips",
-        });
-      }
-
-      const { maxEpisodes } = repo.getCreateLimit(podcastId);
-      if (maxEpisodes != null && maxEpisodes > 0) {
-        const count = repo.countByPodcastId(podcastId);
-        if (count >= maxEpisodes) {
-          return reply.status(403).send({
-            error: `This show has reached its limit of ${maxEpisodes} episode${maxEpisodes === 1 ? "" : "s"}. You cannot import more.`,
-          });
-        }
+      const gate = assertCanImportEpisodeProject(request.userId, podcastId);
+      if (!gate.ok) {
+        return reply.status(gate.status).send({ error: gate.error });
       }
 
       const data = await request.file();
@@ -353,29 +674,26 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "No file uploaded" });
       }
       const filename = data.filename || "project.zip";
-      if (!filename.toLowerCase().endsWith(".zip") && data.mimetype !== "application/zip") {
-        return reply.status(400).send({ error: "File must be a .zip project export" });
+      if (
+        !filename.toLowerCase().endsWith(".zip") &&
+        data.mimetype !== "application/zip"
+      ) {
+        return reply
+          .status(400)
+          .send({ error: "File must be a .zip project export" });
       }
 
       try {
-        const buffer = await data.toBuffer();
-        if (!buffer.length) {
+        const tmpZip = await streamTempZip(data.file, MULTIPART_MAX_BYTES);
+        if (!existsSync(tmpZip) || statSync(tmpZip).size === 0) {
+          removeTempPath(tmpZip);
           return reply.status(400).send({ error: "Empty zip file" });
         }
-        const tmpZip = writeTempZip(buffer);
         const started = startProjectImport(
           podcastId,
           tmpZip,
           request.userId!,
-          () => {
-            try {
-              writeRssFile(podcastId, null);
-              deleteTokenFeedTemplateFile(podcastId);
-              notifyWebSubHub(podcastId, null);
-            } catch {
-              // non-fatal
-            }
-          },
+          () => afterEpisodeImportRss(podcastId),
         );
         if (!started) {
           removeTempPath(tmpZip);
@@ -386,6 +704,12 @@ export async function registerProjectRoutes(app: FastifyInstance) {
         }
         return reply.status(202).send({ status: "importing" });
       } catch (err) {
+        if (err instanceof FileTooLargeError) {
+          return reply.status(413).send({
+            error:
+              "This project zip is too large to upload all at once. Refresh the page and try again.",
+          });
+        }
         request.log.error({ err }, "import-project failed to start");
         return reply.status(500).send({
           error: err instanceof Error ? err.message : "Failed to import project",

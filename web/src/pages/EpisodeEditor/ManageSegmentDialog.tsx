@@ -25,6 +25,7 @@ import {
   startImportSegmentReaper,
   startSegmentHostDucking,
   startSegmentProjectExport,
+  updateSegment,
   type EpisodeSegment,
 } from '../../api/segments';
 import { downloadAuthenticatedBlob, pollUntil } from '../../utils/projectZipTransfer';
@@ -48,6 +49,7 @@ type WaitKind =
   | 'import-mp3'
   | 'reaper'
   | 'otio'
+  | 'update'
   | null;
 
 export function ManageSegmentDialog({
@@ -67,6 +69,9 @@ export function ManageSegmentDialog({
   const [waitKind, setWaitKind] = useState<WaitKind>(null);
   const [waitError, setWaitError] = useState<string | null>(null);
   const [waitWarning, setWaitWarning] = useState<string | null>(null);
+  const [importPhase, setImportPhase] = useState<'validating' | 'uploading' | 'importing'>(
+    'validating',
+  );
   const [duckingBusy, setDuckingBusy] = useState(false);
   const duckingGenRef = useRef(0);
   const duckingBusyRef = useRef(false);
@@ -81,7 +86,30 @@ export function ManageSegmentDialog({
   );
   const canProject = hasAudio;
   const duckingEnabled = Boolean(segment?.hostDuckingEnabled);
+  const loudnessTargetingEnabled = segment?.loudnessTargetingEnabled !== false;
+  const showLoudnessTargeting = Boolean(hasAudio) && !readOnly;
   const showHostDucking = Boolean(segment?.hasRecordings) && !readOnly;
+
+  const FINAL_GAIN_DB_MIN = -24;
+  const FINAL_GAIN_DB_MAX = 6;
+  const FINAL_GAIN_DB_STEP = 0.5;
+
+  function clampFinalGainDb(v: number): number {
+    const stepped = Math.round(v / FINAL_GAIN_DB_STEP) * FINAL_GAIN_DB_STEP;
+    return Math.min(FINAL_GAIN_DB_MAX, Math.max(FINAL_GAIN_DB_MIN, stepped));
+  }
+
+  const segmentFinalGainDb = clampFinalGainDb(
+    typeof segment?.finalGainDb === 'number' && Number.isFinite(segment.finalGainDb)
+      ? segment.finalGainDb
+      : 0,
+  );
+  const [finalGainDraftDb, setFinalGainDraftDb] = useState(segmentFinalGainDb);
+  const finalGainSavingRef = useRef(false);
+
+  useEffect(() => {
+    setFinalGainDraftDb(segmentFinalGainDb);
+  }, [segment?.id, segmentFinalGainDb]);
 
   async function runHostDuckingJob(
     segmentId: string,
@@ -181,9 +209,13 @@ export function ManageSegmentDialog({
     if (!segment || !file || busy || readOnly) return;
     setWaitError(null);
     setWaitWarning(null);
+    setImportPhase('validating');
     setWaitKind('import');
     try {
-      await startImportSegmentProject(episodeId, segment.id, file);
+      await startImportSegmentProject(episodeId, segment.id, file, {
+        onPhase: setImportPhase,
+      });
+      setImportPhase('importing');
       const result = await pollUntil(
         () => getSegmentProjectImportStatus(episodeId, segment.id),
         {
@@ -287,6 +319,50 @@ export function ManageSegmentDialog({
     );
   }
 
+  async function handleLoudnessTargetingToggle(enabled: boolean) {
+    if (!segment || busy || readOnly) return;
+    if ((segment.loudnessTargetingEnabled !== false) === enabled) return;
+    setWaitError(null);
+    try {
+      await updateSegment(episodeId, segment.id, {
+        loudnessTargetingEnabled: enabled,
+      });
+      onImported();
+    } catch (err) {
+      setWaitError(
+        err instanceof Error ? err.message : 'Failed to update loudness targeting',
+      );
+      setWaitKind('update');
+    }
+  }
+
+  async function commitFinalGainDb(nextDb: number) {
+    if (!segment || busy || readOnly || finalGainSavingRef.current) return;
+    const clamped = clampFinalGainDb(nextDb);
+    setFinalGainDraftDb(clamped);
+    if (clamped === segmentFinalGainDb) return;
+    finalGainSavingRef.current = true;
+    setWaitError(null);
+    try {
+      await updateSegment(episodeId, segment.id, { finalGainDb: clamped });
+      onImported();
+    } catch (err) {
+      setFinalGainDraftDb(segmentFinalGainDb);
+      setWaitError(
+        err instanceof Error ? err.message : 'Failed to update final gain',
+      );
+      setWaitKind('update');
+    } finally {
+      finalGainSavingRef.current = false;
+    }
+  }
+
+  function formatFinalGainDb(db: number): string {
+    const rounded = Math.round(db * 10) / 10;
+    const sign = rounded > 0 ? '+' : '';
+    return `${sign}${rounded.toFixed(1)} dB`;
+  }
+
   const waitDescription = duckingBusy
     ? 'Updating host ducking...'
     : waitKind === 'reaper'
@@ -296,14 +372,20 @@ export function ManageSegmentDialog({
         : waitKind === 'import-mp3'
           ? 'Importing final mix...'
           : waitKind === 'import'
-            ? 'Importing segment...'
+            ? importPhase === 'validating'
+              ? 'Validating zip...'
+              : importPhase === 'uploading'
+                ? 'Uploading...'
+                : 'Importing segment...'
             : waitKind === 'download-mp3'
               ? 'Preparing MP3...'
               : 'Preparing your download...';
   const waitErrorTitle =
     waitKind === 'export' || waitKind === 'download-mp3'
       ? 'Download failed'
-      : 'Import failed';
+      : waitKind === 'update'
+        ? 'Update failed'
+        : 'Import Failed';
 
   return (
     <>
@@ -484,6 +566,86 @@ export function ManageSegmentDialog({
                   </span>
                 </button>
               )}
+
+              {showLoudnessTargeting ? (
+                <div
+                  className={styles.hostDuckingSetting}
+                  title="When building the final episode. Ignored if loudness target is 0 in Settings."
+                >
+                  <span className={styles.hostDuckingSettingLabel}>
+                    Loudness Targeting
+                  </span>
+                  <span className={styles.manageSegmentActionHint}>
+                    Opt out for music or beds so final loudness does not reshape them
+                  </span>
+                  <div
+                    className={styles.hostDuckingSegmented}
+                    role="group"
+                    aria-label="Loudness Targeting"
+                  >
+                    <button
+                      type="button"
+                      className={
+                        !loudnessTargetingEnabled
+                          ? styles.hostDuckingSegmentedActive
+                          : styles.hostDuckingSegmentedBtn
+                      }
+                      aria-pressed={!loudnessTargetingEnabled}
+                      disabled={busy}
+                      onClick={() => void handleLoudnessTargetingToggle(false)}
+                    >
+                      Disabled
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        loudnessTargetingEnabled
+                          ? styles.hostDuckingSegmentedActive
+                          : styles.hostDuckingSegmentedBtn
+                      }
+                      aria-pressed={loudnessTargetingEnabled}
+                      disabled={busy}
+                      onClick={() => void handleLoudnessTargetingToggle(true)}
+                    >
+                      Enabled
+                    </button>
+                  </div>
+                  {!loudnessTargetingEnabled ? (
+                    <div className={styles.finalGainSetting}>
+                      <div className={styles.finalGainSettingHead}>
+                        <span className={styles.finalGainSettingLabel}>
+                          Final Gain
+                        </span>
+                        <span className={styles.finalGainSettingValue}>
+                          {formatFinalGainDb(finalGainDraftDb)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        className={styles.finalGainSlider}
+                        min={FINAL_GAIN_DB_MIN}
+                        max={FINAL_GAIN_DB_MAX}
+                        step={FINAL_GAIN_DB_STEP}
+                        value={finalGainDraftDb}
+                        disabled={busy}
+                        aria-label="Final Gain"
+                        onChange={(e) =>
+                          setFinalGainDraftDb(Number(e.target.value))
+                        }
+                        onPointerUp={(e) =>
+                          void commitFinalGainDb(Number(e.currentTarget.value))
+                        }
+                        onKeyUp={(e) =>
+                          void commitFinalGainDb(Number(e.currentTarget.value))
+                        }
+                        onBlur={(e) =>
+                          void commitFinalGainDb(Number(e.currentTarget.value))
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {showHostDucking ? (
                 <div

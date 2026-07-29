@@ -1,7 +1,15 @@
 import type { SegmentResponse, SegmentUpdateBody, SegmentsListResponse, TranscriptTextResponse, TranscriptStatusResponse, RenderStatusResponse, VideoStatusResponse, GenerateVideoBody, SegmentHostDuckingStatusResponse, SegmentRestoreOriginalMixStatusResponse, SegmentTracksResponse, SegmentTrackClip, SegmentTracksApplyStatusResponse, SegmentTracksSaveResponse } from '@harborfm/shared';
 import { csrfHeaders } from './client';
+import { normalizeProjectImportError } from '../utils/normalizeProjectImportError';
+import { validateProjectZipFile } from '../utils/validateProjectZip';
+import {
+  uploadProjectZipChunks,
+  type ProjectZipUploadHooks,
+} from '../utils/uploadProjectZipChunks';
 
 const BASE = '/api';
+
+export type { ProjectZipUploadHooks };
 
 /** Segment as returned by API (from shared schema). */
 export type EpisodeSegment = SegmentResponse;
@@ -423,22 +431,25 @@ export function startImportSegmentProject(
   episodeId: string,
   segmentId: string,
   file: File,
+  hooks?: ProjectZipUploadHooks,
 ): Promise<void> {
-  const form = new FormData();
-  form.append('file', file);
-  return fetch(`${BASE}/episodes/${episodeId}/segments/${segmentId}/import-project`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: csrfHeaders(),
-    body: form,
-  }).then((r) => {
-    if (r.status === 202 || r.status === 409) return;
-    if (!r.ok) {
-      return r.json().then((err: { error?: string }) => {
-        throw new Error(err.error ?? r.statusText);
-      });
+  return (async () => {
+    hooks?.onPhase?.('validating');
+    try {
+      await validateProjectZipFile(file, 'segment');
+    } catch (err) {
+      throw new Error(
+        normalizeProjectImportError(
+          err instanceof Error ? err.message : 'Invalid zip',
+        ),
+      );
     }
-  });
+    await uploadProjectZipChunks(
+      `${BASE}/episodes/${episodeId}/segments/${segmentId}/import-project/upload`,
+      file,
+      hooks,
+    );
+  })();
 }
 
 export function getSegmentProjectImportStatus(
@@ -740,7 +751,12 @@ export function startRenderEpisode(episodeId: string): Promise<{ status: 'buildi
     const body = await r.json().catch(() => ({}));
     if (r.status === 202) return { status: 'building' as const };
     if (r.status === 409) return { status: 'already_building' as const, message: (body as { message?: string }).message ?? 'A build is already in progress.' };
-    if (r.status === 429) throw new Error('You can only run Make Final Episode once per minute. Please try again later.');
+    if (r.status === 429) {
+      throw new Error(
+        (body as { error?: string }).error ??
+          'You can only run Make Final Episode so often. Please try again later.',
+      );
+    }
     if (!r.ok) throw new Error((body as { error?: string }).error ?? r.statusText);
     return body;
   });

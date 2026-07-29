@@ -100,6 +100,7 @@ export type EpisodeMeta = {
   expiresAt: string | null;
   subscriberOnlyStartsAt: string | null;
   subscriberOnlyEndsAt: string | null;
+  unlisted: boolean | null;
 };
 
 /** Get episode meta fields for PATCH logic. */
@@ -114,6 +115,7 @@ export function getEpisodeMeta(id: string): EpisodeMeta | undefined {
       expiresAt: episodes.expiresAt,
       subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
       subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
+      unlisted: episodes.unlisted,
     })
     .from(episodes)
     .where(eq(episodes.id, id))
@@ -190,7 +192,7 @@ export type CastRowWithFilename = {
   description: string | null;
   photoPath: string | null;
   photoUrl: string | null;
-  socialLinkText: string | null;
+  socialLinks: string | null;
   email: string | null;
   isPublic: boolean;
   createdAt: string;
@@ -208,7 +210,7 @@ export function getEpisodeCast(episodeId: string): CastRowWithFilename[] {
       description: podcastCast.description,
       photoPath: podcastCast.photoPath,
       photoUrl: podcastCast.photoUrl,
-      socialLinkText: podcastCast.socialLinkText,
+      socialLinks: podcastCast.socialLinks,
       email: podcastCast.email,
       isPublic: podcastCast.isPublic,
       createdAt: podcastCast.createdAt,

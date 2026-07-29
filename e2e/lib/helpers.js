@@ -833,6 +833,77 @@ export async function importSegmentProject(
 }
 
 /**
+ * Chunked segment project import (same as UI). Uses small chunks so e2e gets 2+ parts
+ * without a multi-hundred-MB fixture.
+ */
+export async function importSegmentProjectChunked(
+  jar,
+  episodeId,
+  segmentId,
+  zipBuffer,
+  filename = 'segment.zip',
+  chunkBytes = 4096,
+) {
+  const totalBytes = zipBuffer.byteLength ?? zipBuffer.length;
+  const totalChunks = Math.max(1, Math.ceil(totalBytes / chunkBytes));
+  const uploadBase = `${baseURL}/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/import-project/upload`;
+
+  const startHeaders = jar.apply({ 'Content-Type': 'application/json' });
+  const csrf = jar.get()['harborfm_csrf'];
+  if (csrf) startHeaders['x-csrf-token'] = csrf;
+  const startRes = await fetch(uploadBase, {
+    method: 'POST',
+    headers: startHeaders,
+    body: JSON.stringify({ totalBytes, totalChunks, filename }),
+  });
+  jar.store(getSetCookies(startRes));
+  if (!startRes.ok) {
+    throw new Error(
+      `Chunked upload start expected 200, got ${startRes.status} ${await startRes.text()}`,
+    );
+  }
+  const { uploadId } = await startRes.json();
+  if (!uploadId) throw new Error('Chunked upload start missing uploadId');
+
+  const buf = Buffer.isBuffer(zipBuffer) ? zipBuffer : Buffer.from(zipBuffer);
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    const start = chunkIndex * chunkBytes;
+    const end = Math.min(totalBytes, start + chunkBytes);
+    const chunk = buf.subarray(start, end);
+    const url =
+      `${uploadBase}/${encodeURIComponent(uploadId)}/chunks/${chunkIndex}` +
+      `?totalChunks=${totalChunks}&totalBytes=${totalBytes}`;
+    const headers = jar.apply({ 'Content-Type': 'application/octet-stream' });
+    if (csrf) headers['x-csrf-token'] = csrf;
+    const res = await fetch(url, { method: 'PUT', headers, body: chunk });
+    jar.store(getSetCookies(res));
+    if (!res.ok) {
+      throw new Error(
+        `Chunk ${chunkIndex + 1}/${totalChunks} expected 200, got ${res.status} ${await res.text()}`,
+      );
+    }
+  }
+
+  const finishHeaders = jar.apply({});
+  if (csrf) finishHeaders['x-csrf-token'] = csrf;
+  delete finishHeaders['Content-Type'];
+  const finishRes = await fetch(
+    `${uploadBase}/${encodeURIComponent(uploadId)}/finish`,
+    { method: 'POST', headers: finishHeaders },
+  );
+  jar.store(getSetCookies(finishRes));
+  if (finishRes.status !== 202 && finishRes.status !== 409) {
+    throw new Error(
+      `Chunked import finish expected 202, got ${finishRes.status} ${await finishRes.text()}`,
+    );
+  }
+  return pollStatus(
+    `/episodes/${encodeURIComponent(episodeId)}/segments/${encodeURIComponent(segmentId)}/import-project/status`,
+    jar,
+  );
+}
+
+/**
  * Start segment project import and expect it to fail (validation after 202).
  * Returns the failure error message.
  */

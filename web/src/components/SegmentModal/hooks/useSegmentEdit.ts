@@ -301,8 +301,11 @@ export function useSegmentEdit(
   }
 
   function handleAddMarker(time: number) {
-    const newMarkers = [...markers, { time }].sort((a, b) => a.time - b.time);
+    const marker = { time };
+    const newMarkers = [...markers, marker].sort((a, b) => a.time - b.time);
     setMarkers(newMarkers);
+    const newIndex = newMarkers.indexOf(marker);
+    setSelectedMarkerIndex(newIndex >= 0 ? newIndex : null);
   }
 
   function handleRemoveTrimRange(index: number) {

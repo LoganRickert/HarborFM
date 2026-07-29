@@ -300,7 +300,7 @@ export function getPodcastCastHosts(podcastId: string) {
       description: podcastCast.description,
       photoPath: podcastCast.photoPath,
       photoUrl: podcastCast.photoUrl,
-      socialLinkText: podcastCast.socialLinkText,
+      socialLinks: podcastCast.socialLinks,
     })
     .from(podcastCast)
     .where(
@@ -339,7 +339,7 @@ export function getPodcastCastGuests(
       description: podcastCast.description,
       photoPath: podcastCast.photoPath,
       photoUrl: podcastCast.photoUrl,
-      socialLinkText: podcastCast.socialLinkText,
+      socialLinks: podcastCast.socialLinks,
     })
     .from(podcastCast)
     .where(whereCond)
@@ -361,7 +361,7 @@ export function getPublicEpisodeCastByEpisodeId(episodeId: string) {
       description: podcastCast.description,
       photoPath: podcastCast.photoPath,
       photoUrl: podcastCast.photoUrl,
-      socialLinkText: podcastCast.socialLinkText,
+      socialLinks: podcastCast.socialLinks,
       isPublic: podcastCast.isPublic,
       createdAt: podcastCast.createdAt,
     })

@@ -176,6 +176,43 @@ async function main() {
   await app.register(cookie);
   await app.register(formbody);
   await app.register(multipart, { limits: { fileSize: MULTIPART_MAX_BYTES } });
+
+  app.setErrorHandler((error, request, reply) => {
+    const code =
+      typeof (error as { code?: string }).code === "string"
+        ? (error as { code: string }).code
+        : "";
+    const msg = error instanceof Error ? error.message : String(error);
+    const isMultipartTooLarge =
+      code === "FST_REQ_FILE_TOO_LARGE" ||
+      /request file too large/i.test(msg);
+    if (isMultipartTooLarge) {
+      return reply.status(413).send({
+        error:
+          "This project zip is too large to upload all at once. Refresh the page and try again.",
+      });
+    }
+    if (reply.sent) return;
+    const statusCode =
+      typeof (error as { statusCode?: number }).statusCode === "number"
+        ? (error as { statusCode: number }).statusCode
+        : 500;
+    if (statusCode >= 500) {
+      request.log.error({ err: error }, "request error");
+    }
+    const validation = (error as { validation?: unknown }).validation;
+    if (validation) {
+      return reply.status(statusCode >= 400 && statusCode < 600 ? statusCode : 400).send({
+        error: msg,
+        message: msg,
+        validation,
+      });
+    }
+    return reply.status(statusCode >= 400 && statusCode < 600 ? statusCode : 500).send({
+      error: statusCode >= 500 ? "Internal Server Error" : msg,
+    });
+  });
+
   await app.register(jwt, {
     secret: JWT_SECRET,
     cookie: { cookieName: JWT_COOKIE_NAME, signed: JWT_COOKIE_SIGNED },

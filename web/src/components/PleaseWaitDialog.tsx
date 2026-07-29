@@ -20,7 +20,7 @@ export interface PleaseWaitDialogProps {
 export function PleaseWaitDialog({
   open,
   title = 'Please wait',
-  description = 'This may take a moment…',
+  description = 'This may take a moment...',
   error = null,
   errorTitle = 'Something went wrong',
   warning = null,

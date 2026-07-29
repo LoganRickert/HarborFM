@@ -1,4 +1,5 @@
 import { basename } from "path";
+import { parseCastSocialLinks } from "@harborfm/shared";
 import { assertPathUnder, artworkDir, resolveDataPath } from "../../services/paths.js";
 
 export function slugify(s: string): string {
@@ -104,7 +105,7 @@ export function castRowToDto(r: {
   description?: string | null;
   photoPath?: string | null;
   photoUrl?: string | null;
-  socialLinkText?: string | null;
+  socialLinks?: string | string[] | null;
   email?: string | null;
   isPublic?: number | boolean;
   createdAt: string;
@@ -118,7 +119,7 @@ export function castRowToDto(r: {
     photoPath: r.photoPath ?? null,
     photoUrl: r.photoUrl ?? null,
     photoFilename: r.photoFilename ?? null,
-    socialLinkText: r.socialLinkText ?? null,
+    socialLinks: parseCastSocialLinks(r.socialLinks ?? null),
     email: r.email?.trim() || null,
     isPublic: Number(r.isPublic ?? 1) === 1,
     createdAt: r.createdAt,

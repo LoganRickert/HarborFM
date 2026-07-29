@@ -552,7 +552,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
       broadcastToEpisode(id, { type: "episodeUpdated" });
 
-      // Fire episode alerts when an episode newly becomes released
+      // Fire episode alerts when an episode newly becomes alertable
+      // (released and not unlisted), including clearing Unlisted later.
       try {
         const wasReleased =
           currentEpisode.status === "published" &&
@@ -564,7 +565,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           (row.publishAt == null ||
             String(row.publishAt).trim() === "" ||
             new Date(String(row.publishAt)).getTime() <= Date.now());
-        if (nowReleased && !wasReleased) {
+        const wasUnlisted = Boolean(currentEpisode.unlisted);
+        const nowUnlisted = Boolean(row.unlisted);
+        const wasAlertable = wasReleased && !wasUnlisted;
+        const nowAlertable = nowReleased && !nowUnlisted;
+        if (nowAlertable && !wasAlertable) {
           void dispatchEpisodeAlerts(id).catch((err) => {
             console.warn(
               "[episodeAlerts] publish hook failed:",

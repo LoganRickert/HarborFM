@@ -100,6 +100,10 @@ import * as m098 from "./migrations/098_show_notes_tag_submitted_by.js";
 import * as m099 from "./migrations/099_episodes_unlisted.js";
 import * as m100 from "./migrations/100_worker_job_stats_subject.js";
 import * as m101 from "./migrations/101_podcast_cast_email.js";
+import * as m102 from "./migrations/102_segment_loudness_targeting.js";
+import * as m103 from "./migrations/103_podcast_cast_social_links.js";
+import * as m104 from "./migrations/104_dial_in_call_logs.js";
+import * as m105 from "./migrations/105_segment_final_gain.js";
 import { syncServerThemesFromDisk } from "../modules/themes/builtins.js";
 
 const migrations = [
@@ -204,6 +208,10 @@ const migrations = [
   { name: "099_episodes_unlisted", ...m099 },
   { name: "100_worker_job_stats_subject", ...m100 },
   { name: "101_podcast_cast_email", ...m101 },
+  { name: "102_segment_loudness_targeting", ...m102 },
+  { name: "103_podcast_cast_social_links", ...m103 },
+  { name: "104_dial_in_call_logs", ...m104 },
+  { name: "105_segment_final_gain", ...m105 },
 ];
 
 const MIGRATIONS_TABLE = `

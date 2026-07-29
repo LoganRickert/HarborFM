@@ -29,7 +29,7 @@ export { episodeAlertsEmailAvailable } from "./emailTransport.js";
 export async function dispatchEpisodeAlerts(episodeId: string): Promise<void> {
   const episode = repo.getEpisodeForAlert(episodeId);
   if (!episode) return;
-  if (!repo.isEpisodeReleased(episode)) return;
+  if (!repo.isEpisodeAlertable(episode)) return;
   if (episode.episodeAlertsSentAt) return;
 
   const podcast = repo.getPodcastAlertSettings(episode.podcastId);

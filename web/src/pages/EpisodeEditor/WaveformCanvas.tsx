@@ -46,6 +46,12 @@ export interface WaveformCanvasProps {
    * Default true.
    */
   interactive?: boolean;
+  /**
+   * Optional overview window (seconds) drawn as a top/bottom (and side) bracket
+   * on the full-duration waveform, e.g. advanced editor timeline viewport.
+   */
+  overviewWindowStartSec?: number;
+  overviewWindowEndSec?: number;
   className?: string;
 }
 
@@ -79,6 +85,8 @@ export function WaveformCanvas({
   onScrubStart,
   onScrubEnd,
   interactive = true,
+  overviewWindowStartSec,
+  overviewWindowEndSec,
   className,
 }: WaveformCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -191,7 +199,49 @@ export function WaveformCanvas({
       ctx.lineTo(headX, height);
       ctx.stroke();
     }
-  }, [data, durationSec, currentTime, viewStartSec, viewEnd, viewWindow, trimRanges]);
+
+    if (
+      overviewWindowStartSec != null &&
+      overviewWindowEndSec != null &&
+      Number.isFinite(overviewWindowStartSec) &&
+      Number.isFinite(overviewWindowEndSec) &&
+      durationSec > 0
+    ) {
+      const winStart = Math.max(0, Math.min(overviewWindowStartSec, durationSec));
+      const winEnd = Math.max(winStart, Math.min(overviewWindowEndSec, durationSec));
+      const left = timeToX(winStart);
+      const right = timeToX(winEnd);
+      const w = Math.max(1, right - left);
+      const inset = 0.5;
+      const borderColor = getThemeColor(container, '--text', '#e2e8f0');
+      ctx.save();
+      ctx.strokeStyle = borderColor;
+      ctx.globalAlpha = 0.85;
+      ctx.lineWidth = 1.5;
+      // Top and bottom of the timeline viewport; short sides close the window.
+      ctx.beginPath();
+      ctx.moveTo(left, inset);
+      ctx.lineTo(left + w, inset);
+      ctx.moveTo(left, height - inset);
+      ctx.lineTo(left + w, height - inset);
+      ctx.moveTo(left, inset);
+      ctx.lineTo(left, height - inset);
+      ctx.moveTo(left + w, inset);
+      ctx.lineTo(left + w, height - inset);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [
+    data,
+    durationSec,
+    currentTime,
+    viewStartSec,
+    viewEnd,
+    viewWindow,
+    trimRanges,
+    overviewWindowStartSec,
+    overviewWindowEndSec,
+  ]);
 
   useEffect(() => {
     draw();

@@ -16,6 +16,7 @@ import {
   login,
   testDataMp3,
   importSegmentProject,
+  importSegmentProjectChunked,
   importSegmentProjectExpectFail,
   importEpisodeProjectExpectFail,
 } from '../../lib/helpers.js';
@@ -336,6 +337,36 @@ export async function run({ runOne }) {
       }
       if (!data.waveformExists) {
         throw new Error('Expected waveformExists after import');
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Chunked import-project upload (2+ chunks) succeeds', async () => {
+      if (!zipBuffer) throw new Error('No zip from export');
+      if (zipBuffer.length < 8192) {
+        throw new Error(`Expected zip >= 8KiB for multi-chunk test, got ${zipBuffer.length}`);
+      }
+      await importSegmentProjectChunked(
+        jar,
+        episode.id,
+        seg.id,
+        zipBuffer,
+        'segment-chunked.zip',
+        4096,
+      );
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) {
+        throw new Error(`GET segments after chunked import failed: ${segRes.status}`);
+      }
+      const segs = (await segRes.json()).segments || [];
+      const data = segs.find((s) => s.id === seg.id);
+      if (!data) throw new Error('Segment missing after chunked import');
+      if (data.id !== seg.id) {
+        throw new Error(`Segment id should be unchanged: ${data.id} vs ${seg.id}`);
+      }
+      if (!data.waveformExists) {
+        throw new Error('Expected waveformExists after chunked import');
       }
     }),
   );
@@ -964,6 +995,55 @@ export async function run({ runOne }) {
       const updated = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
       if (updated?.hostDuckingEnabled) {
         throw new Error('Expected hostDuckingEnabled false after disable');
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('Loudness targeting export/import round-trip', async () => {
+      const patchOff = await apiFetch(`/episodes/${episode.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loudnessTargetingEnabled: false }),
+      }, jar);
+      if (patchOff.status !== 200) {
+        throw new Error(`PATCH loudness off failed: ${patchOff.status} ${await patchOff.text()}`);
+      }
+
+      const exportRes = await apiFetch(
+        `/episodes/${episode.id}/segments/${seg.id}/project-export`,
+        {},
+        jar,
+      );
+      if (exportRes.status !== 200) {
+        throw new Error(`Export failed: ${exportRes.status} ${await exportRes.text()}`);
+      }
+      const zip = new AdmZip(Buffer.from(await exportRes.arrayBuffer()));
+      const segJson = JSON.parse(zip.readAsText('segment/segment.json'));
+      if (segJson.loudnessTargetingEnabled !== false) {
+        throw new Error(
+          `segment.json expected loudnessTargetingEnabled false, got ${JSON.stringify(segJson.loudnessTargetingEnabled)}`,
+        );
+      }
+
+      // Flip on so import can restore false from the zip.
+      const patchOn = await apiFetch(`/episodes/${episode.id}/segments/${seg.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loudnessTargetingEnabled: true }),
+      }, jar);
+      if (patchOn.status !== 200) {
+        throw new Error(`PATCH loudness on failed: ${patchOn.status}`);
+      }
+
+      await importSegmentProject(jar, episode.id, seg.id, zip.toBuffer(), 'segment-loudness.zip');
+      const segRes = await apiFetch(`/episodes/${episode.id}/segments`, {}, jar);
+      if (segRes.status !== 200) throw new Error(`GET segments after import failed: ${segRes.status}`);
+      const updated = ((await segRes.json()).segments || []).find((s) => s.id === seg.id);
+      if (updated?.loudnessTargetingEnabled !== false) {
+        throw new Error(
+          `Expected loudnessTargetingEnabled false after import, got ${JSON.stringify(updated?.loudnessTargetingEnabled)}`,
+        );
       }
     }),
   );

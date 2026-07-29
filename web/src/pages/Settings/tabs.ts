@@ -119,6 +119,7 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
       'Telnyx',
       'Public Key',
       'HarborFM',
+      'Recent dial-in',
     ],
   },
   {

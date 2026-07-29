@@ -99,6 +99,9 @@ function fingerprintSegment(
     seg.markers ?? "",
     seg.audioEq ?? "",
     String(seg.disabled),
+    String(seg.hostDuckingEnabled),
+    String(seg.loudnessTargetingEnabled),
+    String(seg.finalGainDb ?? 0),
     seg.createdAt,
   ];
   if (seg.audioPath) {

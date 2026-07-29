@@ -39,6 +39,16 @@ export type EpisodeRenderSegment = {
   trimRanges: Array<[number, number]> | null;
   /** Optional 3-band EQ. Null or all-zero = skip. */
   audioEq: AudioEqOptions | null;
+  /**
+   * When false, skip loudnorm for this segment (mixed final path).
+   * Missing/undefined treated as true.
+   */
+  loudnessTargetingEnabled?: boolean;
+  /**
+   * Fixed dB gain applied after trim/EQ and before loudnorm.
+   * Missing/undefined/0 = skip.
+   */
+  finalGainDb?: number;
 };
 
 export type EpisodeRenderJobOpts = {
@@ -247,6 +257,30 @@ async function applyEqToWav(
   );
 }
 
+async function applyGainToWav(
+  inputPath: string,
+  outputPath: string,
+  gainDb: number,
+  tools: EpisodeRenderTools,
+): Promise<void> {
+  await exec(
+    tools.ffmpegPath,
+    [
+      "-i",
+      inputPath,
+      "-af",
+      `volume=${gainDb}dB`,
+      "-acodec",
+      "pcm_s16le",
+      "-ar",
+      "44100",
+      "-y",
+      outputPath,
+    ],
+    { maxBuffer: 1024 * 1024 },
+  );
+}
+
 async function concatToFinal(
   segmentPaths: string[],
   outputPath: string,
@@ -294,8 +328,35 @@ async function concatToFinal(
   await exec(tools.ffmpegPath, args, { maxBuffer: 1024 * 1024 });
 }
 
+/** Apply loudnorm to a single audio file, writing PCM WAV. */
+async function loudnormToWav(
+  inputPath: string,
+  outputPath: string,
+  lufs: number,
+  tools: EpisodeRenderTools,
+): Promise<void> {
+  await exec(
+    tools.ffmpegPath,
+    [
+      "-i",
+      inputPath,
+      "-af",
+      `loudnorm=I=${lufs}:TP=-1:LRA=14`,
+      "-acodec",
+      "pcm_s16le",
+      "-ar",
+      "44100",
+      "-y",
+      outputPath,
+    ],
+    { maxBuffer: 1024 * 1024 },
+  );
+}
+
 /**
  * Soft-trim (optional), EQ (optional), then concat + loudnorm into final.mp3|m4a.
+ * When some segments have loudnessTargetingEnabled === false and target ≠ 0,
+ * loudnorm only those segments that opt in, then concat without a final loudnorm.
  * Used by both the HarborFM server (local) and compute workers.
  */
 export async function runEpisodeRenderJob(
@@ -311,6 +372,7 @@ export async function runEpisodeRenderJob(
 
   const preparedPaths: string[] = [];
   const tempsToClean: string[] = [];
+  const targetingFlags: boolean[] = [];
 
   try {
     for (let i = 0; i < opts.segments.length; i++) {
@@ -345,20 +407,65 @@ export async function runEpisodeRenderJob(
         currentPath = eqPath;
       }
 
+      const gainDb =
+        typeof seg.finalGainDb === "number" && Number.isFinite(seg.finalGainDb)
+          ? seg.finalGainDb
+          : 0;
+      if (Math.abs(gainDb) > 1e-6) {
+        const gainPath = join(opts.workDir, `gain_${i}_${randomUUID()}.wav`);
+        tempsToClean.push(gainPath);
+        await applyGainToWav(currentPath, gainPath, gainDb, tools);
+        currentPath = gainPath;
+      }
+
       preparedPaths.push(currentPath);
+      targetingFlags.push(seg.loudnessTargetingEnabled !== false);
     }
 
-    await concatToFinal(
-      preparedPaths,
-      opts.outPath,
-      {
-        format: opts.format,
-        bitrateKbps: opts.bitrateKbps,
-        channels: opts.channels,
-        loudnessTargetLufs: opts.loudnessTargetLufs,
-      },
-      tools,
-    );
+    const effectiveLufs =
+      opts.loudnessTargetLufs !== undefined && opts.loudnessTargetLufs !== null
+        ? opts.loudnessTargetLufs
+        : DEFAULT_LOUDNESS_TARGET_LUFS;
+    const anyDisabled = targetingFlags.some((on) => !on);
+    const useMixedPath = effectiveLufs !== 0 && anyDisabled;
+
+    if (useMixedPath) {
+      const mixedPaths: string[] = [];
+      for (let i = 0; i < preparedPaths.length; i++) {
+        const prepared = preparedPaths[i]!;
+        if (targetingFlags[i]) {
+          const lnPath = join(opts.workDir, `ln_${i}_${randomUUID()}.wav`);
+          tempsToClean.push(lnPath);
+          await loudnormToWav(prepared, lnPath, effectiveLufs, tools);
+          mixedPaths.push(lnPath);
+        } else {
+          mixedPaths.push(prepared);
+        }
+      }
+      await concatToFinal(
+        mixedPaths,
+        opts.outPath,
+        {
+          format: opts.format,
+          bitrateKbps: opts.bitrateKbps,
+          channels: opts.channels,
+          loudnessTargetLufs: 0,
+        },
+        tools,
+      );
+    } else {
+      await concatToFinal(
+        preparedPaths,
+        opts.outPath,
+        {
+          format: opts.format,
+          bitrateKbps: opts.bitrateKbps,
+          channels: opts.channels,
+          loudnessTargetLufs: opts.loudnessTargetLufs,
+        },
+        tools,
+      );
+    }
     return opts.outPath;
   } finally {
     for (const p of tempsToClean) {

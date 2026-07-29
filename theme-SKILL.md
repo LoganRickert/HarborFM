@@ -397,7 +397,20 @@ Show-level cast. Object with `hosts` and `guests` arrays (empty when `show.cast`
 | `role` | string | |
 | `description` | string | Plain text |
 | `image_url` | string | May be empty |
-| `url` | string | Social / profile URL when set |
+| `url` | string | First social / profile URL when set (same as `urls[0]`) |
+| `urls` | array of strings | All social / profile URLs in display order |
+| `links` | array of objects | Structured links with icons (see below) |
+
+Each `links` item:
+
+| Key | Type | Notes |
+|-----|------|--------|
+| `key` | string | Platform id: `facebook`, `x`, `instagram`, `patreon`, `tiktok`, `youtube`, `discord`, or `link` |
+| `label` | string | Display name |
+| `url` | string | Destination URL |
+| `icon_url` | string | HarborFM SVG when known (e.g. `/platform-icons/instagram.svg`); empty for generic links |
+| `handle` | string | Profile handle when extractable (e.g. `@jane`); empty otherwise |
+| `display` | string | Prefer for UI: handle, else a shortened URL |
 
 ```liquid
 {% if show.cast %}
@@ -408,6 +421,22 @@ Show-level cast. Object with `hosts` and `guests` arrays (empty when `show.cast`
       {% endif %}
       <h3>{{ host.name | escape }}</h3>
       {% if host.role != blank %}<p>{{ host.role | escape }}</p>{% endif %}
+      {% if host.links.size > 0 %}
+        <ul>
+          {% for link in host.links %}
+            <li>
+              <a href="{{ link.url | escape }}" target="_blank" rel="noopener noreferrer">
+                {% if link.icon_url != blank %}
+                  <img src="{{ link.icon_url | escape }}" alt="" width="16" height="16" />
+                {% endif %}
+                {{ link.label | escape }}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% elsif host.url != blank %}
+        <a href="{{ host.url | escape }}" target="_blank" rel="noopener noreferrer">{{ host.url | escape }}</a>
+      {% endif %}
     </article>
   {% endfor %}
   {% for guest in cast.guests %}

@@ -417,6 +417,63 @@ export function formatDuration(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/** Round seconds to the nearest tenth (0.1s). */
+export function roundTimeToTenth(sec: number): number {
+  if (!Number.isFinite(sec) || sec < 0) return NaN;
+  return Math.round(sec * 10) / 10;
+}
+
+/**
+ * Parse "m:ss", "m:ss.t", "h:mm:ss(.t)", or plain seconds.
+ * Returns seconds rounded to the nearest tenth, or NaN if invalid.
+ */
+export function parseTimeInput(s: string): number {
+  const trimmed = s.trim();
+  if (!trimmed) return NaN;
+  const num = Number(trimmed);
+  if (!Number.isNaN(num)) {
+    return num >= 0 ? roundTimeToTenth(num) : NaN;
+  }
+  const parts = trimmed.split(':');
+  if (parts.length === 2) {
+    const m = parseInt(parts[0]!, 10);
+    const sec = parseFloat(parts[1]!);
+    if (!Number.isNaN(m) && !Number.isNaN(sec) && m >= 0 && sec >= 0 && sec < 60) {
+      return roundTimeToTenth(m * 60 + sec);
+    }
+  }
+  if (parts.length === 3) {
+    const h = parseInt(parts[0]!, 10);
+    const m = parseInt(parts[1]!, 10);
+    const sec = parseFloat(parts[2]!);
+    if (
+      !Number.isNaN(h) &&
+      !Number.isNaN(m) &&
+      !Number.isNaN(sec) &&
+      h >= 0 &&
+      m >= 0 &&
+      m < 60 &&
+      sec >= 0 &&
+      sec < 60
+    ) {
+      return roundTimeToTenth(h * 3600 + m * 60 + sec);
+    }
+  }
+  return NaN;
+}
+
+/** Format seconds as m:ss or m:ss.t (nearest tenth). For chapter/soundbite time inputs. */
+export function formatTimeInput(sec: number): string {
+  const t = roundTimeToTenth(sec);
+  if (!Number.isFinite(t) || t < 0) return '0:00';
+  const m = Math.floor(t / 60);
+  const s = Math.round((t - m * 60) * 10) / 10;
+  const whole = Math.floor(s + 1e-9);
+  const tenth = Math.round((s - whole) * 10);
+  if (tenth <= 0) return `${m}:${String(whole).padStart(2, '0')}`;
+  return `${m}:${String(whole).padStart(2, '0')}.${tenth}`;
+}
+
 export function formatLibraryDate(createdAt: string): string {
   const d = parseUtc(createdAt);
   if (!d) return createdAt;

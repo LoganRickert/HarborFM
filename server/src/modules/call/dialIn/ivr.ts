@@ -31,6 +31,11 @@ import {
   recordPinFailure,
   resetPinRateLimit,
 } from "./pinRateLimit.js";
+import {
+  telnyxPayloadFields,
+  upsertDialInCallLog,
+  type DialInCallOutcome,
+} from "./callLogRepo.js";
 
 /** Max wrong PIN attempts before hangup. */
 export const DIAL_IN_MAX_PIN_ATTEMPTS = 3;
@@ -116,6 +121,28 @@ export type TelnyxWebhookEnvelope = {
 };
 
 const legsByCallControlId = new Map<string, DialInLeg>();
+
+function safeUpsertDialInCallLog(
+  patch: Parameters<typeof upsertDialInCallLog>[0],
+): void {
+  try {
+    upsertDialInCallLog(patch);
+  } catch (err) {
+    console.warn("[dial-in] call log upsert failed:", err);
+  }
+}
+
+function logOutcome(
+  callControlId: string,
+  outcome: DialInCallOutcome,
+  extra?: Omit<Parameters<typeof upsertDialInCallLog>[0], "callControlId" | "outcome">,
+): void {
+  safeUpsertDialInCallLog({
+    callControlId,
+    outcome,
+    ...extra,
+  });
+}
 
 export function getDialInLeg(callControlId: string): DialInLeg | undefined {
   return legsByCallControlId.get(callControlId);
@@ -216,24 +243,39 @@ async function afterAnswerStartIvr(
   leg: DialInLeg,
 ): Promise<void> {
   if (!isDialInProductEnabled()) {
+    logOutcome(leg.callControlId, "rejected_disabled", {
+      endedAt: new Date().toISOString(),
+    });
     await speakAndHangup(cc, leg, PROMPT_DISABLED);
     return;
   }
   if (isPinRateLimited(leg.from) || isInboundRateLimited(leg.from)) {
+    logOutcome(leg.callControlId, "rate_limited", {
+      endedAt: new Date().toISOString(),
+    });
     await speakAndHangup(cc, leg, PROMPT_RATE_LIMITED);
     return;
   }
   if (isConcurrentDialInLimited(leg.from, listDialInLegs())) {
+    logOutcome(leg.callControlId, "busy", {
+      endedAt: new Date().toISOString(),
+    });
     await speakAndHangup(cc, leg, PROMPT_BUSY);
     return;
   }
   // Count this answered inbound toward the per-caller inbound cap.
   if (recordInboundAttempt(leg.from)) {
+    logOutcome(leg.callControlId, "rate_limited", {
+      endedAt: new Date().toISOString(),
+    });
     await speakAndHangup(cc, leg, PROMPT_RATE_LIMITED);
     return;
   }
   // Race: session ended between initiated check and answer.
   if (getActiveSessionCount() === 0) {
+    logOutcome(leg.callControlId, "rejected_no_call", {
+      endedAt: new Date().toISOString(),
+    });
     await finishHangup(cc, leg);
     return;
   }
@@ -248,6 +290,13 @@ async function rejectPinAndMaybeHangup(
 ): Promise<void> {
   const rateLimited = recordPinFailure(leg.from);
   leg.pinAttempts += 1;
+  logOutcome(leg.callControlId, rateLimited ? "rate_limited" : "pin_failed", {
+    pinAttempts: leg.pinAttempts,
+    endedAt:
+      rateLimited || leg.pinAttempts >= DIAL_IN_MAX_PIN_ATTEMPTS
+        ? new Date().toISOString()
+        : undefined,
+  });
   if (rateLimited || leg.pinAttempts >= DIAL_IN_MAX_PIN_ATTEMPTS) {
     await speakAndHangup(
       cc,
@@ -309,6 +358,14 @@ async function startPendingLiveStream(leg: DialInLeg): Promise<void> {
     streamBidirectionalSamplingRate: streamPrefs.streamBidirectionalSamplingRate,
   });
   leg.status = "bridged";
+  const session = leg.sessionId ? getSessionById(leg.sessionId) : undefined;
+  logOutcome(leg.callControlId, "bridged", {
+    sessionId: leg.sessionId ?? null,
+    episodeId: session?.episodeId ?? null,
+    podcastId: session?.podcastId ?? null,
+    bridgedAt: new Date().toISOString(),
+    pinAttempts: leg.pinAttempts,
+  });
 }
 
 /** Hang up a live/fake dial-in leg by participant id (host kick). */
@@ -347,15 +404,36 @@ export async function handleDialInWebhook(
 
   const from = typeof payload.from === "string" ? payload.from : "";
   const to = typeof payload.to === "string" ? payload.to : "";
+  const fields = telnyxPayloadFields(payload);
   const cc = getCallControlClient();
   const leg = ensureLeg(callControlId, from, to);
+  const occurredAt =
+    typeof body.data?.occurred_at === "string" && body.data.occurred_at.trim()
+      ? body.data.occurred_at.trim()
+      : new Date().toISOString();
 
   if (eventType === "call.initiated") {
+    safeUpsertDialInCallLog({
+      callControlId,
+      callLegId: fields.callLegId,
+      callSessionId: fields.callSessionId,
+      connectionId: fields.connectionId,
+      fromNumber: fields.fromNumber ?? (from || null),
+      toNumber: fields.toNumber ?? (to || null),
+      direction: fields.direction,
+      callerIdName: fields.callerIdName,
+      telnyxState: fields.telnyxState,
+      startedAt: fields.startTime ?? occurredAt,
+      rawInitiatedJson: JSON.stringify(payload),
+    });
     if (leg.status === "ended" || leg.status === "bridged") {
       return { ok: true };
     }
     // Reject before answer when nothing is live: answered welcome TTS is billable.
     if (getActiveSessionCount() === 0) {
+      logOutcome(callControlId, "rejected_no_call", {
+        endedAt: new Date().toISOString(),
+      });
       await cc.reject(callControlId, { cause: "CALL_REJECTED" });
       leg.status = "ended";
       return { ok: true };
@@ -366,6 +444,11 @@ export async function handleDialInWebhook(
   }
 
   if (eventType === "call.answered") {
+    safeUpsertDialInCallLog({
+      callControlId,
+      answeredAt: occurredAt,
+      telnyxState: fields.telnyxState,
+    });
     if (leg.status === "initiated") {
       await afterAnswerStartIvr(cc, leg);
     }
@@ -377,6 +460,9 @@ export async function handleDialInWebhook(
       return { ok: true };
     }
     if (!isDialInProductEnabled()) {
+      logOutcome(callControlId, "rejected_disabled", {
+        endedAt: new Date().toISOString(),
+      });
       await speakAndHangup(cc, leg, PROMPT_DISABLED);
       return { ok: true };
     }
@@ -386,12 +472,20 @@ export async function handleDialInWebhook(
       typeof payload.status === "string" ? payload.status : "valid";
 
     if (gatherStatus === "timeout" || digits.length !== 4) {
+      safeUpsertDialInCallLog({
+        callControlId,
+        joinCode: digits || null,
+      });
       await rejectPinAndMaybeHangup(cc, leg, PROMPT_INVALID);
       return { ok: true };
     }
 
     const session = getSessionByCode(digits);
     if (!session) {
+      safeUpsertDialInCallLog({
+        callControlId,
+        joinCode: digits,
+      });
       await rejectPinAndMaybeHangup(cc, leg, PROMPT_NO_CALL);
       return { ok: true };
     }
@@ -408,6 +502,10 @@ export async function handleDialInWebhook(
       mediaMode,
     });
     if (!admitted.ok) {
+      logOutcome(callControlId, "join_failed", {
+        joinCode: digits,
+        endedAt: new Date().toISOString(),
+      });
       await rejectPinAndMaybeHangup(cc, leg, PROMPT_JOIN_FAILED);
       return { ok: true };
     }
@@ -417,6 +515,15 @@ export async function handleDialInWebhook(
     leg.sessionId = admitted.sessionId;
     leg.displayName = admitted.displayName;
     leg.mediaMode = mediaMode;
+
+    safeUpsertDialInCallLog({
+      callControlId,
+      joinCode: digits,
+      sessionId: admitted.sessionId,
+      episodeId: session.episodeId,
+      podcastId: session.podcastId,
+      pinAttempts: leg.pinAttempts,
+    });
 
     const joining = getJoiningPrompt(session.podcastId);
     try {
@@ -456,6 +563,14 @@ export async function handleDialInWebhook(
           streamUrl: "wss://fake.local/dial-in/media",
         });
         leg.status = "bridged";
+        logOutcome(callControlId, "bridged", {
+          joinCode: digits,
+          sessionId: admitted.sessionId,
+          episodeId: session.episodeId,
+          podcastId: session.podcastId,
+          bridgedAt: new Date().toISOString(),
+          pinAttempts: leg.pinAttempts,
+        });
       }
     } catch (err) {
       console.warn("[dial-in] post-admit Call Control failed; rolling back roster:", err);
@@ -465,6 +580,10 @@ export async function handleDialInWebhook(
       leg.sessionId = undefined;
       leg.displayName = undefined;
       leg.pendingStreamUrl = undefined;
+      logOutcome(callControlId, "join_failed", {
+        joinCode: digits,
+        endedAt: new Date().toISOString(),
+      });
       await speakAndHangup(cc, leg, PROMPT_JOIN_FAILED);
     }
     return { ok: true };
@@ -486,6 +605,9 @@ export async function handleDialInWebhook(
         leg.sessionId = undefined;
         leg.displayName = undefined;
         leg.pendingStreamUrl = undefined;
+        logOutcome(callControlId, "join_failed", {
+          endedAt: new Date().toISOString(),
+        });
         await speakAndHangup(cc, leg, PROMPT_JOIN_FAILED);
       }
     }
@@ -500,7 +622,18 @@ export async function handleDialInWebhook(
     ) {
       await leaveWebrtcForLeg(leg);
     }
+    const wasBridged = leg.status === "bridged";
     leg.status = "ended";
+    safeUpsertDialInCallLog({
+      callControlId,
+      hangupCause: fields.hangupCause,
+      sipHangupCause: fields.sipHangupCause,
+      hangupSource: fields.hangupSource,
+      telnyxState: fields.telnyxState,
+      endedAt: occurredAt,
+      rawHangupJson: JSON.stringify(payload),
+      outcome: wasBridged ? "bridged" : "abandoned",
+    });
     return { ok: true };
   }
 

@@ -207,6 +207,42 @@ export async function getDialInLeg(
   return body.leg;
 }
 
+export type DialInCallLog = {
+  id: string;
+  callControlId: string;
+  fromNumber: string | null;
+  toNumber: string | null;
+  outcome: string | null;
+  joinCode: string | null;
+  sessionId: string | null;
+  episodeId: string | null;
+  podcastId: string | null;
+  hangupCause: string | null;
+  startedAt: string;
+  answeredAt: string | null;
+  bridgedAt: string | null;
+  endedAt: string | null;
+  durationMs: number | null;
+  pinAttempts: number;
+  createdAt: string;
+};
+
+/** Admin list of recent dial-in call logs (Settings → WebRTC). */
+export async function fetchDialInCallLogs(
+  request: APIRequestContext,
+  limit = 10,
+): Promise<DialInCallLog[]> {
+  const res = await request.get(
+    `${API_BASE}/settings/dial-in-call-logs?limit=${encodeURIComponent(String(limit))}`,
+  );
+  if (!res.ok()) {
+    const text = await res.text();
+    throw new Error(`GET dial-in-call-logs failed: ${res.status()} ${text}`);
+  }
+  const body = (await res.json()) as { calls: DialInCallLog[] };
+  return body.calls ?? [];
+}
+
 /** Simulate inbound call → answer → gather → DTMF digits. */
 export async function ivrDialAndEnterCode(
   request: APIRequestContext,

@@ -353,9 +353,13 @@ export function ScheduleMeetingDialog({
     .filter((c) => isValidInviteEmail(c.email));
   const quickInviteSource =
     episodeCastWithEmail.length > 0 ? episodeCastWithEmail : showCastWithEmail;
-  const quickInviteCandidates = quickInviteSource.filter(
-    (c) => !invitedEmails.has(c.email.toLowerCase()),
-  );
+  const quickInviteCandidates = quickInviteSource
+    .filter((c) => !invitedEmails.has(c.email.toLowerCase()))
+    .slice()
+    .sort((a, b) => {
+      if (a.role !== b.role) return a.role === 'host' ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
 
   const renderInviteRow = (inv: (typeof emailedInvites)[number], detail: string) => (
     <li key={inv.id} className={styles.inviteItem}>

@@ -243,20 +243,49 @@ export async function sendMeetingInviteEmail(
 }
 
 /**
- * Send "REMINDER: … In just N hours" to every invitee with an email.
+ * Send "REMINDER: ... In just N hours" to the host and every invitee with an email.
  * Caller should claim reminder_sent_at first (see sendDueMeetingReminder).
+ * Skips invitees whose email matches the host so they get one reminder only.
  */
 export async function notifyEmailedInvitesReminder(
   meeting: MeetingRow,
   fallbackOrigin: string,
 ): Promise<void> {
   const invites = listEmailedInvites(meeting.id);
-  if (invites.length === 0) return;
   const ctx = getMeetingContext(meeting);
+  const hostEmail = ctx.hostEmail?.trim() || null;
+  if (invites.length === 0 && !hostEmail) return;
+  const hostEmailLower = hostEmail?.toLowerCase() ?? null;
   const leadPhrase = formatMeetingDurationMs(MEETING_REMINDER_BEFORE_MS);
+
+  if (hostEmail) {
+    const joinUrl = absoluteJoinUrl(meeting, fallbackOrigin);
+    // PUBLISH: host reminder is "add to calendar", not an RSVP to themselves.
+    const cal = calendarInputForMeeting(meeting, joinUrl, {
+      attendeeEmail: hostEmail,
+      attendeeName: ctx.hostName,
+      method: "PUBLISH",
+    });
+    const gcal = buildGoogleCalendarUrl(cal);
+    const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
+    const content = buildGroupCallMeetingReminderEmail({
+      ...meetingEmailSharedOpts(meeting, fallbackOrigin),
+      googleCalendarUrl: gcal,
+      guestName: ctx.hostName,
+      eventJsonLd,
+      reminderLeadPhrase: leadPhrase,
+    });
+    await sendMail({
+      to: hostEmail,
+      ...content,
+      icalEvent,
+    });
+  }
+
   for (const invite of invites) {
     const email = invite.email?.trim();
     if (!email) continue;
+    if (hostEmailLower && email.toLowerCase() === hostEmailLower) continue;
     const joinUrl = absoluteJoinUrl(meeting, fallbackOrigin, invite);
     const cal = calendarInputForMeeting(meeting, joinUrl, {
       attendeeEmail: email,
@@ -283,16 +312,17 @@ export async function notifyEmailedInvitesReminder(
 /**
  * Claim and send the 4-hour reminder for one due meeting (idempotent).
  * Uses settings hostname when fallbackOrigin is empty (background poller).
- * Meetings with no emailed invites are claimed without sending so the poller
- * does not retry forever.
+ * Meetings with no host email and no emailed invites are claimed without
+ * sending so the poller does not retry forever.
  */
 export async function sendDueMeetingReminder(
   meeting: MeetingRow,
   fallbackOrigin = "",
 ): Promise<void> {
   const invites = listEmailedInvites(meeting.id);
+  const ctx = getMeetingContext(meeting);
   if (!claimMeetingReminderSent(meeting.id)) return;
-  if (invites.length === 0) return;
+  if (invites.length === 0 && !ctx.hostEmail) return;
   await notifyEmailedInvitesReminder(meeting, fallbackOrigin);
 }
 

@@ -12,7 +12,7 @@ import { nanoid } from "nanoid";
 import { randomUUID } from "crypto";
 import { drizzleDb } from "../../db/index.js";
 import { sqlNow } from "../../db/utils.js";
-import { podcastImportBodySchema } from "@harborfm/shared";
+import { podcastImportBodySchema, serializeCastSocialLinks } from "@harborfm/shared";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
 import { getPodcastOwnerId } from "../../services/access.js";
 import {
@@ -204,7 +204,9 @@ export async function registerImportRoutes(app: FastifyInstance) {
             name: name.slice(0, 128),
             role,
             photoUrl: person.img?.trim() || null,
-            socialLinkText: person.href?.trim() || null,
+            socialLinks: serializeCastSocialLinks(
+              person.href?.trim() ? [person.href.trim()] : [],
+            ),
             isPublic: true,
           });
         } catch (err) {

@@ -1,4 +1,5 @@
 import { API_PREFIX } from "../../config.js";
+import { castSocialLinkItems } from "@harborfm/shared";
 import { readSettings } from "../settings/repo.js";
 import * as publicRepo from "../public/repo.js";
 import { publicCastDto, publicPodcastDto } from "../public/utils.js";
@@ -113,13 +114,26 @@ function mapCastMember(
   podcastId: string,
 ) {
   const dto = publicCastDto(row, podcastId);
+  const urls = Array.isArray(dto.social_links)
+    ? dto.social_links.map((u) => String(u))
+    : [];
+  const links = castSocialLinkItems(urls).map((item) => ({
+    key: item.key,
+    label: item.label,
+    url: item.url,
+    icon_url: item.icon_url,
+    handle: item.handle ?? "",
+    display: item.display,
+  }));
   return {
     id: String(dto.id),
     name: String(dto.name || ""),
     role: String(dto.role || ""),
     description: dto.description ? stripHtml(String(dto.description)) : "",
     image_url: dto.photo_url ?? "",
-    url: dto.social_link_text ? String(dto.social_link_text) : "",
+    url: urls[0] ?? "",
+    urls,
+    links,
   };
 }
 

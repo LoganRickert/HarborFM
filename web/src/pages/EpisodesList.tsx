@@ -24,6 +24,9 @@ export function EpisodesList() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importWarning, setImportWarning] = useState<string | null>(null);
   const [importedEpisodeId, setImportedEpisodeId] = useState<string | null>(null);
+  const [importPhase, setImportPhase] = useState<'validating' | 'uploading' | 'importing'>(
+    'validating',
+  );
 
   const { data: podcast, isLoading: podcastLoading } = useQuery({
     queryKey: ['podcast', id],
@@ -52,9 +55,11 @@ export function EpisodesList() {
     setImportError(null);
     setImportWarning(null);
     setImportedEpisodeId(null);
+    setImportPhase('validating');
     setImportOpen(true);
     try {
-      await startImportEpisodeProject(id, file);
+      await startImportEpisodeProject(id, file, { onPhase: setImportPhase });
+      setImportPhase('importing');
       const result = await pollUntil(() => getProjectImportStatus(id), {
         pendingStatuses: ['importing'],
         successStatuses: ['done'],
@@ -178,7 +183,13 @@ export function EpisodesList() {
         <PleaseWaitDialog
           open={importOpen}
           title="Please wait"
-          description="Importing project…"
+          description={
+            importPhase === 'validating'
+              ? 'Validating zip...'
+              : importPhase === 'uploading'
+                ? 'Uploading...'
+                : 'Importing project...'
+          }
           error={importError}
           errorTitle="Import failed"
           warning={importWarning}

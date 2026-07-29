@@ -449,11 +449,13 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.trimRanges !== undefined ||
         body.markers !== undefined ||
         body.audioEq !== undefined ||
-        body.disabled !== undefined;
+        body.disabled !== undefined ||
+        body.loudnessTargetingEnabled !== undefined ||
+        body.finalGainDb !== undefined;
       if (!hasUpdates) {
         return reply.status(400).send({
           error:
-            "At least one of name, trimRanges, markers, audioEq, or disabled must be provided",
+            "At least one of name, trimRanges, markers, audioEq, disabled, loudnessTargetingEnabled, or finalGainDb must be provided",
         });
       }
       const row = repo.getSegmentDuration(segmentId, episodeId);
@@ -526,6 +528,16 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       }
       if (body.disabled !== undefined) {
         repo.updateSegmentDisabled(segmentId, episodeId, body.disabled);
+      }
+      if (body.loudnessTargetingEnabled !== undefined) {
+        repo.updateSegmentLoudnessTargetingEnabled(
+          segmentId,
+          episodeId,
+          body.loudnessTargetingEnabled,
+        );
+      }
+      if (body.finalGainDb !== undefined) {
+        repo.updateSegmentFinalGainDb(segmentId, episodeId, body.finalGainDb);
       }
 
       broadcastToEpisode(episodeId, { type: "segmentUpdated", segmentId });

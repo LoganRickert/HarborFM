@@ -41,7 +41,7 @@ export interface GenerateVideoOptions {
   amplitude: number;
   /** Waveform line color style (API keeps spectrum-style enum names). Optional when color is set. */
   style?: VideoSpectrumStyle;
-  /** Integer 1–30: for sine/circle = stroke width (px); for bars/dots = bar/dot count. Default 3. */
+  /** Integer 1+: for sine/circle = stroke width (px); for bars/dots = bar/dot count. Default 3. */
   strokeWidth?: number;
   /** Smoothing 0–1: 0 = instant, 1 = very smooth/slow (EMA). Default 0.7. */
   smoothing?: number;
@@ -53,6 +53,15 @@ export interface GenerateVideoOptions {
   waveformType?: VideoWaveformType;
   /** Waveform color as hex (e.g. #ffffff). Optional; overrides style when set. */
   color?: string;
+  /** Optional chapter-title overlay layout (center + size, 0–1). */
+  chapterTitle?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  /** Chapters for title overlay (from episode finalMarkers). */
+  chapters?: Array<{ startTime: number; title: string }>;
 }
 
 /**
@@ -94,6 +103,8 @@ export async function generateEpisodeVideo(
     orientation: options.orientation,
     waveformType: options.waveformType,
     color: options.color,
+    chapterTitle: options.chapterTitle,
+    chapters: options.chapters,
     tools: {
       ffmpegPath: FFMPEG_PATH,
       ffprobePath: FFPROBE_PATH,

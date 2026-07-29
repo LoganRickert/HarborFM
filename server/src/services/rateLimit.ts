@@ -20,15 +20,46 @@ function prune(now: number) {
   }
 }
 
+/** Human window length for rate-limit copy (e.g. "30 seconds", "1 minute"). */
+function formatWindowDuration(windowMs: number): string {
+  const sec = Math.max(1, Math.ceil(windowMs / 1000));
+  if (sec < 60) return `${sec} second${sec === 1 ? "" : "s"}`;
+  if (sec % 60 === 0) {
+    const min = sec / 60;
+    return `${min} minute${min === 1 ? "" : "s"}`;
+  }
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return `${min} minute${min === 1 ? "" : "s"} ${rem} second${rem === 1 ? "" : "s"}`;
+}
+
+function rateLimitErrorMessage(opts: {
+  windowMs: number;
+  retryAfterSec: number;
+  actionLabel?: string;
+}): string {
+  const retry =
+    opts.retryAfterSec >= 60
+      ? `${Math.ceil(opts.retryAfterSec / 60)} minute${Math.ceil(opts.retryAfterSec / 60) === 1 ? "" : "s"}`
+      : `${opts.retryAfterSec} second${opts.retryAfterSec === 1 ? "" : "s"}`;
+  if (opts.actionLabel) {
+    return `You can only ${opts.actionLabel} once every ${formatWindowDuration(opts.windowMs)}. Please try again in ${retry}.`;
+  }
+  return `Too many requests. Please try again in ${retry}.`;
+}
+
 export function userRateLimitPreHandler(opts: {
   bucket: string;
   windowMs?: number;
   /** Max requests allowed within window. Default 1 (one request per window). */
   max?: number;
+  /** Optional verb phrase for copy, e.g. "run Make Final Episode". */
+  actionLabel?: string;
 }) {
   const windowMs = opts.windowMs ?? 1000;
   const max = opts.max ?? 1;
   const bucket = opts.bucket;
+  const actionLabel = opts.actionLabel;
 
   return async function rateLimit(
     request: FastifyRequest,
@@ -52,14 +83,16 @@ export function userRateLimitPreHandler(opts: {
           1,
           Math.ceil((windowMs - (now - prev)) / 1000),
         );
-        const retryMsg =
-          retryAfterSec >= 60
-            ? `Too many requests. Please try again in ${Math.ceil(retryAfterSec / 60)} minute${Math.ceil(retryAfterSec / 60) === 1 ? "" : "s"}.`
-            : `Too many requests. Please try again in ${retryAfterSec} second${retryAfterSec === 1 ? "" : "s"}.`;
         reply
           .code(429)
           .header("Retry-After", String(retryAfterSec))
-          .send({ error: retryMsg });
+          .send({
+            error: rateLimitErrorMessage({
+              windowMs,
+              retryAfterSec,
+              actionLabel,
+            }),
+          });
         return;
       }
       lastSeen.set(key, now);
@@ -74,14 +107,16 @@ export function userRateLimitPreHandler(opts: {
         1,
         Math.ceil((windowMs - (now - oldestInWindow)) / 1000),
       );
-      const retryMsg =
-        retryAfterSec >= 60
-          ? `Too many requests. Please try again in ${Math.ceil(retryAfterSec / 60)} minute${Math.ceil(retryAfterSec / 60) === 1 ? "" : "s"}.`
-          : `Too many requests. Please try again in ${retryAfterSec} second${retryAfterSec === 1 ? "" : "s"}.`;
       reply
         .code(429)
         .header("Retry-After", String(retryAfterSec))
-        .send({ error: retryMsg });
+        .send({
+          error: rateLimitErrorMessage({
+            windowMs,
+            retryAfterSec,
+            actionLabel,
+          }),
+        });
       return;
     }
     arr.push(now);

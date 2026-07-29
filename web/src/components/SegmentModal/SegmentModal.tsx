@@ -648,6 +648,7 @@ export function SegmentModal({
         open={segmentSplitConfirmOpen}
         onOpenChange={setSegmentSplitConfirmOpen}
         durationSec={edit.durationSec > 0 ? edit.durationSec : segment.durationSec}
+        markers={edit.markers}
         loading={splittingSegment}
         onConfirm={({ minutes, seconds }) => {
           setSegmentSplitConfirmOpen(false);

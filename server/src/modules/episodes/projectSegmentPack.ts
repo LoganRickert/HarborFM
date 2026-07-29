@@ -227,6 +227,11 @@ export async function packSegmentIntoDir(
     audioEq: parseJsonField(seg.audioEq),
     disabled: seg.disabled,
     hostDuckingEnabled: Boolean(seg.hostDuckingEnabled),
+    loudnessTargetingEnabled: seg.loudnessTargetingEnabled !== false,
+    finalGainDb:
+      typeof seg.finalGainDb === "number" && Number.isFinite(seg.finalGainDb)
+        ? seg.finalGainDb
+        : 0,
     reusableAssetId: seg.reusableAssetId,
     audioFile,
     audioSource,

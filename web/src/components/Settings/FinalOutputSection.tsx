@@ -26,7 +26,9 @@ export function FinalOutputSection({ form, onFormChange }: SettingsFormProps) {
           }}
         />
         <span className={styles.inputHelp}>
-          Target loudness for final episode. 0 = disable normalization. Empty = use env default.
+          Target loudness for final episode. 0 = disable normalization. Empty =
+          use env default. Per-segment Loudness Targeting (Manage segment) can
+          opt music/beds out of this pass.
         </span>
       </label>
 

@@ -31,10 +31,10 @@ import { getPollByEpisodeId, rowToDto } from "../polls/repo.js";
 import { getPodcastTitle } from "../audio/repo.js";
 import { projectZipReadmeMarkdown } from "./projectReadme.js";
 import { findMultitrackDir, packSegmentIntoDir } from "./projectSegmentPack.js";
+import { PROJECT_FORMAT_VERSION } from "@harborfm/shared";
 
 export { findMultitrackDir } from "./projectSegmentPack.js";
-
-export const PROJECT_FORMAT_VERSION = 1;
+export { PROJECT_FORMAT_VERSION };
 
 const CACHE_DIR = join(tmpdir(), "harborfm-project-exports");
 
@@ -123,6 +123,9 @@ function fingerprintEpisode(
       seg.markers ?? "",
       seg.audioEq ?? "",
       String(seg.disabled),
+      String(seg.hostDuckingEnabled),
+      String(seg.loudnessTargetingEnabled),
+      String(seg.finalGainDb ?? 0),
       seg.createdAt,
     );
     if (seg.audioPath) {

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { DIAL_IN_FAKE, DIAL_IN_WEBHOOK_RATE_LIMIT_MAX } from "../../config.js";
+import { requireAuth, requireAdmin } from "../../plugins/auth.js";
 import {
   findSessionByParticipantId,
   getSessionById,
@@ -11,6 +12,7 @@ import {
   leaveWebrtcDialIn,
   muteWebrtcDialIn,
 } from "./dialIn/admitPhone.js";
+import { listDialInCallLogs } from "./dialIn/callLogRepo.js";
 import { getFakeCallControl } from "./dialIn/callControl.js";
 import {
   getDialInLeg,
@@ -60,6 +62,63 @@ export async function kickPhoneDialIn(
 }
 
 export async function registerDialInRoutes(app: FastifyInstance): Promise<void> {
+  app.get(
+    "/settings/dial-in-call-logs",
+    {
+      preHandler: [requireAuth, requireAdmin],
+      schema: {
+        tags: ["Settings"],
+        summary: "List recent inbound Telnyx dial-in call logs",
+        querystring: {
+          type: "object",
+          properties: {
+            limit: { type: "integer", minimum: 1, maximum: 200 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const q = request.query as { limit?: number | string };
+      const limit =
+        typeof q.limit === "number"
+          ? q.limit
+          : typeof q.limit === "string"
+            ? Number(q.limit)
+            : 10;
+      const rows = listDialInCallLogs(limit);
+      return reply.send({
+        calls: rows.map((r) => ({
+          id: r.id,
+          callControlId: r.callControlId,
+          callLegId: r.callLegId,
+          callSessionId: r.callSessionId,
+          connectionId: r.connectionId,
+          fromNumber: r.fromNumber,
+          toNumber: r.toNumber,
+          direction: r.direction,
+          callerIdName: r.callerIdName,
+          telnyxState: r.telnyxState,
+          outcome: r.outcome,
+          joinCode: r.joinCode,
+          sessionId: r.sessionId,
+          episodeId: r.episodeId,
+          podcastId: r.podcastId,
+          hangupCause: r.hangupCause,
+          sipHangupCause: r.sipHangupCause,
+          hangupSource: r.hangupSource,
+          startedAt: r.startedAt,
+          answeredAt: r.answeredAt,
+          bridgedAt: r.bridgedAt,
+          endedAt: r.endedAt,
+          durationMs: r.durationMs,
+          pinAttempts: r.pinAttempts,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        })),
+      });
+    },
+  );
+
   app.post(
     "/call/dial-in/fake/join",
     {

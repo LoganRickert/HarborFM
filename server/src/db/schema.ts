@@ -398,6 +398,12 @@ export const episodeSegments = sqliteTable(
     hostDuckingEnabled: integer("host_ducking_enabled", { mode: "boolean" })
       .notNull()
       .default(false),
+    loudnessTargetingEnabled: integer("loudness_targeting_enabled", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(true),
+    finalGainDb: real("final_gain_db").notNull().default(0),
   },
   (table) => [index("idx_episode_segments_episode").on(table.episodeId)],
 );
@@ -776,7 +782,7 @@ export const podcastCast = sqliteTable(
     description: text("description"),
     photoPath: text("photo_path"),
     photoUrl: text("photo_url"),
-    socialLinkText: text("social_link_text"),
+    socialLinks: text("social_links").notNull().default("[]"),
     email: text("email"),
     isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull().default(sqlNow()),
@@ -1335,5 +1341,45 @@ export const workerJobStats = sqliteTable(
       table.workerName,
       table.createdAt,
     ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Dial-in call logs (104)
+// ---------------------------------------------------------------------------
+export const dialInCallLogs = sqliteTable(
+  "dial_in_call_logs",
+  {
+    id: text("id").primaryKey(),
+    callControlId: text("call_control_id").notNull().unique(),
+    callLegId: text("call_leg_id"),
+    callSessionId: text("call_session_id"),
+    connectionId: text("connection_id"),
+    fromNumber: text("from_number"),
+    toNumber: text("to_number"),
+    direction: text("direction"),
+    callerIdName: text("caller_id_name"),
+    telnyxState: text("telnyx_state"),
+    outcome: text("outcome"),
+    joinCode: text("join_code"),
+    sessionId: text("session_id"),
+    episodeId: text("episode_id"),
+    podcastId: text("podcast_id"),
+    hangupCause: text("hangup_cause"),
+    sipHangupCause: text("sip_hangup_cause"),
+    hangupSource: text("hangup_source"),
+    startedAt: text("started_at").notNull(),
+    answeredAt: text("answered_at"),
+    bridgedAt: text("bridged_at"),
+    endedAt: text("ended_at"),
+    durationMs: integer("duration_ms"),
+    pinAttempts: integer("pin_attempts").notNull().default(0),
+    rawInitiatedJson: text("raw_initiated_json"),
+    rawHangupJson: text("raw_hangup_json"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_dial_in_call_logs_created_at").on(table.createdAt),
   ],
 );

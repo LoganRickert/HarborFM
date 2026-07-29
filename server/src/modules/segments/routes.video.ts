@@ -38,6 +38,31 @@ const VIDEO_COVER_EXTS = ["jpg", "jpeg", "png", "webp"];
 /** Generous rate limit for video operations: 10 requests per 2 minutes per user. */
 const VIDEO_RATE_LIMIT = { bucket: "video", windowMs: 120_000, max: 10 };
 
+/** Parse episode finalMarkers JSON into sorted chapter list for video title overlay. */
+function parseVideoChaptersFromFinalMarkers(
+  raw: string | null | undefined,
+): Array<{ startTime: number; title: string }> {
+  if (raw == null || raw === "") return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const chapters: Array<{ startTime: number; title: string }> = [];
+  for (const item of parsed) {
+    if (item == null || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const time = Number(rec.time);
+    const title = typeof rec.title === "string" ? rec.title.trim() : "";
+    if (!Number.isFinite(time) || time < 0 || title.length === 0) continue;
+    chapters.push({ startTime: time, title });
+  }
+  chapters.sort((a, b) => a.startTime - b.startTime);
+  return chapters;
+}
+
 /** Validate image magic bytes match claimed extension (jpg, png, webp). Returns true if valid. */
 function validateVideoCoverMagicBytes(buffer: Buffer, ext: string): boolean {
   const e = ext === "jpeg" ? "jpg" : ext;
@@ -219,12 +244,23 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             width: { type: "number", minimum: 0, maximum: 1, description: "Spectrum width 0–1 (fraction of video width)" },
             amplitude: { type: "number", minimum: 0, maximum: 2 },
             style: { type: "string", enum: ["spectrum-rainbow", "spectrum-magma", "spectrum-viridis"] },
-            strokeWidth: { type: "integer", minimum: 1, maximum: 30, description: "Sine/circle: stroke px; bars/dots: count" },
+            strokeWidth: { type: "integer", minimum: 1, description: "Sine/circle: stroke px; bars/dots: count" },
             smoothing: { type: "number", minimum: 0, maximum: 1, description: "Smoothing 0–1 (how fast the line reacts)" },
             resolution: { type: "string", enum: ["480p", "720p", "1080p"] },
             orientation: { type: "string", enum: ["landscape", "portrait", "square"] },
             waveformType: { type: "string", enum: ["sine", "bars", "circle", "dots"] },
             color: { type: "string", maxLength: 100, description: "CSS color (hex, rgb, rgba, or gradient)" },
+            chapterTitle: {
+              type: "object",
+              description: "Optional chapter-title overlay layout (center x/y + size, 0–1)",
+              properties: {
+                x: { type: "number", minimum: 0, maximum: 1 },
+                y: { type: "number", minimum: 0, maximum: 1 },
+                width: { type: "number", minimum: 0, maximum: 1 },
+                height: { type: "number", minimum: 0, maximum: 1 },
+              },
+              required: ["x", "y", "width", "height"],
+            },
           },
           required: ["x", "y", "width", "amplitude"],
         },
@@ -354,6 +390,9 @@ export async function registerVideoRoutes(app: FastifyInstance) {
               throw new Error("Final audio file not found. Build the final episode first.");
             }
             const outPath = episodeVideoPath(podcastId, episodeId);
+            const chapters = options.chapterTitle
+              ? parseVideoChaptersFromFinalMarkers(episode?.finalMarkers)
+              : undefined;
             const videoOpts = {
               imagePath: imagePathForVideo,
               audioPath,
@@ -368,6 +407,8 @@ export async function registerVideoRoutes(app: FastifyInstance) {
               orientation: options.orientation,
               waveformType: options.waveformType,
               color: options.color,
+              chapterTitle: options.chapterTitle,
+              chapters,
             };
             const runLocalVideo = () =>
               generateEpisodeVideo(podcastId, episodeId, videoOpts).then(
@@ -394,6 +435,8 @@ export async function registerVideoRoutes(app: FastifyInstance) {
                   orientation: options.orientation,
                   waveformType: options.waveformType,
                   color: options.color,
+                  chapterTitle: options.chapterTitle,
+                  chapters,
                 },
                 subject: resolveWorkerJobSubject({
                   podcastId,

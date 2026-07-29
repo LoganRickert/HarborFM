@@ -99,7 +99,11 @@ export async function registerRenderRoutes(app: FastifyInstance) {
       preHandler: [
         requireAuth,
         requireNotReadOnly,
-        userRateLimitPreHandler({ bucket: "render", windowMs: RENDER_RATE_LIMIT_WINDOW_MS }),
+        userRateLimitPreHandler({
+          bucket: "render",
+          windowMs: RENDER_RATE_LIMIT_WINDOW_MS,
+          actionLabel: "run Make Final Episode",
+        }),
       ],
       schema: {
         tags: ["Segments"],
@@ -240,6 +244,8 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                 midDb?: number;
                 highDb?: number;
               } | null;
+              loudnessTargetingEnabled: boolean;
+              finalGainDb: number;
             };
             const jobInputs: Array<{ name: string; absolutePath: string }> = [];
             const jobSegParams: JobSegParam[] = [];
@@ -392,11 +398,18 @@ export async function registerRenderRoutes(app: FastifyInstance) {
 
               const inputName = `seg_${segIndex}`;
               segIndex += 1;
+              const rawGain = Number(s.finalGainDb);
+              const finalGainDb =
+                Number.isFinite(rawGain) && rawGain !== 0
+                  ? Math.min(6, Math.max(-24, rawGain))
+                  : 0;
               jobInputs.push({ name: inputName, absolutePath: sourcePath });
               jobSegParams.push({
                 input: inputName,
                 trimRanges: ranges.length > 0 ? ranges : null,
                 audioEq,
+                loudnessTargetingEnabled: s.loudnessTargetingEnabled !== false,
+                finalGainDb,
               });
             }
             if (jobInputs.length === 0) {
@@ -427,6 +440,9 @@ export async function registerRenderRoutes(app: FastifyInstance) {
                     inputPath: inp.absolutePath,
                     trimRanges: jobSegParams[i]!.trimRanges,
                     audioEq: jobSegParams[i]!.audioEq,
+                    loudnessTargetingEnabled:
+                      jobSegParams[i]!.loudnessTargetingEnabled,
+                    finalGainDb: jobSegParams[i]!.finalGainDb,
                   })),
                   outPath,
                   format: settings.final_format,

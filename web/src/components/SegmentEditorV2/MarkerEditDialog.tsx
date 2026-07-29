@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Trash2, X } from 'lucide-react';
 import type { Marker } from '@harborfm/shared';
-import { formatDuration } from '../../pages/EpisodeEditor/utils';
+import { formatTimeInput, parseTimeInput } from '../../pages/EpisodeEditor/utils';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
 import { RemoveMarkerConfirmDialog } from '../SegmentModal/dialogs/RemoveMarkerConfirmDialog';
@@ -30,38 +30,6 @@ export type MarkerEditDialogProps = {
   onRemove: () => void;
 };
 
-/** Parse "m:ss", "h:mm:ss", or plain seconds. Returns seconds or NaN. */
-function parseTimeInput(s: string): number {
-  const trimmed = s.trim();
-  if (!trimmed) return NaN;
-  const num = Number(trimmed);
-  if (!Number.isNaN(num)) return num >= 0 ? num : NaN;
-  const parts = trimmed.split(':');
-  if (parts.length === 2) {
-    const m = parseInt(parts[0]!, 10);
-    const sec = parseFloat(parts[1]!);
-    if (!Number.isNaN(m) && !Number.isNaN(sec) && m >= 0 && sec >= 0) {
-      return m * 60 + sec;
-    }
-  }
-  if (parts.length === 3) {
-    const h = parseInt(parts[0]!, 10);
-    const m = parseInt(parts[1]!, 10);
-    const sec = parseFloat(parts[2]!);
-    if (
-      !Number.isNaN(h) &&
-      !Number.isNaN(m) &&
-      !Number.isNaN(sec) &&
-      h >= 0 &&
-      m >= 0 &&
-      sec >= 0
-    ) {
-      return h * 3600 + m * 60 + sec;
-    }
-  }
-  return NaN;
-}
-
 function clampSoundbiteDuration(raw: string): number {
   let d = Number(raw);
   if (!Number.isFinite(d)) d = 30;
@@ -80,7 +48,7 @@ export function MarkerEditDialog({
 }: MarkerEditDialogProps) {
   const initialTitle = marker?.title ?? '';
   const initialTimeStr =
-    marker != null ? formatDuration(Math.floor(marker.time)) : '0:00';
+    marker != null ? formatTimeInput(marker.time) : '0:00';
   const initialColor = marker?.color ?? MARKER_COLORS[0];
   const initialType = (marker?.markerType ?? '') as MarkerType;
   const initialDuration = String(
@@ -108,7 +76,7 @@ export function MarkerEditDialog({
   useEffect(() => {
     if (!open || !marker) return;
     const nextTitle = marker.title ?? '';
-    const nextTimeStr = formatDuration(Math.floor(marker.time));
+    const nextTimeStr = formatTimeInput(marker.time);
     const nextColor = marker.color ?? MARKER_COLORS[0];
     const nextType = (marker.markerType ?? '') as MarkerType;
     const nextDuration = String(
@@ -155,11 +123,11 @@ export function MarkerEditDialog({
   const handleSave = () => {
     const timeSec = parseTimeInput(timeStr);
     if (Number.isNaN(timeSec) || timeSec < 0) {
-      setError('Enter a valid time (e.g. 1:30 or 90)');
+      setError('Enter a valid time (e.g. 1:20.5 or 90)');
       return;
     }
     if (maxTimeSec > 0 && timeSec > maxTimeSec) {
-      setError(`Time cannot exceed ${formatDuration(Math.floor(maxTimeSec))}`);
+      setError(`Time cannot exceed ${formatTimeInput(maxTimeSec)}`);
       return;
     }
     const type = markerType || undefined;
@@ -244,7 +212,7 @@ export function MarkerEditDialog({
                   type="text"
                   value={timeStr}
                   onChange={(e) => setTimeStr(e.target.value)}
-                  placeholder="0:00 or 90"
+                  placeholder="1:20.5 or 90"
                   className={styles.chapterEditInput}
                 />
               </label>

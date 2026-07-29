@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
+import type { Marker } from '@harborfm/shared';
 import styles from '../../../pages/EpisodeEditor.module.css';
 
 export interface SegmentSplitConfirmDialogProps {
@@ -9,7 +10,11 @@ export interface SegmentSplitConfirmDialogProps {
   onConfirm: (params: { minutes: number; seconds: number }) => void;
   loading: boolean;
   durationSec: number;
+  /** Current segment markers; used for optional split-at-marker. */
+  markers?: Marker[];
 }
+
+type SplitSource = 'time' | 'marker';
 
 function formatDuration(sec: number): string {
   const m = Math.floor(Math.max(0, sec) / 60);
@@ -42,26 +47,75 @@ function midpointSplitFields(durationSec: number): { minutes: string; seconds: s
   return { minutes: String(minutes), seconds: String(seconds) };
 }
 
+function secToFields(sec: number): { minutes: string; seconds: string } {
+  const clamped = Math.max(0, sec);
+  const minutes = Math.floor(clamped / 60);
+  const seconds = Math.round((clamped - minutes * 60) * 100) / 100;
+  return { minutes: String(minutes), seconds: String(seconds) };
+}
+
+function markerTypeLabel(markerType?: Marker['markerType']): string {
+  if (markerType === 'chapter') return 'Chapter';
+  if (markerType === 'soundbite') return 'Soundbite';
+  return 'Marker';
+}
+
+function markerOptionLabel(m: Marker): string {
+  const title = m.title?.trim();
+  const type = markerTypeLabel(m.markerType);
+  const time = formatDuration(m.time);
+  if (title) return `${time} - ${title} (${type})`;
+  return `${time} (${type})`;
+}
+
 export function SegmentSplitConfirmDialog({
   open,
   onOpenChange,
   onConfirm,
   loading,
   durationSec,
+  markers = [],
 }: SegmentSplitConfirmDialogProps) {
+  const [source, setSource] = useState<SplitSource>('time');
   const [minutesText, setMinutesText] = useState('');
   const [secondsText, setSecondsText] = useState('');
+  const [selectedMarkerKey, setSelectedMarkerKey] = useState('');
+
+  const splitMarkers = useMemo(
+    () =>
+      markers
+        .map((m, index) => ({ m, index }))
+        .filter(({ m }) => Number.isFinite(m.time) && m.time > 0 && m.time < durationSec)
+        .sort((a, b) => a.m.time - b.m.time),
+    [markers, durationSec],
+  );
 
   useEffect(() => {
-    if (open) {
-      const mid = midpointSplitFields(durationSec);
-      setMinutesText(mid.minutes);
-      setSecondsText(mid.seconds);
-    }
+    if (!open) return;
+    const mid = midpointSplitFields(durationSec);
+    setSource('time');
+    setMinutesText(mid.minutes);
+    setSecondsText(mid.seconds);
   }, [open, durationSec]);
 
-  const minutes = parseMinutes(minutesText);
-  const seconds = parseSeconds(secondsText);
+  useEffect(() => {
+    if (!open) return;
+    setSelectedMarkerKey((prev) => {
+      if (prev && splitMarkers.some((x) => String(x.index) === prev)) return prev;
+      return splitMarkers[0] ? String(splitMarkers[0].index) : '';
+    });
+  }, [open, splitMarkers]);
+
+  const selectedMarker = splitMarkers.find((x) => String(x.index) === selectedMarkerKey)?.m;
+
+  const minutes =
+    source === 'marker' && selectedMarker != null
+      ? Math.floor(selectedMarker.time / 60)
+      : parseMinutes(minutesText);
+  const seconds =
+    source === 'marker' && selectedMarker != null
+      ? Math.round((selectedMarker.time % 60) * 100) / 100
+      : parseSeconds(secondsText);
   const splitSec =
     minutes != null && seconds != null ? minutes * 60 + seconds : NaN;
   const splitValid =
@@ -69,7 +123,14 @@ export function SegmentSplitConfirmDialog({
     seconds != null &&
     Number.isFinite(splitSec) &&
     splitSec > 0 &&
-    splitSec < durationSec;
+    splitSec < durationSec &&
+    (source === 'time' || selectedMarker != null);
+
+  const showTimeInvalid =
+    source === 'time' &&
+    durationSec > 0 &&
+    (minutesText !== '' || secondsText !== '') &&
+    !splitValid;
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onOpenChange(false)}>
@@ -91,8 +152,8 @@ export function SegmentSplitConfirmDialog({
           </div>
           <Dialog.Description asChild>
             <div className={styles.dialogDescription}>
-              Split this segment into two at the time below. This will update the audio file and
-              cannot be undone.
+              Split this segment into two at the time or marker below. This will update the audio
+              file and cannot be undone.
               <div className={styles.removeSilenceNote}>
                 Markers at or after the split time move to the new segment.
               </div>
@@ -101,72 +162,165 @@ export function SegmentSplitConfirmDialog({
               </div>
             </div>
           </Dialog.Description>
+
           <div
-            style={{
-              display: 'flex',
-              gap: '0.75rem',
-              alignItems: 'flex-end',
-              marginTop: '0.75rem',
-              marginBottom: '0.5rem',
-              width: '100%',
-              maxWidth: '100%',
-              boxSizing: 'border-box',
-            }}
+            className={styles.publishSettingSegmented}
+            role="group"
+            aria-label="Split using"
+            style={{ marginTop: '0.75rem', width: '100%' }}
           >
-            <label
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.25rem',
-                flex: '1 1 0',
-                minWidth: 0,
-              }}
+            <button
+              type="button"
+              className={
+                source === 'time'
+                  ? styles.publishSettingSegmentedActive
+                  : styles.publishSettingSegmentedBtn
+              }
+              onClick={() => setSource('time')}
+              disabled={loading}
+              aria-pressed={source === 'time'}
             >
-              <span style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>Minutes</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                className={styles.input}
-                style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}
-                value={minutesText}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  if (next === '' || /^\d+$/.test(next)) setMinutesText(next);
-                }}
-                disabled={loading}
-                placeholder="0"
-                aria-label="Split at minutes"
-              />
-            </label>
-            <label
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.25rem',
-                flex: '1 1 0',
-                minWidth: 0,
+              Time
+            </button>
+            <button
+              type="button"
+              className={
+                source === 'marker'
+                  ? styles.publishSettingSegmentedActive
+                  : styles.publishSettingSegmentedBtn
+              }
+              onClick={() => {
+                setSource('marker');
+                if (!selectedMarkerKey && splitMarkers[0]) {
+                  setSelectedMarkerKey(String(splitMarkers[0].index));
+                }
               }}
+              disabled={loading || splitMarkers.length === 0}
+              aria-pressed={source === 'marker'}
+              title={
+                splitMarkers.length === 0
+                  ? 'Add a marker between the start and end to split here'
+                  : undefined
+              }
             >
-              <span style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>Seconds</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                className={styles.input}
-                style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}
-                value={secondsText}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  if (next === '' || /^\d*\.?\d*$/.test(next)) setSecondsText(next);
-                }}
-                disabled={loading}
-                placeholder="0"
-                aria-label="Split at seconds"
-              />
-            </label>
+              Marker
+            </button>
           </div>
-          {!splitValid && durationSec > 0 && (minutesText !== '' || secondsText !== '') && (
+
+          {source === 'time' ? (
+            <div
+              style={{
+                display: 'flex',
+                gap: '0.75rem',
+                alignItems: 'flex-end',
+                marginTop: '0.75rem',
+                marginBottom: '0.5rem',
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  flex: '1 1 0',
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>Minutes</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className={styles.input}
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}
+                  value={minutesText}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === '' || /^\d+$/.test(next)) setMinutesText(next);
+                  }}
+                  disabled={loading}
+                  placeholder="0"
+                  aria-label="Split at minutes"
+                />
+              </label>
+              <label
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  flex: '1 1 0',
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>Seconds</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={styles.input}
+                  style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0 }}
+                  value={secondsText}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === '' || /^\d*\.?\d*$/.test(next)) setSecondsText(next);
+                  }}
+                  disabled={loading}
+                  placeholder="0"
+                  aria-label="Split at seconds"
+                />
+              </label>
+            </div>
+          ) : (
+            <label
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.25rem',
+                marginTop: '0.75rem',
+                marginBottom: '0.5rem',
+                width: '100%',
+              }}
+            >
+              <span style={{ fontSize: '0.9375rem', color: 'var(--text-muted)' }}>Marker</span>
+              <select
+                className={styles.select}
+                style={{ width: '100%', boxSizing: 'border-box' }}
+                value={selectedMarkerKey}
+                onChange={(e) => {
+                  const key = e.target.value;
+                  setSelectedMarkerKey(key);
+                  const found = splitMarkers.find((x) => String(x.index) === key);
+                  if (found) {
+                    const fields = secToFields(found.m.time);
+                    setMinutesText(fields.minutes);
+                    setSecondsText(fields.seconds);
+                  }
+                }}
+                disabled={loading || splitMarkers.length === 0}
+                aria-label="Split at marker"
+              >
+                {splitMarkers.length === 0 ? (
+                  <option value="">No markers available</option>
+                ) : (
+                  splitMarkers.map(({ m, index }) => (
+                    <option key={index} value={String(index)}>
+                      {markerOptionLabel(m)}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+          )}
+
+          {showTimeInvalid && (
             <p className={`${styles.error} ${styles.rateLimitError}`} role="alert">
               Enter a time greater than 0 and less than {formatDuration(durationSec)}.
+            </p>
+          )}
+          {source === 'marker' && splitMarkers.length === 0 && (
+            <p className={`${styles.error} ${styles.rateLimitError}`} role="alert">
+              Add a marker between the start and end of the segment to split here.
             </p>
           )}
           <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>

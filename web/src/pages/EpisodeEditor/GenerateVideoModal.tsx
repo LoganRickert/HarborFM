@@ -25,13 +25,42 @@ const WAVEFORM_TYPES: { value: VideoWaveformType; label: string }[] = [
 ];
 
 const DEFAULT_BOX = { x: 0.25, y: 0.375, width: 0.5, height: 0.25 };
+/** Default title box: ~30 title chars at default height on 720p landscape, above waveform. */
+const DEFAULT_TITLE_BOX = { x: 0.15, y: 0.22, width: 0.7, height: 0.08 };
 const MIN_BOX_SIZE = 0.05;
+/** Match preview inset so the final waveform is not flush to the box edges. */
+const WAVEFORM_EDGE_INSET_PX = 5;
+/** 30-character sample title body for preview sizing. */
+const SAMPLE_TITLE_BODY = 'Introduction to the main topic';
+const SAMPLE_TITLE_LABEL = `1. ${SAMPLE_TITLE_BODY}`;
+const PREVIEW_PROGRESS = 0.4;
+
+function isValidCssColor(value: string): boolean {
+  const s = value.trim();
+  if (!s) return false;
+  if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function') {
+    return CSS.supports('color', s);
+  }
+  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(s)
+    || /^rgba?\(/i.test(s)
+    || /^[a-zA-Z]+$/.test(s);
+}
+
+function isValidThickness(value: number | ''): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
+type LayoutBox = { x: number; y: number; width: number; height: number };
+type BoxTarget = 'waveform' | 'title';
+type DragHandle = 'nw' | 'ne' | 'sw' | 'se' | 'move';
 
 export interface GenerateVideoModalProps {
   episodeId: string;
   onClose: () => void;
   /** Episode artwork URL for fallback background when no cover uploaded. */
   artworkUrl?: string | null;
+  /** Final chapter markers; used to enable the chapter-title overlay. */
+  finalMarkers?: Array<{ time: number; title?: string; color?: string }> | null;
   /** Called when video is generated so parent can close modal. */
   onSuccess?: () => void;
 }
@@ -40,6 +69,7 @@ export function GenerateVideoModal({
   episodeId,
   onClose,
   artworkUrl,
+  finalMarkers,
   onSuccess,
 }: GenerateVideoModalProps) {
   const queryClient = useQueryClient();
@@ -55,12 +85,20 @@ export function GenerateVideoModal({
 
   const [waveformType, setWaveformType] = useState<VideoWaveformType>('sine');
   const [color, setColor] = useState('#ffffff');
-  const [thickness, setThickness] = useState(5);
+  const [thickness, setThickness] = useState<number | ''>(5);
   const [box, setBox] = useState(DEFAULT_BOX);
+  const [titleEnabled, setTitleEnabled] = useState(false);
+  const [titleBox, setTitleBox] = useState(DEFAULT_TITLE_BOX);
 
   const [submitted, setSubmitted] = useState(false);
-  const [dragHandle, setDragHandle] = useState<'nw' | 'ne' | 'sw' | 'se' | 'move' | null>(null);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number; box: typeof DEFAULT_BOX } | null>(null);
+  const [dragTarget, setDragTarget] = useState<BoxTarget | null>(null);
+  const [dragHandle, setDragHandle] = useState<DragHandle | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number; box: LayoutBox } | null>(null);
+
+  const hasChapters = useMemo(() => {
+    const markers = finalMarkers ?? [];
+    return markers.some((m) => typeof m.time === 'number' && String(m.title ?? '').trim().length > 0);
+  }, [finalMarkers]);
 
   useEffect(() => {
     setStep(1);
@@ -73,9 +111,18 @@ export function GenerateVideoModal({
     setColor('#ffffff');
     setThickness(5);
     setBox(DEFAULT_BOX);
+    setTitleEnabled(false);
+    setTitleBox(DEFAULT_TITLE_BOX);
+    setDragTarget(null);
     setDragHandle(null);
     setDragStart(null);
   }, [episodeId]);
+
+  useEffect(() => {
+    if (!hasChapters && titleEnabled) {
+      setTitleEnabled(false);
+    }
+  }, [hasChapters, titleEnabled]);
 
   useEffect(() => {
     if (step === 1 && (hasVideoCover || artworkUrl) && !coverFile) {
@@ -83,12 +130,11 @@ export function GenerateVideoModal({
     }
   }, [step, hasVideoCover, artworkUrl, coverFile]);
 
-  useEffect(() => {
-    if (waveformType === 'sine' || waveformType === 'circle') {
-      setThickness((t) => Math.max(1, Math.min(8, t)));
-    }
-  }, [waveformType]);
-
+  const colorValid = useMemo(() => isValidCssColor(color), [color]);
+  const thicknessValid = isValidThickness(thickness);
+  const canGenerate = colorValid && thicknessValid;
+  /** Shared overlay color for waveform + chapter title preview (matches Color field). */
+  const overlayColor = colorValid ? color.trim() : '#ffffff';
   const { data: videoStatus } = useQuery({
     queryKey: ['video-status', episodeId],
     queryFn: () => getVideoStatus(episodeId),
@@ -126,19 +172,36 @@ export function GenerateVideoModal({
 
   const generateMutation = useMutation({
     mutationFn: async () => {
+      if (!isValidCssColor(color) || !isValidThickness(thickness)) {
+        throw new Error('Enter a valid color and thickness/count before generating.');
+      }
       if (coverFile) {
         await uploadEpisodeVideoCover(episodeId, coverFile);
       }
+      const canvasW = canvasRef.current?.offsetWidth ?? 0;
+      const insetX = canvasW > 0 ? WAVEFORM_EDGE_INSET_PX / canvasW : 0;
+      const waveWidth = Math.max(MIN_BOX_SIZE, box.width - 2 * insetX);
+      const waveX = box.x + (box.width - waveWidth) / 2;
       return startGenerateVideo(episodeId, {
-        x: box.x + box.width / 2,
+        x: waveX + waveWidth / 2,
         y: box.y + box.height / 2,
-        width: box.width,
+        width: waveWidth,
         amplitude: box.height,
         resolution,
         orientation,
         waveformType,
-        color,
+        color: color.trim(),
         strokeWidth: thickness,
+        ...(titleEnabled
+          ? {
+              chapterTitle: {
+                x: titleBox.x + titleBox.width / 2,
+                y: titleBox.y + titleBox.height / 2,
+                width: titleBox.width,
+                height: titleBox.height,
+              },
+            }
+          : {}),
       });
     },
     onSuccess: (result) => {
@@ -170,10 +233,13 @@ export function GenerateVideoModal({
     setColor('#ffffff');
     setThickness(5);
     setBox(DEFAULT_BOX);
+    setTitleEnabled(false);
+    setTitleBox(DEFAULT_TITLE_BOX);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canGenerate) return;
     generateMutation.mutate();
   };
 
@@ -186,23 +252,30 @@ export function GenerateVideoModal({
     }
   };
 
-  const clampBox = useCallback((b: typeof box) => ({
+  const clampBox = useCallback((b: LayoutBox) => ({
     x: Math.max(0, Math.min(1 - b.width, b.x)),
     y: Math.max(0, Math.min(1 - b.height, b.y)),
     width: Math.max(MIN_BOX_SIZE, Math.min(1, b.width)),
     height: Math.max(MIN_BOX_SIZE, Math.min(1, b.height)),
   }), []);
 
-  const handleCanvasPointerDown = (e: React.PointerEvent, handle: 'nw' | 'ne' | 'sw' | 'se' | 'move') => {
+  const handleCanvasPointerDown = (
+    e: React.PointerEvent,
+    target: BoxTarget,
+    handle: DragHandle,
+  ) => {
     e.preventDefault();
-    if (handle !== 'move') e.stopPropagation();
+    e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    const current = target === 'waveform' ? box : titleBox;
+    setDragTarget(target);
     setDragHandle(handle);
-    setDragStart({ x: e.clientX, y: e.clientY, box: { ...box } });
+    setDragStart({ x: e.clientX, y: e.clientY, box: { ...current } });
   };
 
   useEffect(() => {
-    if (dragHandle == null || dragStart == null) return;
+    if (dragHandle == null || dragStart == null || dragTarget == null) return;
+    const setTargetBox = dragTarget === 'waveform' ? setBox : setTitleBox;
     const onMove = (e: PointerEvent) => {
       e.preventDefault();
       const el = canvasRef.current;
@@ -210,7 +283,7 @@ export function GenerateVideoModal({
       const dx = (e.clientX - dragStart.x) / el.offsetWidth;
       const dy = (e.clientY - dragStart.y) / el.offsetHeight;
       if (dragHandle === 'move') {
-        setBox(clampBox({
+        setTargetBox(clampBox({
           ...dragStart.box,
           x: dragStart.box.x + dx,
           y: dragStart.box.y + dy,
@@ -228,10 +301,11 @@ export function GenerateVideoModal({
         }
         if (width < MIN_BOX_SIZE) { x = x + width - MIN_BOX_SIZE; width = MIN_BOX_SIZE; }
         if (height < MIN_BOX_SIZE) { y = y + height - MIN_BOX_SIZE; height = MIN_BOX_SIZE; }
-        setBox(clampBox({ x, y, width, height }));
+        setTargetBox(clampBox({ x, y, width, height }));
       }
     };
     const onUp = () => {
+      setDragTarget(null);
       setDragHandle(null);
       setDragStart(null);
     };
@@ -241,7 +315,7 @@ export function GenerateVideoModal({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [dragHandle, dragStart, clampBox]);
+  }, [dragHandle, dragStart, dragTarget, clampBox]);
 
   const aspectRatio =
     orientation === 'portrait'
@@ -392,7 +466,11 @@ export function GenerateVideoModal({
           )}
 
           {step === 2 && (
-            <form onSubmit={handleSubmit} className={styles.generateVideoStep}>
+            <form
+              id="generate-video-form"
+              onSubmit={handleSubmit}
+              className={styles.generateVideoStep}
+            >
               {errorMessage && (
                 <p className={styles.error} role="alert" style={{ marginTop: 0 }}>
                   {errorMessage}
@@ -425,28 +503,63 @@ export function GenerateVideoModal({
                     placeholder="#fff, rgba(0,0,0,0.5)"
                     disabled={isGenerating}
                     className={styles.generateVideoHexInput}
+                    style={colorValid ? { color: overlayColor } : undefined}
+                    aria-invalid={!colorValid}
                   />
                 </div>
                 <div className={styles.generateVideoField}>
                   <label htmlFor="generate-video-thickness">
                     {waveformType === 'bars' || waveformType === 'dots'
-                      ? 'Count (1–30)'
-                      : 'Thickness (1–8 px)'}
+                      ? 'Count'
+                      : 'Thickness (px)'}
                   </label>
                   <input
                     id="generate-video-thickness"
                     type="number"
-                    min={waveformType === 'sine' || waveformType === 'circle' ? 1 : 1}
-                    max={waveformType === 'sine' || waveformType === 'circle' ? 8 : 30}
+                    min={1}
                     step={1}
                     value={thickness}
-                    onChange={(e) => setThickness(Math.max(1, Math.min(30, parseInt(e.target.value, 10) || 1)))}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setThickness('');
+                        return;
+                      }
+                      if (!/^\d+$/.test(raw)) return;
+                      setThickness(parseInt(raw, 10));
+                    }}
                     disabled={isGenerating}
+                    aria-invalid={!thicknessValid}
                   />
                 </div>
               </div>
               <div className={styles.generateVideoField}>
-                <span className={styles.generateVideoLabel}>Position & size</span>
+                <div className={styles.generateVideoLabelRow}>
+                  <span className={styles.generateVideoLabel}>Position & size</span>
+                  {titleEnabled ? (
+                    <button
+                      type="button"
+                      className={styles.generateVideoPill}
+                      onClick={() => setTitleEnabled(false)}
+                      disabled={isGenerating}
+                    >
+                      Remove title
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.generateVideoPill}
+                      onClick={() => {
+                        setTitleBox(DEFAULT_TITLE_BOX);
+                        setTitleEnabled(true);
+                      }}
+                      disabled={isGenerating || !hasChapters}
+                      title={!hasChapters ? 'Add chapters to the episode first' : undefined}
+                    >
+                      Add chapter title
+                    </button>
+                  )}
+                </div>
                 <div className={styles.generateVideoCanvasWrap}>
                   <div
                     ref={canvasRef}
@@ -478,28 +591,78 @@ export function GenerateVideoModal({
                       width: `${box.width * 100}%`,
                       height: `${box.height * 100}%`,
                     }}
-                    onPointerDown={(e) => handleCanvasPointerDown(e, 'move')}
+                    onPointerDown={(e) => handleCanvasPointerDown(e, 'waveform', 'move')}
                   >
                     <div
                       className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleNw}`}
-                      onPointerDown={(e) => handleCanvasPointerDown(e, 'nw')}
+                      onPointerDown={(e) => handleCanvasPointerDown(e, 'waveform', 'nw')}
                     />
                     <div
                       className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleNe}`}
-                      onPointerDown={(e) => handleCanvasPointerDown(e, 'ne')}
+                      onPointerDown={(e) => handleCanvasPointerDown(e, 'waveform', 'ne')}
                     />
                     <div
                       className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleSw}`}
-                      onPointerDown={(e) => handleCanvasPointerDown(e, 'sw')}
+                      onPointerDown={(e) => handleCanvasPointerDown(e, 'waveform', 'sw')}
                     />
                     <div
                       className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleSe}`}
-                      onPointerDown={(e) => handleCanvasPointerDown(e, 'se')}
+                      onPointerDown={(e) => handleCanvasPointerDown(e, 'waveform', 'se')}
                     />
                     <div className={styles.generateVideoWaveformPreview}>
-                      <WaveformPreview type={waveformType} color={color} thickness={thickness} />
+                      <WaveformPreview
+                        type={waveformType}
+                        color={overlayColor}
+                        thickness={typeof thickness === 'number' ? thickness : 1}
+                      />
                     </div>
                   </div>
+                  {titleEnabled && (
+                    <div
+                      className={`${styles.generateVideoBox} ${styles.generateVideoTitleBox}`}
+                      style={{
+                        left: `${titleBox.x * 100}%`,
+                        top: `${titleBox.y * 100}%`,
+                        width: `${titleBox.width * 100}%`,
+                        height: `${titleBox.height * 100}%`,
+                      }}
+                      onPointerDown={(e) => handleCanvasPointerDown(e, 'title', 'move')}
+                    >
+                      <div
+                        className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleNw}`}
+                        onPointerDown={(e) => handleCanvasPointerDown(e, 'title', 'nw')}
+                      />
+                      <div
+                        className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleNe}`}
+                        onPointerDown={(e) => handleCanvasPointerDown(e, 'title', 'ne')}
+                      />
+                      <div
+                        className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleSw}`}
+                        onPointerDown={(e) => handleCanvasPointerDown(e, 'title', 'sw')}
+                      />
+                      <div
+                        className={`${styles.generateVideoBoxHandle} ${styles.generateVideoBoxHandleSe}`}
+                        onPointerDown={(e) => handleCanvasPointerDown(e, 'title', 'se')}
+                      />
+                      <div
+                        className={styles.generateVideoTitlePreview}
+                        style={{ color: overlayColor }}
+                      >
+                        <span className={styles.generateVideoTitleText}>
+                          {SAMPLE_TITLE_LABEL}
+                        </span>
+                        <div
+                          className={styles.generateVideoTitleProgressTrack}
+                          style={{ background: `color-mix(in srgb, ${overlayColor} 30%, transparent)` }}
+                        >
+                          <div
+                            className={styles.generateVideoTitleProgressFill}
+                            style={{ width: `${PREVIEW_PROGRESS * 100}%`, background: overlayColor }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 </div>
               </div>
@@ -509,20 +672,6 @@ export function GenerateVideoModal({
                   Generating video…
                 </p>
               )}
-
-              <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
-                <button type="button" className={styles.cancel} onClick={handleBack} disabled={isGenerating}>
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  className={styles.submit}
-                  disabled={isGenerating || generateMutation.isPending}
-                  aria-label="Generate video"
-                >
-                  {generateMutation.isPending ? 'Starting…' : isGenerating ? 'Generating…' : 'Generate'}
-                </button>
-              </div>
             </form>
           )}
 
@@ -539,6 +688,23 @@ export function GenerateVideoModal({
                 aria-label="Next"
               >
                 Next
+              </button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className={`${styles.dialogActions} ${styles.dialogActionsCancelLeft}`}>
+              <button type="button" className={styles.cancel} onClick={handleBack} disabled={isGenerating}>
+                Back
+              </button>
+              <button
+                type="submit"
+                form="generate-video-form"
+                className={styles.submit}
+                disabled={isGenerating || generateMutation.isPending || !canGenerate}
+                aria-label="Generate video"
+              >
+                {generateMutation.isPending ? 'Starting…' : isGenerating ? 'Generating…' : 'Generate'}
               </button>
             </div>
           )}
@@ -560,10 +726,11 @@ function WaveformPreview({
   const w = 120;
   const h = 40;
   const halfH = h / 2;
-  const strokeW = Math.max(1, Math.min(8, thickness));
-  const barCount = type === 'bars' ? Math.max(1, Math.min(30, thickness)) : 8;
-  const dotCount = type === 'dots' ? Math.max(1, Math.min(30, thickness)) : 9;
-  const amp = halfH - strokeW;
+  const isCountType = type === 'bars' || type === 'dots';
+  const strokeW = isCountType ? 2 : Math.max(1, thickness);
+  const barCount = type === 'bars' ? Math.max(1, thickness) : 8;
+  const dotCount = type === 'dots' ? Math.max(1, thickness) : 9;
+  const amp = Math.max(2, halfH - Math.min(strokeW, halfH - 2));
 
   const isSquareView = type === 'circle' || type === 'dots';
   const viewBox = type === 'circle' ? '0 0 40 40' : type === 'dots' ? '0 0 40 40' : `0 0 ${w} ${h}`;
@@ -575,7 +742,7 @@ function WaveformPreview({
         <path
           fill="none"
           stroke={color}
-          strokeWidth={strokeW}
+          strokeWidth={Math.min(strokeW, halfH)}
           strokeLinecap="round"
           d={Array.from({ length: w + 1 }, (_, i) => {
             const y = halfH + amp * Math.sin((2 * Math.PI * 2 * i) / w);
@@ -587,35 +754,41 @@ function WaveformPreview({
         <g fill={color}>
           {Array.from({ length: barCount }, (_, i) => {
             const phase = barCount > 1 ? (2 * Math.PI * 2 * i) / barCount : 0;
-            const barH = Math.max(2, halfH * 0.3 + amp * (0.5 + 0.5 * Math.sin(phase)));
-            const barW = barCount > 0 ? (w - 4 - (barCount - 1) * 2) / barCount : w / 8;
+            // Match encode: bars use most of the box height; count only affects width.
+            const barH = Math.max(2, (h - 2) * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(phase))));
+            const gap = barCount > 40 ? 1 : 2;
+            const barW = barCount > 0 ? Math.max(0.5, (w - 4 - (barCount - 1) * gap) / barCount) : w / 8;
             return (
               <rect
                 key={i}
-                x={4 + i * (barW + 2)}
+                x={4 + i * (barW + gap)}
                 y={h - barH}
                 width={barW}
                 height={barH}
-                rx={2}
+                rx={Math.min(2, barW / 2)}
               />
             );
           })}
         </g>
       )}
       {type === 'circle' && (
-        <circle cx={20} cy={20} r={Math.min(18, 20 - strokeW)} fill="none" stroke={color} strokeWidth={strokeW} />
+        <circle
+          cx={20}
+          cy={20}
+          r={Math.max(2, Math.min(18, 20 - Math.min(strokeW, 16) / 2))}
+          fill="none"
+          stroke={color}
+          strokeWidth={Math.min(strokeW, 16)}
+        />
       )}
       {type === 'dots' && (
         <g fill={color}>
           {(() => {
             const viewW = 40;
             const gap = 2;
-            let r = Math.max(0.8, Math.min(8, strokeW)) * 0.5;
             const n = dotCount;
-            const totalUsed = n * 2 * r + (n - 1) * gap;
-            if (totalUsed > viewW) {
-              r = Math.max(0.5, (viewW - (n - 1) * gap) / (2 * n));
-            }
+            let r = Math.max(0.5, (viewW - (n - 1) * gap) / (2 * n));
+            r = Math.min(r, 8);
             const padding = (viewW - (n * 2 * r + (n - 1) * gap)) / 2;
             return Array.from({ length: dotCount }, (_, i) => {
               const x = padding + r + i * (2 * r + gap);

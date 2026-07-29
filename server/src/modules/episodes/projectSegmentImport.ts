@@ -31,9 +31,9 @@ import * as audioService from "../../services/audio.js";
 import {
   pruneMarkersForDuration,
   pruneTrimRangesForDuration,
-  remakeMixFromMultitrackDir,
   type MultitrackManifest,
 } from "../../services/multitrackRemake.js";
+import { remakeMixWithOptionalWorker } from "../../services/segmentRemakeWorker.js";
 import { sha256FileSync } from "../../utils/hash.js";
 import { waveformPath } from "../segments/utils.js";
 import {
@@ -41,6 +41,8 @@ import {
   getSegmentById,
   updateSegmentAudio,
   updateSegmentHostDuckingEnabled,
+  updateSegmentLoudnessTargetingEnabled,
+  updateSegmentFinalGainDb,
   updateSegmentMarkers,
 } from "../segments/repo.js";
 import { findMultitrackDir } from "./projectSegmentPack.js";
@@ -379,12 +381,16 @@ export async function applySegmentFolderOntoExisting(opts: {
       const duckingEnabled = Boolean(segMeta.hostDuckingEnabled);
       const ducking = duckingEnabled ? readHostDuckingFile(mtDest) : null;
       const remakeManifest = buildManifestForRemake(manifest, ducking, mtDest);
-      const remade = await remakeMixFromMultitrackDir(
-        mtDest,
+      const remade = await remakeMixWithOptionalWorker({
+        podcastId,
+        episodeId,
+        segmentId,
+        mtDir: mtDest,
         remakeManifest,
         mixDest,
-        episodeUploads,
-      );
+        allowedBaseDir: episodeUploads,
+        userId: importerUserId,
+      });
       if (audioAbsDest && audioAbsDest !== mixDest && existsSync(audioAbsDest)) {
         try {
           unlinkSync(audioAbsDest);
@@ -428,6 +434,25 @@ export async function applySegmentFolderOntoExisting(opts: {
       segmentId,
       episodeId,
       Boolean(segMeta.hostDuckingEnabled),
+    );
+  }
+
+  if (segMeta.loudnessTargetingEnabled !== undefined) {
+    updateSegmentLoudnessTargetingEnabled(
+      segmentId,
+      episodeId,
+      Boolean(segMeta.loudnessTargetingEnabled),
+    );
+  }
+
+  if (
+    typeof segMeta.finalGainDb === "number" &&
+    Number.isFinite(segMeta.finalGainDb)
+  ) {
+    updateSegmentFinalGainDb(
+      segmentId,
+      episodeId,
+      Math.min(6, Math.max(-24, segMeta.finalGainDb)),
     );
   }
 

@@ -1,10 +1,17 @@
 import type { EpisodeCreate, EpisodeResponse, EpisodeUpdate, EpisodesResponse } from '@harborfm/shared';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, csrfHeaders } from './client';
+import { normalizeProjectImportError } from '../utils/normalizeProjectImportError';
+import { validateProjectZipFile } from '../utils/validateProjectZip';
+import {
+  uploadProjectZipChunks,
+  type ProjectZipUploadHooks,
+} from '../utils/uploadProjectZipChunks';
 
 const BASE = '/api';
 
 export type { EpisodeCreate, EpisodeResponse, EpisodeUpdate, EpisodesResponse };
 export type Episode = EpisodeResponse;
+export type { ProjectZipUploadHooks };
 
 export function listEpisodes(podcastId: string) {
   return apiGet<EpisodesResponse>(`/podcasts/${podcastId}/episodes`).then((r) => r.episodes);
@@ -60,20 +67,21 @@ export type ProjectImportStatusResponse = {
 export async function startImportEpisodeProject(
   podcastId: string,
   file: File,
+  hooks?: ProjectZipUploadHooks,
 ): Promise<void> {
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch(`${BASE}/podcasts/${podcastId}/episodes/import-project`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: csrfHeaders(),
-    body: form,
-  });
-  if (res.status === 202 || res.status === 409) return;
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? res.statusText);
+  hooks?.onPhase?.('validating');
+  try {
+    await validateProjectZipFile(file, 'episode');
+  } catch (err) {
+    throw new Error(
+      normalizeProjectImportError(err instanceof Error ? err.message : 'Invalid zip'),
+    );
   }
+  await uploadProjectZipChunks(
+    `${BASE}/podcasts/${podcastId}/episodes/import-project/upload`,
+    file,
+    hooks,
+  );
 }
 
 export function getProjectImportStatus(
@@ -101,7 +109,7 @@ export interface EpisodeCastMember {
   photoPath: string | null;
   photoUrl: string | null;
   photoFilename?: string | null;
-  socialLinkText: string | null;
+  socialLinks: string[];
   email: string | null;
   isPublic: boolean;
   createdAt: string;

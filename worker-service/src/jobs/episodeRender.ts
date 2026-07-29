@@ -69,6 +69,11 @@ export async function runEpisodeRenderWorkerJob(opts: {
       inputPath,
       trimRanges: asTrimRanges(o.trimRanges),
       audioEq: asEq(o.audioEq),
+      loudnessTargetingEnabled: o.loudnessTargetingEnabled !== false,
+      finalGainDb:
+        typeof o.finalGainDb === "number" && Number.isFinite(o.finalGainDb)
+          ? o.finalGainDb
+          : 0,
     };
   });
 

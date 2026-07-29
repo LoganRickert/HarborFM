@@ -6,6 +6,7 @@ import {
   writeFileSync,
 } from "fs";
 import { basename, extname, join } from "path";
+import { parseCastSocialLinks } from "@harborfm/shared";
 import { drizzleDb } from "../db/index.js";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { episodes, exports, podcastCast, podcasts, settings } from "../db/schema.js";
@@ -798,7 +799,7 @@ ${channelLink ? `      <link>${escapeXml(channelLink)}</link>\n` : ""}    </imag
         name: podcastCast.name,
         photoPath: podcastCast.photoPath,
         photoUrl: podcastCast.photoUrl,
-        socialLinkText: podcastCast.socialLinkText,
+        socialLinks: podcastCast.socialLinks,
       })
       .from(podcastCast)
       .where(
@@ -831,9 +832,8 @@ ${channelLink ? `      <link>${escapeXml(channelLink)}</link>\n` : ""}    </imag
           img = sanitizeHttpUrl(host.photoUrl);
         }
 
-        const href = host.socialLinkText
-          ? sanitizeHttpUrl(host.socialLinkText)
-          : "";
+        const links = parseCastSocialLinks(host.socialLinks);
+        const href = links[0] ? sanitizeHttpUrl(links[0]) : "";
 
         let attrs = `role="host"`;
         if (href) attrs += ` href="${escapeXml(href)}"`;

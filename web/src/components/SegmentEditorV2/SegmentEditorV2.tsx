@@ -120,7 +120,7 @@ const DEFAULT_VIEW_MS = 60_000;
 const MIN_VIEW_MS = 2_000;
 const LABEL_COL_PX = 168;
 /** Preview playback speeds (toolbar + E cycles through these). */
-const PREVIEW_RATES = [1, 1.5, 2] as const;
+const PREVIEW_RATES = [1, 1.5, 2, 2.5, 3] as const;
 type PreviewRate = (typeof PREVIEW_RATES)[number];
 
 /** Nice ruler intervals (ms), coarsest last. */
@@ -587,7 +587,7 @@ export function SegmentEditorV2({
   /** Actual visible span (matches simple editor TimelineWaveform). Never use
    * viewWindowMs alone when the window is clamped by duration. */
   const visibleWindowMs = Math.max(1, viewEndMs - viewStartMs);
-  viewWindowMsRef.current = visibleWindowMs;
+  viewWindowMsRef.current = viewWindowMs;
 
   const clampViewStart = useCallback(
     (next: number) => {
@@ -597,34 +597,39 @@ export function SegmentEditorV2({
     [durationMs, viewWindowMs],
   );
 
-  // Keep playhead in view when it drifts outside, and during playback pan once
-  // it crosses the right 90% of the view (same rule as the simple editor).
-  // Skipped when the user has panned/scrolled away on purpose.
+  // Page-scroll follow while playing: playhead walks across a fixed view; when it
+  // hits the right edge, jump so the playhead is near the left (Resolve-style).
+  // Re-enabled on play / seek / scrub; disabled when the user pans or scrolls away.
   useEffect(() => {
     if (scrubbingRef.current || panningRef.current || !followPlayheadRef.current) {
       return;
     }
-    const win = visibleWindowMs;
+    const win = viewWindowMs;
     if (win <= 1) return;
 
+    if (isPlaying) {
+      if (playheadMs > viewEndMs || playheadMs < viewStartMs) {
+        const next = clampViewStart(playheadMs - win * 0.05);
+        if (Math.abs(next - viewStartMs) >= 1) setViewStartMs(next);
+      }
+      return;
+    }
+
+    // Idle: only snap if the playhead left the visible range (e.g. mix scrub).
     if (playheadMs < viewStartMs) {
       const next = clampViewStart(playheadMs - win * 0.1);
       if (Math.abs(next - viewStartMs) >= 1) setViewStartMs(next);
       return;
     }
-
-    const pastRightEdge = playheadMs > viewEndMs;
-    const nearRightEdge = isPlaying && playheadMs >= viewStartMs + 0.9 * win;
-    if (!pastRightEdge && !nearRightEdge) return;
-
-    const next = clampViewStart(playheadMs - win * 0.1);
-    if (Math.abs(next - viewStartMs) < 1) return;
-    setViewStartMs(next);
+    if (playheadMs > viewEndMs) {
+      const next = clampViewStart(playheadMs - win * 0.9);
+      if (Math.abs(next - viewStartMs) >= 1) setViewStartMs(next);
+    }
   }, [
     playheadMs,
     viewStartMs,
     viewEndMs,
-    visibleWindowMs,
+    viewWindowMs,
     isPlaying,
     clampViewStart,
   ]);
@@ -792,7 +797,7 @@ export function SegmentEditorV2({
         const dx = e.clientX - pan.startX;
         if (Math.abs(dx) > 3) {
           pan.moved = true;
-          // User is navigating away; stop auto-centering on the playhead.
+          // User is navigating away; stop page-scrolling with the playhead.
           followPlayheadRef.current = false;
         }
         const el = tracksColRef.current;
@@ -2049,7 +2054,7 @@ export function SegmentEditorV2({
                     }
                     onClick={cyclePlaybackRate}
                     disabled={busy || segment.recordFailed || !clips.length}
-                    title="Cycle preview speed (E): 1x, 1.5x, 2x"
+                    title="Cycle preview speed (E): 1x, 1.5x, 2x, 2.5x, 3x"
                     aria-label={`Playback speed ${playbackRate}x`}
                   >
                     {playbackRate}x
@@ -2123,6 +2128,8 @@ export function SegmentEditorV2({
                         data={mixWaveform}
                         durationSec={mixDurationSec}
                         currentTime={playheadMs / 1000}
+                        overviewWindowStartSec={viewStartMs / 1000}
+                        overviewWindowEndSec={viewEndMs / 1000}
                         onSeek={handleSeekSec}
                         onPlayPause={togglePlay}
                         onScrubStart={handleMixScrubStart}

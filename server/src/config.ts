@@ -125,6 +125,28 @@ function envPositiveInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : fallback;
 }
 
+/** Project/segment import upload chunk size (MB). Env: PROJECT_IMPORT_CHUNK_MB. Default 50. */
+export const PROJECT_IMPORT_CHUNK_MB = envPositiveInt(
+  "PROJECT_IMPORT_CHUNK_MB",
+  50,
+);
+export const PROJECT_IMPORT_CHUNK_BYTES =
+  PROJECT_IMPORT_CHUNK_MB * 1024 * 1024;
+
+/**
+ * Max accepted project-import chunk body (MB). Defaults to chunk size + 1; never below that.
+ * Env: PROJECT_IMPORT_CHUNK_BODY_LIMIT_MB.
+ */
+export const PROJECT_IMPORT_CHUNK_BODY_LIMIT_MB = Math.max(
+  envPositiveInt(
+    "PROJECT_IMPORT_CHUNK_BODY_LIMIT_MB",
+    PROJECT_IMPORT_CHUNK_MB + 1,
+  ),
+  PROJECT_IMPORT_CHUNK_MB + 1,
+);
+export const PROJECT_IMPORT_CHUNK_BODY_LIMIT =
+  PROJECT_IMPORT_CHUNK_BODY_LIMIT_MB * 1024 * 1024;
+
 /**
  * Max single-shot worker file upload body (MB). Prefer chunked uploads.
  * Env: WORKER_FILE_BODY_LIMIT_MB. Default 8192 (8 GiB).
@@ -423,11 +445,11 @@ export const MEETING_INVITE_RATE_LIMIT_WINDOW_MS =
 export const MEETING_INVITE_RATE_LIMIT_MAX =
   Number(process.env.MEETING_INVITE_RATE_LIMIT_MAX) || 5;
 
-/** Render rate limit: min ms between "Make Final Episode" requests per user. 0 = no limit (e.g. for e2e). Env: RENDER_RATE_LIMIT_WINDOW_MS. Default 60000 (1 min). */
+/** Render rate limit: min ms between "Make Final Episode" requests per user. 0 = no limit (e.g. for e2e). Env: RENDER_RATE_LIMIT_WINDOW_MS. Default 30000 (30s). */
 export const RENDER_RATE_LIMIT_WINDOW_MS =
   process.env.RENDER_RATE_LIMIT_WINDOW_MS !== undefined
     ? Number(process.env.RENDER_RATE_LIMIT_WINDOW_MS)
-    : 60_000;
+    : 30_000;
 
 /** Import project/segment/Reaper rate limit: min ms between imports per user. 0 = no limit (e.g. for e2e). Env: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS. Default 30000. */
 export const IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS =

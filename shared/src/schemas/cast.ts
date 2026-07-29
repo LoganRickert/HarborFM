@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  CAST_SOCIAL_LINKS_MAX,
+  normalizeCastSocialLinks,
+} from '../castSocialLinks.js';
 
 const emptyStringToNull = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (v === '' ? null : v), schema);
@@ -7,12 +11,31 @@ const nullableOptionalString = emptyStringToNull(z.string().nullable().optional(
 
 export const castRoleSchema = z.enum(['host', 'guest']);
 
+/** Validates and normalizes a socialLinks array (required present). */
+const socialLinksArraySchema = z
+  .array(z.string())
+  .max(CAST_SOCIAL_LINKS_MAX)
+  .transform((arr) => normalizeCastSocialLinks(arr))
+  .pipe(
+    z
+      .array(
+        z
+          .string()
+          .url({ error: 'Enter a valid URL (https://...)' })
+          .max(2000),
+      )
+      .max(CAST_SOCIAL_LINKS_MAX),
+  );
+
 export const castCreateSchema = z.object({
   name: z.string().min(1, { error: 'Name is required' }),
   role: castRoleSchema,
   description: nullableOptionalString,
   photoUrl: emptyStringToNull(z.string().nullable().optional()),
-  socialLinkText: nullableOptionalString,
+  socialLinks: z.preprocess(
+    (v) => (v === undefined || v === null ? [] : v),
+    socialLinksArraySchema,
+  ),
   /** Private invite email; backend only, not shown on public feeds. */
   email: emptyStringToNull(
     z
@@ -29,10 +52,12 @@ export const castCreateSchema = z.object({
  * applies .default() for omitted keys (isPublic: 1), which can flip private cast public.
  */
 export const castUpdateSchema = castCreateSchema
-  .omit({ isPublic: true })
+  .omit({ isPublic: true, socialLinks: true })
   .partial()
   .extend({
     isPublic: z.union([z.literal(0), z.literal(1)]).optional(),
+    /** Omitted = leave unchanged; present (including []) = replace. */
+    socialLinks: socialLinksArraySchema.optional(),
   });
 
 export const castResponseSchema = z.object({
@@ -43,7 +68,7 @@ export const castResponseSchema = z.object({
   description: z.string().nullable(),
   photoPath: z.string().nullable(),
   photoUrl: z.string().nullable(),
-  socialLinkText: z.string().nullable(),
+  socialLinks: z.array(z.string()),
   email: z.string().nullable(),
   isPublic: z.union([z.literal(0), z.literal(1)]),
   createdAt: z.string(),

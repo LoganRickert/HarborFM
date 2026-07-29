@@ -1,8 +1,17 @@
 # Changelog
 
+## v1.24.0 - 7-28-2026
+
+- **Show cast social links:** Cast members can have multiple social / profile URLs (reorderable in the edit dialog). Public feed and themes show platform icons when the host is recognized (Facebook, X, Instagram, Patreon, TikTok, YouTube, Discord). Themes keep `url` (first link) and gain `urls` plus `links` with `icon_url`. RSS `<podcast:person href>` still uses the first link.
+- **Meeting reminders:** The 4-hour reminder now also goes to the host who scheduled the call, not only emailed invitees.
+- **Loudness Targeting (per segment):** Manage Segment can disable loudness targeting for a section (for example music or beds). Generate Final Episode still uses one loudnorm on the full mix when every included segment allows it or the global target is 0; otherwise it loudnorms only opted-in segments, then concatenates. When targeting is disabled, a Final gain slider (-24..+6 dB) applies fixed gain on Generate Final (not loudnorm).
+- **Project / segment import:** Large project and segment zips upload in ~50 MiB chunks (no practical single-request size cap behind nginx). The browser validates zip structure (`harborfm-project.json` and required folders) before upload. Oversized single-shot uploads show a clear message instead of "request file too large".
+- **Advanced editor:** Preview speed cycles through 1x, 1.5x, 2x, 2.5x, and 3x (toolbar + E).
+- **Advanced editor:** Timeline view page-scrolls with the playhead while preview is playing (playhead walks across the view, then jumps left when it hits the right edge; pan away to unlock; play or seek re-enables follow).
+
 ## v1.23.0 - 7-28-2026
 
-- **Compute workers:** Settings > Compute Workers adds a **Build Multi-Track Segment** toggle. Advanced editor Remake and post-recording multi-track remakes can run on remote workers via a shared `@harborfm/segment-remake` mixer (same local fallback as other offloads).
+- **Compute workers:** Settings > Compute Workers adds a **Build Multi-Track Segment** toggle. Advanced editor Remake, post-recording remakes, Import Segment / project import, Reaper and OTIO import, and Restore Original Mix can run on remote workers via a shared `@harborfm/segment-remake` mixer (same local fallback as other offloads).
 
 ## v1.22.0 - 7-27-2026
 
