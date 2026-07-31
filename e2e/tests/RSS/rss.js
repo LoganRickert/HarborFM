@@ -68,5 +68,63 @@ export async function run({ runOne }) {
     })
   );
 
+  results.push(
+    await runOne('RSS preview emits YouTube podcast:contentLink and dedupes manual link', async () => {
+      const youtubeHref = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+      const episode = await createEpisode(jar, podcast.id, {
+        title: 'E2E YouTube ContentLink Ep',
+        status: 'draft',
+      });
+      const patchRes = await apiFetch(`/episodes/${episode.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'published',
+          publishAt: null,
+          youtubeUrl: youtubeHref,
+          contentLinks: [
+            { href: youtubeHref, text: 'Duplicate YouTube' },
+            { href: 'https://example.com/extra', text: 'Extra link' },
+          ],
+        }),
+      }, jar);
+      if (patchRes.status !== 200) {
+        throw new Error(`PATCH episode failed: ${patchRes.status} ${await patchRes.text()}`);
+      }
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/rss-preview`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const text = await res.text();
+
+      const youtubeTag =
+        `<podcast:contentLink href="${youtubeHref}">Watch on YouTube</podcast:contentLink>`;
+      if (!text.includes(youtubeTag)) {
+        throw new Error(`Expected auto YouTube contentLink, missing from:\n${text.slice(0, 3000)}`);
+      }
+      if (text.includes('Duplicate YouTube')) {
+        throw new Error('Expected duplicate manual YouTube contentLink to be suppressed');
+      }
+      if (
+        !text.includes(
+          '<podcast:contentLink href="https://example.com/extra">Extra link</podcast:contentLink>',
+        )
+      ) {
+        throw new Error('Expected other manual contentLinks to remain');
+      }
+
+      const youtubeMatches = text.match(
+        new RegExp(
+          `<podcast:contentLink href="${youtubeHref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`,
+          'g',
+        ),
+      );
+      if (!youtubeMatches || youtubeMatches.length !== 1) {
+        throw new Error(
+          `Expected exactly one YouTube contentLink href, got ${youtubeMatches?.length ?? 0}`,
+        );
+      }
+    })
+  );
+
   return results;
 }

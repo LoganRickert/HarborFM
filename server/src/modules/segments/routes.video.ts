@@ -393,6 +393,9 @@ export async function registerVideoRoutes(app: FastifyInstance) {
             const chapters = options.chapterTitle
               ? parseVideoChaptersFromFinalMarkers(episode?.finalMarkers)
               : undefined;
+            const episodeTitle = options.chapterTitle
+              ? (episode?.title ?? "").trim() || undefined
+              : undefined;
             const videoOpts = {
               imagePath: imagePathForVideo,
               audioPath,
@@ -409,6 +412,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
               color: options.color,
               chapterTitle: options.chapterTitle,
               chapters,
+              episodeTitle,
             };
             const runLocalVideo = () =>
               generateEpisodeVideo(podcastId, episodeId, videoOpts).then(
@@ -437,6 +441,7 @@ export async function registerVideoRoutes(app: FastifyInstance) {
                   color: options.color,
                   chapterTitle: options.chapterTitle,
                   chapters,
+                  episodeTitle,
                 },
                 subject: resolveWorkerJobSubject({
                   podcastId,

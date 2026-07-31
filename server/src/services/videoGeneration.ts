@@ -62,6 +62,8 @@ export interface GenerateVideoOptions {
   };
   /** Chapters for title overlay (from episode finalMarkers). */
   chapters?: Array<{ startTime: number; title: string }>;
+  /** Episode title shown in the overlay before the first chapter marker. */
+  episodeTitle?: string;
 }
 
 /**
@@ -105,6 +107,7 @@ export async function generateEpisodeVideo(
     color: options.color,
     chapterTitle: options.chapterTitle,
     chapters: options.chapters,
+    episodeTitle: options.episodeTitle,
     tools: {
       ffmpegPath: FFMPEG_PATH,
       ffprobePath: FFPROBE_PATH,

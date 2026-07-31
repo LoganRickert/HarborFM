@@ -104,6 +104,7 @@ import * as m102 from "./migrations/102_segment_loudness_targeting.js";
 import * as m103 from "./migrations/103_podcast_cast_social_links.js";
 import * as m104 from "./migrations/104_dial_in_call_logs.js";
 import * as m105 from "./migrations/105_segment_final_gain.js";
+import * as m106 from "./migrations/106_episodes_youtube_url.js";
 import { syncServerThemesFromDisk } from "../modules/themes/builtins.js";
 
 const migrations = [
@@ -212,6 +213,7 @@ const migrations = [
   { name: "103_podcast_cast_social_links", ...m103 },
   { name: "104_dial_in_call_logs", ...m104 },
   { name: "105_segment_final_gain", ...m105 },
+  { name: "106_episodes_youtube_url", ...m106 },
 ];
 
 const MIGRATIONS_TABLE = `

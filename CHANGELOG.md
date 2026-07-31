@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.25.0 - 7-30-2026
+
+- **Episode transcript:** Download SRT and Download TXT from the Episode Transcript dialog. TXT is plain spoken text (no timestamps), matching how transcript text is fed to LLM metadata prompts.
+
 ## v1.24.0 - 7-28-2026
 
 - **Show cast social links:** Cast members can have multiple social / profile URLs (reorderable in the edit dialog). Public feed and themes show platform icons when the host is recognized (Facebook, X, Instagram, Patreon, TikTok, YouTube, Discord). Themes keep `url` (first link) and gain `urls` plus `links` with `icon_url`. RSS `<podcast:person href>` still uses the first link.

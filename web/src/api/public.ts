@@ -85,6 +85,7 @@ export interface PublicEpisode {
   audioDurationSec: number | null;
   audioUrl: string | null;
   videoUrl?: string | null;
+  youtubeUrl?: string | null;
   srtUrl?: string | null;
   subscriberOnly?: boolean;
   subscriberOnlyStartsAt?: string | null;
@@ -250,6 +251,7 @@ function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
     audioDurationSec: r.audio_duration_sec != null ? Number(r.audio_duration_sec) : null,
     audioUrl: r.audio_url != null ? String(r.audio_url) : null,
     videoUrl: (r.video_url as string | null) ?? null,
+    youtubeUrl: r.youtube_url != null ? String(r.youtube_url) : null,
     srtUrl: r.srt_url != null ? String(r.srt_url) : null,
     subscriberOnly: r.subscriber_only === 1 || r.subscriber_only === true,
     subscriberOnlyStartsAt:

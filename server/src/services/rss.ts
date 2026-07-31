@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from "fs";
 import { basename, extname, join } from "path";
-import { parseCastSocialLinks } from "@harborfm/shared";
+import { isYouTubeVideoUrl, parseCastSocialLinks } from "@harborfm/shared";
 import { drizzleDb } from "../db/index.js";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { episodes, exports, podcastCast, podcasts, settings } from "../db/schema.js";
@@ -1187,12 +1187,27 @@ ${emailRaw ? `      <itunes:email>${email}</itunes:email>\n` : ""}    </itunes:o
           /* ignore */
         }
       }
+
+      const youtubeRaw = (ep as { youtubeUrl?: string | null }).youtubeUrl;
+      const youtubeHref =
+        typeof youtubeRaw === "string" && isYouTubeVideoUrl(youtubeRaw)
+          ? sanitizeHttpUrl(youtubeRaw)
+          : "";
+      const emittedHrefs = new Set<string>();
+
+      if (youtubeHref) {
+        out += `      <podcast:contentLink href="${escapeXml(youtubeHref)}">Watch on YouTube</podcast:contentLink>\n`;
+        emittedHrefs.add(youtubeHref);
+      }
+
       for (const link of contentLinks) {
         const href = sanitizeHttpUrl(link.href);
         if (!href) continue;
+        if (emittedHrefs.has(href)) continue;
         const textRaw = typeof link.text === "string" ? link.text.trim() : "";
         const text = textRaw || href;
         out += `      <podcast:contentLink href="${escapeXml(href)}">${escapeXml(text)}</podcast:contentLink>\n`;
+        emittedHrefs.add(href);
       }
     }
     // Podcast 2.0 More-tab metadata (txt, socialInteract, location, license, image, funding, chat, value)

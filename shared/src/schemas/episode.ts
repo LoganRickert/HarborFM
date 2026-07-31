@@ -24,6 +24,44 @@ const emptyStringToNull = <T extends z.ZodType>(schema: T) =>
 const nullableOptionalUrl = emptyStringToNull(z.string().url().nullable().optional());
 const nullableOptionalString = emptyStringToNull(z.string().nullable().optional());
 
+/** True when the URL is a supported YouTube watch/short/embed/youtu.be video link. */
+export function isYouTubeVideoUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    let id: string | null = null;
+    if (host === 'youtu.be') {
+      id = parsed.pathname.split('/').filter(Boolean)[0] ?? null;
+    } else if (
+      host === 'youtube.com' ||
+      host === 'm.youtube.com' ||
+      host === 'music.youtube.com'
+    ) {
+      if (parsed.pathname.startsWith('/embed/')) {
+        id = parsed.pathname.split('/')[2] ?? null;
+      } else if (parsed.pathname.startsWith('/shorts/')) {
+        id = parsed.pathname.split('/')[2] ?? null;
+      } else {
+        id = parsed.searchParams.get('v');
+      }
+    }
+    return Boolean(id && /^[a-zA-Z0-9_-]{6,}$/.test(id));
+  } catch {
+    return false;
+  }
+}
+
+const nullableOptionalYouTubeUrl = emptyStringToNull(
+  z
+    .string()
+    .url()
+    .nullable()
+    .optional()
+    .refine((v) => v == null || isYouTubeVideoUrl(v), {
+      message: 'Must be a valid YouTube video URL',
+    }),
+);
+
 export const episodeTypeSchema = z.enum(['full', 'trailer', 'bonus']).nullable().optional();
 export const episodeStatusSchema = z.enum(['draft', 'scheduled', 'published']);
 
@@ -82,6 +120,7 @@ const episodeCreateObjectSchema = z.object({
   status: episodeStatusSchema.default('draft'),
   artworkUrl: nullableOptionalUrl,
   episodeLink: nullableOptionalUrl,
+  youtubeUrl: nullableOptionalYouTubeUrl,
   guidIsPermalink: z.union([z.literal(0), z.literal(1)]).default(0),
 });
 
@@ -178,6 +217,7 @@ export const episodeResponseSchema = z.object({
   audioBytes: z.number().nullable(),
   audioDurationSec: z.number().nullable(),
   episodeLink: z.string().nullable(),
+  youtubeUrl: z.string().nullable().optional(),
   guidIsPermalink: z.union([z.literal(0), z.literal(1)]),
   createdAt: z.string(),
   updatedAt: z.string(),

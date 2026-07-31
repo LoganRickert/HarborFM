@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronDown, ChevronUp, Play, Pencil, Trash2, Plus, TriangleAlert } from 'lucide-react';
+import { ChevronDown, ChevronUp, Play, Pencil, Trash2, Plus, TriangleAlert, Copy, Check } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { formatTimeInput, parseTimeInput } from './utils';
@@ -39,6 +39,35 @@ function clampPlayheadTime(playheadTimeSec: number | undefined, maxTimeSec: numb
   if (!Number.isFinite(t) || t < 0) return 0;
   if (maxTimeSec > 0 && t > maxTimeSec) return Math.floor(maxTimeSec);
   return t;
+}
+
+/** YouTube chapter timestamps use whole seconds as M:SS or H:MM:SS. */
+function formatYouTubeChapterTime(sec: number): string {
+  const t = Math.max(0, Math.floor(Number.isFinite(sec) ? sec : 0));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  const ss = String(s).padStart(2, '0');
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${ss}`;
+  return `${m}:${ss}`;
+}
+
+/**
+ * Build a YouTube description chapter block.
+ * YouTube requires the first timestamp to be 0:00, so an Intro line is prepended when needed.
+ */
+function formatYouTubeChapters(markers: ChapterMarker[]): string {
+  const sorted = [...markers].sort((a, b) => a.time - b.time);
+  const lines: string[] = [];
+  const first = sorted[0];
+  if (!first || Math.floor(first.time) > 0) {
+    lines.push('0:00 Intro');
+  }
+  for (const m of sorted) {
+    const title = (m.title ?? '').trim() || 'Untitled';
+    lines.push(`${formatYouTubeChapterTime(m.time)} ${title}`);
+  }
+  return lines.join('\n');
 }
 
 function ChapterEditDialog({
@@ -258,8 +287,20 @@ export function ChaptersCard({
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
+  const [chaptersCopied, setChaptersCopied] = useState(false);
 
   const sortedMarkers = [...markers].sort((a, b) => a.time - b.time);
+
+  async function handleCopyChapters() {
+    const text = formatYouTubeChapters(sortedMarkers);
+    try {
+      await navigator.clipboard.writeText(text);
+      setChaptersCopied(true);
+      window.setTimeout(() => setChaptersCopied(false), 1200);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const handleSaveEdit = (m: ChapterMarker) => {
     if (editIndex === null) return;
@@ -414,8 +455,18 @@ export function ChaptersCard({
                 ))}
               </tbody>
             </table>
-            {canEdit && (
-              <div className={styles.chaptersAddBtnWrap}>
+            <div className={styles.chaptersAddBtnWrap}>
+              <button
+                type="button"
+                className={styles.chaptersCopyBtn}
+                onClick={() => void handleCopyChapters()}
+                aria-label={chaptersCopied ? 'Copied' : 'Copy chapters for YouTube'}
+                title={chaptersCopied ? 'Copied' : 'Copy chapters for YouTube'}
+              >
+                {chaptersCopied ? <Check size={18} strokeWidth={2} aria-hidden /> : <Copy size={18} strokeWidth={2} aria-hidden />}
+                {chaptersCopied ? 'Copied' : 'Copy Chapters'}
+              </button>
+              {canEdit && (
                 <button
                   type="button"
                   className={styles.chaptersAddBtn}
@@ -425,8 +476,8 @@ export function ChaptersCard({
                   <Plus size={18} strokeWidth={2} aria-hidden />
                   Add Chapter
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>

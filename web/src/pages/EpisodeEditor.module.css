@@ -2065,7 +2065,10 @@
 .chaptersAddBtnWrap {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
   margin-top: 0.75rem;
 }
 
@@ -2088,6 +2091,32 @@
 .chaptersAddBtn:hover {
   background: color-mix(in srgb, var(--accent) 90%, white);
   box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.chaptersCopyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.chaptersCopyBtn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.chaptersCopyBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .chapterEditLabel {
@@ -4034,6 +4063,16 @@
   align-items: center;
   gap: 0.5rem;
 }
+@media (max-width: 640px) {
+  .episodeTranscriptUploadRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .episodeTranscriptUploadBtn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .episodeTranscriptUploadBtn {
   display: inline-flex;
   align-items: center;
@@ -4050,9 +4089,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.episodeTranscriptUploadBtn:hover {
+.episodeTranscriptUploadBtn:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--bg-elevated);
+}
+.episodeTranscriptUploadBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .dialogActions {
   display: flex;
@@ -7268,4 +7311,146 @@ a.manageSegmentAction .manageSegmentActionHint {
   color: var(--text);
   border-color: var(--text-muted);
   background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.thumbnailDialogContent {
+  max-width: 480px;
+}
+
+.thumbnailSetting {
+  margin-top: 0.5rem;
+}
+
+/* Overrides the shared Stripe segmented control so it sits beside the label. */
+.thumbnailSetting .thumbnailSegmented {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.thumbnailSetting .thumbnailSegmentedBtn {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.thumbnailOptions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.625rem;
+  margin-top: 0.25rem;
+}
+
+.thumbnailOption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 0.5rem 0.75rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.thumbnailOption:hover:not(:disabled) {
+  border-color: var(--accent, var(--border));
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+}
+
+.thumbnailOption:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.thumbnailOptionActive {
+  border-color: var(--accent, var(--border));
+  background: var(--bg-elevated);
+}
+
+.thumbnailPreviewFrame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 92px;
+}
+
+.thumbnailPreview {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background-color: #000;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+.thumbnailPreview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.15));
+}
+
+.thumbnailPreviewLandscape {
+  width: min(116px, 100%);
+  aspect-ratio: 16 / 9;
+}
+
+.thumbnailPreviewPortrait {
+  height: 92px;
+  aspect-ratio: 9 / 16;
+}
+
+.thumbnailPreviewSquare {
+  width: min(84px, 100%);
+  aspect-ratio: 1 / 1;
+}
+
+.thumbnailOptionLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.thumbnailOptionHint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .thumbnailOptions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .thumbnailOption {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    text-align: left;
+  }
+  .thumbnailPreviewFrame {
+    width: auto;
+    height: 56px;
+    flex-shrink: 0;
+  }
+  .thumbnailPreviewLandscape {
+    width: 96px;
+  }
+  .thumbnailPreviewPortrait {
+    height: 56px;
+  }
+  .thumbnailPreviewSquare {
+    width: 56px;
+  }
+  .thumbnailOptionHint {
+    margin-left: auto;
+  }
 }

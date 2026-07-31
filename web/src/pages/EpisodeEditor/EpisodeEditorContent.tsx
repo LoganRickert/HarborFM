@@ -871,6 +871,15 @@ export function EpisodeEditorContent({
 
       <GenerateFinalBar
         episodeId={id}
+        podcastId={podcastId}
+        episodeTitle={episode.title}
+        podcastCoverUrl={
+          podcast?.artworkUrl
+            ? podcast.artworkUrl
+            : podcast?.artworkFilename && podcastId
+              ? `/api/podcasts/${podcastId}/artwork/${encodeURIComponent(podcast.artworkFilename)}`
+              : null
+        }
         segmentCount={segments.filter((s) => !s.disabled).length}
         onBuild={() => renderMutation.mutate()}
         isBuilding={renderMutation.isPending || renderStatus?.status === 'building'}

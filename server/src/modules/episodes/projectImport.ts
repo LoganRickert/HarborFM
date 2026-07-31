@@ -105,6 +105,7 @@ type EpisodeProjectJson = {
   episodeType?: string | null;
   explicit?: boolean | null;
   episodeLink?: string | null;
+  youtubeUrl?: string | null;
   artworkUrl?: string | null;
   subscriberOnly?: boolean | null;
   subscriberOnlyStartsAt?: string | null;
@@ -215,6 +216,7 @@ export async function importProjectZip(
       status: "draft",
       artworkUrl: episodeData.artworkUrl ?? null,
       episodeLink: episodeData.episodeLink ?? null,
+      youtubeUrl: episodeData.youtubeUrl ?? null,
       guidIsPermalink: false,
       subscriberOnly: Boolean(episodeData.subscriberOnly),
       subscriberOnlyStartsAt: episodeData.subscriberOnlyStartsAt ?? null,

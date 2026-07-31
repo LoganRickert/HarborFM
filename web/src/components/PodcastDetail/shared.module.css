@@ -1013,6 +1013,10 @@ textarea.input:disabled {
   gap: 0.5rem;
 }
 
+.overviewToggleBlock {
+  margin-top: 0.5rem;
+}
+
 .advancedFields {
   margin-top: 0;
   margin-bottom: 1rem;

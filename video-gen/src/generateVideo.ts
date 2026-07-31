@@ -447,6 +447,7 @@ function chapterAtTime(
   chapters: VideoChapterMarker[],
   t: number,
   durationSec: number,
+  episodeTitle?: string,
 ): { index: number; start: number; end: number; title: string } | null {
   if (chapters.length === 0) return null;
   let idx = -1;
@@ -454,7 +455,17 @@ function chapterAtTime(
     if ((chapters[i]?.startTime ?? Infinity) <= t) idx = i;
     else break;
   }
-  if (idx < 0) return null;
+  if (idx < 0) {
+    const first = chapters[0]!;
+    const title = (episodeTitle ?? "").trim();
+    if (!title || first.startTime <= 0) return null;
+    return {
+      index: 0,
+      start: 0,
+      end: first.startTime,
+      title,
+    };
+  }
   const current = chapters[idx]!;
   const next = chapters[idx + 1];
   const end = next != null ? next.startTime : durationSec;
@@ -545,6 +556,8 @@ export async function generateVideoToPath(opts: {
   color?: string;
   chapterTitle?: VideoChapterTitleLayout;
   chapters?: VideoChapterMarker[];
+  /** Episode title shown before the first chapter marker. */
+  episodeTitle?: string;
   /** Optional binary paths; defaults to ffmpeg/ffprobe/audiowaveform on PATH. */
   tools?: Partial<VideoGenTools>;
 }): Promise<string> {
@@ -593,6 +606,7 @@ export async function generateVideoToPath(opts: {
   const waveY = Math.max(0, Math.min(yPx, VIDEO_HEIGHT - vizHeight));
 
   const chapters = (opts.chapters ?? []).slice().sort((a, b) => a.startTime - b.startTime);
+  const episodeTitle = (opts.episodeTitle ?? "").trim() || undefined;
   const chapterTitleLayout = opts.chapterTitle;
   const titleEnabled =
     chapterTitleLayout != null &&
@@ -789,12 +803,13 @@ export async function generateVideoToPath(opts: {
 
   const drawTitle = (t: number) => {
     if (!titleEnabled) return;
-    const chapter = chapterAtTime(chapters, t, durationSec);
+    const chapter = chapterAtTime(chapters, t, durationSec, episodeTitle);
     if (chapter == null) return;
 
     const padX = Math.max(2, Math.round(titleW * 0.02));
     const textMaxW = Math.max(1, titleW - padX * 2);
-    const label = `${chapter.index}. ${chapter.title}`;
+    const label =
+      chapter.index > 0 ? `${chapter.index}. ${chapter.title}` : chapter.title;
     ctx.font = titleFont;
     ctx.fillStyle = lineColor;
     ctx.textAlign = "left";
@@ -878,6 +893,7 @@ export async function runVideoJob(opts: {
     color: asOptionalString(params.color),
     chapterTitle: parseChapterTitleLayout(params.chapterTitle),
     chapters: parseVideoChapters(params.chapters),
+    episodeTitle: asOptionalString(params.episodeTitle)?.trim() || undefined,
     tools: opts.tools,
   });
 }

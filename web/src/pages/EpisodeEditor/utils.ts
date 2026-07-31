@@ -21,6 +21,7 @@ export interface EpisodeForm {
   explicit: boolean;
   episodeType: 'full' | 'trailer' | 'bonus' | '';
   episodeLink: string;
+  youtubeUrl: string;
   guidIsPermalink: boolean;
   subscriberOnly: boolean;
   subscriberOnlyStartsAt: string;
@@ -168,6 +169,7 @@ export function episodeToForm(episode: Episode): EpisodeForm {
     explicit: !!episode.explicit,
     episodeType: (episode.episodeType as 'full' | 'trailer' | 'bonus') || 'full',
     episodeLink: episode.episodeLink ?? '',
+    youtubeUrl: episode.youtubeUrl ?? '',
     guidIsPermalink: episode.guidIsPermalink === 1,
     subscriberOnly: !!(episode.subscriberOnly),
     subscriberOnlyStartsAt: episode.subscriberOnlyStartsAt
@@ -380,6 +382,7 @@ export function formToApiPayload(form: EpisodeForm) {
     publishAt: form.publishAt ? new Date(form.publishAt).toISOString() : null,
     expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
     episodeLink: form.episodeLink || null,
+    youtubeUrl: form.youtubeUrl || null,
     guidIsPermalink: form.guidIsPermalink ? 1 : 0,
     subscriberOnly: form.subscriberOnly ? 1 : 0,
     subscriberOnlyStartsAt: form.subscriberOnlyStartsAt

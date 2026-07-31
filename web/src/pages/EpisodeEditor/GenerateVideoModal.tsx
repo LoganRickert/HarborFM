@@ -543,7 +543,7 @@ export function GenerateVideoModal({
                       onClick={() => setTitleEnabled(false)}
                       disabled={isGenerating}
                     >
-                      Remove title
+                      Remove Title
                     </button>
                   ) : (
                     <button
@@ -556,7 +556,7 @@ export function GenerateVideoModal({
                       disabled={isGenerating || !hasChapters}
                       title={!hasChapters ? 'Add chapters to the episode first' : undefined}
                     >
-                      Add chapter title
+                      Add Chapter Title
                     </button>
                   )}
                 </div>

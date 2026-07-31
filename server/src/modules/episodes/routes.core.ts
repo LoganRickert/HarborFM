@@ -167,6 +167,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         status: data.status ?? "draft",
         artworkUrl: data.artworkUrl ?? null,
         episodeLink: data.episodeLink ?? null,
+        youtubeUrl: data.youtubeUrl ?? null,
         guidIsPermalink: Boolean(data.guidIsPermalink),
       };
       try {
@@ -450,6 +451,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           data.episodeLink === ""
             ? null
             : data.episodeLink,
+        youtubeUrl:
+          data.youtubeUrl === ""
+            ? null
+            : data.youtubeUrl,
         guidIsPermalink: data.guidIsPermalink,
         subscriberOnly: data.subscriberOnly,
         subscriberOnlyStartsAt: data.subscriberOnlyStartsAt,

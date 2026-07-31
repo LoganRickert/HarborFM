@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { Play, Pause } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -24,6 +24,7 @@ import { getSiteDisplayName } from '../utils/siteBranding';
 import { isLiquidFeedTheme } from '../utils/feedTheme';
 import { useFeedAudioPlayer } from '../hooks/useFeedAudioPlayer';
 import { WaveformCanvas } from './EpisodeEditor/WaveformCanvas';
+import { youtubeEmbedUrl } from '../utils/episodeFileLinks';
 import {
   FeedSiteHeader,
   FeedBreadcrumbs,
@@ -206,8 +207,14 @@ export function FeedEpisode({
     : '';
 
   const scheduledNotReleased = Boolean(episode?.scheduledNotReleased);
+  const videosHidden =
+    scheduledNotReleased || podcast?.feedShowVideos === false;
+  const youtubeEmbed =
+    !videosHidden && episode?.youtubeUrl
+      ? youtubeEmbedUrl(episode.youtubeUrl)
+      : null;
   const videoUrlRaw =
-    scheduledNotReleased || podcast?.feedShowVideos === false
+    videosHidden || youtubeEmbed
       ? null
       : (episode?.privateVideoUrl ?? episode?.videoUrl ?? null);
   const videoUrl =
@@ -218,6 +225,44 @@ export function FeedEpisode({
         : videoUrlRaw.startsWith('/')
           ? videoUrlRaw
           : `${origin}/${videoUrlRaw}`;
+
+  const renderEpisodeVideo = useCallback(() => {
+    if (youtubeEmbed && episode) {
+      return (
+        <div className={styles.videoWrap}>
+          <iframe
+            className={styles.youtubeEmbed}
+            src={youtubeEmbed}
+            title={`YouTube video for ${episode.title}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      );
+    }
+    if (!videoUrl || !episode) return null;
+    return (
+      <div className={styles.videoWrap}>
+        <FeedVideoPlayer
+          key={videoUrl}
+          src={videoUrl}
+          poster={
+            episode.artworkUrl
+              ? episode.artworkUrl
+              : episode.artworkFilename
+                ? `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`
+                : podcast?.artworkUrl
+                  ? podcast.artworkUrl
+                  : podcast?.artworkFilename
+                    ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`
+                    : undefined
+          }
+          ariaLabel={`Video for ${episode.title}`}
+          className={styles.video}
+        />
+      </div>
+    );
+  }, [youtubeEmbed, videoUrl, episode, podcast]);
 
   const liquidActions = useMemo((): HarborfmActionHandlers | undefined => {
     if (!useLiquidLayout || !podcast || !episode) return undefined;
@@ -276,27 +321,7 @@ export function FeedEpisode({
           <FeedEpisodePoll podcastSlug={podcastSlug} episodeSlug={episodeSlug} />
         </FeedEpisodeHeader>
 
-        {videoUrl && (
-          <div className={styles.videoWrap}>
-            <FeedVideoPlayer
-              key={videoUrl}
-              src={videoUrl}
-              poster={
-                episode.artworkUrl
-                  ? episode.artworkUrl
-                  : episode.artworkFilename
-                    ? `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`
-                    : podcast.artworkUrl
-                      ? podcast.artworkUrl
-                      : podcast.artworkFilename
-                        ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`
-                        : undefined
-              }
-              ariaLabel={`Video for ${episode.title}`}
-              className={styles.video}
-            />
-          </div>
-        )}
+        {renderEpisodeVideo()}
 
         {audioUrl && !audioLoadFailed && (
           <div className={styles.player}>
@@ -454,7 +479,7 @@ export function FeedEpisode({
     embedCode,
     currentTime,
     seekAndPlay,
-    videoUrl,
+    renderEpisodeVideo,
     audioUrl,
     audioLoadFailed,
     hasWaveform,
@@ -604,27 +629,7 @@ export function FeedEpisode({
               <FeedEpisodePoll podcastSlug={podcastSlug} episodeSlug={episodeSlug} />
             </FeedEpisodeHeader>
 
-            {videoUrl && (
-              <div className={styles.videoWrap}>
-                <FeedVideoPlayer
-                  key={videoUrl}
-                  src={videoUrl}
-                  poster={
-                    episode.artworkUrl
-                      ? episode.artworkUrl
-                      : episode.artworkFilename
-                        ? `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`
-                        : podcast.artworkUrl
-                          ? podcast.artworkUrl
-                          : podcast.artworkFilename
-                            ? `/api/public/artwork/${podcast.id}/${encodeURIComponent(podcast.artworkFilename)}`
-                            : undefined
-                  }
-                  ariaLabel={`Video for ${episode.title}`}
-                  className={styles.video}
-                />
-              </div>
-            )}
+            {renderEpisodeVideo()}
 
             {audioUrl && !audioLoadFailed && (
               <div className={styles.player}>

@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Upload } from 'lucide-react';
+import { X, Upload, Download } from 'lucide-react';
 import { getEpisodeTranscript, updateEpisodeTranscript } from '../../api/segments';
 import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
+import { parseSrt } from '../../components/SegmentModal/utils/srt';
 import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeTranscriptModalProps {
@@ -12,6 +13,30 @@ export interface EpisodeTranscriptModalProps {
   onClose: () => void;
   /** If false, transcript is read-only (view only). */
   canEdit: boolean;
+}
+
+function downloadTextFile(content: string, filename: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+/** Plain spoken text only (no indices/timestamps), matching LLM metadata feed. */
+function plainTranscriptText(srtOrText: string): string {
+  const raw = srtOrText.replace(/\r\n/g, '\n').trim();
+  if (!raw) return '';
+  const entries = parseSrt(raw);
+  if (entries.length === 0) return raw;
+  return entries
+    .map((e) => e.text.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
 }
 
 export function EpisodeTranscriptModal({
@@ -88,6 +113,23 @@ export function EpisodeTranscriptModal({
 
   const hasChanges = canEdit && text != null && editValue !== text;
   const isSaving = updateMutation.isPending;
+  const sourceText = canEdit ? editValue : (text ?? '');
+  const canDownload = sourceText.trim().length > 0;
+
+  const handleDownloadSrt = () => {
+    if (!canDownload) return;
+    downloadTextFile(sourceText, 'transcript.srt', 'application/x-subrip;charset=utf-8');
+  };
+
+  const handleDownloadTxt = () => {
+    if (!canDownload) return;
+    downloadTextFile(
+      plainTranscriptText(sourceText),
+      'transcript.txt',
+      'text/plain;charset=utf-8',
+    );
+  };
+
   const {
     confirmOpen,
     requestClose,
@@ -96,6 +138,32 @@ export function EpisodeTranscriptModal({
     handleDiscard,
     dialogContentProps,
   } = useDialogCloseGuard({ isDirty: hasChanges, onClose });
+
+  const downloadButtons = (
+    <>
+      <button
+        type="button"
+        className={styles.episodeTranscriptUploadBtn}
+        onClick={handleDownloadSrt}
+        disabled={!canDownload}
+        aria-label="Download SRT file"
+      >
+        <Download size={18} strokeWidth={2} aria-hidden />
+        Download SRT
+      </button>
+      <button
+        type="button"
+        className={styles.episodeTranscriptUploadBtn}
+        onClick={handleDownloadTxt}
+        disabled={!canDownload}
+        aria-label="Download TXT file"
+        title="Plain spoken text with no timestamps"
+      >
+        <Download size={18} strokeWidth={2} aria-hidden />
+        Download TXT
+      </button>
+    </>
+  );
 
   return (
     <Dialog.Root open onOpenChange={onOpenChange}>
@@ -118,7 +186,7 @@ export function EpisodeTranscriptModal({
               : 'View the transcript for the final episode. Only owners and editors can edit.'}
           </Dialog.Description>
           <div className={styles.episodeTranscriptBody}>
-            {loading && <p className={styles.episodeTranscriptStatus}>Loading…</p>}
+            {loading && <p className={styles.episodeTranscriptStatus}>Loading...</p>}
             {error && (
               <div className={styles.episodeTranscriptErrorWrap}>
                 <p className={styles.episodeTranscriptError} role="alert">{error}</p>
@@ -145,6 +213,7 @@ export function EpisodeTranscriptModal({
                         <Upload size={18} strokeWidth={2} aria-hidden />
                         Upload SRT file
                       </button>
+                      {downloadButtons}
                     </div>
                     <textarea
                       ref={transcriptRef}
@@ -158,7 +227,12 @@ export function EpisodeTranscriptModal({
                     />
                   </>
                 ) : (
-                  <pre className={styles.transcriptText}>{text ?? '(empty)'}</pre>
+                  <>
+                    <div className={styles.episodeTranscriptUploadRow}>
+                      {downloadButtons}
+                    </div>
+                    <pre className={styles.transcriptText}>{text ?? '(empty)'}</pre>
+                  </>
                 )}
                 {canEdit && (
                   <div className={`${styles.dialogActions} ${styles.episodeTranscriptDialogActions}`}>
@@ -178,7 +252,7 @@ export function EpisodeTranscriptModal({
                       disabled={isSaving || !hasChanges}
                       aria-label="Save transcript"
                     >
-                      {isSaving ? 'Saving…' : 'Save'}
+                      {isSaving ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                 )}

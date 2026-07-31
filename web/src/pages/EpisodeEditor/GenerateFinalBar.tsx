@@ -13,6 +13,7 @@ import {
   BarChart3,
   FolderArchive,
   Paperclip,
+  Images,
 } from 'lucide-react';
 import {
   downloadEpisodeUrl,
@@ -30,6 +31,7 @@ import { ChaptersCard } from './ChaptersCard';
 import { SoundbitesCard } from './SoundbitesCard';
 import { PollsDialog } from './PollsDialog';
 import { EpisodeFilesDialog } from './EpisodeFilesDialog';
+import { DownloadThumbnailsDialog } from './DownloadThumbnailsDialog';
 import { CollapsiblePublishPanel } from './CollapsiblePublishPanel';
 import { ActionTile } from './ActionTile';
 import type { PublishFormFields } from './EpisodePublishControls';
@@ -37,6 +39,9 @@ import styles from '../EpisodeEditor.module.css';
 
 export interface GenerateFinalBarProps {
   episodeId: string;
+  podcastId?: string;
+  episodeTitle?: string;
+  podcastCoverUrl?: string | null;
   /** When false, Episode Files tile is shown disabled with a permissions info tip. */
   canUploadEpisodeFiles?: boolean;
   segmentCount: number;
@@ -76,6 +81,9 @@ export interface GenerateFinalBarProps {
 
 export function GenerateFinalBar({
   episodeId,
+  podcastId,
+  episodeTitle = '',
+  podcastCoverUrl = null,
   canUploadEpisodeFiles = false,
   segmentCount,
   onBuild,
@@ -123,6 +131,7 @@ export function GenerateFinalBar({
   const [soundbitesExpanded, setSoundbitesExpanded] = useState(false);
   const [pollsOpen, setPollsOpen] = useState(false);
   const [episodeFilesOpen, setEpisodeFilesOpen] = useState(false);
+  const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
 
   const waveformCacheKey = finalUpdatedAt ?? episodeId ?? '';
   const waveformUrl =
@@ -535,6 +544,16 @@ export function GenerateFinalBar({
               : 'You need Episode Files permission to use this. Ask an admin to enable Can Upload Episode Files on your account.'
           }
         />
+        {podcastId && (
+          <ActionTile
+            icon={<Images size={22} strokeWidth={1.75} aria-hidden />}
+            label="Download Thumbnails"
+            color="amber"
+            onClick={() => setThumbnailsOpen(true)}
+            active={thumbnailsOpen}
+            infoText="Generate landscape, portrait, or square episode thumbnails from the podcast cover and cast photos."
+          />
+        )}
         {showDownloadMp3 && (
           <ActionTile
             icon={<Download size={22} strokeWidth={1.75} aria-hidden />}
@@ -616,6 +635,16 @@ export function GenerateFinalBar({
           open={episodeFilesOpen}
           onOpenChange={setEpisodeFilesOpen}
           readOnly={metadataReadOnly || readOnly}
+        />
+      )}
+      {podcastId && (
+        <DownloadThumbnailsDialog
+          open={thumbnailsOpen}
+          onOpenChange={setThumbnailsOpen}
+          podcastId={podcastId}
+          episodeId={episodeId}
+          episodeTitle={episodeTitle}
+          podcastCoverUrl={podcastCoverUrl}
         />
       )}
     </div>

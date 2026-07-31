@@ -2440,6 +2440,7 @@ export function SegmentEditorV2({
                             <button
                               type="button"
                               className={styles.timelineTrimRemoveBtn}
+                              onPointerDown={(e) => e.stopPropagation()}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleRemoveTrim(i);

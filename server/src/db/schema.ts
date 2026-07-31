@@ -210,6 +210,7 @@ export const episodes = sqliteTable(
     audioDurationSec: integer("audio_duration_sec"),
     slug: text("slug"),
     episodeLink: text("episode_link"),
+    youtubeUrl: text("youtube_url"),
     guidIsPermalink: integer("guid_is_permalink", { mode: "boolean" }).default(false),
     createdAt: text("created_at").notNull().default(sqlNow()),
     updatedAt: text("updated_at").notNull().default(sqlNow()),

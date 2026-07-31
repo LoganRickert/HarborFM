@@ -376,7 +376,7 @@ export function EpisodeDetailsForm({
           </label>
         </div>
         {form.status !== 'draft' ? (
-          <div className={styles.overviewFieldBlock}>
+          <div className={`${styles.overviewFieldBlock} ${styles.overviewToggleBlock}`}>
             <label className="toggle" aria-describedby="episode-overview-unlisted-desc">
               <input
                 type="checkbox"
@@ -494,6 +494,19 @@ export function EpisodeDetailsForm({
             />
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
               URL to this episode's web page (optional)
+            </p>
+          </label>
+          <label className={styles.label}>
+            YouTube video link
+            <input
+              type="url"
+              value={form.youtubeUrl}
+              onChange={(e) => setForm((prev) => ({ ...prev, youtubeUrl: e.target.value }))}
+              className={styles.input}
+              placeholder="e.g. https://www.youtube.com/watch?v=..."
+            />
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '0' }}>
+              If set, the public episode page embeds this YouTube video instead of HarborFM video, and it is added as a Podcast 2.0 content link.
             </p>
           </label>
         </div>

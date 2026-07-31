@@ -233,6 +233,7 @@ async function buildZipToPath(
       episodeType: episode.episodeType,
       explicit: episode.explicit,
       episodeLink: episode.episodeLink,
+      youtubeUrl: episode.youtubeUrl,
       artworkUrl: episode.artworkUrl,
       subscriberOnly: episode.subscriberOnly,
       subscriberOnlyStartsAt: episode.subscriberOnlyStartsAt,

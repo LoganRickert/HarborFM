@@ -329,6 +329,12 @@ export function publicEpisodeDto(
       hasVideo && allowPublicAudio
         ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}/video`
         : null,
+    youtube_url:
+      allowPublicAudio &&
+      typeof row.youtubeUrl === "string" &&
+      row.youtubeUrl.trim()
+        ? String(row.youtubeUrl).trim()
+        : null,
     srt_url:
       opts.podcastSlug && allowPublicSrt
         ? `/${API_PREFIX}/public/podcasts/${encodeURIComponent(opts.podcastSlug)}/episodes/${encodeURIComponent(String(row.slug))}/transcript.srt`
