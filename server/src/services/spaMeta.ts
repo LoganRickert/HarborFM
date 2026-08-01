@@ -275,6 +275,7 @@ export function resolveSpaMetaForRequest(
       ? {
           appleWebAppTitle: podcastTitle,
           appleTouchIcon: podcastCover,
+          favicon: podcastCover,
         }
       : {};
 

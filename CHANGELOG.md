@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.26.2 - 8-1-2026
+
+- **Custom domain favicon:** Crawler HTML on managed/custom domains now sets `rel="icon"` to the podcast cover (same as apple-touch-icon), so Google Search no longer picks the HarborFM logo from the SPA shell.
+
 ## v1.26.1 - 8-1-2026
 
 - **Public feed episode list:** Cards prefer the episode subtitle for the blurb (description when subtitle is empty) and show square episode cover art when present (beside title and blurb on desktop; beside the title row only on mobile).

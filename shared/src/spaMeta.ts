@@ -4,6 +4,8 @@ export type SpaPageMeta = {
   siteName: string;
   url: string;
   image: string;
+  /** Site favicon URL (custom/managed domains; crawler HTML). */
+  favicon?: string;
   /** iOS home-screen title (custom/managed domain installs). */
   appleWebAppTitle?: string;
   /** iOS home-screen icon URL (custom/managed domain installs). */
@@ -76,6 +78,29 @@ function setLinkHref(html: string, rel: string, href: string): string {
   );
 }
 
+function faviconTypeForUrl(url: string): string | null {
+  const path = url.split('?')[0]?.toLowerCase() ?? '';
+  if (path.endsWith('.png')) return 'image/png';
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
+  if (path.endsWith('.webp')) return 'image/webp';
+  if (path.endsWith('.svg')) return 'image/svg+xml';
+  if (path.endsWith('.ico')) return 'image/x-icon';
+  return null;
+}
+
+/** Rewrite or insert `rel="icon"`, adjusting `type` to match the URL. */
+function setIconLink(html: string, href: string): string {
+  const escaped = escapeHtmlAttr(href);
+  const type = faviconTypeForUrl(href);
+  const typeAttr = type ? ` type="${type}"` : '';
+  const tag = `<link rel="icon"${typeAttr} href="${escaped}" />`;
+  const pattern = /<link\s+[^>]*\brel=["']icon["'][^>]*>/i;
+  if (pattern.test(html)) {
+    return html.replace(pattern, tag);
+  }
+  return html.replace('</head>', `${tag}\n</head>`);
+}
+
 /** Inject podcast/episode meta into the SPA index.html shell (for crawlers and view-source). */
 export function injectSpaMetaHtml(html: string, meta: SpaPageMeta): string {
   const description = truncateMetaDescription(meta.description);
@@ -96,6 +121,9 @@ export function injectSpaMetaHtml(html: string, meta: SpaPageMeta): string {
   out = setMetaContent(out, 'name', 'twitter:description', description);
   out = setMetaContent(out, 'name', 'twitter:image', meta.image);
 
+  if (meta.favicon) {
+    out = setIconLink(out, meta.favicon);
+  }
   if (meta.appleWebAppTitle) {
     out = setMetaContent(
       out,
