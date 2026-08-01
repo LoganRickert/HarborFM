@@ -70,6 +70,8 @@ export const publicEpisodeSchema = z.object({
   podcastId: z.string(),
   title: z.string(),
   slug: z.string(),
+  /** itunes:subtitle; used as list blurb when present. */
+  subtitle: z.string().nullable().optional(),
   description: z.string(),
   guid: z.string(),
   seasonNumber: z.number().nullable(),

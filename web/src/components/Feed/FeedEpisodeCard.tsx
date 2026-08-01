@@ -3,7 +3,7 @@ import { ArrowRight, Lock } from 'lucide-react';
 import { FeedEpisodeCardProps } from '../../types/feed';
 import { FeedEpisodePlayer } from './FeedEpisodePlayer';
 import { formatDate, formatDuration, formatSeasonEpisode } from '../../utils/format';
-import { PublicEpisodeWithAuth } from '../../api/public';
+import { getPublicEpisodeCoverUrl, PublicEpisodeWithAuth } from '../../api/public';
 import styles from './FeedEpisodeCard.module.css';
 
 export function FeedEpisodeCard({
@@ -28,11 +28,14 @@ export function FeedEpisodeCard({
   const episodeType = String(episode.episodeType ?? '').toLowerCase();
   const typeAttr =
     episodeType === 'trailer' || episodeType === 'bonus' ? episodeType : undefined;
+  const coverUrl = getPublicEpisodeCoverUrl(episode);
+  const blurb = (episode.subtitle?.trim() || episode.description?.trim() || '');
 
   const className = [
     styles.episode,
     plain ? styles.episodePlain : '',
     isSubscriberOnly ? styles.episodeSubscriberOnly : '',
+    coverUrl ? styles.episodeWithCover : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -55,6 +58,11 @@ export function FeedEpisodeCard({
           {episodeType === 'trailer' ? 'Trailer' : 'Bonus'}
         </span>
       )}
+      {coverUrl ? (
+        <div className={styles.cover} data-harborfm-episode-item-cover>
+          <img src={coverUrl} alt="" className={styles.coverImg} />
+        </div>
+      ) : null}
       <div className={styles.header} data-harborfm-episode-item-header>
         <div className={styles.headerContent}>
           <h3 className={styles.title} data-harborfm-episode-item-title>
@@ -87,13 +95,13 @@ export function FeedEpisodeCard({
           <ArrowRight size={14} strokeWidth={2.5} />
         </Link>
       </div>
-      {showDescription && episode.description && (
+      {showDescription && blurb ? (
         <p className={styles.description} data-harborfm-episode-item-description>
-          {episode.description}
+          {blurb}
         </p>
-      )}
+      ) : null}
       {showPlayer && hasAudio ? (
-        <div data-harborfm-episode-item-player>
+        <div className={styles.playerSlot} data-harborfm-episode-item-player>
           <FeedEpisodePlayer
             episode={episode}
             podcastSlug={podcastSlug}
@@ -104,7 +112,7 @@ export function FeedEpisodeCard({
         </div>
       ) : scheduledNotReleased && !hasAudio ? (
         <div
-          className={styles.lockedCard}
+          className={`${styles.lockedCard} ${styles.playerSlot}`}
           aria-label="Scheduled for future release"
           data-harborfm-episode-item-locked
         >
@@ -115,7 +123,7 @@ export function FeedEpisodeCard({
         </div>
       ) : isSubscriberOnly && !hasAudio ? (
         <div
-          className={styles.lockedCard}
+          className={`${styles.lockedCard} ${styles.playerSlot}`}
           aria-label="Subscriber only"
           data-harborfm-episode-item-locked
         >
@@ -124,7 +132,7 @@ export function FeedEpisodeCard({
         </div>
       ) : showPlayer && !hasAudio ? (
         <div
-          className={styles.noAudioCard}
+          className={`${styles.noAudioCard} ${styles.playerSlot}`}
           aria-label="No audio"
           data-harborfm-episode-item-no-audio
         >

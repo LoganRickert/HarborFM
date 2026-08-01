@@ -309,6 +309,10 @@ export function publicEpisodeDto(
     podcast_id: row.podcastId,
     title: row.title,
     slug: row.slug,
+    subtitle:
+      typeof row.subtitle === "string" && row.subtitle.trim()
+        ? row.subtitle.trim()
+        : null,
     description,
     guid: row.guid,
     season_number: row.seasonNumber ?? null,

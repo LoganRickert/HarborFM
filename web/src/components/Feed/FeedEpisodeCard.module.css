@@ -7,6 +7,69 @@
   padding: 1rem 1.25rem;
 }
 
+.episodeWithCover {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'cover headerContent viewBtn'
+    'cover description description'
+    'player player player';
+  column-gap: 1rem;
+  row-gap: 0.5rem;
+  align-items: start;
+}
+
+.cover {
+  grid-area: cover;
+  width: 5.5rem;
+  height: 5.5rem;
+  aspect-ratio: 1;
+  align-self: start;
+  justify-self: start;
+  overflow: hidden;
+  border-radius: calc(var(--radius) * 0.6);
+  background: var(--bg-muted);
+}
+
+.coverImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.episodeWithCover .header {
+  display: contents;
+}
+
+.episodeWithCover .headerContent {
+  grid-area: headerContent;
+  min-width: 0;
+}
+
+.episodeWithCover .viewBtn {
+  grid-area: viewBtn;
+  align-self: start;
+}
+
+.episodeWithCover .description {
+  grid-area: description;
+  margin-top: 0;
+}
+
+.episodeWithCover .playerSlot {
+  grid-area: player;
+}
+
+.episodeWithCover .playerSlot.lockedCard,
+.episodeWithCover .playerSlot.noAudioCard {
+  margin-top: 0.25rem;
+}
+
+.episodePlain.episodeWithCover .cover {
+  border-radius: 2px;
+}
+
 .episode:hover {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent-glow);
@@ -239,5 +302,19 @@
 
   .viewBtn {
     width: 100%;
+  }
+
+  .episodeWithCover {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'cover headerContent'
+      'viewBtn viewBtn'
+      'description description'
+      'player player';
+  }
+
+  .episodeWithCover .cover {
+    width: 3.75rem;
+    height: 3.75rem;
   }
 }

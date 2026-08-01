@@ -71,6 +71,8 @@ export interface PublicEpisode {
   podcastId: string;
   title: string;
   slug: string;
+  /** itunes:subtitle; preferred list blurb when present. */
+  subtitle?: string | null;
   description: string;
   guid: string;
   seasonNumber: number | null;
@@ -237,6 +239,7 @@ function toPublicEpisode(r: Record<string, unknown>): PublicEpisode {
     podcastId: String(r.podcast_id ?? ''),
     title: String(r.title ?? ''),
     slug: String(r.slug ?? ''),
+    subtitle: r.subtitle != null && String(r.subtitle).trim() ? String(r.subtitle).trim() : null,
     description: String(r.description ?? ''),
     guid: String(r.guid ?? ''),
     seasonNumber: r.season_number != null ? Number(r.season_number) : null,
@@ -296,6 +299,20 @@ export function getPublicPodcastArtworkUrl(podcast: {
   return null;
 }
 
+/** Episode cover only (no podcast artwork fallback). */
+export function getPublicEpisodeCoverUrl(episode: {
+  artworkUrl?: string | null;
+  artworkFilename?: string | null;
+  id: string;
+  podcastId: string;
+}): string | null {
+  if (episode.artworkUrl) return episode.artworkUrl;
+  if (episode.artworkFilename) {
+    return `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`;
+  }
+  return null;
+}
+
 export function getPublicEpisodeArtworkUrl(
   episode: {
     artworkUrl?: string | null;
@@ -309,11 +326,7 @@ export function getPublicEpisodeArtworkUrl(
     id: string;
   },
 ): string | null {
-  if (episode.artworkUrl) return episode.artworkUrl;
-  if (episode.artworkFilename) {
-    return `/api/public/artwork/${episode.podcastId}/episodes/${episode.id}/${encodeURIComponent(episode.artworkFilename)}`;
-  }
-  return getPublicPodcastArtworkUrl(podcast);
+  return getPublicEpisodeCoverUrl(episode) ?? getPublicPodcastArtworkUrl(podcast);
 }
 
 export function getPublicConfig() {

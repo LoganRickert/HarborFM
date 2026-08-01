@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.26.1 - 8-1-2026
+
+- **Public feed episode list:** Cards prefer the episode subtitle for the blurb (description when subtitle is empty) and show square episode cover art when present (beside title and blurb on desktop; beside the title row only on mobile).
+
 ## v1.26.0 - 7-31-2026
 
 - **Episode Archive:** Configure one archive destination per show (Archive Settings in the show header, reusing delivery destination types).
