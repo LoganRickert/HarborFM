@@ -14,10 +14,13 @@ import {
   podcastStatsEpisodeDaily,
   podcastStatsEpisodeListensDaily,
   podcastStatsEpisodeLocationDaily,
+  podcastStatsListenDedup,
+  podcastStatsRetentionReach,
   podcastStatsRssDaily,
   podcasts,
   users,
 } from "../../db/schema.js";
+import { RETENTION_BUCKETS } from "../../services/podcastStats.js";
 import { isUniqueViolation, sqlNow } from "../../db/utils.js";
 import {
   isAdmin,
@@ -455,7 +458,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         tags: ["Podcasts"],
         summary: "Get podcast analytics",
         description:
-          "Returns listen and episode analytics for a show. Optional startDate, endDate (YYYY-MM-DD in the server local timezone), limit, and offset filter and paginate daily stats. When both dates are omitted, defaults to the last 14 local calendar days including today.",
+          "Returns download and audience analytics for a show. Optional startDate, endDate (YYYY-MM-DD in the server local timezone), limit, and offset filter and paginate daily stats. When both dates are omitted, defaults to the last 14 local calendar days including today.",
         params: {
           type: "object",
           properties: { id: { type: "string" } },
@@ -683,6 +686,114 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         }
         episode_listens_daily.push(...listensQuery.all());
       }
+
+      // Unique listeners = distinct client keys with a download in range.
+      let unique_listeners = 0;
+      const unique_listeners_by_episode: Array<{
+        episode_id: string;
+        unique_listeners: number;
+      }> = [];
+      if (episodeIds.length > 0) {
+        const totalRow = drizzleDb
+          .select({
+            n: sql<number>`count(DISTINCT ${podcastStatsListenDedup.clientKey})`.as(
+              "n",
+            ),
+          })
+          .from(podcastStatsListenDedup)
+          .where(
+            and(
+              inArray(podcastStatsListenDedup.episodeId, episodeIds),
+              ...(startDate !== undefined && endDate !== undefined
+                ? [
+                    gte(podcastStatsListenDedup.statDate, startDate),
+                    lte(podcastStatsListenDedup.statDate, endDate),
+                  ]
+                : []),
+            ),
+          )
+          .get();
+        unique_listeners = Number(totalRow?.n ?? 0);
+
+        const perEp = drizzleDb
+          .select({
+            episode_id: podcastStatsListenDedup.episodeId,
+            unique_listeners:
+              sql<number>`count(DISTINCT ${podcastStatsListenDedup.clientKey})`.as(
+                "unique_listeners",
+              ),
+          })
+          .from(podcastStatsListenDedup)
+          .where(
+            and(
+              inArray(podcastStatsListenDedup.episodeId, episodeIds),
+              ...(startDate !== undefined && endDate !== undefined
+                ? [
+                    gte(podcastStatsListenDedup.statDate, startDate),
+                    lte(podcastStatsListenDedup.statDate, endDate),
+                  ]
+                : []),
+            ),
+          )
+          .groupBy(podcastStatsListenDedup.episodeId)
+          .all();
+        unique_listeners_by_episode.push(
+          ...perEp.map((r) => ({
+            episode_id: r.episode_id,
+            unique_listeners: Number(r.unique_listeners ?? 0),
+          })),
+        );
+      }
+
+      // Website retention: clients reaching each decile / clients at bucket 0.
+      const retention_by_episode: Array<{
+        episode_id: string;
+        buckets: Array<{ bucket: number; clients: number; pct: number }>;
+      }> = [];
+      if (episodeIds.length > 0) {
+        const reachRows = drizzleDb
+          .select({
+            episode_id: podcastStatsRetentionReach.episodeId,
+            bucket: podcastStatsRetentionReach.bucket,
+            clients: sql<number>`count(DISTINCT ${podcastStatsRetentionReach.clientKey})`.as(
+              "clients",
+            ),
+          })
+          .from(podcastStatsRetentionReach)
+          .where(
+            and(
+              inArray(podcastStatsRetentionReach.episodeId, episodeIds),
+              ...(startDate !== undefined && endDate !== undefined
+                ? [
+                    gte(podcastStatsRetentionReach.statDate, startDate),
+                    lte(podcastStatsRetentionReach.statDate, endDate),
+                  ]
+                : []),
+            ),
+          )
+          .groupBy(
+            podcastStatsRetentionReach.episodeId,
+            podcastStatsRetentionReach.bucket,
+          )
+          .all();
+
+        const byEp = new Map<string, Map<number, number>>();
+        for (const row of reachRows) {
+          if (!byEp.has(row.episode_id)) byEp.set(row.episode_id, new Map());
+          byEp.get(row.episode_id)!.set(row.bucket, Number(row.clients ?? 0));
+        }
+        for (const [episodeId, bucketMap] of byEp) {
+          const starters = bucketMap.get(0) ?? 0;
+          const buckets = RETENTION_BUCKETS.map((bucket) => {
+            const clients = bucketMap.get(bucket) ?? 0;
+            const pct =
+              starters > 0 ? Math.round((clients / starters) * 1000) / 10 : 0;
+            return { bucket, clients, pct };
+          });
+          retention_by_episode.push({ episode_id: episodeId, buckets });
+        }
+      }
+
       if (podcast.ownerReadOnly === 1 && episode_location_daily.length > 0) {
         const distinctLocations = [
           ...new Set(episode_location_daily.map((r) => r.location)),
@@ -701,6 +812,19 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episode_daily,
         episode_location_daily,
         episode_listens_daily,
+        unique_listeners,
+        unique_listeners_by_episode,
+        retention_by_episode,
+        methodology: {
+          downloads:
+            "Unique valid audio downloads of about one minute or more (250 KB), at most one per client per episode per day. Bots and tiny Range probes are excluded from human Downloads charts.",
+          unique_listeners:
+            "Distinct clients (IP + User-Agent + Accept-Language) with at least one Download in the selected date range.",
+          feed_health:
+            "RSS feed fetches. Directory crawlers are invalid traffic for Downloads; shown separately under Feed health.",
+          retention:
+            "Website player playhead reach by decile on the HarborFM site or theme player.",
+        },
       };
     },
   );

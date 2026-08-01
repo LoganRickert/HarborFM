@@ -35,6 +35,7 @@ import {
 } from "../../services/multitrackRemake.js";
 import { remakeMixWithOptionalWorker } from "../../services/segmentRemakeWorker.js";
 import { sha256FileSync } from "../../utils/hash.js";
+import { tryCopyValidatedWaveform } from "../../utils/waveform.js";
 import { waveformPath } from "../segments/utils.js";
 import {
   addUserDiskBytes,
@@ -196,8 +197,19 @@ export async function applySegmentFolderOntoExisting(opts: {
       ) {
         needSegmentWaveformRegen = true;
       } else {
-        copyFileSync(wavSrc, waveformPath(dest));
-        bytesAdded += statSync(waveformPath(dest)).size;
+        if (
+          tryCopyValidatedWaveform(wavSrc, waveformPath(dest), {
+            expectedDurationSec:
+              typeof segMeta.durationSec === "number" &&
+              segMeta.durationSec > 0
+                ? segMeta.durationSec
+                : undefined,
+          })
+        ) {
+          bytesAdded += statSync(waveformPath(dest)).size;
+        } else {
+          needSegmentWaveformRegen = true;
+        }
       }
     } else {
       needSegmentWaveformRegen = true;

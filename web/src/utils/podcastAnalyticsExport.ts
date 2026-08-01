@@ -20,15 +20,19 @@ type LongRow = {
 };
 
 const METRIC_DEFINITIONS = {
-  feedCheckIns:
-    'RSS feed fetches. Listeners are human clients; Crawlers are bots and directory polls.',
-  episodeRequests:
-    'Full-file or 250 KB+ audio requests. Tiny probes are excluded. Listeners are human; Crawlers are bots.',
-  listens:
-    'Unique listener downloads of 250 KB or more (at most one per client per episode per day).',
-  requestsByLocation: 'Episode requests broken down by location (when available).',
+  downloads:
+    'Unique valid audio downloads of about one minute or more (250 KB), at most one per client per episode per day. Bots and tiny Range probes are excluded from human Downloads.',
+  uniqueListeners:
+    'Distinct clients (IP + User-Agent + Accept-Language) with at least one Download in the selected date range.',
+  feedHealth:
+    'RSS feed fetches. Directory crawlers are invalid traffic for Downloads; shown separately under Feed health.',
+  rawAudioFetches:
+    'Full-file or 250 KB+ audio requests before daily dedup. Tiny probes are excluded.',
+  downloadsByLocation: 'Human Downloads broken down by location (when available).',
   listeners: 'Human clients (human_count).',
   crawlers: 'Bots and directory crawlers (bot_count).',
+  retention:
+    'Website player playhead reach by decile on the HarborFM site or theme player.',
 } as const;
 
 const CSV_COLUMNS = [
@@ -107,33 +111,33 @@ function episodeTitleMap(analytics: PodcastAnalytics): Map<string, string> {
 
 function buildOverviewRows(analytics: PodcastAnalytics): Array<{
   date: string;
-  feed_check_ins: number;
-  episode_requests: number;
-  listens: number;
+  downloads: number;
+  raw_fetches: number;
+  feed_listeners: number;
 }> {
-  const byDate: Record<string, { feed: number; requests: number; listens: number }> = {};
+  const byDate: Record<string, { feed: number; requests: number; downloads: number }> = {};
   for (const row of analytics.rssDaily) {
     const d = row.statDate;
-    if (!byDate[d]) byDate[d] = { feed: 0, requests: 0, listens: 0 };
+    if (!byDate[d]) byDate[d] = { feed: 0, requests: 0, downloads: 0 };
     byDate[d].feed += row.humanCount;
   }
   for (const row of analytics.episodeDaily) {
     const d = row.statDate;
-    if (!byDate[d]) byDate[d] = { feed: 0, requests: 0, listens: 0 };
+    if (!byDate[d]) byDate[d] = { feed: 0, requests: 0, downloads: 0 };
     byDate[d].requests += row.humanCount;
   }
   for (const row of analytics.episodeListensDaily) {
     const d = row.statDate;
-    if (!byDate[d]) byDate[d] = { feed: 0, requests: 0, listens: 0 };
-    byDate[d].listens += row.humanCount;
+    if (!byDate[d]) byDate[d] = { feed: 0, requests: 0, downloads: 0 };
+    byDate[d].downloads += row.humanCount;
   }
   return Object.entries(byDate)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, v]) => ({
       date,
-      feed_check_ins: v.feed,
-      episode_requests: v.requests,
-      listens: v.listens,
+      downloads: v.downloads,
+      raw_fetches: v.requests,
+      feed_listeners: v.feed,
     }));
 }
 
@@ -145,7 +149,7 @@ function buildLongRows(
   const titles = episodeTitleMap(analytics);
   const rows: LongRow[] = [];
 
-  for (const [field, value] of Object.entries(buildExportMeta(podcast, range))) {
+  for (const [field, value] of Object.entries(buildExportMeta(podcast, range, analytics))) {
     rows.push({
       table: 'meta',
       date: field,
@@ -173,7 +177,7 @@ function buildLongRows(
 
   for (const row of analytics.rssDaily) {
     rows.push({
-      table: 'feed_check_ins',
+      table: 'feed_health',
       date: row.statDate,
       episode_id: '',
       episode_title: '',
@@ -186,7 +190,7 @@ function buildLongRows(
 
   for (const row of analytics.episodeDaily) {
     rows.push({
-      table: 'episode_requests',
+      table: 'raw_audio_fetches',
       date: row.statDate,
       episode_id: row.episodeId,
       episode_title: titles.get(row.episodeId) ?? '',
@@ -199,7 +203,7 @@ function buildLongRows(
 
   for (const row of analytics.episodeListensDaily) {
     rows.push({
-      table: 'episode_listens',
+      table: 'downloads',
       date: row.statDate,
       episode_id: row.episodeId,
       episode_title: titles.get(row.episodeId) ?? '',
@@ -212,7 +216,7 @@ function buildLongRows(
 
   for (const row of analytics.episodeLocationDaily) {
     rows.push({
-      table: 'requests_by_location',
+      table: 'downloads_by_location',
       date: row.statDate,
       episode_id: row.episodeId,
       episode_title: titles.get(row.episodeId) ?? '',
@@ -229,6 +233,7 @@ function buildLongRows(
 function buildExportMeta(
   podcast: AnalyticsExportPodcast,
   range: AnalyticsDateRange,
+  analytics?: PodcastAnalytics,
 ): Record<string, string> {
   return {
     podcastId: podcast.id,
@@ -237,10 +242,13 @@ function buildExportMeta(
     startDate: range.startDate,
     endDate: range.endDate,
     exportedAt: new Date().toISOString(),
-    feedCheckIns: METRIC_DEFINITIONS.feedCheckIns,
-    episodeRequests: METRIC_DEFINITIONS.episodeRequests,
-    listens: METRIC_DEFINITIONS.listens,
-    requestsByLocation: METRIC_DEFINITIONS.requestsByLocation,
+    uniqueListenersTotal: String(analytics?.uniqueListeners ?? 0),
+    feedHealth: METRIC_DEFINITIONS.feedHealth,
+    rawAudioFetches: METRIC_DEFINITIONS.rawAudioFetches,
+    downloads: METRIC_DEFINITIONS.downloads,
+    uniqueListeners: METRIC_DEFINITIONS.uniqueListeners,
+    downloadsByLocation: METRIC_DEFINITIONS.downloadsByLocation,
+    retention: METRIC_DEFINITIONS.retention,
     listeners: METRIC_DEFINITIONS.listeners,
     crawlers: METRIC_DEFINITIONS.crawlers,
   };
@@ -281,12 +289,15 @@ export function downloadAnalyticsJson(
   range: AnalyticsDateRange = resolveAnalyticsDateRange(analytics),
 ): void {
   const payload = {
-    meta: buildExportMeta(podcast, range),
+    meta: buildExportMeta(podcast, range, analytics),
     rssDaily: analytics.rssDaily,
     episodes: analytics.episodes,
     episodeDaily: analytics.episodeDaily,
     episodeLocationDaily: analytics.episodeLocationDaily,
     episodeListensDaily: analytics.episodeListensDaily,
+    uniqueListeners: analytics.uniqueListeners,
+    uniqueListenersByEpisode: analytics.uniqueListenersByEpisode,
+    retentionByEpisode: analytics.retentionByEpisode,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   downloadBlob(blob, buildAnalyticsExportFilename(podcast, range, 'json'));
@@ -312,7 +323,7 @@ export async function downloadAnalyticsExcel(
   workbook.creator = 'HarborFM';
   workbook.created = new Date();
 
-  const meta = buildExportMeta(podcast, range);
+  const meta = buildExportMeta(podcast, range, analytics);
   const metaSheet = workbook.addWorksheet('Meta');
   metaSheet.addRow(['Field', 'Value']);
   for (const [field, value] of Object.entries(meta)) {
@@ -331,18 +342,18 @@ export async function downloadAnalyticsExcel(
   episodesSheet.getColumn(3).width = 24;
 
   const overviewSheet = workbook.addWorksheet('Overview');
-  overviewSheet.addRow(['date', 'feed_check_ins', 'episode_requests', 'listens']);
+  overviewSheet.addRow(['date', 'downloads', 'raw_fetches', 'feed_listeners']);
   for (const row of buildOverviewRows(analytics)) {
-    overviewSheet.addRow([row.date, row.feed_check_ins, row.episode_requests, row.listens]);
+    overviewSheet.addRow([row.date, row.downloads, row.raw_fetches, row.feed_listeners]);
   }
   overviewSheet.getColumn(1).width = 14;
-  overviewSheet.getColumn(2).width = 16;
-  overviewSheet.getColumn(3).width = 18;
-  overviewSheet.getColumn(4).width = 12;
+  overviewSheet.getColumn(2).width = 14;
+  overviewSheet.getColumn(3).width = 14;
+  overviewSheet.getColumn(4).width = 14;
 
   const titles = episodeTitleMap(analytics);
 
-  const feedSheet = workbook.addWorksheet('Feed check-ins');
+  const feedSheet = workbook.addWorksheet('Feed health');
   feedSheet.addRow(['date', 'source', 'listeners', 'crawlers']);
   for (const row of analytics.rssDaily) {
     feedSheet.addRow([row.statDate, row.source, row.humanCount, row.botCount]);
@@ -352,7 +363,7 @@ export async function downloadAnalyticsExcel(
   feedSheet.getColumn(3).width = 12;
   feedSheet.getColumn(4).width = 12;
 
-  const requestsSheet = workbook.addWorksheet('Episode requests');
+  const requestsSheet = workbook.addWorksheet('Raw audio fetches');
   requestsSheet.addRow(['date', 'episode_id', 'episode_title', 'source', 'listeners', 'crawlers']);
   for (const row of analytics.episodeDaily) {
     requestsSheet.addRow([
@@ -371,7 +382,7 @@ export async function downloadAnalyticsExcel(
   requestsSheet.getColumn(5).width = 12;
   requestsSheet.getColumn(6).width = 12;
 
-  const listensSheet = workbook.addWorksheet('Episode listens');
+  const listensSheet = workbook.addWorksheet('Downloads');
   listensSheet.addRow(['date', 'episode_id', 'episode_title', 'source', 'listeners', 'crawlers']);
   for (const row of analytics.episodeListensDaily) {
     listensSheet.addRow([
@@ -390,7 +401,7 @@ export async function downloadAnalyticsExcel(
   listensSheet.getColumn(5).width = 12;
   listensSheet.getColumn(6).width = 12;
 
-  const locationSheet = workbook.addWorksheet('Requests by location');
+  const locationSheet = workbook.addWorksheet('Downloads by location');
   locationSheet.addRow([
     'date',
     'episode_id',

@@ -260,7 +260,9 @@ You also have the option to trim the start and end of a segment. You can also re
 
 Once you're finished building your episode, at the bottom you can click "Make Final Episode" and this will generate the final audio file. You can customize the settings, such as mono or stereo, on the site settings page. Whenever you change your podcast and are ready for a new version, just click it again. Once you've generated a final episode, an option to download it will appear so you can upload it to other platforms or share it before publishing.
 
-Editors and above can also use **Download Project** next to the final episode controls. That downloads a zip of the episode (metadata, segment audio, optional multitrack recordings, and library assets used in the episode), plus a short README. Managers and the owner can use **Import Project** on the show's Episodes page to upload that zip and create a **new draft** episode with new ids (handy for backups or editing audio offline). Hand-added segment folders that only contain `audio.mp3` or `audio.wav` are supported; waveforms and hashes regenerate on import when needed.
+Editors and above can also use **Download Project** next to the final episode controls. That downloads a zip of the episode (metadata, segment audio, optional multitrack recordings, and library assets used in the episode), plus a short README. Managers and the owner can use **Import Project** on the show's Episodes page to upload that zip and create a **new draft** episode with new ids (handy for offline edit or cloning). Hand-added segment folders that only contain `audio.mp3` or `audio.wav` are supported; waveforms and hashes regenerate on import when needed.
+
+With **Archive Settings** on the show (one remote destination, same modes as Podcast Delivery), Final Episode also offers **Archive** and **Backup**. **Archive** uploads the project zip, verifies it, then removes local segment files while keeping feed-serving final audio. **Backup** / **Dated Backup** upload without deleting local files; you can restore a listed backup from the Backup dialog. Restore an archived episode from the archived project card without overwriting episode metadata. Details: wiki [Episode archive and backup](https://github.com/loganrickert/harborfm/wiki/Episode-archive-and-backup).
 
 For a single section, open **Manage segment** on the segment row. **Download MP3** saves the trimmed final mix for that section. **Download Segment** downloads a segment project zip (source audio, tracks, and metadata). **Import Segment** uploads a segment zip and overwrites that segment in place (same id and position). Episode **Import Project** will reject a segment zip; use **Import Segment** from the episode editor instead. To drop a multitrack take from the mix, delete its audio file under `recordings/` in the zip and leave `tracks_manifest.json` as-is; import remakes the mix from the remaining tracks.
 
@@ -475,6 +477,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | `MEETING_INVITE_RATE_LIMIT_MAX` | `5` | Max meeting invite creates per user per window. |
 | **Podcast stats** | | |
 | `STATS_FLUSH_INTERVAL_MS` | `60000` | Podcast stats flush interval (ms) |
+| `STATS_DEDUP_RETAIN_DAYS` | `90` | Days to keep listen-dedup and retention-reach keys (Unique listeners / retention) |
 | `LISTEN_THRESHOLD_BYTES` | `256000` | Min bytes requested in one range to count as a listen (250 KB) |
 | **Swagger** | | |
 | `SWAGGER_UI_ROUTE_PREFIX` | (from API_PREFIX) | Swagger UI route (e.g. `/api/docs`) |
@@ -506,6 +509,9 @@ All environment variables supported by the server work the same in Docker. Set t
 | `EPISODE_ALERT_SECRETS_AAD` | `${APP_NAME}-episode-alerts` | AAD for encrypting episode alert destination secrets |
 | **DNS secrets** | | |
 | `DNS_SECRETS_AAD` | `${APP_NAME}-dns` | AAD for encrypted DNS-related secrets (e.g. Cloudflare) |
+| **Export / archive secrets** | | |
+| `EXPORTS_SECRETS_AAD` | `${APP_NAME_SLUG}:exports` | AAD for encrypting Podcast Delivery credentials |
+| `ARCHIVE_SECRETS_AAD` | `${APP_NAME_SLUG}:archive` | AAD for encrypting Archive Settings credentials |
 | **Roles** | | |
 | `ROLE_MIN_EDIT_SEGMENTS` | `editor` | Minimum share role to edit segments (`view`, `editor`, `manager`, `owner`) |
 | `ROLE_MIN_EDIT_METADATA` | `manager` | Minimum share role to edit episode/podcast metadata |
@@ -545,7 +551,9 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Segments.** Each episode is a sequence of segments. A segment is either recorded (audio uploaded for that episode) or reusable (from your library). Reorder, trim, split, and remove silence. The app uses ffmpeg to concatenate segments into the final episode audio. From **Manage segment**, editors can download a trimmed MP3, download or import a segment project zip (overwrite in place), or delete the section.
 
-- **Episode and segment projects.** Download Project zips a full episode for backup or offline edit. Import Project on the Episodes page recreates a draft episode with new ids. Download Segment / Import Segment work the same way for one section (import overwrites that segment). Segment zips cannot be imported as full episodes.
+- **Episode and segment projects.** Download Project zips a full episode for offline edit or cloning. Import Project on the Episodes page recreates a draft episode with new ids. Download Segment / Import Segment work the same way for one section (import overwrites that segment). Segment zips cannot be imported as full episodes.
+
+- **Episode archive and backup.** Configure Archive Settings per show (one remote destination). Archive uploads a project zip, verifies it, and frees local project files while keeping feed audio. Backup / Dated Backup upload without deleting local files; restore from a listed backup or restore an archived episode without overwriting metadata.
 
 - **Group calls.** Record remote guests via WebRTC; host starts an ad-hoc call or a **scheduled meeting** with a reserved join link/code, email or share invites, and calendar attachments; guests join by link or 4-digit code (or phone dial-in when enabled); in-call chat, soundboard, and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
 
@@ -837,7 +845,7 @@ Each podcast has an **owner** (the user who created it) and optional **collabora
 |------|------------------|
 | **view** | List/read podcast and episodes, stream audio, view analytics. Read-only. |
 | **editor** | Everything in view, plus: edit segments, record new sections, render/build the final episode, download episode/segment projects, import a segment project (overwrite in place). |
-| **manager** | Everything in editor, plus: create/update episodes and episode artwork, **Import Project** (new draft from episode zip), edit show details, configure **Podcast Delivery** (exports), manage collaborators (invite, change role, remove). |
+| **manager** | Everything in editor, plus: create/update episodes and episode artwork, **Import Project** (new draft from episode zip), edit show details, configure **Podcast Delivery** (exports) and **Archive Settings**, manage collaborators (invite, change role, remove). |
 | **owner** | Full control. Only the owner can delete the podcast or transfer ownership. |
 
 - **Collaborators** are managed per show in **Settings > Collaborators**. You invite by email and choose a role (view, editor, or manager). If the person isn’t on HarborFM yet, the UI can send them an “invite to the platform” email (rate-limited).
@@ -849,7 +857,9 @@ Each podcast has an **owner** (the user who created it) and optional **collabora
 
 ## Export
 
-Podcast delivery exports push your RSS feed and episode audio to a destination. Configure one or more exports per show in **Settings > Podcast Delivery**; credentials are stored encrypted. Deploy skips files that are unchanged (using MD5 sidecar files where the service doesn’t provide hashes).
+Podcast delivery exports push your RSS feed and episode audio to a destination. Configure one or more exports per show in **Settings > Podcast Delivery**; credentials are stored encrypted. Deploy skips files that are unchanged (using MD5 sidecar files where the service doesn't provide hashes).
+
+**Episode archive and backup** use a separate **Archive Settings** destination on the show (same modes: S3, FTP, SFTP, WebDAV, IPFS, SMB). From Final Episode, **Archive** uploads a project zip and frees local project files; **Backup** / **Dated Backup** upload without deleting local files. See the wiki [Episode archive and backup](https://github.com/loganrickert/harborfm/wiki/Episode-archive-and-backup) guide.
 
 Supported export types and example request bodies (for create/update):
 

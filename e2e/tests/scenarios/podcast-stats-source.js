@@ -24,10 +24,16 @@ function todayLocal() {
   return `${y}-${m}-${day}`;
 }
 
+function sumRows(rows, episodeId, today) {
+  return (rows || [])
+    .filter((r) => r.episode_id === episodeId && r.stat_date === today)
+    .reduce((s, r) => s + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
+}
+
 /**
- * E2E: Podcast stats include source (Apple Podcasts, Spotify, Other).
- * Requests public RSS with different User-Agents, waits for stats flush, then asserts
- * GET /podcasts/:id/analytics returns rows with source.
+ * E2E: Podcast stats include IAB-style Downloads, Unique listeners, Website source,
+ * and website retention reach. Requests public RSS / audio with different User-Agents,
+ * waits for stats flush, then asserts GET /podcasts/:id/analytics.
  */
 export async function run({ runOne }) {
   const results = [];
@@ -44,7 +50,7 @@ export async function run({ runOne }) {
   await processEpisodeAudio(jar, episode.id);
 
   results.push(
-    await runOne('GET /podcasts/:id/analytics returns 200 and response shape', async () => {
+    await runOne('GET /podcasts/:id/analytics returns 200 and IAB response shape', async () => {
       const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
@@ -52,6 +58,14 @@ export async function run({ runOne }) {
       if (!Array.isArray(data.episode_daily)) throw new Error('Expected episode_daily array');
       if (!Array.isArray(data.episode_listens_daily)) throw new Error('Expected episode_listens_daily array');
       if (!Array.isArray(data.episode_location_daily)) throw new Error('Expected episode_location_daily array');
+      if (typeof data.unique_listeners !== 'number') throw new Error('Expected unique_listeners number');
+      if (!Array.isArray(data.unique_listeners_by_episode)) {
+        throw new Error('Expected unique_listeners_by_episode array');
+      }
+      if (!Array.isArray(data.retention_by_episode)) throw new Error('Expected retention_by_episode array');
+      if (!data.methodology || typeof data.methodology.downloads !== 'string') {
+        throw new Error('Expected methodology.downloads string');
+      }
       for (const row of data.rss_daily) {
         if (row.source === undefined) throw new Error('rss_daily row missing source');
       }
@@ -117,6 +131,7 @@ export async function run({ runOne }) {
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
       if (!Array.isArray(data.rss_daily) || !Array.isArray(data.episode_daily)) throw new Error('Expected analytics shape');
+      if (typeof data.unique_listeners !== 'number') throw new Error('Expected unique_listeners');
     })
   );
 
@@ -166,12 +181,12 @@ export async function run({ runOne }) {
       const row = episodeRows[0];
       if (row.source === undefined) throw new Error('episode_daily row missing source');
       const total = (row.human_count ?? 0) + (row.bot_count ?? 0);
-      if (total < 1) throw new Error('Expected at least one request counted');
+      if (total < 1) throw new Error('Expected at least one raw fetch counted');
     })
   );
 
   results.push(
-    await runOne('Full GET public episode audio counts as one listen after flush', async () => {
+    await runOne('Full GET public episode audio counts as one Download after flush', async () => {
       const episodeUrl = `${baseURL}/${podcast.id}/episodes/${episode.id}`;
       await fetch(episodeUrl, { headers: { 'User-Agent': BROWSER_UA } });
       await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
@@ -179,20 +194,27 @@ export async function run({ runOne }) {
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
       const today = todayLocal();
-      const listenRows = (data.episode_listens_daily || []).filter((r) => r.episode_id === episode.id && r.stat_date === today);
-      if (listenRows.length === 0) throw new Error(`Expected episode_listens_daily row for episode today`);
-      const totalListens = listenRows.reduce((sum, r) => sum + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
-      if (totalListens < 1) throw new Error('Expected at least one listen counted');
+      const downloadRows = (data.episode_listens_daily || []).filter((r) => r.episode_id === episode.id && r.stat_date === today);
+      if (downloadRows.length === 0) throw new Error(`Expected episode_listens_daily (Downloads) row for episode today`);
+      const totalDownloads = downloadRows.reduce((sum, r) => sum + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
+      if (totalDownloads < 1) throw new Error('Expected at least one Download counted');
+      if (typeof data.unique_listeners !== 'number' || data.unique_listeners < 1) {
+        throw new Error(`Expected unique_listeners >= 1, got ${data.unique_listeners}`);
+      }
+      const byEp = (data.unique_listeners_by_episode || []).find((r) => r.episode_id === episode.id);
+      if (!byEp || (byEp.unique_listeners ?? 0) < 1) {
+        throw new Error('Expected unique_listeners_by_episode entry for episode');
+      }
     })
   );
 
   results.push(
-    await runOne('Same client GET episode twice in same day counts as one listen (dedup)', async () => {
+    await runOne('Same client GET episode twice in same day counts as one Download (dedup)', async () => {
       const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       const beforeData = await beforeRes.json();
       const today = todayLocal();
-      const sumListens = (rows) => (rows || []).filter((r) => r.episode_id === episode.id && r.stat_date === today).reduce((s, r) => s + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
-      const beforeListens = sumListens(beforeData.episode_listens_daily);
+      const beforeDownloads = sumRows(beforeData.episode_listens_daily, episode.id, today);
+      const beforeUnique = beforeData.unique_listeners ?? 0;
 
       const episodeUrl = `${baseURL}/${podcast.id}/episodes/${episode.id}`;
       const headers = { 'User-Agent': BROWSER_UA, 'Accept-Language': 'en-US,en;q=0.9' };
@@ -203,14 +225,18 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      const afterListens = sumListens(data.episode_listens_daily);
-      const delta = afterListens - beforeListens;
-      if (delta !== 1) throw new Error(`Expected dedup: 2 same-client GETs should add 1 listen, got delta ${delta}`);
+      const afterDownloads = sumRows(data.episode_listens_daily, episode.id, today);
+      const delta = afterDownloads - beforeDownloads;
+      if (delta !== 1) throw new Error(`Expected dedup: 2 same-client GETs should add 1 Download, got delta ${delta}`);
+      // Same client may or may not bump unique_listeners depending on prior GETs in this run.
+      if ((data.unique_listeners ?? 0) < beforeUnique) {
+        throw new Error('unique_listeners should not decrease');
+      }
     })
   );
 
   results.push(
-    await runOne('RSS with generic browser UA results in source Other', async () => {
+    await runOne('RSS with generic browser UA results in source Website', async () => {
       const rssUrl = `${baseURL}/public/podcasts/${encodeURIComponent(slug)}/rss`;
       await fetch(rssUrl, { headers: { 'User-Agent': BROWSER_UA } });
       await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
@@ -218,21 +244,76 @@ export async function run({ runOne }) {
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
       const sources = [...(data.rss_daily || []).map((r) => r.source)];
-      if (!sources.includes('Other')) throw new Error(`Expected Other in rss_daily sources, got ${sources.join(', ')}`);
+      if (!sources.includes('Website')) {
+        throw new Error(`Expected Website in rss_daily sources, got ${sources.join(', ')}`);
+      }
     })
   );
 
   results.push(
-    await runOne('Tiny Range GET public episode audio does not count as request or listen', async () => {
+    await runOne('Audio GET with hf_src=web records Website source', async () => {
       const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       const beforeData = await beforeRes.json();
       const today = todayLocal();
-      const sumRows = (rows, eid) =>
+      const sumWebsite = (rows) =>
         (rows || [])
-          .filter((r) => r.episode_id === eid && r.stat_date === today)
+          .filter((r) => r.episode_id === episode.id && r.stat_date === today && r.source === 'Website')
           .reduce((s, r) => s + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
-      const beforeReq = sumRows(beforeData.episode_daily, episode.id);
-      const beforeLis = sumRows(beforeData.episode_listens_daily, episode.id);
+      const beforeWebsite = sumWebsite(beforeData.episode_listens_daily);
+
+      const episodeUrl = `${baseURL}/${podcast.id}/episodes/${episode.id}.mp3?hf_src=web`;
+      await fetch(episodeUrl, {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          'Accept-Language': `hf-src-web-${Date.now()}`,
+        },
+      });
+      await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const afterWebsite = sumWebsite(data.episode_listens_daily);
+      if (afterWebsite < beforeWebsite + 1) {
+        throw new Error(
+          `Expected hf_src=web Download under Website (before ${beforeWebsite}, after ${afterWebsite})`
+        );
+      }
+    })
+  );
+
+  results.push(
+    await runOne('iTMS RSS maps source to Apple Podcasts and crawler bot_count', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const today = todayLocal();
+      const sumAppleBot = (rows) =>
+        (rows || [])
+          .filter((r) => r.stat_date === today && r.source === 'Apple Podcasts')
+          .reduce((s, r) => s + (r.bot_count ?? 0), 0);
+      const beforeBot = sumAppleBot(beforeData.rss_daily);
+
+      const rssUrl = `${baseURL}/public/podcasts/${encodeURIComponent(slug)}/rss`;
+      await fetch(rssUrl, { headers: { 'User-Agent': 'iTMS' } });
+      await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const afterBot = sumAppleBot(data.rss_daily);
+      if (afterBot < beforeBot + 1) {
+        throw new Error(`Expected iTMS to increment Apple Podcasts bot_count (before ${beforeBot}, after ${afterBot})`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('Tiny Range GET public episode audio does not count as raw fetch or Download', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const today = todayLocal();
+      const beforeReq = sumRows(beforeData.episode_daily, episode.id, today);
+      const beforeLis = sumRows(beforeData.episode_listens_daily, episode.id, today);
 
       const episodeUrl = `${baseURL}/${podcast.id}/episodes/${episode.id}`;
       await fetch(episodeUrl, {
@@ -246,13 +327,13 @@ export async function run({ runOne }) {
       const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const data = await res.json();
-      const afterReq = sumRows(data.episode_daily, episode.id);
-      const afterLis = sumRows(data.episode_listens_daily, episode.id);
+      const afterReq = sumRows(data.episode_daily, episode.id, today);
+      const afterLis = sumRows(data.episode_listens_daily, episode.id, today);
       if (afterReq !== beforeReq) {
-        throw new Error(`Expected tiny Range not to increment requests (before ${beforeReq}, after ${afterReq})`);
+        throw new Error(`Expected tiny Range not to increment raw fetches (before ${beforeReq}, after ${afterReq})`);
       }
       if (afterLis !== beforeLis) {
-        throw new Error(`Expected tiny Range not to increment listens (before ${beforeLis}, after ${afterLis})`);
+        throw new Error(`Expected tiny Range not to increment Downloads (before ${beforeLis}, after ${afterLis})`);
       }
     })
   );
@@ -286,6 +367,81 @@ export async function run({ runOne }) {
       }
       if (afterOvercastHuman < beforeOvercastHuman + 1) {
         throw new Error(`Expected Overcast to increment Overcast human_count (before ${beforeOvercastHuman}, after ${afterOvercastHuman})`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('POST /public/analytics/retention records website retention reach', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const beforeEp = (beforeData.retention_by_episode || []).find((r) => r.episode_id === episode.id);
+      const beforeClients0 = beforeEp?.buckets?.find((b) => b.bucket === 0)?.clients ?? 0;
+
+      const res = await fetch(`${baseURL}/public/analytics/retention`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': BROWSER_UA,
+          'Accept-Language': `retention-${Date.now()}`,
+        },
+        body: JSON.stringify({ episodeId: episode.id, percent: 40 }),
+      });
+      if (res.status !== 204) throw new Error(`Expected 204, got ${res.status}`);
+
+      const afterRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (afterRes.status !== 200) throw new Error(`Expected 200, got ${afterRes.status}`);
+      const data = await afterRes.json();
+      const afterEp = (data.retention_by_episode || []).find((r) => r.episode_id === episode.id);
+      if (!afterEp) throw new Error('Expected retention_by_episode entry for episode');
+      const bucket0 = afterEp.buckets.find((b) => b.bucket === 0);
+      const bucket40 = afterEp.buckets.find((b) => b.bucket === 40);
+      if (!bucket0 || (bucket0.clients ?? 0) < beforeClients0 + 1) {
+        throw new Error(`Expected retention bucket 0 clients to increase (before ${beforeClients0})`);
+      }
+      if (!bucket40 || (bucket40.clients ?? 0) < 1) {
+        throw new Error('Expected retention bucket 40 to have at least one client');
+      }
+      if ((bucket40.pct ?? 0) <= 0) {
+        throw new Error('Expected retention bucket 40 pct > 0');
+      }
+    })
+  );
+
+  results.push(
+    await runOne('POST /public/analytics/retention rejects invalid body', async () => {
+      const res = await fetch(`${baseURL}/public/analytics/retention`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episodeId: '', percent: 200 }),
+      });
+      if (res.status !== 400) throw new Error(`Expected 400, got ${res.status}`);
+    })
+  );
+
+  results.push(
+    await runOne('ListenNotes RSS counts as crawler IVT', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const today = todayLocal();
+      const sumOtherBot = (rows) =>
+        (rows || [])
+          .filter((r) => r.stat_date === today && r.source === 'Other')
+          .reduce((s, r) => s + (r.bot_count ?? 0), 0);
+      const beforeBot = sumOtherBot(beforeData.rss_daily);
+
+      const rssUrl = `${baseURL}/public/podcasts/${encodeURIComponent(slug)}/rss`;
+      await fetch(rssUrl, {
+        headers: { 'User-Agent': 'ListenNotes/3.0 (+https://www.listennotes.com/about/)' },
+      });
+      await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const afterBot = sumOtherBot(data.rss_daily);
+      if (afterBot < beforeBot + 1) {
+        throw new Error(`Expected ListenNotes to increment Other bot_count (before ${beforeBot}, after ${afterBot})`);
       }
     })
   );

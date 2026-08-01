@@ -238,6 +238,12 @@ export const episodes = sqliteTable(
       .notNull()
       .default(false),
     episodeAlertsSentAt: text("episode_alerts_sent_at"),
+    /** When set, episode project files were uploaded to the podcast archive destination. */
+    archivedAt: text("archived_at"),
+    archiveRemotePath: text("archive_remote_path"),
+    archiveSha256: text("archive_sha256"),
+    archiveBytes: integer("archive_bytes"),
+    archiveFilename: text("archive_filename"),
   },
   (table) => [
     unique("episodes_podcast_guid").on(table.podcastId, table.guid),
@@ -305,6 +311,20 @@ export const episodeAlertSubscribers = sqliteTable(
     index("idx_episode_alert_subscribers_unsub").on(table.unsubscribeTokenHash),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Podcast archive settings (108) - one destination per podcast
+// ---------------------------------------------------------------------------
+export const podcastArchiveSettings = sqliteTable("podcast_archive_settings", {
+  podcastId: text("podcast_id")
+    .primaryKey()
+    .references(() => podcasts.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  mode: text("mode").notNull().default("S3"),
+  configEnc: text("config_enc"),
+  createdAt: text("created_at").notNull().default(sqlNow()),
+  updatedAt: text("updated_at").notNull().default(sqlNow()),
+});
 
 // ---------------------------------------------------------------------------
 // Exports (001 + 009, 010, 011 unified)
@@ -594,6 +614,26 @@ export const podcastStatsListenDedup = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.episodeId, table.statDate, table.clientKey] }),
     index("idx_podcast_stats_listen_dedup_stat_date").on(table.statDate),
+  ],
+);
+
+/** Website player retention reach by decile (0..90). Migration 107. */
+export const podcastStatsRetentionReach = sqliteTable(
+  "podcast_stats_retention_reach",
+  {
+    episodeId: text("episode_id").notNull(),
+    statDate: text("stat_date").notNull(),
+    bucket: integer("bucket").notNull(),
+    clientKey: text("client_key").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.episodeId, table.statDate, table.bucket, table.clientKey],
+    }),
+    index("idx_podcast_stats_retention_reach_episode_date").on(
+      table.episodeId,
+      table.statDate,
+    ),
   ],
 );
 

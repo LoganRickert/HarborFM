@@ -11,6 +11,7 @@ import {
   Settings,
   Share2,
   Palette,
+  Archive,
 } from 'lucide-react';
 import { buildAbsolutePublicRssUrl } from '../../api/rss';
 import { PodcastGroupDetailRow, PodcastGroupRow } from './PodcastGroupList';
@@ -54,6 +55,7 @@ interface PodcastHeroProps {
   onEditClick: () => void;
   onLinksClick?: () => void;
   onSubmitDirectoriesClick?: () => void;
+  onArchiveSettingsClick?: () => void;
   onPageCustomizationsClick?: () => void;
   publicFeedsEnabled?: boolean;
   detailsExpanded: boolean;
@@ -67,6 +69,7 @@ export function PodcastHero({
   onEditClick,
   onLinksClick,
   onSubmitDirectoriesClick,
+  onArchiveSettingsClick,
   onPageCustomizationsClick,
   publicFeedsEnabled,
   detailsExpanded,
@@ -198,6 +201,14 @@ export function PodcastHero({
             icon={Globe}
             iconTone="blue"
             onClick={onSubmitDirectoriesClick}
+          />
+        )}
+        {canEdit && onArchiveSettingsClick && (
+          <PodcastGroupRow
+            label="Archive Settings"
+            icon={Archive}
+            iconTone="slate"
+            onClick={onArchiveSettingsClick}
           />
         )}
 

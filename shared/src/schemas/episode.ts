@@ -277,6 +277,12 @@ export const episodeResponseSchema = z.object({
   valueBlocks: z.array(valueBlockResponseSchema).optional().nullable(),
   /** Path to generated video (relative to data dir). Present when video has been generated. */
   videoFinalPath: z.string().nullable().optional(),
+  /** When set, episode project was archived to the show archive destination. */
+  archivedAt: z.string().nullable().optional(),
+  archiveRemotePath: z.string().nullable().optional(),
+  archiveSha256: z.string().nullable().optional(),
+  archiveBytes: z.number().nullable().optional(),
+  archiveFilename: z.string().nullable().optional(),
 });
 
 /** Response for GET /podcasts/:podcastId/episodes (list). */

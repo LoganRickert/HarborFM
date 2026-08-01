@@ -1,12 +1,16 @@
-import { createHash } from "crypto";
-import { readFileSync } from "fs";
-import { extname, join } from "path";
 import {
   S3Client,
   PutObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
+import { createHash } from "crypto";
+import { createWriteStream, readFileSync } from "fs";
+import { extname, join } from "path";
+import { pipeline } from "stream/promises";
+import type { Readable } from "stream";
 import { RSS_FEED_FILENAME } from "../config.js";
 import { assertPathUnder, getDataDir } from "./paths.js";
 import { EXT_DOT_TO_EXT, EXT_TO_MIMETYPE } from "../utils/artwork.js";
@@ -19,6 +23,24 @@ export interface S3Config {
   accessKeyId: string;
   secretAccessKey: string;
 }
+
+/** Thrown when an S3 object is in Glacier/Deep Archive and not yet restored. */
+export class ArchiveColdStorageError extends Error {
+  readonly code = "ARCHIVE_COLD_STORAGE";
+  constructor(message?: string) {
+    super(
+      message ??
+        "This archive is in cold storage (Glacier or Deep Archive). Restore the object in AWS (or move it to a warm storage class) before HarborFM can download it.",
+    );
+    this.name = "ArchiveColdStorageError";
+  }
+}
+
+const COLD_STORAGE_CLASSES = new Set([
+  "GLACIER",
+  "DEEP_ARCHIVE",
+  "GLACIER_IR",
+]);
 
 function fullKey(config: S3Config, key: string): string {
   return config.prefix ? `${config.prefix.replace(/\/$/, "")}/${key}` : key;
@@ -132,18 +154,150 @@ export async function uploadFile(
   key: string,
   body: Buffer | string,
   contentType?: string,
+  opts?: { storageClass?: string },
 ): Promise<void> {
   const client = createS3Client(config);
-  await client.send(
-    new PutObjectCommand({
+  const cmd: ConstructorParameters<typeof PutObjectCommand>[0] = {
+    Bucket: config.bucket,
+    Key: fullKey(config, key),
+    Body: body,
+    ContentType:
+      contentType ??
+      (key.endsWith(".xml") ? "application/xml" : "audio/mpeg"),
+  };
+  if (opts?.storageClass) {
+    cmd.StorageClass = opts.storageClass as
+      | "STANDARD"
+      | "REDUCED_REDUNDANCY"
+      | "STANDARD_IA"
+      | "ONEZONE_IA"
+      | "INTELLIGENT_TIERING"
+      | "GLACIER"
+      | "DEEP_ARCHIVE"
+      | "OUTPOSTS"
+      | "GLACIER_IR"
+      | "SNOW"
+      | "EXPRESS_ONEZONE";
+  }
+  await client.send(new PutObjectCommand(cmd));
+}
+
+/**
+ * Upload a single archive object. Uses STANDARD_IA on real AWS (no custom endpoint).
+ */
+export async function uploadArchiveObject(
+  config: S3Config,
+  key: string,
+  body: Buffer,
+  contentType = "application/zip",
+): Promise<void> {
+  const useIa = !config.endpoint?.trim();
+  await uploadFile(config, key, body, contentType, {
+    storageClass: useIa ? "STANDARD_IA" : undefined,
+  });
+}
+
+export type S3ObjectStat = {
+  size: number;
+  etag: string | null;
+  storageClass: string | null;
+  restore: string | null;
+};
+
+/**
+ * Head an object. Throws ArchiveColdStorageError when the object is in unrestored cold storage.
+ */
+export async function statObject(
+  config: S3Config,
+  key: string,
+  opts?: { requireDownloadable?: boolean },
+): Promise<S3ObjectStat | null> {
+  const client = createS3Client(config);
+  try {
+    const res = await client.send(
+      new HeadObjectCommand({
+        Bucket: config.bucket,
+        Key: fullKey(config, key),
+      }),
+    );
+    const storageClass = res.StorageClass ?? null;
+    const restore = res.Restore ?? null;
+    if (opts?.requireDownloadable) {
+      assertObjectDownloadable(storageClass, restore);
+    }
+    return {
+      size: res.ContentLength ?? 0,
+      etag: res.ETag ? res.ETag.replace(/^"|"$/g, "").trim() : null,
+      storageClass,
+      restore,
+    };
+  } catch (err: unknown) {
+    if (err instanceof ArchiveColdStorageError) throw err;
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (
+      e.name === "NotFound" ||
+      e.name === "NoSuchKey" ||
+      e.$metadata?.httpStatusCode === 404
+    ) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+/** True when Restore header indicates an active temporary restore copy. */
+function isRestoredForDownload(restore: string | null): boolean {
+  if (!restore) return false;
+  // e.g. 'ongoing-request="false", expiry-date="..."'
+  return /ongoing-request\s*=\s*"false"/i.test(restore);
+}
+
+export function assertObjectDownloadable(
+  storageClass: string | null | undefined,
+  restore: string | null | undefined,
+): void {
+  const sc = (storageClass ?? "").toUpperCase();
+  if (!COLD_STORAGE_CLASSES.has(sc)) return;
+  // GLACIER_IR is immediately readable via GetObject on AWS; still warn only for true vault classes
+  if (sc === "GLACIER_IR") return;
+  if (isRestoredForDownload(restore ?? null)) return;
+  throw new ArchiveColdStorageError();
+}
+
+/** Download object to a local file path. Checks cold storage first. */
+export async function downloadObjectToFile(
+  config: S3Config,
+  key: string,
+  destPath: string,
+): Promise<void> {
+  const client = createS3Client(config);
+  const head = await client.send(
+    new HeadObjectCommand({
       Bucket: config.bucket,
       Key: fullKey(config, key),
-      Body: body,
-      ContentType:
-        contentType ??
-        (key.endsWith(".xml") ? "application/xml" : "audio/mpeg"),
     }),
   );
+  assertObjectDownloadable(head.StorageClass, head.Restore);
+  try {
+    const res = await client.send(
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: fullKey(config, key),
+      }),
+    );
+    if (!res.Body) throw new Error("Empty S3 response body");
+    await pipeline(res.Body as Readable, createWriteStream(destPath));
+  } catch (err: unknown) {
+    const e = err as { name?: string; Code?: string; message?: string };
+    const code = e.name ?? e.Code ?? "";
+    if (
+      code === "InvalidObjectState" ||
+      /InvalidObjectState|Glacier|cold storage/i.test(e.message ?? "")
+    ) {
+      throw new ArchiveColdStorageError();
+    }
+    throw err;
+  }
 }
 
 export async function deployPodcastToS3(
@@ -280,4 +434,50 @@ export async function deployPodcastToS3(
     }
   }
   return { uploaded, skipped, errors };
+}
+
+export type S3ListedObject = {
+  /** Key relative to config.prefix (same form as upload keys). */
+  key: string;
+  size: number;
+  lastModified: string | null;
+};
+
+/** List objects under a key prefix (non-recursive delimiter-free). */
+export async function listObjectsUnderPrefix(
+  config: S3Config,
+  prefix: string,
+): Promise<S3ListedObject[]> {
+  const client = createS3Client(config);
+  const fullPrefix = fullKey(config, prefix.replace(/^\//, ""));
+  const prefixLen = config.prefix
+    ? config.prefix.replace(/\/$/, "").length + 1
+    : 0;
+  const out: S3ListedObject[] = [];
+  let token: string | undefined;
+  do {
+    const res = await client.send(
+      new ListObjectsV2Command({
+        Bucket: config.bucket,
+        Prefix: fullPrefix,
+        ContinuationToken: token,
+      }),
+    );
+    for (const obj of res.Contents ?? []) {
+      if (!obj.Key || obj.Key.endsWith("/")) continue;
+      const relative =
+        prefixLen > 0 && obj.Key.startsWith(config.prefix.replace(/\/$/, "") + "/")
+          ? obj.Key.slice(prefixLen)
+          : obj.Key;
+      out.push({
+        key: relative,
+        size: obj.Size ?? 0,
+        lastModified: obj.LastModified
+          ? obj.LastModified.toISOString()
+          : null,
+      });
+    }
+    token = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (token);
+  return out;
 }

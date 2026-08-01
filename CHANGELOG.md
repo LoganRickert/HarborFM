@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.26.0 - 7-31-2026
+
+- **Episode Archive:** Configure one archive destination per show (Archive Settings in the show header, reusing delivery destination types).
+- **Archive episode:** From Final Episode, Archive uploads a project zip (S3 uses Infrequent Access on AWS), verifies size/checksum, then removes local project files while keeping feed-serving audio.
+- **Episode Backup:** Manage-style dialog uploads a project zip without removing local files. Dated Backup appends a timestamp so each upload is a new zip. Restore from a listed backup with confirmation.
+- **Restore archived episode:** Downloads the archive zip without overwriting live episode metadata. Glacier/Deep Archive unrestored objects return a clear error.
+- **Project restore safety:** Validates library asset ids (nanoid-shaped) and audiowaveform sidecars before reuse/copy, regenerating waveforms when bogus.
+- **Analytics:** Primary metrics are Downloads (unique filtered audio downloads) and Unique listeners, with Apps (Spotify, Apple Podcasts, Website, Other), Locations (country charts; city detail in the table), Feed health, and optional Raw fetches.
+- **Analytics filters:** Choose start and end dates, and which published episodes appear in the charts (defaults to the 5 newest).
+- **Website Downloads:** Site and theme players mark audio with `hf_src=web` so browser listens count as Website. RSS enclosure URLs stay unchanged.
+- **Retention:** Website player reports playhead reach by episode (decile curve on Analytics).
+- **Crawler filtering:** Stronger invalid-traffic denylist (including Apple Watch and common directory scrapers) so crawlers stay out of human Download charts.
+
 ## v1.25.0 - 7-30-2026
 
 - **Episode transcript:** Download SRT and Download TXT from the Episode Transcript dialog. TXT is plain spoken text (no timestamps), matching how transcript text is fed to LLM metadata prompts.

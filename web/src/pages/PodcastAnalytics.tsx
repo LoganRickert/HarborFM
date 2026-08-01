@@ -1,7 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, Rss, LayoutGrid, ListMusic, Ear, MapPinned, Smartphone, FileSpreadsheet, FileText, FileJson, Download } from 'lucide-react';
+import {
+  BarChart3,
+  Rss,
+  LayoutGrid,
+  ListMusic,
+  MapPinned,
+  Smartphone,
+  FileSpreadsheet,
+  FileText,
+  FileJson,
+  Download,
+  Activity,
+  ChevronDown,
+} from 'lucide-react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -26,25 +39,81 @@ import {
   downloadAnalyticsCsv,
   downloadAnalyticsExcel,
   downloadAnalyticsJson,
-  resolveAnalyticsDateRange,
 } from '../utils/podcastAnalyticsExport';
 import styles from './PodcastAnalytics.module.css';
 
 const COLORS = {
   human: 'var(--accent)',
   bot: '#e6a030',
+  downloads: '#198754',
+  fetches: '#0d6efd',
   feed: '#0dcaf0',
-  requests: '#0d6efd',
-  listens: '#198754',
 };
-const PIE_COLORS = ['#0dcaf0', '#0d6efd', '#198754', '#e6a030', '#6f42c1', '#fd7e14', '#6c757d'];
+const PIE_COLORS = ['#1DB954', '#FC3C44', '#0d6efd', '#6c757d', '#e6a030', '#6f42c1'];
+const RETENTION_LINE_COLORS = ['#198754', '#0d6efd', '#e6a030', '#6f42c1', '#fd7e14', '#0dcaf0', '#d63384', '#20c997'];
 
-/** Bar charts only: avoids cramped Y-axis labels when a show has many episodes. */
-const EPISODE_BAR_CHART_MAX = 8;
+/** Default episode multi-select: newest published episodes. */
+const DEFAULT_SELECTED_EPISODES = 5;
+const RETENTION_BUCKETS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90] as const;
+
+function localDateYYYYMMDD(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Inclusive local window of `days` days ending today. */
+function lastNLocalDateRange(days: number): { startDate: string; endDate: string } {
+  const end = new Date();
+  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (days - 1));
+  return { startDate: localDateYYYYMMDD(start), endDate: localDateYYYYMMDD(end) };
+}
+
+function filterAnalyticsByEpisodes(
+  analytics: PodcastAnalytics,
+  selectedIds: Set<string>,
+): PodcastAnalytics {
+  const episodes = analytics.episodes.filter((e) => selectedIds.has(e.id));
+  const episodeDaily = analytics.episodeDaily.filter((r) => selectedIds.has(r.episodeId));
+  const episodeLocationDaily = analytics.episodeLocationDaily.filter((r) =>
+    selectedIds.has(r.episodeId),
+  );
+  const episodeListensDaily = analytics.episodeListensDaily.filter((r) =>
+    selectedIds.has(r.episodeId),
+  );
+  const uniqueListenersByEpisode = analytics.uniqueListenersByEpisode.filter((r) =>
+    selectedIds.has(r.episodeId),
+  );
+  const retentionByEpisode = analytics.retentionByEpisode.filter((r) =>
+    selectedIds.has(r.episodeId),
+  );
+  const uniqueListeners = uniqueListenersByEpisode.reduce(
+    (sum, r) => sum + r.uniqueListeners,
+    0,
+  );
+  return {
+    ...analytics,
+    episodes,
+    episodeDaily,
+    episodeLocationDaily,
+    episodeListensDaily,
+    uniqueListenersByEpisode,
+    retentionByEpisode,
+    uniqueListeners,
+  };
+}
 
 function truncateEpisodeAxisTitle(title: string, maxLen: number): string {
   if (title.length <= maxLen) return title;
-  return title.slice(0, Math.max(0, maxLen - 1)) + '…';
+  return title.slice(0, Math.max(0, maxLen - 3)) + '...';
+}
+
+function bucketAppSource(source: string): string {
+  if (source === 'Spotify') return 'Spotify';
+  if (source === 'Apple Podcasts') return 'Apple Podcasts';
+  if (source === 'Website') return 'Website';
+  return 'Other';
 }
 
 function sumRss(analytics: PodcastAnalytics) {
@@ -57,26 +126,32 @@ function sumRss(analytics: PodcastAnalytics) {
   return { bot, human, total: bot + human };
 }
 
+function sumDownloads(analytics: PodcastAnalytics) {
+  let human = 0;
+  for (const row of analytics.episodeListensDaily) human += row.humanCount;
+  return human;
+}
+
 function episodeTotals(analytics: PodcastAnalytics) {
   const byEpisode: Record<
     string,
-    { requestsBot: number; requestsHuman: number; listensBot: number; listensHuman: number }
+    { fetchesHuman: number; fetchesBot: number; downloadsHuman: number; downloadsBot: number }
   > = {};
   for (const e of analytics.episodes) {
-    byEpisode[e.id] = { requestsBot: 0, requestsHuman: 0, listensBot: 0, listensHuman: 0 };
+    byEpisode[e.id] = { fetchesHuman: 0, fetchesBot: 0, downloadsHuman: 0, downloadsBot: 0 };
   }
   for (const row of analytics.episodeDaily) {
     const cur = byEpisode[row.episodeId];
     if (cur) {
-      cur.requestsBot += row.botCount;
-      cur.requestsHuman += row.humanCount;
+      cur.fetchesBot += row.botCount;
+      cur.fetchesHuman += row.humanCount;
     }
   }
   for (const row of analytics.episodeListensDaily) {
     const cur = byEpisode[row.episodeId];
     if (cur) {
-      cur.listensBot += row.botCount;
-      cur.listensHuman += row.humanCount;
+      cur.downloadsBot += row.botCount;
+      cur.downloadsHuman += row.humanCount;
     }
   }
   return byEpisode;
@@ -91,25 +166,81 @@ function locationTotals(analytics: PodcastAnalytics) {
     byLocation[row.location] = cur;
   }
   return Object.entries(byLocation)
-    .map(([location, counts]) => ({ location, ...counts, total: counts.bot + counts.human }))
-    .sort((a, b) => b.total - a.total);
+    .map(([location, counts]) => ({ location, ...counts, total: counts.human }))
+    .filter((r) => r.human > 0)
+    .sort((a, b) => b.human - a.human);
 }
 
-function sourceTotals(analytics: PodcastAnalytics) {
-  const bySource: Record<string, { bot: number; human: number }> = {};
-  for (const row of analytics.episodeListensDaily) {
-    const cur = bySource[row.source] ?? { bot: 0, human: 0 };
-    cur.bot += row.botCount;
-    cur.human += row.humanCount;
-    bySource[row.source] = cur;
+/** Last comma-separated segment, e.g. "Dayton, Ohio, United States" → "United States". */
+function countryFromLocation(location: string): string {
+  const parts = location
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] || location;
+}
+
+function countryTotals(
+  locations: Array<{ location: string; bot: number; human: number; total: number }>,
+) {
+  const byCountry: Record<string, { bot: number; human: number }> = {};
+  for (const row of locations) {
+    const country = countryFromLocation(row.location);
+    const cur = byCountry[country] ?? { bot: 0, human: 0 };
+    cur.bot += row.bot;
+    cur.human += row.human;
+    byCountry[country] = cur;
   }
-  return Object.entries(bySource)
-    .map(([source, counts]) => ({ source, ...counts, total: counts.bot + counts.human }))
-    .sort((a, b) => b.total - a.total);
+  return Object.entries(byCountry)
+    .map(([location, counts]) => ({ location, ...counts, total: counts.human }))
+    .filter((r) => r.human > 0)
+    .sort((a, b) => b.human - a.human);
+}
+
+/** Keep top N rows; roll the rest into Other. */
+function topWithOther(
+  rows: Array<{ location: string; bot: number; human: number; total: number }>,
+  limit: number,
+) {
+  if (rows.length <= limit) return rows;
+  const top = rows.slice(0, limit);
+  const rest = rows.slice(limit);
+  const other = rest.reduce(
+    (acc, r) => {
+      acc.bot += r.bot;
+      acc.human += r.human;
+      return acc;
+    },
+    { bot: 0, human: 0 },
+  );
+  if (other.human <= 0 && other.bot <= 0) return top;
+  return [
+    ...top,
+    { location: 'Other', bot: other.bot, human: other.human, total: other.human },
+  ];
+}
+
+const LOCATION_PIE_TOP = 6;
+const LOCATION_BAR_TOP = 12;
+
+/** Apps pie: human Downloads bucketed to Spotify / Apple / Website / Other. */
+function appDownloadTotals(analytics: PodcastAnalytics) {
+  const byApp: Record<string, number> = {
+    Spotify: 0,
+    'Apple Podcasts': 0,
+    Website: 0,
+    Other: 0,
+  };
+  for (const row of analytics.episodeListensDaily) {
+    byApp[bucketAppSource(row.source)] += row.humanCount;
+  }
+  return Object.entries(byApp)
+    .map(([source, human]) => ({ source, human, total: human }))
+    .filter((r) => r.human > 0)
+    .sort((a, b) => b.human - a.human);
 }
 
 function formatShortDate(iso: string) {
-  // Calendar day label (server-local YYYY-MM-DD).
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -123,14 +254,21 @@ function tooltipLabelFormatter(label: unknown): string {
 type TimeViewType = 'line' | 'area' | 'bar' | 'table';
 type LocationsViewType = 'pie' | 'bar' | 'table';
 type SourceViewType = 'pie' | 'table';
-type EpisodesViewType = 'bar' | 'table';
+type EpisodeEngagementTab = 'downloads' | 'fetches' | 'comparison' | 'table';
 
 const axisProps = {
   tick: { fill: 'var(--text-muted)' as const, fontSize: 11 },
   axisLine: { stroke: 'var(--border)' as const },
   tickLine: { stroke: 'var(--border)' as const },
 };
-const tooltipContentStyle = { background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8 };
+const tooltipContentStyle = {
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  color: 'var(--text)',
+};
+const tooltipItemStyle = { color: 'var(--text)' };
+const tooltipLabelStyle = { color: 'var(--text)' };
 
 function CardTabs<T extends string>({
   options,
@@ -163,11 +301,18 @@ function CardTabs<T extends string>({
 
 export function PodcastAnalytics() {
   const { id } = useParams<{ id: string }>();
+  const defaultRange = useMemo(() => lastNLocalDateRange(14), []);
+  const [startDate, setStartDate] = useState(defaultRange.startDate);
+  const [endDate, setEndDate] = useState(defaultRange.endDate);
+  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<string[]>([]);
+  const [episodesInitializedFor, setEpisodesInitializedFor] = useState<string | null>(null);
+  const [episodeMenuOpen, setEpisodeMenuOpen] = useState(false);
+  const episodeMenuRef = useRef<HTMLDivElement>(null);
   const [overviewView, setOverviewView] = useState<TimeViewType>('line');
   const [feedView, setFeedView] = useState<TimeViewType>('line');
-  const [episodesView, setEpisodesView] = useState<EpisodesViewType>('bar');
-  const [listensView, setListensView] = useState<EpisodesViewType>('bar');
-  const [locationsView, setLocationsView] = useState<LocationsViewType>('pie');
+  const [showFeedCrawlers, setShowFeedCrawlers] = useState(false);
+  const [engagementTab, setEngagementTab] = useState<EpisodeEngagementTab>('downloads');
+  const [locationsView, setLocationsView] = useState<LocationsViewType>('bar');
   const [sourceView, setSourceView] = useState<SourceViewType>('pie');
   const [narrow, setNarrow] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -180,6 +325,24 @@ export function PodcastAnalytics() {
     return () => mq.removeEventListener('change', update);
   }, []);
 
+  useEffect(() => {
+    if (!episodeMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (episodeMenuRef.current && !episodeMenuRef.current.contains(e.target as Node)) {
+        setEpisodeMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEpisodeMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [episodeMenuOpen]);
+
   const chartMargin = narrow ? { top: 8, right: 4, left: 0, bottom: 8 } : { top: 8, right: 8, left: 8, bottom: 8 };
   const verticalYAxisWidth = narrow ? 72 : 120;
 
@@ -189,45 +352,90 @@ export function PodcastAnalytics() {
     enabled: !!id,
   });
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ['podcast-analytics', id],
-    queryFn: () => getPodcastAnalytics(id!),
-    enabled: !!id,
+    queryKey: ['podcast-analytics', id, startDate, endDate],
+    queryFn: () => getPodcastAnalytics(id!, { startDate, endDate }),
+    enabled: !!id && !!startDate && !!endDate && startDate <= endDate,
   });
 
+  useEffect(() => {
+    if (!analytics || !id) return;
+    if (episodesInitializedFor === id) return;
+    setSelectedEpisodeIds(
+      analytics.episodes.slice(0, DEFAULT_SELECTED_EPISODES).map((e) => e.id),
+    );
+    setEpisodesInitializedFor(id);
+  }, [analytics, id, episodesInitializedFor]);
+
+  useEffect(() => {
+    if (!analytics || episodesInitializedFor !== id) return;
+    setSelectedEpisodeIds((prev) => {
+      const valid = new Set(analytics.episodes.map((e) => e.id));
+      const next = prev.filter((eid) => valid.has(eid));
+      if (next.length === prev.length) return prev;
+      if (next.length > 0) return next;
+      return analytics.episodes.slice(0, DEFAULT_SELECTED_EPISODES).map((e) => e.id);
+    });
+  }, [analytics, episodesInitializedFor, id]);
+
+  const selectedEpisodeSet = useMemo(() => new Set(selectedEpisodeIds), [selectedEpisodeIds]);
+
+  const viewAnalytics = useMemo(() => {
+    if (!analytics) return null;
+    return filterAnalyticsByEpisodes(analytics, selectedEpisodeSet);
+  }, [analytics, selectedEpisodeSet]);
+
+  const allEpisodes = analytics?.episodes ?? [];
+  const dateRange = useMemo(() => ({ startDate, endDate }), [startDate, endDate]);
+
   const episodeTotalsMap = useMemo(
-    () => (analytics ? episodeTotals(analytics) : {}),
-    [analytics]
+    () => (viewAnalytics ? episodeTotals(viewAnalytics) : {}),
+    [viewAnalytics]
   );
   const locationTotalsList = useMemo(
-    () => (analytics ? locationTotals(analytics) : []),
-    [analytics]
+    () => (viewAnalytics ? locationTotals(viewAnalytics) : []),
+    [viewAnalytics]
   );
-  const sourceTotalsList = useMemo(
-    () => (analytics ? sourceTotals(analytics) : []),
-    [analytics]
+  const countryTotalsList = useMemo(
+    () => countryTotals(locationTotalsList),
+    [locationTotalsList]
+  );
+  const locationBarData = useMemo(
+    () => topWithOther(countryTotalsList, LOCATION_BAR_TOP),
+    [countryTotalsList]
+  );
+  const locationPieData = useMemo(() => {
+    return topWithOther(countryTotalsList, LOCATION_PIE_TOP).map((row) => ({
+      name: row.location,
+      value: row.human,
+    }));
+  }, [countryTotalsList]);
+  const appTotalsList = useMemo(
+    () => (viewAnalytics ? appDownloadTotals(viewAnalytics) : []),
+    [viewAnalytics]
   );
 
+  const uniqueByEpisode = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!viewAnalytics) return m;
+    for (const row of viewAnalytics.uniqueListenersByEpisode) {
+      m.set(row.episodeId, row.uniqueListeners);
+    }
+    return m;
+  }, [viewAnalytics]);
+
+  const downloadsTotal = viewAnalytics ? sumDownloads(viewAnalytics) : 0;
+  const uniqueListeners = viewAnalytics?.uniqueListeners ?? 0;
+
   const overviewData = useMemo(() => {
-    if (!analytics) return [];
-    // Overview defaults to listener (human_count) totals so crawler RSS polls do not dominate.
-    const byDate: Record<string, { statDate: string; feed: number; requests: number; listens: number }> = {};
-    for (const row of analytics.rssDaily) {
+    if (!viewAnalytics) return [];
+    const byDate: Record<string, { statDate: string; downloads: number }> = {};
+    for (const row of viewAnalytics.episodeListensDaily) {
       const d = row.statDate;
-      if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
-      byDate[d].feed += row.humanCount;
-    }
-    for (const row of analytics.episodeDaily) {
-      const d = row.statDate;
-      if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
-      byDate[d].requests += row.humanCount;
-    }
-    for (const row of analytics.episodeListensDaily) {
-      const d = row.statDate;
-      if (!byDate[d]) byDate[d] = { statDate: d, feed: 0, requests: 0, listens: 0 };
-      byDate[d].listens += row.humanCount;
+      if (!byDate[d]) byDate[d] = { statDate: d, downloads: 0 };
+      byDate[d].downloads += row.humanCount;
     }
     return Object.values(byDate).sort((a, b) => a.statDate.localeCompare(b.statDate));
-  }, [analytics]);
+  }, [viewAnalytics]);
 
   const feedData = useMemo(() => {
     if (!analytics) return [];
@@ -248,53 +456,33 @@ export function PodcastAnalytics() {
       }));
   }, [analytics]);
 
-  const episodeBarData = useMemo(() => {
-    if (!analytics) return [];
-    return analytics.episodes
+  const episodeEngagementData = useMemo(() => {
+    if (!viewAnalytics) return [];
+    return viewAnalytics.episodes
       .map((ep) => {
-        const tot = episodeTotalsMap[ep.id] ?? { requestsHuman: 0, requestsBot: 0, listensHuman: 0, listensBot: 0 };
+        const tot = episodeTotalsMap[ep.id] ?? {
+          fetchesHuman: 0,
+          fetchesBot: 0,
+          downloadsHuman: 0,
+          downloadsBot: 0,
+        };
         return {
           id: ep.id,
           name: truncateEpisodeAxisTitle(ep.title, narrow ? 28 : 36),
           fullName: ep.title,
-          requests: tot.requestsHuman + tot.requestsBot,
-          Listeners: tot.requestsHuman,
-          Crawlers: tot.requestsBot,
+          Downloads: tot.downloadsHuman,
+          'Unique listeners': uniqueByEpisode.get(ep.id) ?? 0,
+          Fetches: tot.fetchesHuman,
+          downloadsTotal: tot.downloadsHuman + tot.downloadsBot,
+          fetchesTotal: tot.fetchesHuman + tot.fetchesBot,
         };
       })
-      .sort((a, b) => b.requests - a.requests);
-  }, [analytics, episodeTotalsMap, narrow]);
-
-  const listensBarData = useMemo(() => {
-    if (!analytics) return [];
-    return analytics.episodes
-      .map((ep) => {
-        const tot = episodeTotalsMap[ep.id] ?? { requestsHuman: 0, requestsBot: 0, listensHuman: 0, listensBot: 0 };
-        return {
-          id: ep.id,
-          name: truncateEpisodeAxisTitle(ep.title, narrow ? 28 : 36),
-          fullName: ep.title,
-          listens: tot.listensHuman + tot.listensBot,
-          Listeners: tot.listensHuman,
-          Crawlers: tot.listensBot,
-        };
-      })
-      .sort((a, b) => b.listens - a.listens);
-  }, [analytics, episodeTotalsMap, narrow]);
-
-  const newestEpisodeIdSet = useMemo(() => {
-    if (!analytics) return new Set<string>();
-    return new Set(analytics.episodes.slice(0, EPISODE_BAR_CHART_MAX).map((e) => e.id));
-  }, [analytics]);
+      .sort((a, b) => b.Downloads - a.Downloads);
+  }, [viewAnalytics, episodeTotalsMap, uniqueByEpisode, narrow]);
 
   const episodeBarChartData = useMemo(
-    () => episodeBarData.filter((row) => newestEpisodeIdSet.has(row.id)).sort((a, b) => b.requests - a.requests),
-    [episodeBarData, newestEpisodeIdSet]
-  );
-
-  const listensBarChartData = useMemo(
-    () => listensBarData.filter((row) => newestEpisodeIdSet.has(row.id)).sort((a, b) => b.listens - a.listens),
-    [listensBarData, newestEpisodeIdSet]
+    () => [...episodeEngagementData].sort((a, b) => b.Downloads - a.Downloads),
+    [episodeEngagementData]
   );
 
   const episodeChartMargin = useMemo(
@@ -307,21 +495,59 @@ export function PodcastAnalytics() {
 
   const episodeYAxisWidth = narrow ? 108 : 172;
 
-  const locationPieData = useMemo(() => {
-    return locationTotalsList.map((row) => ({ name: row.location, value: row.total }));
-  }, [locationTotalsList]);
+  const appPieData = useMemo(() => {
+    return appTotalsList.map((row) => ({ name: row.source, value: row.human }));
+  }, [appTotalsList]);
 
-  const sourcePieData = useMemo(() => {
-    return sourceTotalsList.map((row) => ({ name: row.source, value: row.total }));
-  }, [sourceTotalsList]);
+  const retentionChartData = useMemo(() => {
+    if (!viewAnalytics || viewAnalytics.retentionByEpisode.length === 0) return [];
+    const titleById = new Map(viewAnalytics.episodes.map((e) => [e.id, e.title]));
+    const series = viewAnalytics.retentionByEpisode;
+    if (series.length === 0) return [];
+    return RETENTION_BUCKETS.map((bucket) => {
+      const point: Record<string, string | number> = { bucket: `${bucket}%` };
+      for (const ep of series) {
+        const title = truncateEpisodeAxisTitle(titleById.get(ep.episodeId) ?? ep.episodeId, 24);
+        const b = ep.buckets.find((x) => x.bucket === bucket);
+        point[title] = b?.pct ?? 0;
+      }
+      return point;
+    });
+  }, [viewAnalytics]);
+
+  const retentionSeriesKeys = useMemo(() => {
+    if (!viewAnalytics || !retentionChartData[0]) return [] as string[];
+    return Object.keys(retentionChartData[0]).filter((k) => k !== 'bucket');
+  }, [viewAnalytics, retentionChartData]);
 
   const hasAnyData =
-    overviewData.length > 0 ||
+    overviewData.some((d) => d.downloads > 0) ||
     feedData.length > 0 ||
-    episodeBarData.some((d) => d.requests > 0) ||
-    listensBarData.some((d) => d.listens > 0) ||
+    episodeEngagementData.some((d) => d.Downloads > 0 || d.Fetches > 0) ||
     locationPieData.length > 0 ||
-    sourcePieData.length > 0;
+    appPieData.length > 0 ||
+    retentionSeriesKeys.length > 0;
+
+  const toggleEpisode = (episodeId: string) => {
+    setSelectedEpisodeIds((prev) =>
+      prev.includes(episodeId) ? prev.filter((x) => x !== episodeId) : [...prev, episodeId],
+    );
+  };
+
+  const selectAllEpisodes = () => {
+    setSelectedEpisodeIds(allEpisodes.map((e) => e.id));
+  };
+
+  const selectNewestEpisodes = () => {
+    setSelectedEpisodeIds(allEpisodes.slice(0, DEFAULT_SELECTED_EPISODES).map((e) => e.id));
+  };
+
+  const episodeFilterLabel =
+    selectedEpisodeIds.length === 0
+      ? 'No episodes'
+      : selectedEpisodeIds.length === allEpisodes.length && allEpisodes.length > 0
+        ? `All episodes (${allEpisodes.length})`
+        : `${selectedEpisodeIds.length} episode${selectedEpisodeIds.length === 1 ? '' : 's'}`;
 
   if (!id) return null;
   if (podcastLoading || !podcast) return <FullPageLoading />;
@@ -334,6 +560,14 @@ export function PodcastAnalytics() {
   ];
 
   const rssTotal = analytics ? sumRss(analytics) : { bot: 0, human: 0, total: 0 };
+  const methodology = analytics?.methodology;
+
+  const feedSeries = showFeedCrawlers
+    ? [
+        { key: 'Listeners', name: 'Listeners', color: COLORS.human },
+        { key: 'Crawlers', name: 'Crawlers', color: COLORS.bot },
+      ]
+    : [{ key: 'Listeners', name: 'Listeners', color: COLORS.human }];
 
   const renderTimeChart = (
     data: Array<{ statDate: string; [key: string]: string | number }>,
@@ -347,7 +581,12 @@ export function PodcastAnalytics() {
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
           <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
-          <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
+          <Tooltip
+            contentStyle={tooltipContentStyle}
+            itemStyle={tooltipItemStyle}
+            labelStyle={tooltipLabelStyle}
+            labelFormatter={tooltipLabelFormatter}
+          />
           <Legend />
           {series.map((s) => (
             <Line key={s.key} type="monotone" dataKey={s.key} name={s.name} stroke={s.color} strokeWidth={2} dot={{ r: 3 }} />
@@ -361,10 +600,25 @@ export function PodcastAnalytics() {
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
           <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
-          <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
+          <Tooltip
+            contentStyle={tooltipContentStyle}
+            itemStyle={tooltipItemStyle}
+            labelStyle={tooltipLabelStyle}
+            labelFormatter={tooltipLabelFormatter}
+          />
           <Legend />
           {series.map((s) => (
-            <Area key={s.key} type="monotone" dataKey={s.key} name={s.name} stackId="1" stroke={s.color} fill={s.color} fillOpacity={0.5} strokeWidth={2} />
+            <Area
+              key={s.key}
+              type="monotone"
+              dataKey={s.key}
+              name={s.name}
+              stackId={showFeedCrawlers ? '1' : undefined}
+              stroke={s.color}
+              fill={s.color}
+              fillOpacity={0.5}
+              strokeWidth={2}
+            />
           ))}
         </AreaChart>
       );
@@ -375,10 +629,22 @@ export function PodcastAnalytics() {
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
           <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
-          <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
+          <Tooltip
+            contentStyle={tooltipContentStyle}
+            itemStyle={tooltipItemStyle}
+            labelStyle={tooltipLabelStyle}
+            labelFormatter={tooltipLabelFormatter}
+          />
           <Legend />
           {series.map((s) => (
-            <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[4, 4, 0, 0]} stackId="1" />
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              name={s.name}
+              fill={s.color}
+              radius={[4, 4, 0, 0]}
+              stackId={showFeedCrawlers ? '1' : undefined}
+            />
           ))}
         </BarChart>
       );
@@ -398,8 +664,86 @@ export function PodcastAnalytics() {
           </h1>
         </div>
         <p className={styles.sectionSub}>
-          See how your show is doing over the last 2 weeks: feed check-ins, episode plays, and where listeners are from.
+          Downloads and Unique listeners for the selected date range, plus apps, locations, and optional feed health.
         </p>
+        <div className={styles.filterBar}>
+          <label className={styles.filterField}>
+            <span className={styles.filterLabel}>Start</span>
+            <input
+              type="date"
+              className={styles.filterInput}
+              value={startDate}
+              max={endDate}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (!next) return;
+                setStartDate(next);
+                if (next > endDate) setEndDate(next);
+              }}
+            />
+          </label>
+          <label className={styles.filterField}>
+            <span className={styles.filterLabel}>End</span>
+            <input
+              type="date"
+              className={styles.filterInput}
+              value={endDate}
+              min={startDate}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (!next) return;
+                setEndDate(next);
+                if (next < startDate) setStartDate(next);
+              }}
+            />
+          </label>
+          <div className={styles.filterField} ref={episodeMenuRef}>
+            <span className={styles.filterLabel} id="analytics-episodes-label">
+              Episodes
+            </span>
+            <button
+              type="button"
+              className={styles.episodeFilterBtn}
+              aria-labelledby="analytics-episodes-label"
+              aria-haspopup="listbox"
+              aria-expanded={episodeMenuOpen}
+              disabled={allEpisodes.length === 0}
+              onClick={() => setEpisodeMenuOpen((open) => !open)}
+            >
+              <span className={styles.episodeFilterBtnText}>{episodeFilterLabel}</span>
+              <ChevronDown size={16} strokeWidth={2} aria-hidden />
+            </button>
+            {episodeMenuOpen && (
+              <div className={styles.episodeMenu} role="listbox" aria-multiselectable="true">
+                <div className={styles.episodeMenuActions}>
+                  <button type="button" className={styles.episodeMenuAction} onClick={selectAllEpisodes}>
+                    Select all
+                  </button>
+                  <button type="button" className={styles.episodeMenuAction} onClick={selectNewestEpisodes}>
+                    Newest {Math.min(DEFAULT_SELECTED_EPISODES, allEpisodes.length)}
+                  </button>
+                </div>
+                <ul className={styles.episodeMenuList}>
+                  {allEpisodes.map((ep) => {
+                    const checked = selectedEpisodeSet.has(ep.id);
+                    return (
+                      <li key={ep.id}>
+                        <label className={styles.episodeMenuOption}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleEpisode(ep.id)}
+                          />
+                          <span>{ep.title}</span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className={styles.card}>
@@ -421,7 +765,7 @@ export function PodcastAnalytics() {
                 void downloadAnalyticsExcel(
                   { id: podcast.id, title: podcast.title, slug: podcast.slug },
                   analytics,
-                  resolveAnalyticsDateRange(analytics),
+                  dateRange,
                 ).finally(() => setExportingExcel(false));
               }}
             >
@@ -438,7 +782,7 @@ export function PodcastAnalytics() {
                 downloadAnalyticsCsv(
                   { id: podcast.id, title: podcast.title, slug: podcast.slug },
                   analytics,
-                  resolveAnalyticsDateRange(analytics),
+                  dateRange,
                 );
               }}
             >
@@ -455,7 +799,7 @@ export function PodcastAnalytics() {
                 downloadAnalyticsJson(
                   { id: podcast.id, title: podcast.title, slug: podcast.slug },
                   analytics,
-                  resolveAnalyticsDateRange(analytics),
+                  dateRange,
                 );
               }}
             >
@@ -468,18 +812,27 @@ export function PodcastAnalytics() {
 
       {!hasAnyData && (
         <div className={styles.card}>
-          <p className={styles.empty}>No data in the last 2 weeks.</p>
+          <p className={styles.empty}>No data in this date range.</p>
         </div>
       )}
 
       {hasAnyData && (
         <>
-          {/* Overview card */}
           <div className={styles.card}>
             <h2 className={styles.sectionTitle}>
               <LayoutGrid size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
               Overview
             </h2>
+            <div className={styles.summary}>
+              <span className={styles.summaryItem}>
+                <span className={styles.summaryCount}>{downloadsTotal}</span>{' '}
+                <span className={styles.summaryLabel}>Downloads</span>
+              </span>
+              <span className={styles.summaryItem}>
+                <span className={styles.summaryCount}>{uniqueListeners}</span>{' '}
+                <span className={styles.summaryLabel}>Unique listeners</span>
+              </span>
+            </div>
             <CardTabs
               options={['line', 'area', 'bar', 'table'] as const}
               value={overviewView}
@@ -492,18 +845,14 @@ export function PodcastAnalytics() {
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th className={styles.num}>Feed Check-Ins</th>
-                      <th className={styles.num}>Episode Requests</th>
-                      <th className={styles.num}>Listens</th>
+                      <th className={styles.num}>Downloads</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[...overviewData].reverse().map((row) => (
                       <tr key={row.statDate}>
                         <td>{formatShortDate(row.statDate)}</td>
-                        <td className={styles.num}>{row.feed}</td>
-                        <td className={styles.num}>{row.requests}</td>
-                        <td className={styles.num}>{row.listens}</td>
+                        <td className={styles.num}>{row.downloads}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -511,151 +860,65 @@ export function PodcastAnalytics() {
               </div>
             ) : overviewData.length === 0 ? (
               <div className={styles.chartContainer}>
-                <p className={styles.empty}>No data in the last 2 weeks.</p>
+                <p className={styles.empty}>No downloads in this date range.</p>
               </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer width="100%" height={300}>
-                  {overviewView === 'line' ? (
-                    <LineChart data={overviewData} margin={chartMargin}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
-                      <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
-                      <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
-                      <Legend />
-                      <Line type="monotone" dataKey="feed" name="Feed Check-Ins" stroke={COLORS.feed} strokeWidth={2} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="requests" name="Episode Requests" stroke={COLORS.requests} strokeWidth={2} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="listens" name="Listens" stroke={COLORS.listens} strokeWidth={2} dot={{ r: 3 }} />
-                    </LineChart>
-                  ) : overviewView === 'area' ? (
-                    <AreaChart data={overviewData} margin={chartMargin}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
-                      <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
-                      <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
-                      <Legend />
-                      <Area type="monotone" dataKey="feed" name="Feed Check-Ins" stackId="1" stroke={COLORS.feed} fill={COLORS.feed} fillOpacity={0.5} strokeWidth={2} />
-                      <Area type="monotone" dataKey="requests" name="Episode Requests" stackId="1" stroke={COLORS.requests} fill={COLORS.requests} fillOpacity={0.5} strokeWidth={2} />
-                      <Area type="monotone" dataKey="listens" name="Listens" stackId="1" stroke={COLORS.listens} fill={COLORS.listens} fillOpacity={0.5} strokeWidth={2} />
-                    </AreaChart>
-                  ) : (
-                    <BarChart data={overviewData} margin={chartMargin} barCategoryGap="10%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
-                      <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
-                      <Tooltip contentStyle={tooltipContentStyle} labelFormatter={tooltipLabelFormatter} />
-                      <Legend />
-                      <Bar dataKey="feed" name="Feed Check-Ins" fill={COLORS.feed} radius={[4, 4, 0, 0]} stackId="1" />
-                      <Bar dataKey="requests" name="Episode Requests" fill={COLORS.requests} radius={[4, 4, 0, 0]} stackId="1" />
-                      <Bar dataKey="listens" name="Listens" fill={COLORS.listens} radius={[4, 4, 0, 0]} stackId="1" />
-                    </BarChart>
+                  {renderTimeChart(
+                    overviewData,
+                    [{ key: 'downloads', name: 'Downloads', color: COLORS.downloads }],
+                    overviewView
                   )}
                 </ResponsiveContainer>
               </div>
             )}
             <p className={styles.cardFooter}>
-              <strong>Feed Check-Ins:</strong> Listener feed fetches (directory crawlers are excluded from this overview).{' '}
-              <strong>Episode Requests:</strong> Full-file or ≥250 KB audio requests from listeners (tiny metadata probes are excluded).{' '}
-              <strong>Listens:</strong> Unique listener downloads of 250 KB or more (at most one per client per episode per day).
+              {methodology?.downloads ??
+                'Downloads are unique valid audio downloads of about one minute or more (250 KB), at most one per client per episode per day. Bots and tiny Range probes are excluded.'}{' '}
+              {methodology?.uniqueListeners ??
+                'Unique listeners are distinct clients with at least one Download in this date range.'}
             </p>
           </div>
 
-          {/* Feed card */}
-          <div className={styles.card}>
-            <h2 className={styles.sectionTitle}>
-              <Rss size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-              Feed Check-Ins
-            </h2>
-            <div className={styles.summary}>
-              <span className={styles.summaryItem}>
-                <span className={styles.summaryCount}>{rssTotal.total}</span> <span className={styles.summaryLabel}>Total</span>
-              </span>
-              <span className={styles.summaryItem}>
-                <span className={styles.summaryCount}>{rssTotal.human}</span> <span className={styles.summaryLabel}>Listeners</span>
-              </span>
-              <span className={styles.summaryItem}>
-                <span className={styles.summaryCount}>{rssTotal.bot}</span> <span className={styles.summaryLabel}>Crawlers</span>
-              </span>
-            </div>
-            <CardTabs
-              options={['line', 'area', 'bar', 'table'] as const}
-              value={feedView}
-              onChange={setFeedView}
-              labels={{ line: 'Line', area: 'Area', bar: 'Bar', table: 'Table' }}
-            />
-            {feedView === 'table' ? (
-              <div className={styles.tableWrap}>
-                <table className={`${styles.table} ${styles.tableEqualColumns}`}>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th className={styles.num}>Listeners</th>
-                      <th className={styles.num}>Crawlers</th>
-                      <th className={styles.num}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...feedData].reverse().map((row) => (
-                      <tr key={row.statDate}>
-                        <td>{formatShortDate(row.statDate)}</td>
-                        <td className={styles.num}>{row.Listeners}</td>
-                        <td className={styles.num}>{row.Crawlers}</td>
-                        <td className={styles.num}>{row.total}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : feedData.length === 0 ? (
-              <div className={styles.chartContainer}>
-                <p className={styles.empty}>No data in the last 2 weeks.</p>
-              </div>
-            ) : (
-              <div className={styles.chartContainer}>
-                <ResponsiveContainer width="100%" height={300}>
-                  {renderTimeChart(feedData, [{ key: 'Listeners', name: 'Listeners', color: COLORS.human }, { key: 'Crawlers', name: 'Crawlers', color: COLORS.bot }], feedView)}
-                </ResponsiveContainer>
-              </div>
-            )}
-            <p className={styles.cardFooter}>
-              Directory polls (Spotify, Amazon Music, Podbean, etc.) appear under Crawlers. They check for new episodes and are not downloads.
-            </p>
-          </div>
-
-          {/* Episodes card */}
           <div className={styles.card}>
             <h2 className={styles.sectionTitle}>
               <ListMusic size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-              Episode Requests
+              Episodes
             </h2>
             <CardTabs
-              options={['bar', 'table'] as const}
-              value={episodesView}
-              onChange={setEpisodesView}
-              labels={{ bar: 'Bar', table: 'Table' }}
+              options={['downloads', 'fetches', 'comparison', 'table'] as const}
+              value={engagementTab}
+              onChange={setEngagementTab}
+              labels={{
+                downloads: 'Downloads',
+                fetches: 'Raw fetches',
+                comparison: 'Comparison',
+                table: 'Table',
+              }}
             />
-            {episodesView === 'table' ? (
+            {engagementTab === 'table' ? (
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
                   <thead>
                     <tr>
                       <th>Episode</th>
-                      <th className={styles.num}>Listeners</th>
-                      <th className={styles.num}>Crawlers</th>
-                      <th className={styles.num}>Total</th>
+                      <th className={styles.num}>Downloads</th>
+                      <th className={styles.num}>Unique listeners</th>
+                      <th className={styles.num}>Raw fetches</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {episodeBarData.map((row) => (
+                    {episodeEngagementData.map((row) => (
                       <tr key={row.id}>
                         <td>
                           <Link to={`/episodes/${row.id}`} className={styles.episodeLink}>
                             {row.fullName}
                           </Link>
                         </td>
-                        <td className={styles.num}>{row.Listeners}</td>
-                        <td className={styles.num}>{row.Crawlers}</td>
-                        <td className={styles.num}>{row.requests}</td>
+                        <td className={styles.num}>{row.Downloads}</td>
+                        <td className={styles.num}>{row['Unique listeners']}</td>
+                        <td className={styles.num}>{row.Fetches}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -663,7 +926,7 @@ export function PodcastAnalytics() {
               </div>
             ) : episodeBarChartData.length === 0 ? (
               <div className={styles.chartContainer}>
-                <p className={styles.empty}>No episode data in the last 2 weeks.</p>
+                <p className={styles.empty}>No episode data in this date range.</p>
               </div>
             ) : (
               <div className={styles.chartContainer}>
@@ -677,172 +940,41 @@ export function PodcastAnalytics() {
                     <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
                     <Tooltip
                       contentStyle={tooltipContentStyle}
-                      formatter={(value: number | undefined) => [value ?? 0, '']}
-                      labelFormatter={(_: unknown, payload: readonly unknown[]) =>
-                        (payload?.[0] as { payload?: { fullName?: string } } | undefined)?.payload?.fullName ?? ''
-                      }
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
                     />
                     <Legend />
-                    <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
-                    <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
+                    {engagementTab === 'downloads' && (
+                      <>
+                        <Bar dataKey="Downloads" name="Downloads" fill={COLORS.downloads} radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="Unique listeners" name="Unique listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} />
+                      </>
+                    )}
+                    {engagementTab === 'fetches' && (
+                      <Bar dataKey="Fetches" name="Raw audio fetches" fill={COLORS.fetches} radius={[0, 4, 4, 0]} />
+                    )}
+                    {engagementTab === 'comparison' && (
+                      <>
+                        <Bar dataKey="Fetches" name="Raw fetches" fill={COLORS.fetches} radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="Downloads" name="Downloads" fill={COLORS.downloads} radius={[0, 4, 4, 0]} />
+                      </>
+                    )}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
-            {episodesView === 'bar' && episodeBarData.length > EPISODE_BAR_CHART_MAX && (
-              <p className={styles.cardFooter}>Bar chart shows your {EPISODE_BAR_CHART_MAX} most recent episodes (see the table for all).</p>
-            )}
+            <p className={styles.cardFooter}>
+              <strong>Downloads</strong> are unique filtered downloads (about one minute or more, at most one per client per episode per day).{' '}
+              <strong>Unique listeners</strong> are distinct clients in this date range.{' '}
+              <strong>Raw audio fetches</strong> count full-file or ≥250 KB requests before daily dedup.
+            </p>
           </div>
 
-          {/* Listens card */}
-          <div className={styles.card}>
-            <h2 className={styles.sectionTitle}>
-              <Ear size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-              Listens
-            </h2>
-            <CardTabs options={['bar', 'table'] as const} value={listensView} onChange={setListensView} labels={{ bar: 'Bar', table: 'Table' }} />
-            {listensView === 'table' ? (
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Episode</th>
-                      <th className={styles.num}>Listeners</th>
-                      <th className={styles.num}>Crawlers</th>
-                      <th className={styles.num}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {listensBarData.map((row) => (
-                      <tr key={row.id}>
-                        <td>
-                          <Link to={`/episodes/${row.id}`} className={styles.episodeLink}>
-                            {row.fullName}
-                          </Link>
-                        </td>
-                        <td className={styles.num}>{row.Listeners}</td>
-                        <td className={styles.num}>{row.Crawlers}</td>
-                        <td className={styles.num}>{row.listens}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : listensBarChartData.length === 0 ? (
-              <div className={styles.chartContainer}>
-                <p className={styles.empty}>No listen data in the last 2 weeks.</p>
-              </div>
-            ) : (
-              <div className={styles.chartContainer}>
-                <ResponsiveContainer
-                  width="100%"
-                  height={Math.min(420, Math.max(260, 52 + listensBarChartData.length * 44))}
-                >
-                  <BarChart data={listensBarChartData} layout="vertical" margin={episodeChartMargin} barCategoryGap="12%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                    <XAxis type="number" {...axisProps} />
-                    <YAxis type="category" dataKey="name" width={episodeYAxisWidth} {...axisProps} tickLine={false} />
-                    <Tooltip
-                      contentStyle={tooltipContentStyle}
-                      formatter={(value: number | undefined) => [value ?? 0, '']}
-                      labelFormatter={(_: unknown, payload: readonly unknown[]) =>
-                        (payload?.[0] as { payload?: { fullName?: string } } | undefined)?.payload?.fullName ?? ''
-                      }
-                    />
-                    <Legend />
-                    <Bar dataKey="Listeners" name="Listeners" fill={COLORS.human} radius={[0, 4, 4, 0]} stackId="1" />
-                    <Bar dataKey="Crawlers" name="Crawlers" fill={COLORS.bot} radius={[0, 4, 4, 0]} stackId="1" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-            {listensView === 'bar' && listensBarData.length > EPISODE_BAR_CHART_MAX && (
-              <p className={styles.cardFooter}>Bar chart shows your {EPISODE_BAR_CHART_MAX} most recent episodes (see the table for all).</p>
-            )}
-          </div>
-
-          {/* Locations card */}
-          <div className={styles.card}>
-            <h2 className={styles.sectionTitle}>
-              <MapPinned size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-              Requests by Location
-            </h2>
-            <CardTabs
-              options={['pie', 'bar', 'table'] as const}
-              value={locationsView}
-              onChange={setLocationsView}
-              labels={{ pie: 'Pie', bar: 'Bar', table: 'Table' }}
-            />
-            {locationsView === 'table' ? (
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Location</th>
-                      <th className={styles.num}>Listeners</th>
-                      <th className={styles.num}>Crawlers</th>
-                      <th className={styles.num}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {locationTotalsList.map((row) => (
-                      <tr key={row.location}>
-                        <td>{row.location}</td>
-                        <td className={styles.num}>{row.human}</td>
-                        <td className={styles.num}>{row.bot}</td>
-                        <td className={styles.num}>{row.total}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : locationPieData.length === 0 ? (
-              <div className={styles.chartContainer}>
-                <p className={styles.empty}>No location data in the last 2 weeks.</p>
-              </div>
-            ) : (
-              <div className={styles.chartContainer}>
-                <ResponsiveContainer width="100%" height={300}>
-                  {locationsView === 'pie' ? (
-                    <PieChart>
-                      <Pie
-                        data={locationPieData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                      >
-                        {locationPieData.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={tooltipContentStyle} formatter={(value: number | undefined) => [value ?? 0, 'Requests']} />
-                    </PieChart>
-                  ) : (
-                    <BarChart data={locationTotalsList} layout="vertical" margin={chartMargin} barCategoryGap="8%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                      <XAxis type="number" {...axisProps} />
-                      <YAxis type="category" dataKey="location" width={verticalYAxisWidth} {...axisProps} tickLine={false} />
-                      <Tooltip contentStyle={tooltipContentStyle} />
-                      <Bar dataKey="total" name="Requests" fill={COLORS.requests} radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-
-          {/* By source (app) card */}
           <div className={styles.card}>
             <h2 className={styles.sectionTitle}>
               <Smartphone size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-              Listens by Source
+              Apps
             </h2>
-            <p className={styles.sectionSub}>
-              Where listens came from (e.g. Apple Podcasts, Spotify, other apps). Based on app User-Agent.
-            </p>
             <CardTabs
               options={['pie', 'table'] as const}
               value={sourceView}
@@ -854,50 +986,252 @@ export function PodcastAnalytics() {
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th>Source</th>
+                      <th>App</th>
+                      <th className={styles.num}>Downloads</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {appTotalsList.map((row) => (
+                      <tr key={row.source}>
+                        <td>{row.source}</td>
+                        <td className={styles.num}>{row.human}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : appPieData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No app data in this date range.</p>
+              </div>
+            ) : (
+              <div className={styles.chartContainer}>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={appPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
+                      {appPieData.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={tooltipContentStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <p className={styles.cardFooter}>
+              Human Downloads by app: Spotify, Apple Podcasts, Website (HarborFM site/theme player), and Other.
+            </p>
+          </div>
+
+          <div className={styles.card}>
+            <h2 className={styles.sectionTitle}>
+              <MapPinned size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+              Locations
+            </h2>
+            <CardTabs
+              options={['bar', 'pie', 'table'] as const}
+              value={locationsView}
+              onChange={setLocationsView}
+              labels={{ bar: 'Bar', pie: 'Pie', table: 'Table' }}
+            />
+            {locationsView === 'table' ? (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Location</th>
+                      <th className={styles.num}>Downloads</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {locationTotalsList.map((row) => (
+                      <tr key={row.location}>
+                        <td>{row.location}</td>
+                        <td className={styles.num}>{row.human}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : locationBarData.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No location data in this date range.</p>
+              </div>
+            ) : locationsView === 'pie' ? (
+              <div className={styles.chartContainer}>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={locationPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}>
+                      {locationPieData.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={tooltipContentStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className={styles.chartContainer}>
+                <ResponsiveContainer
+                  width="100%"
+                  height={Math.min(360, Math.max(220, locationBarData.length * 36))}
+                >
+                  <BarChart
+                    data={locationBarData.map((r) => ({
+                      name: truncateEpisodeAxisTitle(r.location, narrow ? 16 : 22),
+                      Downloads: r.human,
+                    }))}
+                    layout="vertical"
+                    margin={episodeChartMargin}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                    <XAxis type="number" {...axisProps} />
+                    <YAxis type="category" dataKey="name" width={verticalYAxisWidth} {...axisProps} tickLine={false} />
+                    <Tooltip
+                      contentStyle={tooltipContentStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                    <Bar dataKey="Downloads" fill={COLORS.downloads} radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <p className={styles.cardFooter}>
+              Charts group Downloads by country. Table shows the full city-level breakdown when available.
+            </p>
+          </div>
+
+          <div className={styles.card}>
+            <h2 className={styles.sectionTitle}>
+              <Rss size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+              Feed health
+            </h2>
+            <div className={styles.summary}>
+              <span className={styles.summaryItem}>
+                <span className={styles.summaryCount}>{rssTotal.human}</span>{' '}
+                <span className={styles.summaryLabel}>Listeners</span>
+              </span>
+              <span className={styles.summaryItem}>
+                <span className={styles.summaryCount}>{rssTotal.bot}</span>{' '}
+                <span className={styles.summaryLabel}>Crawlers</span>
+              </span>
+              <span className={styles.summaryItem}>
+                <span className={styles.summaryCount}>{rssTotal.total}</span>{' '}
+                <span className={styles.summaryLabel}>Total</span>
+              </span>
+            </div>
+            <label className={`toggle ${styles.toggleRow}`}>
+              <input
+                type="checkbox"
+                checked={showFeedCrawlers}
+                onChange={(e) => setShowFeedCrawlers(e.target.checked)}
+              />
+              <span className="toggle__track" aria-hidden="true" />
+              <span>Show crawlers</span>
+            </label>
+            <CardTabs
+              options={['line', 'area', 'bar', 'table'] as const}
+              value={feedView}
+              onChange={setFeedView}
+              labels={{ line: 'Line', area: 'Area', bar: 'Bar', table: 'Table' }}
+            />
+            {feedView === 'table' ? (
+              <div className={styles.tableWrap}>
+                <table className={`${styles.table} ${styles.tableEqualColumns}`}>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
                       <th className={styles.num}>Listeners</th>
-                      <th className={styles.num}>Crawlers</th>
+                      {showFeedCrawlers && <th className={styles.num}>Crawlers</th>}
                       <th className={styles.num}>Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sourceTotalsList.map((row) => (
-                      <tr key={row.source}>
-                        <td>{row.source}</td>
-                        <td className={styles.num}>{row.human}</td>
-                        <td className={styles.num}>{row.bot}</td>
+                    {[...feedData].reverse().map((row) => (
+                      <tr key={row.statDate}>
+                        <td>{formatShortDate(row.statDate)}</td>
+                        <td className={styles.num}>{row.Listeners}</td>
+                        {showFeedCrawlers && <td className={styles.num}>{row.Crawlers}</td>}
                         <td className={styles.num}>{row.total}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : sourcePieData.length === 0 ? (
+            ) : feedData.length === 0 ? (
               <div className={styles.chartContainer}>
-                <p className={styles.empty}>No source data in the last 2 weeks.</p>
+                <p className={styles.empty}>No feed data in this date range.</p>
               </div>
             ) : (
               <div className={styles.chartContainer}>
                 <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={sourcePieData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                    >
-                      {sourcePieData.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={tooltipContentStyle} formatter={(value: number | undefined) => [value ?? 0, 'Listens']} />
-                  </PieChart>
+                  {renderTimeChart(feedData, feedSeries, feedView)}
                 </ResponsiveContainer>
               </div>
             )}
+            <p className={styles.cardFooter}>
+              {methodology?.feedHealth ??
+                'RSS feed fetches. Directory polls (Spotify, Amazon Music, Podbean, and similar) are invalid traffic for Downloads and are shown under Crawlers.'}
+            </p>
+          </div>
+
+          <div className={styles.card}>
+            <h2 className={styles.sectionTitle}>
+              <Activity size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+              Retention
+            </h2>
+            <p className={styles.sectionSub}>
+              How far listeners get in the episode on your HarborFM site or theme player.
+            </p>
+            {retentionSeriesKeys.length === 0 ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>
+                  No website retention data yet. Curves appear after listeners play episodes on your HarborFM site or theme player.
+                </p>
+              </div>
+            ) : (
+              <div className={styles.chartContainer}>
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={retentionChartData} margin={chartMargin}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="bucket" {...axisProps} />
+                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} {...axisProps} />
+                    <Tooltip
+                      contentStyle={tooltipContentStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                    <Legend />
+                    {retentionSeriesKeys.map((key, i) => (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        name={key}
+                        stroke={RETENTION_LINE_COLORS[i % RETENTION_LINE_COLORS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <p className={styles.cardFooter}>
+              {methodology?.retention ??
+                'Percent of website listeners still present at each 10% of the episode (client-confirmed playhead).'}
+            </p>
           </div>
         </>
       )}

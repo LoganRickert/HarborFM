@@ -44,6 +44,7 @@ export function FeedEpisodePlayer({
     audioUrl,
     podcastSlug,
     episodeSlug: episode.slug,
+    episodeId: episode.id,
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
     privateWaveformUrl: episodeWithAuth.privateWaveformUrl,

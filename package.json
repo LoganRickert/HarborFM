@@ -1,7 +1,7 @@
 {
   "name": "harborfm",
   "private": true,
-  "version": "1.25.0",
+  "version": "1.26.0",
   "description": "Open source podcast creator.",
   "scripts": {
     "dev": "pnpm run dev:server & pnpm run dev:web",
@@ -14,6 +14,7 @@
     "db:migrate": "pnpm --filter server run db:migrate",
     "db:clear-ip-bans": "pnpm --filter server run db:clear-ip-bans",
     "db:seed-analytics": "pnpm --filter server run db:seed-analytics",
+    "db:import-analytics": "pnpm --filter server run db:import-analytics",
     "db:seed-podcast-episodes": "pnpm --filter server run db:seed-podcast-episodes",
     "reset-password": "pnpm --filter server run reset-password",
     "add-sso-provider": "pnpm --filter server run add-sso-provider",

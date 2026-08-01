@@ -30,9 +30,11 @@ import {
   chaptersJsonPath,
   episodeVideoPath,
   libraryAssetPath,
+  libraryDir,
   multitrackRecordingsDir,
   pathRelativeToData,
   processedDir,
+  resolveDataPath,
   segmentPath,
   transcriptSrtPath,
   uploadsDir,
@@ -45,10 +47,12 @@ import {
 } from "../../services/multitrackRemake.js";
 import { remakeMixWithOptionalWorker } from "../../services/segmentRemakeWorker.js";
 import { sha256FileSync } from "../../utils/hash.js";
+import { isHarborEntityId } from "../../utils/ids.js";
+import { tryCopyValidatedWaveform } from "../../utils/waveform.js";
 import { waveformPath } from "../segments/utils.js";
 import * as episodeRepo from "./repo.js";
 import { slugify } from "./utils.js";
-import { insertAsset } from "../library/repo.js";
+import { insertAsset, getById as getLibraryAsset } from "../library/repo.js";
 import {
   addUserDiskBytes,
   updateSegmentAudio,
@@ -94,6 +98,27 @@ export type ProjectImportResult = {
   warning?: string;
 };
 
+/** Options for restore-into-existing-episode (archive restore). */
+export type ProjectImportOptions = {
+  /** Restore into this episode instead of creating a new one. */
+  restoreIntoEpisodeId?: string;
+  /** Do not apply episode.json metadata onto the live episode row. */
+  skipMetadata?: boolean;
+  /** Only write processed artifacts when missing locally. */
+  skipExistingProcessed?: boolean;
+  /** Skip show notes and poll import. */
+  skipShowNotesAndPoll?: boolean;
+  /** Skip cast assignment. */
+  skipCast?: boolean;
+  /** Skip artwork import when episode already has artwork. */
+  skipExistingArtwork?: boolean;
+  /**
+   * Prefer existing library assets by originalId when present on this server
+   * (archive restore). Only create new library rows when the original is gone.
+   */
+  reuseExistingLibraryAssets?: boolean;
+};
+
 type EpisodeProjectJson = {
   title?: string;
   description?: string;
@@ -135,15 +160,79 @@ function isFinalAudioName(name: string): boolean {
 }
 
 /**
+ * After copying library audio into place: attach/copy waveform and ensure duration.
+ * Matches normal library upload (waveform + probe).
+ */
+async function finalizeImportedLibraryAudio(
+  dest: string,
+  ownerUserId: string,
+  opts?: {
+    durationSec?: number | null;
+    waveformSrc?: string | null;
+  },
+): Promise<{ bytesAdded: number; durationSec: number }> {
+  const dir = libraryDir(ownerUserId);
+  let bytesAdded = 0;
+  const wavDest = waveformPath(dest);
+  const waveformSrc = opts?.waveformSrc?.trim() || null;
+  const expectedDuration =
+    typeof opts?.durationSec === "number" &&
+    Number.isFinite(opts.durationSec) &&
+    opts.durationSec > 0
+      ? opts.durationSec
+      : undefined;
+  if (
+    waveformSrc &&
+    tryCopyValidatedWaveform(waveformSrc, wavDest, {
+      expectedDurationSec: expectedDuration,
+    })
+  ) {
+    try {
+      bytesAdded += statSync(wavDest).size;
+    } catch {
+      // ignore
+    }
+  } else if (!existsSync(wavDest)) {
+    try {
+      await audioService.generateWaveformFile(dest, dir);
+      if (existsSync(wavDest)) bytesAdded += statSync(wavDest).size;
+    } catch {
+      // best-effort; asset is still usable
+    }
+  }
+
+  let durationSec =
+    typeof opts?.durationSec === "number" &&
+    Number.isFinite(opts.durationSec) &&
+    opts.durationSec > 0
+      ? opts.durationSec
+      : 0;
+  if (durationSec <= 0) {
+    try {
+      const probe = await audioService.probeAudio(dest, dir);
+      durationSec = probe.durationSec;
+    } catch {
+      durationSec = 0;
+    }
+  }
+  return { bytesAdded, durationSec };
+}
+
+/**
  * Import a HarborFM project zip into podcastId as a new draft episode.
  * Creates new UUIDs for episode and segments; embeds library assets for the importer.
  * Regenerates waveforms (and remakes the segment mix from multitrack) when audio hashes diverge.
+ *
+ * Pass restore options to restore into an existing archived episode without overwriting metadata.
  */
 export async function importProjectZip(
   podcastId: string,
   zipPath: string,
   importerUserId: string,
+  options: ProjectImportOptions = {},
 ): Promise<ProjectImportResult> {
+  const restoreId = options.restoreIntoEpisodeId?.trim() || null;
+  const isRestore = Boolean(restoreId);
   const extractRoot = join(
     tmpdir(),
     `harborfm-project-import-${nanoid()}`,
@@ -185,61 +274,80 @@ export async function importProjectZip(
     }
 
     const episodeData = readJsonFile<EpisodeProjectJson>(episodeJsonPath);
-    const title = (episodeData.title || "Imported Episode").trim() || "Imported Episode";
 
-    const id = nanoid();
-    const urnNamespace = APP_NAME.toLowerCase().replace(/\s+/g, "-");
-    const guid = `urn:${urnNamespace}:episode:${id}`;
-    let finalSlug = slugify(title) || `episode-${id.slice(0, 8)}`;
-    let counter = 1;
-    while (episodeRepo.slugExists(podcastId, finalSlug)) {
-      finalSlug = `${slugify(title) || "episode"}-${counter}`;
-      counter++;
+    let id: string;
+    let finalSlug: string;
+
+    if (isRestore && restoreId) {
+      const existing = episodeRepo.getById(restoreId);
+      if (!existing || existing.podcastId !== podcastId) {
+        throw new ImportValidationError("Episode not found for restore");
+      }
+      id = restoreId;
+      finalSlug = existing.slug || `episode-${id.slice(0, 8)}`;
+    } else {
+      const title =
+        (episodeData.title || "Imported Episode").trim() || "Imported Episode";
+
+      id = nanoid();
+      const urnNamespace = APP_NAME.toLowerCase().replace(/\s+/g, "-");
+      const guid = `urn:${urnNamespace}:episode:${id}`;
+      finalSlug = slugify(title) || `episode-${id.slice(0, 8)}`;
+      let counter = 1;
+      while (episodeRepo.slugExists(podcastId, finalSlug)) {
+        finalSlug = `${slugify(title) || "episode"}-${counter}`;
+        counter++;
+      }
+
+      const insertRow: episodeRepo.EpisodeInsert = {
+        id,
+        podcastId,
+        title,
+        description: episodeData.description ?? "",
+        guid,
+        subtitle: episodeData.subtitle ?? null,
+        summary: episodeData.summary ?? null,
+        contentEncoded: episodeData.contentEncoded ?? null,
+        slug: finalSlug,
+        seasonNumber: episodeData.seasonNumber ?? null,
+        episodeNumber: episodeData.episodeNumber ?? null,
+        episodeType: episodeData.episodeType ?? null,
+        explicit:
+          episodeData.explicit == null ? null : Boolean(episodeData.explicit),
+        publishAt: null,
+        status: "draft",
+        artworkUrl: episodeData.artworkUrl ?? null,
+        episodeLink: episodeData.episodeLink ?? null,
+        youtubeUrl: episodeData.youtubeUrl ?? null,
+        guidIsPermalink: false,
+        subscriberOnly: Boolean(episodeData.subscriberOnly),
+        subscriberOnlyStartsAt: episodeData.subscriberOnlyStartsAt ?? null,
+        subscriberOnlyEndsAt: episodeData.subscriberOnlyEndsAt ?? null,
+        unlisted: false,
+        showNotesGuestVisible: Boolean(episodeData.showNotesGuestVisible),
+        finalMarkers: stringifyJsonField(episodeData.finalMarkers),
+        finalSoundbites: stringifyJsonField(episodeData.finalSoundbites),
+        contentLinks: stringifyJsonField(episodeData.contentLinks),
+        podcastTxts: stringifyJsonField(episodeData.podcastTxts),
+        socialInteracts: stringifyJsonField(episodeData.socialInteracts),
+        locations: stringifyJsonField(episodeData.locations),
+        license: episodeData.license ?? null,
+        podcastImages: stringifyJsonField(episodeData.podcastImages),
+        fundingLinks: stringifyJsonField(episodeData.fundingLinks),
+        chat: stringifyJsonField(episodeData.chat),
+        valueBlocks: stringifyJsonField(episodeData.valueBlocks),
+      };
+      episodeRepo.insertEpisode(insertRow);
     }
 
-    const insertRow: episodeRepo.EpisodeInsert = {
-      id,
-      podcastId,
-      title,
-      description: episodeData.description ?? "",
-      guid,
-      subtitle: episodeData.subtitle ?? null,
-      summary: episodeData.summary ?? null,
-      contentEncoded: episodeData.contentEncoded ?? null,
-      slug: finalSlug,
-      seasonNumber: episodeData.seasonNumber ?? null,
-      episodeNumber: episodeData.episodeNumber ?? null,
-      episodeType: episodeData.episodeType ?? null,
-      explicit:
-        episodeData.explicit == null ? null : Boolean(episodeData.explicit),
-      publishAt: null,
-      status: "draft",
-      artworkUrl: episodeData.artworkUrl ?? null,
-      episodeLink: episodeData.episodeLink ?? null,
-      youtubeUrl: episodeData.youtubeUrl ?? null,
-      guidIsPermalink: false,
-      subscriberOnly: Boolean(episodeData.subscriberOnly),
-      subscriberOnlyStartsAt: episodeData.subscriberOnlyStartsAt ?? null,
-      subscriberOnlyEndsAt: episodeData.subscriberOnlyEndsAt ?? null,
-      unlisted: false,
-      showNotesGuestVisible: Boolean(episodeData.showNotesGuestVisible),
-      finalMarkers: stringifyJsonField(episodeData.finalMarkers),
-      finalSoundbites: stringifyJsonField(episodeData.finalSoundbites),
-      contentLinks: stringifyJsonField(episodeData.contentLinks),
-      podcastTxts: stringifyJsonField(episodeData.podcastTxts),
-      socialInteracts: stringifyJsonField(episodeData.socialInteracts),
-      locations: stringifyJsonField(episodeData.locations),
-      license: episodeData.license ?? null,
-      podcastImages: stringifyJsonField(episodeData.podcastImages),
-      fundingLinks: stringifyJsonField(episodeData.fundingLinks),
-      chat: stringifyJsonField(episodeData.chat),
-      valueBlocks: stringifyJsonField(episodeData.valueBlocks),
-    };
-    episodeRepo.insertEpisode(insertRow);
-
-    // Artwork
+    // Artwork (skip on restore when episode already has artwork)
     const artworkSrc = findFirstFile(join(extractRoot, "episode"), "artwork.");
-    if (artworkSrc) {
+    const existingEp = isRestore ? episodeRepo.getById(id) : null;
+    const skipArt =
+      options.skipExistingArtwork &&
+      existingEp &&
+      (existingEp.artworkPath || existingEp.artworkUrl);
+    if (artworkSrc && !skipArt && !options.skipMetadata) {
       const ext = extname(artworkSrc).replace(/^\./, "") || "jpg";
       const dest = join(artworkDir(podcastId), `${nanoid()}.${ext}`);
       copyFileSync(artworkSrc, dest);
@@ -261,13 +369,24 @@ export async function importProjectZip(
         const finalAudio = join(finalSrcDir, finalName);
         const ext = extname(finalAudio).replace(/^\./, "") || "mp3";
         const dest = join(processedDir(podcastId, id), `final.${ext}`);
-        copyFileSync(finalAudio, dest);
-        bytesAdded += statSync(dest).size;
-        audioFinalPath = pathRelativeToData(dest);
-        const wavSrc = join(finalSrcDir, `final${WAVEFORM_EXTENSION}`);
-        if (existsSync(wavSrc)) {
-          copyFileSync(wavSrc, waveformPath(dest));
-          bytesAdded += statSync(waveformPath(dest)).size;
+        const skipFinal =
+          options.skipExistingProcessed && existsSync(dest);
+        if (!skipFinal) {
+          copyFileSync(finalAudio, dest);
+          bytesAdded += statSync(dest).size;
+          audioFinalPath = pathRelativeToData(dest);
+          const wavSrc = join(finalSrcDir, `final${WAVEFORM_EXTENSION}`);
+          if (
+            tryCopyValidatedWaveform(wavSrc, waveformPath(dest), {
+              expectedDurationSec:
+                typeof episodeData.audioDurationSec === "number" &&
+                episodeData.audioDurationSec > 0
+                  ? episodeData.audioDurationSec
+                  : undefined,
+            })
+          ) {
+            bytesAdded += statSync(waveformPath(dest)).size;
+          }
         }
       }
     }
@@ -275,25 +394,31 @@ export async function importProjectZip(
     const srtSrc = join(finalSrcDir, "transcript.srt");
     if (existsSync(srtSrc)) {
       const dest = transcriptSrtPath(podcastId, id);
-      copyFileSync(srtSrc, dest);
-      bytesAdded += statSync(dest).size;
+      if (!(options.skipExistingProcessed && existsSync(dest))) {
+        copyFileSync(srtSrc, dest);
+        bytesAdded += statSync(dest).size;
+      }
     }
     const chaptersSrc = join(finalSrcDir, "chapters.json");
     if (existsSync(chaptersSrc)) {
       const dest = chaptersJsonPath(podcastId, id);
-      copyFileSync(chaptersSrc, dest);
-      bytesAdded += statSync(dest).size;
+      if (!(options.skipExistingProcessed && existsSync(dest))) {
+        copyFileSync(chaptersSrc, dest);
+        bytesAdded += statSync(dest).size;
+      }
     }
     const videoSrc = join(finalSrcDir, "video.mp4");
     let videoFinalPath: string | null = null;
     if (existsSync(videoSrc)) {
       const dest = episodeVideoPath(podcastId, id);
-      copyFileSync(videoSrc, dest);
-      bytesAdded += statSync(dest).size;
-      videoFinalPath = pathRelativeToData(dest);
+      if (!(options.skipExistingProcessed && existsSync(dest))) {
+        copyFileSync(videoSrc, dest);
+        bytesAdded += statSync(dest).size;
+        videoFinalPath = pathRelativeToData(dest);
+      }
     }
 
-    if (audioFinalPath || videoFinalPath) {
+    if (!options.skipMetadata && (audioFinalPath || videoFinalPath)) {
       episodeRepo.updateEpisode(id, {
         ...(audioFinalPath
           ? {
@@ -310,7 +435,7 @@ export async function importProjectZip(
 
     // Show notes
     const showNotesPath = join(extractRoot, "episode", "show-notes.json");
-    if (existsSync(showNotesPath)) {
+    if (!options.skipShowNotesAndPoll && existsSync(showNotesPath)) {
       const sn = readJsonFile<{
         guestVisible?: boolean;
         items?: Array<{
@@ -362,7 +487,7 @@ export async function importProjectZip(
 
     // Poll (definition only)
     const pollPath = join(extractRoot, "episode", "poll.json");
-    if (existsSync(pollPath)) {
+    if (!options.skipShowNotesAndPoll && existsSync(pollPath)) {
       const poll = readJsonFile<{
         enabled?: boolean;
         startAt?: string | null;
@@ -390,7 +515,7 @@ export async function importProjectZip(
     const castNames = Array.isArray(episodeData.castNames)
       ? episodeData.castNames
       : [];
-    if (castNames.length > 0) {
+    if (!options.skipCast && castNames.length > 0) {
       const showCast = drizzleDb
         .select({ id: podcastCast.id, name: podcastCast.name })
         .from(podcastCast)
@@ -408,13 +533,20 @@ export async function importProjectZip(
       if (matched.length) episodeRepo.replaceEpisodeCast(id, matched);
     }
 
-    // Library assets map: originalId -> newId
+    // Library assets map: claimed originalId -> newId (or same id when reusing)
     const libraryMap = new Map<string, string>();
     const libraryRoot = join(extractRoot, "library");
     if (existsSync(libraryRoot)) {
       for (const assetFolder of readdirSync(libraryRoot)) {
+        // Reject path-escape / non-id folder names from tampered zips.
+        if (!/^[a-zA-Z0-9_-]+$/.test(assetFolder)) continue;
         const libDir = join(libraryRoot, assetFolder);
         if (!statSync(libDir).isDirectory()) continue;
+        try {
+          assertResolvedPathUnder(libDir, libraryRoot);
+        } catch {
+          continue;
+        }
         const assetJsonPath = join(libDir, "asset.json");
         if (!existsSync(assetJsonPath)) continue;
         const assetMeta = readJsonFile<{
@@ -426,6 +558,34 @@ export async function importProjectZip(
           license?: string | null;
           sourceUrl?: string | null;
         }>(assetJsonPath);
+        const claimedRaw =
+          typeof assetMeta.originalId === "string"
+            ? assetMeta.originalId.trim()
+            : "";
+        const mapKey = claimedRaw || assetFolder;
+        // Only trust nanoid-shaped ids for DB reuse (blocks "thisisanidtest").
+        const reuseId = isHarborEntityId(claimedRaw)
+          ? claimedRaw
+          : isHarborEntityId(assetFolder)
+            ? assetFolder
+            : null;
+
+        if (options.reuseExistingLibraryAssets && reuseId) {
+          const existing = getLibraryAsset(reuseId);
+          if (
+            existing?.audioPath &&
+            (existing.ownerUserId === importerUserId ||
+              Boolean(existing.globalAsset))
+          ) {
+            const abs = resolveDataPath(existing.audioPath);
+            if (existsSync(abs)) {
+              libraryMap.set(mapKey, existing.id);
+              libraryMap.set(reuseId, existing.id);
+              continue;
+            }
+          }
+        }
+
         const audioSrc = findFirstFile(libDir, "audio.");
         if (!audioSrc) continue;
         const newAssetId = nanoid();
@@ -433,20 +593,35 @@ export async function importProjectZip(
         const dest = libraryAssetPath(importerUserId, newAssetId, ext);
         copyFileSync(audioSrc, dest);
         bytesAdded += statSync(dest).size;
+        const besideAudio = waveformPath(audioSrc);
+        const waveformSrc = existsSync(besideAudio)
+          ? besideAudio
+          : existsSync(join(libDir, "waveform.json"))
+            ? join(libDir, "waveform.json")
+            : findFirstFile(libDir, "waveform");
+        const finalized = await finalizeImportedLibraryAudio(
+          dest,
+          importerUserId,
+          {
+            durationSec: assetMeta.durationSec,
+            waveformSrc,
+          },
+        );
+        bytesAdded += finalized.bytesAdded;
         insertAsset({
           id: newAssetId,
           ownerUserId: importerUserId,
           name: assetMeta.name || "Imported asset",
           audioPath: pathRelativeToData(dest),
-          durationSec: assetMeta.durationSec ?? 0,
+          durationSec: finalized.durationSec,
           tag: assetMeta.tag ?? null,
           globalAsset: false,
           copyright: assetMeta.copyright ?? null,
           license: assetMeta.license ?? null,
           sourceUrl: assetMeta.sourceUrl ?? null,
         });
-        const originalId = assetMeta.originalId || assetFolder;
-        libraryMap.set(originalId, newAssetId);
+        libraryMap.set(mapKey, newAssetId);
+        if (reuseId) libraryMap.set(reuseId, newAssetId);
       }
     }
 
@@ -546,8 +721,19 @@ export async function importProjectZip(
             ) {
               needSegmentWaveformRegen = true;
             } else {
-              copyFileSync(wavSrc, waveformPath(dest));
-              bytesAdded += statSync(waveformPath(dest)).size;
+              if (
+                tryCopyValidatedWaveform(wavSrc, waveformPath(dest), {
+                  expectedDurationSec:
+                    typeof segMeta.durationSec === "number" &&
+                    segMeta.durationSec > 0
+                      ? segMeta.durationSec
+                      : undefined,
+                })
+              ) {
+                bytesAdded += statSync(waveformPath(dest)).size;
+              } else {
+                needSegmentWaveformRegen = true;
+              }
             }
           } else {
             needSegmentWaveformRegen = true;
@@ -557,19 +743,49 @@ export async function importProjectZip(
 
       let reusableAssetId: string | null = null;
       if (type === "reusable" && segMeta.reusableAssetId) {
-        reusableAssetId = libraryMap.get(segMeta.reusableAssetId) ?? null;
+        const claimedAssetId = String(segMeta.reusableAssetId).trim();
+        reusableAssetId = libraryMap.get(claimedAssetId) ?? null;
+        if (
+          !reusableAssetId &&
+          options.reuseExistingLibraryAssets &&
+          isHarborEntityId(claimedAssetId)
+        ) {
+          const existing = getLibraryAsset(claimedAssetId);
+          if (
+            existing?.audioPath &&
+            (existing.ownerUserId === importerUserId ||
+              Boolean(existing.globalAsset))
+          ) {
+            const abs = resolveDataPath(existing.audioPath);
+            if (existsSync(abs)) {
+              reusableAssetId = existing.id;
+              libraryMap.set(claimedAssetId, existing.id);
+            }
+          }
+        }
         if (!reusableAssetId && audioSrc) {
           const newAssetId = nanoid();
           const ext = extname(audioSrc).replace(/^\./, "") || "mp3";
           const dest = libraryAssetPath(importerUserId, newAssetId, ext);
           copyFileSync(audioSrc, dest);
           bytesAdded += statSync(dest).size;
+          const segWaveform = join(segDir, "waveform.json");
+          const finalized = await finalizeImportedLibraryAudio(
+            dest,
+            importerUserId,
+            {
+              durationSec,
+              waveformSrc: existsSync(segWaveform) ? segWaveform : null,
+            },
+          );
+          bytesAdded += finalized.bytesAdded;
+          if (finalized.durationSec > 0) durationSec = finalized.durationSec;
           insertAsset({
             id: newAssetId,
             ownerUserId: importerUserId,
             name: String(name || "Imported asset"),
             audioPath: pathRelativeToData(dest),
-            durationSec,
+            durationSec: finalized.durationSec || durationSec,
             tag: null,
             globalAsset: false,
             copyright: null,
@@ -577,6 +793,7 @@ export async function importProjectZip(
             sourceUrl: null,
           });
           reusableAssetId = newAssetId;
+          libraryMap.set(claimedAssetId, newAssetId);
         }
       }
 

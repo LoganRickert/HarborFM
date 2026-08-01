@@ -11,10 +11,14 @@ import {
   List,
   AudioLines,
   BarChart3,
+  Archive,
   FolderArchive,
+  HardDriveUpload,
   Paperclip,
   Images,
+  X,
 } from 'lucide-react';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   downloadEpisodeUrl,
   downloadProjectUrl,
@@ -34,6 +38,7 @@ import { EpisodeFilesDialog } from './EpisodeFilesDialog';
 import { DownloadThumbnailsDialog } from './DownloadThumbnailsDialog';
 import { CollapsiblePublishPanel } from './CollapsiblePublishPanel';
 import { ActionTile } from './ActionTile';
+import { EpisodeBackupDialog } from './EpisodeBackupDialog';
 import type { PublishFormFields } from './EpisodePublishControls';
 import styles from '../EpisodeEditor.module.css';
 
@@ -77,6 +82,14 @@ export interface GenerateFinalBarProps {
   onOpenGenerateVideo?: () => void;
   downloadVideoUrl?: string;
   videoPosterUrl?: string | null;
+  /** Episode project has been archived to remote storage. */
+  isArchived?: boolean;
+  /** Show has archive settings configured. */
+  archiveConfigured?: boolean;
+  onArchive?: () => void | Promise<void>;
+  isArchiving?: boolean;
+  archiveError?: string | null;
+  onClearArchiveError?: () => void;
 }
 
 export function GenerateFinalBar({
@@ -115,6 +128,12 @@ export function GenerateFinalBar({
   onOpenGenerateVideo,
   downloadVideoUrl,
   videoPosterUrl,
+  isArchived = false,
+  archiveConfigured = false,
+  onArchive,
+  isArchiving = false,
+  archiveError = null,
+  onClearArchiveError,
 }: GenerateFinalBarProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastLoadedUrlRef = useRef<string | null>(null);
@@ -132,6 +151,18 @@ export function GenerateFinalBar({
   const [pollsOpen, setPollsOpen] = useState(false);
   const [episodeFilesOpen, setEpisodeFilesOpen] = useState(false);
   const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [archiveWaitOpen, setArchiveWaitOpen] = useState(false);
+  const [backupDialogOpen, setBackupDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (isArchiving) setArchiveWaitOpen(true);
+    else if (!archiveError) setArchiveWaitOpen(false);
+  }, [isArchiving, archiveError]);
+
+  useEffect(() => {
+    if (archiveError) setArchiveWaitOpen(true);
+  }, [archiveError]);
 
   const waveformCacheKey = finalUpdatedAt ?? episodeId ?? '';
   const waveformUrl =
@@ -437,8 +468,12 @@ export function GenerateFinalBar({
           label={isBuilding ? 'Building…' : hasFinalAudio ? 'Rebuild' : 'Build'}
           color="teal"
           onClick={onBuild}
-          disabled={segmentCount === 0 || isBuilding || readOnly}
-          infoText="Stitch all enabled sections into one MP3 for your podcast feed."
+          disabled={segmentCount === 0 || isBuilding || readOnly || isArchived}
+          infoText={
+            isArchived
+              ? 'Restore the project before building again.'
+              : 'Stitch all enabled sections into one MP3 for your podcast feed.'
+          }
         />
         {showTranscriptTile && (
           <ActionTile
@@ -580,16 +615,62 @@ export function GenerateFinalBar({
             label="Download Project"
             color="slate"
             onClick={() => void handleDownloadProject()}
-            disabled={projectExportOpen && !projectExportError}
-            infoText="Download a zip of this episode (segments, finals, multitrack recordings) to archive or import later."
+            disabled={isArchived || (projectExportOpen && !projectExportError)}
+            infoText={
+              isArchived
+                ? 'Restore the project before downloading.'
+                : 'Download a zip of this episode (segments, finals, multitrack recordings) to archive or import later.'
+            }
+          />
+        )}
+        {episodeId && !readOnly && archiveConfigured && (
+          <ActionTile
+            icon={<HardDriveUpload size={22} strokeWidth={1.75} aria-hidden />}
+            label="Backup"
+            color="slate"
+            onClick={() => setBackupDialogOpen(true)}
+            disabled={isArchiving || isArchived || !hasFinalAudio}
+            infoText={
+              isArchived
+                ? 'Restore the project before backing up.'
+                : !hasFinalAudio
+                  ? 'Build the final episode before backing up.'
+                  : 'Upload a project zip to the archive destination, or restore from a previous backup.'
+            }
+          />
+        )}
+        {episodeId && !readOnly && !isArchived && (
+          <ActionTile
+            icon={<Archive size={22} strokeWidth={1.75} aria-hidden />}
+            label={isArchiving ? 'Archiving...' : 'Archive'}
+            color="slate"
+            onClick={() => setArchiveConfirmOpen(true)}
+            disabled={isArchiving || !hasFinalAudio || !archiveConfigured}
+            infoText={
+              !archiveConfigured
+                ? 'Configure Archive Settings on the show page first.'
+                : !hasFinalAudio
+                  ? 'Build the final episode before archiving.'
+                  : 'Upload a project zip to the archive destination and free local project files. The feed keeps serving the final audio.'
+            }
           />
         )}
       </div>
 
+      {episodeId ? (
+        <EpisodeBackupDialog
+          open={backupDialogOpen}
+          onOpenChange={setBackupDialogOpen}
+          episodeId={episodeId}
+          hasFinalAudio={hasFinalAudio}
+          readOnly={readOnly}
+        />
+      ) : null}
+
       <PleaseWaitDialog
         open={projectExportOpen}
         title="Please wait"
-        description="Preparing your download…"
+        description="Preparing your download..."
         error={projectExportError}
         errorTitle="Download failed"
         onDismiss={() => {
@@ -597,6 +678,62 @@ export function GenerateFinalBar({
           setProjectExportError(null);
         }}
       />
+
+      <PleaseWaitDialog
+        open={archiveWaitOpen}
+        title="Please wait"
+        description="Creating and uploading the archive..."
+        error={archiveError}
+        errorTitle="Archive failed"
+        onDismiss={() => {
+          setArchiveWaitOpen(false);
+          onClearArchiveError?.();
+        }}
+      />
+
+      <Dialog.Root open={archiveConfirmOpen} onOpenChange={setArchiveConfirmOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className={styles.dialogOverlay} />
+          <Dialog.Content className={styles.dialogContent}>
+            <div className={styles.dialogHeaderRow}>
+              <Dialog.Title className={styles.dialogTitle}>Archive this episode?</Dialog.Title>
+              <button
+                type="button"
+                className={styles.dialogClose}
+                aria-label="Close"
+                onClick={() => setArchiveConfirmOpen(false)}
+              >
+                <X size={18} strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+            <Dialog.Description className={styles.dialogDescription}>
+              HarborFM will zip this project, upload it to your archive destination, verify the
+              upload, then remove local segment and recording files. Final audio and other
+              feed-serving files stay so listeners are unaffected. You can restore the project
+              later.
+            </Dialog.Description>
+            <div className={styles.dialogActions}>
+              <button
+                type="button"
+                className={styles.cancel}
+                onClick={() => setArchiveConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.submit}
+                onClick={() => {
+                  setArchiveConfirmOpen(false);
+                  void onArchive?.();
+                }}
+              >
+                Archive
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <ChaptersCard
         markers={finalMarkers ?? []}

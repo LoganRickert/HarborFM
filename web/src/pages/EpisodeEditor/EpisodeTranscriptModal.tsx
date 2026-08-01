@@ -10,6 +10,8 @@ import styles from '../EpisodeEditor.module.css';
 
 export interface EpisodeTranscriptModalProps {
   episodeId: string;
+  /** Used for download filenames (e.g. "Episode Title.srt"). */
+  episodeTitle: string;
   onClose: () => void;
   /** If false, transcript is read-only (view only). */
   canEdit: boolean;
@@ -27,6 +29,19 @@ function downloadTextFile(content: string, filename: string, mime: string): void
   URL.revokeObjectURL(objectUrl);
 }
 
+/** Safe download basename from episode title (path/control chars stripped). */
+function transcriptDownloadBasename(episodeTitle: string): string {
+  const cleaned =
+    episodeTitle
+      .trim()
+      .replace(/[\u0000-\u001f\u007f]/g, '') // eslint-disable-line no-control-regex -- strip C0 controls from download basename
+      .replace(/[\\/:*?"<>|]/g, '-')
+      .replace(/\s+/g, ' ')
+      .replace(/^[.\s-]+|[.\s-]+$/g, '')
+      .slice(0, 120) || 'transcript';
+  return cleaned;
+}
+
 /** Plain spoken text only (no indices/timestamps), matching LLM metadata feed. */
 function plainTranscriptText(srtOrText: string): string {
   const raw = srtOrText.replace(/\r\n/g, '\n').trim();
@@ -41,6 +56,7 @@ function plainTranscriptText(srtOrText: string): string {
 
 export function EpisodeTranscriptModal({
   episodeId,
+  episodeTitle,
   onClose,
   canEdit,
 }: EpisodeTranscriptModalProps) {
@@ -116,16 +132,22 @@ export function EpisodeTranscriptModal({
   const sourceText = canEdit ? editValue : (text ?? '');
   const canDownload = sourceText.trim().length > 0;
 
+  const downloadBase = transcriptDownloadBasename(episodeTitle);
+
   const handleDownloadSrt = () => {
     if (!canDownload) return;
-    downloadTextFile(sourceText, 'transcript.srt', 'application/x-subrip;charset=utf-8');
+    downloadTextFile(
+      sourceText,
+      `${downloadBase}.srt`,
+      'application/x-subrip;charset=utf-8',
+    );
   };
 
   const handleDownloadTxt = () => {
     if (!canDownload) return;
     downloadTextFile(
       plainTranscriptText(sourceText),
-      'transcript.txt',
+      `${downloadBase}.txt`,
       'text/plain;charset=utf-8',
     );
   };

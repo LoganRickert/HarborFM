@@ -161,6 +161,7 @@ export function FeedEpisode({
     audioUrl,
     podcastSlug,
     episodeSlug,
+    episodeId: episode?.id,
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
     privateWaveformUrl: episode?.privateWaveformUrl,

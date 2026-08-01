@@ -326,6 +326,112 @@
   line-height: 1.45;
 }
 
+/* Archived project: replaces Build Your Episode while remote archive is active */
+.archivedProjectPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1.25rem;
+  padding: 2.25rem 1.5rem 2rem;
+  background:
+    radial-gradient(
+      120% 80% at 50% 0%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 55%
+    ),
+    color-mix(in srgb, var(--bg) 45%, var(--bg-elevated) 55%);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: var(--radius);
+}
+
+.archivedProjectIconWrap {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 0 24px var(--accent-glow);
+}
+
+.archivedProjectCopy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.archivedProjectEyebrow {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.archivedProjectTitle {
+  margin: 0;
+  font-size: clamp(1.125rem, 2.5vw, 1.375rem);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.archivedProjectActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.archivedProjectRestoreBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  padding: 0.7rem 1.5rem;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: 0 0 20px var(--accent-glow);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.archivedProjectRestoreBtn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  box-shadow: 0 0 28px var(--accent-glow);
+  transform: translateY(-1px);
+}
+
+.archivedProjectRestoreBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.archivedProjectRestoreBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.archivedProjectError {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #f87171;
+}
+
 .sectionsUploadRow {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -4299,6 +4405,41 @@ a.manageSegmentAction .manageSegmentActionHint {
   margin: 0.75rem 0 0;
   color: var(--error);
   font-size: 0.875rem;
+}
+.backupRestoreSection {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.backupRestoreHeading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.backupRestoreLead {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.backupRestoreRow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+.backupRestoreRow .select {
+  width: 100%;
+  min-width: 0;
+}
+.backupRestoreRow .submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  align-self: center;
 }
 .dialogConfirmRemove {
   padding: 0.5rem 1rem;

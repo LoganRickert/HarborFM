@@ -20,6 +20,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -78,7 +79,20 @@ CRAWLER_UA_RE = re.compile(
             r"Baiduspider",
             r"Dataprovider",
             r"ClaudeBot",
-            r"iHeartRadio",  # directory / feed agent UAs
+            r"iHeartRadio",
+            r"ListenNotes/",
+            r"PlayerFM/",
+            r"^axios/",
+            r"^TPA/",
+            r"MyRSSReader/",
+            r"Podline/",
+            r"Podverse/Feed",
+            r"Aggrivator",
+            r"taddy\.org",
+            r"Deezer Podcasters",
+            r"Stract/",
+            r"^atc/",
+            r"watchOS/",
         ]
     ),
     re.I,
@@ -112,6 +126,7 @@ LISTENER_UA_RE = re.compile(
 )
 
 SOURCE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("Apple Podcasts", re.compile(r"^iTMS$|^itms$", re.I)),
     ("Apple Podcasts", re.compile(r"^Podcasts/|^Balados/", re.I)),
     ("Spotify", re.compile(r"Spotify/[\d.]+", re.I)),
     ("Amazon Music", re.compile(r"Amazon Music", re.I)),
@@ -128,6 +143,10 @@ SOURCE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Podbean", re.compile(r"Podbean/", re.I)),
 ]
 
+BROWSER_UA_RE = re.compile(
+    r"Mozilla/5\.0.*(Chrome|Chromium|Firefox|Edg|Safari|OPR)/", re.I
+)
+
 
 @dataclass
 class LogEntry:
@@ -140,6 +159,7 @@ class LogEntry:
     size: int
     referer: str
     ua: str
+    hf_src: str = ""
 
 
 @dataclass
@@ -177,13 +197,68 @@ def nginx_ts_to_day(ts: str) -> str:
     return f"{year}-{MONTHS[mon]:02d}-{int(day_s):02d}"
 
 
-def parse_size(raw: str) -> int:
-    if raw == "-":
+def unix_ts_to_day(ts: float | int | str) -> str:
+    # Caddy JSON logs use unix seconds (float).
+    try:
+        sec = float(ts)
+    except (TypeError, ValueError):
+        return ""
+    return datetime.fromtimestamp(sec, tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+def parse_size(raw: str | int | float | None) -> int:
+    if raw is None or raw == "-":
         return -1
     try:
         return int(raw)
-    except ValueError:
+    except (TypeError, ValueError):
         return -1
+
+
+def _header_first(headers: dict[str, Any] | None, *names: str) -> str:
+    if not headers:
+        return "-"
+    lower = {str(k).lower(): v for k, v in headers.items()}
+    for name in names:
+        val = lower.get(name.lower())
+        if isinstance(val, list) and val:
+            return str(val[0])
+        if isinstance(val, str) and val:
+            return val
+    return "-"
+
+
+def parse_caddy_entry(obj: dict[str, Any]) -> LogEntry | None:
+    """Parse a Caddy JSON access line (`msg: handled request`)."""
+    if obj.get("msg") != "handled request":
+        return None
+    req = obj.get("request")
+    if not isinstance(req, dict):
+        return None
+    method = str(req.get("method") or "")
+    uri = str(req.get("uri") or "")
+    status = obj.get("status")
+    if status is None:
+        return None
+    try:
+        status_i = int(status)
+    except (TypeError, ValueError):
+        return None
+    ip = str(req.get("client_ip") or req.get("remote_ip") or "-")
+    day = unix_ts_to_day(obj.get("ts", 0))
+    headers = req.get("headers") if isinstance(req.get("headers"), dict) else {}
+    return LogEntry(
+        ip=ip,
+        day=day,
+        ts=str(obj.get("ts") or ""),
+        method=method,
+        path=uri.split("?", 1)[0],
+        status=status_i,
+        size=parse_size(obj.get("size")),
+        referer=_header_first(headers, "Referer", "Referrer"),
+        ua=_header_first(headers, "User-Agent"),
+        hf_src=_parse_hf_src(uri),
+    )
 
 
 def traffic_class(ua: str) -> str:
@@ -200,14 +275,32 @@ def traffic_class(ua: str) -> str:
     return "crawler"
 
 
-def source_from_ua(ua: str) -> str:
+def source_from_request(ua: str, referer: str = "", hf_src: str = "") -> str:
+    if (hf_src or "").strip().lower() == "web":
+        return "Website"
     u = (ua or "").strip()
     if not u:
         return "Other"
     for label, pat in SOURCE_PATTERNS:
         if pat.search(u):
             return label
+    if BROWSER_UA_RE.search(u):
+        return "Website"
     return "Other"
+
+
+def source_from_ua(ua: str) -> str:
+    return source_from_request(ua)
+
+
+def _parse_hf_src(uri: str) -> str:
+    if "?" not in uri:
+        return ""
+    qs = uri.split("?", 1)[1]
+    for part in qs.split("&"):
+        if part.startswith("hf_src="):
+            return part.split("=", 1)[1]
+    return ""
 
 
 def size_bucket(sz: int) -> str:
@@ -223,9 +316,35 @@ def size_bucket(sz: int) -> str:
 
 
 def iter_entries(path: Path) -> Iterator[LogEntry | None]:
+    """Yield LogEntry for access lines; None for malformed access lines.
+
+    Supports nginx combined text and Caddy JSON (`handled request`). Non-access
+    Caddy operational lines are skipped (not counted as parse failures).
+    """
     with path.open("r", errors="replace") as f:
-        for line in f:
-            m = COMBINED_RE.match(line.rstrip("\n"))
+        for raw in f:
+            line = raw.rstrip("\n")
+            if not line:
+                continue
+
+            # Caddy / NDJSON access logs
+            if line.startswith("{"):
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    yield None
+                    continue
+                if not isinstance(obj, dict):
+                    yield None
+                    continue
+                if obj.get("msg") != "handled request":
+                    # TLS, admin, reverse_proxy noise: ignore
+                    continue
+                entry = parse_caddy_entry(obj)
+                yield entry  # None => malformed handled-request line
+                continue
+
+            m = COMBINED_RE.match(line)
             if not m:
                 yield None
                 continue
@@ -240,6 +359,7 @@ def iter_entries(path: Path) -> Iterator[LogEntry | None]:
                 size=parse_size(size),
                 referer=ref,
                 ua=ua,
+                hf_src=_parse_hf_src(req_path),
             )
 
 
@@ -283,7 +403,9 @@ def build_report(
             report.rss_total += 1
             report.rss_by_day[entry.day] += 1
             report.rss_by_ua[entry.ua[:120] or "(empty)"] += 1
-            report.rss_by_source[source_from_ua(entry.ua)] += 1
+            report.rss_by_source[
+                source_from_request(entry.ua, entry.referer, entry.hf_src)
+            ] += 1
             if traffic_class(entry.ua) == "crawler":
                 report.rss_crawler += 1
             else:
@@ -296,7 +418,9 @@ def build_report(
                 report.audio_total += 1
                 report.audio_by_day[entry.day] += 1
                 report.audio_by_ua[entry.ua[:120] or "(empty)"] += 1
-                report.audio_by_source[source_from_ua(entry.ua)] += 1
+                report.audio_by_source[
+                    source_from_request(entry.ua, entry.referer, entry.hf_src)
+                ] += 1
                 report.audio_by_status[entry.status] += 1
                 report.audio_by_size_bucket[size_bucket(entry.size)] += 1
                 report.audio_by_episode[eid] += 1
@@ -367,11 +491,11 @@ def print_text_report(data: dict[str, Any]) -> None:
     print("=== HarborFM access log analytics ===")
     print(
         f"slug={data['slug']} podcast_id={data['podcast_id']} "
-        f"range={data['start'] or '…'}..{data['end'] or '…'}"
+        f"range={data['start'] or '...'}..{data['end'] or '...'}"
     )
     print(f"parsed lines={data['parse_ok']} parse_fail={data['parse_fail']}")
     print()
-    print("--- RSS ---")
+    print("--- Feed health (RSS) ---")
     print(
         f"total={rss['total']} crawler={rss['crawler']} "
         f"listener={rss['listener']} crawler%={rss['crawler_pct']}"
@@ -381,11 +505,11 @@ def print_text_report(data: dict[str, Any]) -> None:
     for ua, c in rss["top_ua"][:10]:
         print(f"  {c:6d}  {ua}")
     print()
-    print("--- Audio enclosures ---")
+    print("--- Downloads (audio enclosures) ---")
     print(
-        f"GETs={audio['total_gets']} tiny<1k={audio['tiny_lt_1k']} "
+        f"raw_fetches={audio['total_gets']} tiny<1k={audio['tiny_lt_1k']} "
         f">=250KB responses={audio['ge_250kb_responses']} "
-        f"unique downloads={audio['unique_downloads']} "
+        f"unique_downloads={audio['unique_downloads']} "
         f"inflation={audio['request_vs_unique_ratio']}x"
     )
     print("status:", audio["by_status"])
@@ -423,7 +547,7 @@ def compare_to_api(report: Report, api: dict[str, Any], episode_titles: dict[str
         ("RSS bot/crawler", rss_b, report.rss_crawler),
         ("RSS human/listener", rss_h, report.rss_listener),
         ("Episode requests (API) / GETs", req_t, report.audio_total),
-        ("Listens / unique downloads", lis_t, len(report.unique_downloads)),
+        ("Downloads / unique downloads", lis_t, len(report.unique_downloads)),
     ]
     for name, api_v, log_v in rows:
         print(f"{name:<28} {api_v:10d} {log_v:10d} {log_v - api_v:10d}")
@@ -440,7 +564,7 @@ def compare_to_api(report: Report, api: dict[str, Any], episode_titles: dict[str
         )
 
     print()
-    print("Per-episode (API requests / log GETs / API listens / log unique):")
+    print("Per-episode (API raw fetches / log GETs / API Downloads / log unique):")
     ids = sorted(
         set(api_req) | set(report.audio_by_episode) | set(api_lis) | set(report.downloads_by_episode),
         key=lambda i: -(api_req[i] + report.audio_by_episode[i]),
@@ -479,7 +603,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--log",
         type=Path,
         default=Path(__file__).with_name("access.log"),
-        help="Path to nginx combined access.log",
+        help="Path to nginx combined or Caddy JSON access.log",
     )
     p.add_argument("--slug", help="Podcast public slug (for RSS paths)")
     p.add_argument("--podcast-id", help="Podcast id (for /api/{id}/episodes/...)")

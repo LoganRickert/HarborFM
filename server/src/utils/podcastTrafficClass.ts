@@ -2,7 +2,7 @@
  * Podcast-aware traffic classification for analytics.
  *
  * Maps to existing bot_count / human_count columns:
- * - crawler to bot (directory agents, scrapers, empty UA)
+ * - crawler to bot (directory agents, scrapers, empty UA, Apple Watch IVT)
  * - listener to human (podcast apps + normal browsers)
  *
  * Known podcast apps override isbot (which often marks Overcast, AntennaPod, etc. as bots).
@@ -13,7 +13,7 @@ import { isbot } from "isbot";
 
 export type PodcastTrafficClass = "listener" | "crawler";
 
-/** Directory / feed / search crawlers: always classified as crawler. */
+/** Directory / feed / search crawlers and IAB IVT: always classified as crawler. */
 const CRAWLER_PATTERNS: RegExp[] = [
   /^Spotify\/1\.0$/i, // Spotify directory poller (not the mobile/desktop app)
   /Amazon Music Podcast/i,
@@ -47,6 +47,21 @@ const CRAWLER_PATTERNS: RegExp[] = [
   /Podcasts\/FeedParser/i,
   /PocketCasts\/1\.0 \(Pocket Casts Feed Parser/i,
   /iHeartRadio/i, // directory / feed agent UAs
+  // Expanded from production access logs
+  /ListenNotes\//i,
+  /PlayerFM\//i,
+  /^axios\//i,
+  /^TPA\//i,
+  /MyRSSReader\//i,
+  /Podline\//i,
+  /Podverse\/Feed/i,
+  /Aggrivator/i,
+  /taddy\.org/i,
+  /Deezer Podcasters/i,
+  /Stract\//i,
+  // IAB: Apple Watch downloads often duplicate paired-device downloads
+  /^atc\//i,
+  /watchOS\//i,
 ];
 
 /**

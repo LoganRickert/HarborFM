@@ -40,7 +40,7 @@ import { DeleteEpisodeConfirmDialog } from './DeleteEpisodeConfirmDialog';
 import { DeleteSegmentDialog } from './DeleteSegmentDialog';
 import { ManageSegmentDialog } from './ManageSegmentDialog';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
+import { Archive, X } from 'lucide-react';
 import { SegmentModal } from '../../components/SegmentModal';
 import { SegmentEditorV2 } from '../../components/SegmentEditorV2';
 import {
@@ -61,6 +61,11 @@ import {
 } from '../../api/segments';
 import type { Episode, EpisodeUpdate } from '../../api/episodes';
 import type { Podcast } from '../../api/podcasts';
+import {
+  archiveEpisode as archiveEpisodeApi,
+  isArchiveConfigured,
+  restoreEpisode as restoreEpisodeApi,
+} from '../../api/archive';
 import sharedStyles from '../../components/PodcastDetail/shared.module.css';
 import styles from '../EpisodeEditor.module.css';
 import { getPublicConfig } from '../../api/public';
@@ -619,6 +624,43 @@ export function EpisodeEditorContent({
     },
   });
 
+  const { data: archiveConfiguredData } = useQuery({
+    queryKey: ['archive-configured', podcastId],
+    queryFn: () => isArchiveConfigured(podcastId!),
+    enabled: Boolean(podcastId) && !segmentReadOnly,
+  });
+  const archiveConfigured = Boolean(archiveConfiguredData?.configured);
+  const isArchived = Boolean(episode.archivedAt);
+
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveEpisodeApi(id),
+    onSuccess: () => {
+      setArchiveError(null);
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+      queryClient.invalidateQueries({ queryKey: ['segments', id] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (err: Error) => {
+      setArchiveError(err.message || 'Archive failed');
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: () => restoreEpisodeApi(id),
+    onSuccess: () => {
+      setRestoreError(null);
+      queryClient.invalidateQueries({ queryKey: ['episode', id] });
+      queryClient.invalidateQueries({ queryKey: ['segments', id] });
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+    onError: (err: Error & { code?: string }) => {
+      setRestoreError(err.message || 'Restore failed');
+    },
+  });
+
   const TRANSCRIPT_POLL_INTERVAL_MS = 5000;
 
   const generateTranscriptMutation = useMutation({
@@ -807,6 +849,48 @@ export function EpisodeEditorContent({
         </div>
       )}
       <ShowNotesPanel episodeId={id} canEdit={canEditSegments && !segmentReadOnly} />
+      {isArchived ? (
+        <div className={styles.card}>
+          <div className={styles.archivedProjectPanel}>
+            <div className={styles.archivedProjectIconWrap} aria-hidden>
+              <Archive size={26} strokeWidth={1.75} />
+            </div>
+            <div className={styles.archivedProjectCopy}>
+              <p className={styles.archivedProjectEyebrow}>Offloaded</p>
+              <h2 className={styles.archivedProjectTitle}>This project is archived</h2>
+            </div>
+            <div className={styles.archivedProjectActions}>
+              {restoreError && (
+                <p className={styles.archivedProjectError} role="alert">
+                  {restoreError}
+                </p>
+              )}
+              {!segmentReadOnly && (
+                <button
+                  type="button"
+                  className={styles.archivedProjectRestoreBtn}
+                  disabled={restoreMutation.isPending}
+                  onClick={() => {
+                    setRestoreError(null);
+                    restoreMutation.mutate();
+                  }}
+                >
+                  <Archive size={18} strokeWidth={2.25} aria-hidden />
+                  {restoreMutation.isPending ? 'Restoring...' : 'Restore Project'}
+                </button>
+              )}
+            </div>
+          </div>
+          <PleaseWaitDialog
+            open={restoreMutation.isPending}
+            title="Please wait"
+            description="Downloading and restoring the project archive..."
+            error={null}
+            errorTitle="Restore failed"
+            onDismiss={() => {}}
+          />
+        </div>
+      ) : (
       <div className={styles.card}>
         <EpisodeSectionsPanel
               episodeId={id}
@@ -868,6 +952,7 @@ export function EpisodeEditorContent({
           unregisterSegmentPause={unregisterSegmentPause}
         />
       </div>
+      )}
 
       <GenerateFinalBar
         episodeId={id}
@@ -885,6 +970,15 @@ export function EpisodeEditorContent({
         isBuilding={renderMutation.isPending || renderStatus?.status === 'building'}
         buildMessage={buildAlreadyInProgressMessage}
         hasFinalAudio={Boolean(episode.audioFinalPath)}
+        isArchived={isArchived}
+        archiveConfigured={archiveConfigured}
+        onArchive={() => {
+          setArchiveError(null);
+          archiveMutation.mutate();
+        }}
+        isArchiving={archiveMutation.isPending}
+        archiveError={archiveError}
+        onClearArchiveError={() => setArchiveError(null)}
         finalDurationSec={episode.audioDurationSec ?? 0}
         finalUpdatedAt={episode.updatedAt}
         finalMarkers={episode.finalMarkers ?? []}
@@ -971,6 +1065,7 @@ export function EpisodeEditorContent({
       {showEpisodeTranscript && (
         <EpisodeTranscriptModal
           episodeId={id}
+          episodeTitle={episode.title}
           onClose={() => setShowEpisodeTranscript(false)}
           canEdit={canEditSegments && !readOnly}
         />

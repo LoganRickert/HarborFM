@@ -15,6 +15,10 @@ interface ExportFormProps {
   onSubmitUpdate: (exportId: string, body: ExportUpdate) => void;
   error?: string;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Hide public base URL field (archive settings). */
+  hidePublicBaseUrl?: boolean;
+  /** Form element id for external submit buttons. */
+  formId?: string;
 }
 
 export function ExportForm({
@@ -25,6 +29,8 @@ export function ExportForm({
   onSubmitUpdate,
   error,
   onDirtyChange,
+  hidePublicBaseUrl = false,
+  formId = 'add-delivery-form',
 }: ExportFormProps) {
   const currentMode = (initial?.mode as ExportMode) ?? 'S3';
   const [exportMode, setExportMode] = useState<ExportMode>(currentMode);
@@ -75,7 +81,7 @@ export function ExportForm({
 
   const buildCreateBody = (): ExportCreate => {
     const nameTrim = name.trim();
-    const pub = publicBaseUrl.trim() || undefined;
+    const pub = hidePublicBaseUrl ? undefined : publicBaseUrl.trim() || undefined;
     switch (exportMode) {
       case 'S3':
         return {
@@ -168,9 +174,11 @@ export function ExportForm({
     const body: ExportUpdate = {
       mode: exportMode,
       name: name.trim(),
-      publicBaseUrl: publicBaseUrl.trim() || null,
       endpointUrl: null,
     };
+    if (!hidePublicBaseUrl) {
+      body.publicBaseUrl = publicBaseUrl.trim() || null;
+    }
     if (exportMode === 'S3') {
       if (String(v('bucket')).trim()) body.bucket = String(v('bucket')).trim();
       if (String(v('region')).trim()) body.region = String(v('region')).trim();
@@ -222,16 +230,18 @@ export function ExportForm({
 
   return (
     <div>
-      <form id="add-delivery-form" className={styles.addExportForm} onSubmit={handleSubmit}>
+      <form id={formId} className={styles.addExportForm} onSubmit={handleSubmit}>
         <label className={styles.label}>
           Name
           <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Production" required />
         </label>
 
-        <label className={styles.label}>
-          Public base URL (optional)
-          <input className={styles.input} type="url" value={publicBaseUrl} onChange={(e) => setPublicBaseUrl(e.target.value)} placeholder="https://cdn.example.com" />
-        </label>
+        {!hidePublicBaseUrl && (
+          <label className={styles.label}>
+            Public base URL (optional)
+            <input className={styles.input} type="url" value={publicBaseUrl} onChange={(e) => setPublicBaseUrl(e.target.value)} placeholder="https://cdn.example.com" />
+          </label>
+        )}
 
         <div className={styles.label}>
           Destination type

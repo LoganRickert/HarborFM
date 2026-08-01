@@ -342,6 +342,14 @@ textarea.input:disabled {
   flex-direction: column;
 }
 
+.dialogContentScrollable > .dialogHeaderRow {
+  flex-shrink: 0;
+}
+
+.dialogContentScrollable > .dialogActions {
+  flex-shrink: 0;
+}
+
 .dialogBodyScroll {
   flex: 1;
   min-height: 0;

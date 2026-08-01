@@ -11,6 +11,7 @@ import { EditPageCustomizationsDialog } from './EditPageCustomizationsDialog';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { PodcastHero } from '../components/PodcastDetail/PodcastHero';
 import { SubmitDirectoriesDialog } from '../components/PodcastDetail/SubmitDirectoriesDialog';
+import { ArchiveSettingsDialog } from '../components/PodcastDetail/ArchiveSettingsDialog';
 import { RssFeedCard } from '../components/PodcastDetail/RssFeedCard';
 import { ShowCastCard } from '../components/ShowCast';
 import { ExportsSection } from '../components/Exports/ExportsSection';
@@ -46,6 +47,7 @@ export function PodcastDetail() {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [linksDialogOpen, setLinksDialogOpen] = useState(false);
   const [submitDirectoriesDialogOpen, setSubmitDirectoriesDialogOpen] = useState(false);
+  const [archiveSettingsDialogOpen, setArchiveSettingsDialogOpen] = useState(false);
   const [pageCustomizationsDialogOpen, setPageCustomizationsDialogOpen] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
@@ -70,6 +72,7 @@ export function PodcastDetail() {
           onEditClick={() => setDetailsDialogOpen(true)}
           onLinksClick={() => setLinksDialogOpen(true)}
           onSubmitDirectoriesClick={() => setSubmitDirectoriesDialogOpen(true)}
+          onArchiveSettingsClick={() => setArchiveSettingsDialogOpen(true)}
           onPageCustomizationsClick={() => setPageCustomizationsDialogOpen(true)}
           publicFeedsEnabled={publicFeedsEnabled}
           detailsExpanded={detailsExpanded}
@@ -98,6 +101,15 @@ export function PodcastDetail() {
           open
           podcast={podcast}
           onClose={() => setSubmitDirectoriesDialogOpen(false)}
+        />
+      )}
+
+      {archiveSettingsDialogOpen && (
+        <ArchiveSettingsDialog
+          podcastId={id}
+          isOpen
+          readOnly={readOnly}
+          onClose={() => setArchiveSettingsDialogOpen(false)}
         />
       )}
 

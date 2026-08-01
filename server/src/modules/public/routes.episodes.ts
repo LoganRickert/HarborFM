@@ -114,7 +114,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
                   if (scheduledNotReleased) return ep;
                   return {
                     ...ep,
-                    private_audio_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.id))}`,
+                    private_audio_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.id))}?hf_src=web`,
                     private_waveform_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/waveform`,
                     private_srt_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/transcript.srt`,
                     private_chapters_url: `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(ep.slug))}/chapters.json`,
@@ -211,7 +211,7 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
             if (token) {
               const tokenRow = validateSubscriberTokenByValue(token);
               if (tokenRow && tokenRow.podcastId === podcast.id) {
-                episode.private_audio_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(row.id))}`;
+                episode.private_audio_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(String(row.id))}?hf_src=web`;
                 episode.private_waveform_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/waveform`;
                 episode.private_srt_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/transcript.srt`;
                 episode.private_chapters_url = `/${API_PREFIX}/public/podcasts/${encodeURIComponent(podcastSlug)}/private/${encodeURIComponent(token)}/episodes/${encodeURIComponent(episodeSlug)}/chapters.json`;

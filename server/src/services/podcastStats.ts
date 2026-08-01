@@ -1,17 +1,20 @@
 import { createHash } from "crypto";
 import { sql } from "drizzle-orm";
-import { LISTEN_THRESHOLD_BYTES, STATS_FLUSH_INTERVAL_MS } from "../config.js";
+import {
+  LISTEN_THRESHOLD_BYTES,
+  STATS_DEDUP_RETAIN_DAYS,
+  STATS_FLUSH_INTERVAL_MS,
+} from "../config.js";
 import { drizzleDb } from "../db/drizzle.js";
 import {
   podcastStatsEpisodeDaily,
   podcastStatsEpisodeListensDaily,
   podcastStatsEpisodeLocationDaily,
   podcastStatsListenDedup,
+  podcastStatsRetentionReach,
   podcastStatsRssDaily,
 } from "../db/schema.js";
 import { formatLocalDateYYYYMMDD } from "../utils/datetime.js";
-
-const DEDUP_RETAIN_DAYS = 2;
 
 function statDate(): string {
   return formatLocalDateYYYYMMDD(); // YYYY-MM-DD in server local timezone
@@ -154,6 +157,44 @@ export function recordEpisodeListenIfNew(
   if (!tryRecordListenDedup(episodeId, date, clientKeyVal)) return;
   incListen(episodeId, isBot, source);
 }
+
+const RETENTION_BUCKETS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90] as const;
+
+/**
+ * Record website-player retention reach for a client at a playhead percent.
+ * Stores this bucket and all lower deciles so curves can use cumulative reach.
+ */
+export function recordRetentionReach(
+  episodeId: string,
+  clientKeyVal: string,
+  percent: number,
+): void {
+  if (!Number.isFinite(percent) || percent < 0) return;
+  const capped = Math.min(100, percent);
+  const date = statDate();
+  for (const bucket of RETENTION_BUCKETS) {
+    if (bucket > capped) break;
+    drizzleDb
+      .insert(podcastStatsRetentionReach)
+      .values({
+        episodeId,
+        statDate: date,
+        bucket,
+        clientKey: clientKeyVal,
+      })
+      .onConflictDoNothing({
+        target: [
+          podcastStatsRetentionReach.episodeId,
+          podcastStatsRetentionReach.statDate,
+          podcastStatsRetentionReach.bucket,
+          podcastStatsRetentionReach.clientKey,
+        ],
+      })
+      .run();
+  }
+}
+
+export { RETENTION_BUCKETS };
 
 function flushRss(): void {
   for (const [key, counts] of rssCounters) {
@@ -315,7 +356,13 @@ export function pruneListenDedup(): void {
   drizzleDb
     .delete(podcastStatsListenDedup)
     .where(
-      sql`${podcastStatsListenDedup.statDate} < date('now', 'localtime', ${`-${DEDUP_RETAIN_DAYS} days`})`,
+      sql`${podcastStatsListenDedup.statDate} < date('now', 'localtime', ${`-${STATS_DEDUP_RETAIN_DAYS} days`})`,
+    )
+    .run();
+  drizzleDb
+    .delete(podcastStatsRetentionReach)
+    .where(
+      sql`${podcastStatsRetentionReach.statDate} < date('now', 'localtime', ${`-${STATS_DEDUP_RETAIN_DAYS} days`})`,
     )
     .run();
 }

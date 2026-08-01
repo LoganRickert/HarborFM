@@ -230,6 +230,7 @@ export interface PodcastAnalytics {
     botCount: number;
     humanCount: number;
   }>;
+  /** Daily Downloads (unique filtered audio downloads). */
   episodeListensDaily: Array<{
     episodeId: string;
     statDate: string;
@@ -237,6 +238,20 @@ export interface PodcastAnalytics {
     botCount: number;
     humanCount: number;
   }>;
+  /** Distinct clients with a Download in the selected range. */
+  uniqueListeners: number;
+  uniqueListenersByEpisode: Array<{ episodeId: string; uniqueListeners: number }>;
+  /** Website-player retention curves. */
+  retentionByEpisode: Array<{
+    episodeId: string;
+    buckets: Array<{ bucket: number; clients: number; pct: number }>;
+  }>;
+  methodology?: {
+    downloads?: string;
+    uniqueListeners?: string;
+    feedHealth?: string;
+    retention?: string;
+  };
 }
 
 function mapAnalyticsFromServer(raw: {
@@ -245,6 +260,18 @@ function mapAnalyticsFromServer(raw: {
   episode_daily?: Array<{ episode_id?: string; stat_date?: string; source?: string; bot_count?: number; human_count?: number }>;
   episode_location_daily?: Array<{ episode_id?: string; stat_date?: string; location?: string; source?: string; bot_count?: number; human_count?: number }>;
   episode_listens_daily?: Array<{ episode_id?: string; stat_date?: string; source?: string; bot_count?: number; human_count?: number }>;
+  unique_listeners?: number;
+  unique_listeners_by_episode?: Array<{ episode_id?: string; unique_listeners?: number }>;
+  retention_by_episode?: Array<{
+    episode_id?: string;
+    buckets?: Array<{ bucket?: number; clients?: number; pct?: number }>;
+  }>;
+  methodology?: {
+    downloads?: string;
+    unique_listeners?: string;
+    feed_health?: string;
+    retention?: string;
+  };
 }): PodcastAnalytics {
   return {
     rssDaily: (raw.rss_daily ?? []).map((r) => ({
@@ -276,6 +303,27 @@ function mapAnalyticsFromServer(raw: {
       botCount: r.bot_count ?? 0,
       humanCount: r.human_count ?? 0,
     })),
+    uniqueListeners: raw.unique_listeners ?? 0,
+    uniqueListenersByEpisode: (raw.unique_listeners_by_episode ?? []).map((r) => ({
+      episodeId: r.episode_id ?? '',
+      uniqueListeners: r.unique_listeners ?? 0,
+    })),
+    retentionByEpisode: (raw.retention_by_episode ?? []).map((r) => ({
+      episodeId: r.episode_id ?? '',
+      buckets: (r.buckets ?? []).map((b) => ({
+        bucket: b.bucket ?? 0,
+        clients: b.clients ?? 0,
+        pct: b.pct ?? 0,
+      })),
+    })),
+    methodology: raw.methodology
+      ? {
+          downloads: raw.methodology.downloads,
+          uniqueListeners: raw.methodology.unique_listeners,
+          feedHealth: raw.methodology.feed_health,
+          retention: raw.methodology.retention,
+        }
+      : undefined,
   };
 }
 

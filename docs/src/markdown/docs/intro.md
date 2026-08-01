@@ -17,6 +17,7 @@ This documentation covers installing and running HarborFM, day-to-day usage in t
 - Record and edit segments: trim, split, silence removal, chapters, transcripts, and LLM helpers.
 - Host public feeds and embeds, optional paid access with Stripe (bring your own keys).
 - Deliver via built-in hosting or push to S3/R2, FTP, SFTP, WebDAV, IPFS, or SMB.
+- Archive or back up episode projects to a remote destination, then restore when you need the files again.
 - Customize public pages with Liquid [page themes](/themes/).
 
 ## Project Links

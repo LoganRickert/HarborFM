@@ -39,6 +39,10 @@ const cases: Array<{ ua: string; expect: "listener" | "crawler" }> = [
     ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     expect: "listener",
   },
+  { ua: "ListenNotes/3.0 (+https://www.listennotes.com/about/)", expect: "crawler" },
+  { ua: "PlayerFM/1.0 Podcast Sync", expect: "crawler" },
+  { ua: "axios/1.6.8", expect: "crawler" },
+  { ua: "atc/1.0 watchOS/10.6.2", expect: "crawler" },
 ];
 
 for (const { ua, expect } of cases) {

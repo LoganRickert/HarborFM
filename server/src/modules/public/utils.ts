@@ -321,9 +321,11 @@ export function publicEpisodeDto(
     audio_mime: row.audioMime ?? null,
     audio_bytes: audioBytes,
     audio_duration_sec: row.audioDurationSec ?? null,
+    // Site/theme players append hf_src=web for Website attribution. RSS enclosure
+    // URLs (episodeEnclosureUrl) stay unmarked so published feed identity is stable.
     audio_url:
       hasAudio && allowPublicAudio
-        ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}`
+        ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}.mp3?hf_src=web`
         : null,
     video_url:
       hasVideo && allowPublicAudio

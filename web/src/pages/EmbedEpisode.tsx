@@ -93,6 +93,7 @@ export function EmbedEpisode() {
     audioUrl,
     podcastSlug: effectivePodcastSlug,
     episodeSlug,
+    episodeId: episode?.id,
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
     privateWaveformUrl: episode?.privateWaveformUrl,

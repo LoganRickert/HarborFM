@@ -128,7 +128,21 @@ export async function packSegmentIntoDir(
         const aAbs = resolveDataPath(asset.audioPath);
         if (existsSync(aAbs)) {
           const ext = extname(aAbs) || ".mp3";
-          copyFileSync(aAbs, join(libDir, `audio${ext}`));
+          const libAudio = join(libDir, `audio${ext}`);
+          copyFileSync(aAbs, libAudio);
+          let wav = waveformPath(aAbs);
+          if (!existsSync(wav)) {
+            try {
+              await audioService.generateWaveformFile(aAbs, dirname(aAbs));
+              wav = waveformPath(aAbs);
+            } catch {
+              // best-effort
+            }
+          }
+          if (existsSync(wav)) {
+            copyFileSync(wav, waveformPath(libAudio));
+            copyFileSync(wav, join(libDir, "waveform.json"));
+          }
         }
       }
     }

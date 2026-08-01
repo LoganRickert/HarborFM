@@ -659,6 +659,15 @@ export const RATE_LIMIT_TIME_WINDOW =
 export const STATS_FLUSH_INTERVAL_MS =
   Number(process.env.STATS_FLUSH_INTERVAL_MS) || 60_000;
 
+/**
+ * Days to keep listen-dedup and retention-reach keys (Unique listeners / retention).
+ * Env: STATS_DEDUP_RETAIN_DAYS. Default 90. Minimum 1.
+ */
+export const STATS_DEDUP_RETAIN_DAYS = Math.max(
+  1,
+  Number(process.env.STATS_DEDUP_RETAIN_DAYS) || 90,
+);
+
 /** Min bytes requested in one range to count as a listen. Env: LISTEN_THRESHOLD_BYTES. Default 256000 (250 KB). */
 export const LISTEN_THRESHOLD_BYTES =
   Number(process.env.LISTEN_THRESHOLD_BYTES) || 250 * 1024;
@@ -772,6 +781,14 @@ export const STRIPE_SECRETS_AAD =
 /** AAD for episode alert destination secrets. Env: EPISODE_ALERT_SECRETS_AAD. */
 export const EPISODE_ALERT_SECRETS_AAD =
   process.env.EPISODE_ALERT_SECRETS_AAD?.trim() || `${APP_NAME}-episode-alerts`;
+
+/** AAD for podcast delivery export credentials. Env: EXPORTS_SECRETS_AAD. */
+export const EXPORTS_SECRETS_AAD =
+  process.env.EXPORTS_SECRETS_AAD?.trim() || `${APP_NAME_SLUG}:exports`;
+
+/** AAD for podcast archive destination credentials. Env: ARCHIVE_SECRETS_AAD. */
+export const ARCHIVE_SECRETS_AAD =
+  process.env.ARCHIVE_SECRETS_AAD?.trim() || `${APP_NAME_SLUG}:archive`;
 
 /** When true, email/password sign-in is disabled (SSO only). Terraform can set SSO_EMAIL_SIGNIN_DISABLED=1. Env: SSO_EMAIL_SIGNIN_DISABLED. Default false. Applied at read time (does not write to DB). */
 export const SSO_EMAIL_SIGNIN_DISABLED =

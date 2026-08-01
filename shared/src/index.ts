@@ -10,6 +10,7 @@ export * from './schemas/podcast.js';
 export * from './schemas/podcastNamespace.js';
 export * from './schemas/episode.js';
 export * from './schemas/export.js';
+export * from './schemas/archive.js';
 export * from './schemas/library.js';
 export * from './schemas/llm.js';
 export * from './schemas/public.js';

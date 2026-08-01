@@ -11,8 +11,13 @@ import type { SftpConfig } from "./sftp.js";
 import type { WebdavConfig } from "./webdav.js";
 import type { IpfsConfig } from "./ipfs.js";
 import type { SmbConfig } from "./smb.js";
+import {
+  ARCHIVE_SECRETS_AAD,
+  EXPORTS_SECRETS_AAD,
+} from "../config.js";
 
-const AAD = "harborfm:exports";
+const EXPORTS_AAD = EXPORTS_SECRETS_AAD;
+export const ARCHIVE_AAD = ARCHIVE_SECRETS_AAD;
 
 export type ExportMode = "S3" | "FTP" | "SFTP" | "WebDAV" | "IPFS" | "SMB";
 
@@ -35,12 +40,13 @@ export type ExportConfigDecrypted =
 
 function decryptConfigEnc(
   exp: Record<string, unknown>,
+  aad: string = EXPORTS_AAD,
 ): Record<string, unknown> {
   const configEnc = (exp.configEnc ?? exp.config_enc) as string | null | undefined;
   if (!configEnc || !isEncryptedSecret(configEnc)) {
     throw new Error("Missing or invalid export config");
   }
-  return JSON.parse(decryptSecret(configEnc, AAD)) as Record<string, unknown>;
+  return JSON.parse(decryptSecret(configEnc, aad)) as Record<string, unknown>;
 }
 
 /** Normalize path: trim and ensure non-empty path ends with exactly one /. */
@@ -119,12 +125,14 @@ function parseS3Config(raw: Record<string, unknown>): S3ConfigDecrypted {
 
 /**
  * Get decrypted config for any export mode (including S3). All config lives in config_enc.
+ * @param aad encryption AAD; defaults to exports. Use ARCHIVE_AAD for archive settings.
  */
 export function getDecryptedConfigFromEnc(
   exp: Record<string, unknown>,
+  aad: string = EXPORTS_AAD,
 ): ExportConfigDecrypted {
   const mode = ((exp.mode as string) || "S3") as ExportMode;
-  const raw = decryptConfigEnc(exp);
+  const raw = decryptConfigEnc(exp, aad);
   switch (mode) {
     case "S3":
       return { mode: "S3", config: parseS3Config(raw) };
@@ -147,6 +155,7 @@ export function getDecryptedConfigFromEnc(
 export function buildConfigEnc(
   mode: ExportMode,
   data: Record<string, unknown>,
+  aad: string = EXPORTS_AAD,
 ): string {
   const obj: Record<string, unknown> = {};
   switch (mode) {
@@ -154,9 +163,9 @@ export function buildConfigEnc(
       obj.bucket = data.bucket;
       obj.prefix = data.prefix ?? "";
       obj.region = data.region;
-      obj.endpoint_url = data.endpoint_url ?? null;
-      obj.access_key_id = data.access_key_id;
-      obj.secret_access_key = data.secret_access_key;
+      obj.endpoint_url = data.endpoint_url ?? data.endpointUrl ?? null;
+      obj.access_key_id = data.access_key_id ?? data.accessKeyId;
+      obj.secret_access_key = data.secret_access_key ?? data.secretAccessKey;
       break;
     case "FTP":
       obj.host = data.host;
@@ -167,12 +176,12 @@ export function buildConfigEnc(
       obj.secure = data.secure ?? false;
       break;
     case "SFTP": {
-      const privateKey = String(data.private_key ?? "").trim();
+      const privateKey = String(data.private_key ?? data.privateKey ?? "").trim();
       obj.host = data.host;
       obj.port = data.port ?? 22;
       obj.username = data.username;
       obj.password = privateKey ? "" : (data.password ?? "");
-      obj.private_key = data.private_key ?? "";
+      obj.private_key = data.private_key ?? data.privateKey ?? "";
       obj.path = normalizePath(data.path as string | undefined);
       break;
     }
@@ -183,12 +192,12 @@ export function buildConfigEnc(
       obj.path = normalizePath(data.path as string | undefined);
       break;
     case "IPFS":
-      obj.api_url = data.api_url;
-      obj.api_key = data.api_key ?? "";
+      obj.api_url = data.api_url ?? data.apiUrl;
+      obj.api_key = data.api_key ?? data.apiKey ?? "";
       obj.username = data.username ?? "";
       obj.password = data.password ?? "";
       obj.path = normalizePath(data.path as string | undefined);
-      obj.gateway_url = data.gateway_url ?? null;
+      obj.gateway_url = data.gateway_url ?? data.gatewayUrl ?? null;
       break;
     case "SMB": {
       const smbPort = data.port != null ? Number(data.port) : undefined;
@@ -204,7 +213,7 @@ export function buildConfigEnc(
     default:
       throw new Error(`Unsupported export mode: ${mode}`);
   }
-  return encryptSecret(JSON.stringify(obj), AAD);
+  return encryptSecret(JSON.stringify(obj), aad);
 }
 
 /** Keys stored in config_enc by mode. public_base_url is always a plain column on the export row. */
@@ -234,11 +243,22 @@ const CONFIG_KEYS = new Set([
 export function mergeAndEncryptConfig(
   exp: Record<string, unknown>,
   update: Record<string, unknown>,
+  aad: string = EXPORTS_AAD,
 ): string {
-  const raw = decryptConfigEnc(exp);
+  const raw = decryptConfigEnc(exp, aad);
   const mode = (exp.mode as ExportMode) || "S3";
   const merged = { ...raw };
-  for (const [k, v] of Object.entries(update)) {
+  const normalizedUpdate: Record<string, unknown> = { ...update };
+  // Accept camelCase from API bodies
+  if (update.accessKeyId !== undefined) normalizedUpdate.access_key_id = update.accessKeyId;
+  if (update.secretAccessKey !== undefined)
+    normalizedUpdate.secret_access_key = update.secretAccessKey;
+  if (update.endpointUrl !== undefined) normalizedUpdate.endpoint_url = update.endpointUrl;
+  if (update.privateKey !== undefined) normalizedUpdate.private_key = update.privateKey;
+  if (update.apiUrl !== undefined) normalizedUpdate.api_url = update.apiUrl;
+  if (update.apiKey !== undefined) normalizedUpdate.api_key = update.apiKey;
+  if (update.gatewayUrl !== undefined) normalizedUpdate.gateway_url = update.gatewayUrl;
+  for (const [k, v] of Object.entries(normalizedUpdate)) {
     if (v !== undefined && CONFIG_KEYS.has(k))
       (merged as Record<string, unknown>)[k] = v;
   }
@@ -251,7 +271,7 @@ export function mergeAndEncryptConfig(
   }
   // public_base_url is always a plain column; never store in config_enc
   delete (merged as Record<string, unknown>).public_base_url;
-  return encryptSecret(JSON.stringify(merged), AAD);
+  return encryptSecret(JSON.stringify(merged), aad);
 }
 
 /**

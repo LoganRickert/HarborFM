@@ -15,7 +15,10 @@ export function SubscriberInfoDialog({ isOpen, onClose }: SubscriberInfoDialogPr
     <Dialog.Root open={isOpen} onOpenChange={onClose}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content className={styles.dialogContent} aria-describedby="subscriber-info-desc">
+        <Dialog.Content
+          className={`${styles.dialogContent} ${styles.dialogContentScrollable}`}
+          aria-describedby="subscriber-info-desc"
+        >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>How subscriber feeds work</Dialog.Title>
             <Dialog.Close asChild>
@@ -24,7 +27,10 @@ export function SubscriberInfoDialog({ isOpen, onClose }: SubscriberInfoDialogPr
               </button>
             </Dialog.Close>
           </div>
-          <div id="subscriber-info-desc" className={styles.subscriberInfoBody}>
+          <div
+            id="subscriber-info-desc"
+            className={`${styles.dialogBodyScroll} ${styles.subscriberInfoBody}`}
+          >
             <p>
               <strong>Subscriber-only feeds</strong> let you share a private RSS feed with specific people. Each subscriber gets a unique feed URL that only they can use.
             </p>

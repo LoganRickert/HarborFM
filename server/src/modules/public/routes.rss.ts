@@ -3,7 +3,7 @@ import send from "@fastify/send";
 import { recordRssRequest } from "../../services/podcastStats.js";
 import { rssDir } from "../../services/paths.js";
 import { isPodcastListenerUserAgent } from "../../utils/podcastTrafficClass.js";
-import { podcastSourceFromUserAgent } from "../../utils/podcastSourceFromUserAgent.js";
+import { podcastSourceFromRequest } from "../../utils/podcastSourceFromUserAgent.js";
 import {
   generateRss,
   getCachedRssIfFresh,
@@ -47,7 +47,14 @@ export async function registerRssRoutes(app: FastifyInstance) {
         const ua = getUserAgent(request);
         // crawler to bot_count, listener to human_count
         const isBot = !isPodcastListenerUserAgent(ua);
-        const source = podcastSourceFromUserAgent(ua);
+        const refererHeader = request.headers.referer ?? request.headers.referrer;
+        const referer =
+          typeof refererHeader === "string"
+            ? refererHeader
+            : Array.isArray(refererHeader)
+              ? refererHeader[0]
+              : undefined;
+        const source = podcastSourceFromRequest({ userAgent: ua, referer });
         recordRssRequest(podcast.id, isBot, source);
       }
 

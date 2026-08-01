@@ -24,7 +24,12 @@ const sections: FeatureSection[] = [
       {
         name: 'Episode project import & export',
         detail:
-          'Download Project (editors and above) zips episode metadata, segment audio, multitrack recordings, and library assets for backup or offline edit. Import Project (managers and the owner) on the Episodes page recreates a new draft with new ids. Hand-added audio.mp3 / audio.wav segments work without full metadata.',
+          'Download Project (editors and above) zips episode metadata, segment audio, multitrack recordings, and library assets for offline edit or cloning. Import Project (managers and the owner) on the Episodes page recreates a new draft with new ids. Hand-added audio.mp3 / audio.wav segments work without full metadata.',
+      },
+      {
+        name: 'Episode archive & backup',
+        detail:
+          'Archive Settings per show (one remote destination, same modes as Podcast Delivery). Archive uploads a project zip, verifies it, and frees local project files while keeping feed audio. Backup / Dated Backup upload without deleting local files; restore from a listed backup with confirmation, or restore an archived episode without overwriting metadata.',
       },
       {
         name: 'Segment project import & export',
@@ -318,7 +323,7 @@ const sections: FeatureSection[] = [
       {
         name: 'Podcast delivery exports',
         detail:
-          'Push feed and audio to S3, Cloudflare R2, Backblaze B2, FTP, SFTP, WebDAV, IPFS, or SMB. Skip unchanged files.',
+          'Push feed and audio to S3, Cloudflare R2, Backblaze B2, FTP, SFTP, WebDAV, IPFS, or SMB. Skip unchanged files. Separate Archive Settings power episode Archive and Backup (project zips), not the public feed deploy.',
       },
       {
         name: 'Custom / managed domains',
@@ -368,7 +373,7 @@ const sections: FeatureSection[] = [
 
 <Layout
   title="Features - HarborFM"
-  description="Full feature list for HarborFM: segment editor, episode and segment project import/export, WebRTC calls and scheduled meetings, Podcast 2.0 RSS, Stripe BYOK subscriptions, analytics, exports, and self-hosting."
+  description="Full feature list for HarborFM: segment editor, episode and segment project import/export, episode archive and backup, WebRTC calls and scheduled meetings, Podcast 2.0 RSS, Stripe BYOK subscriptions, analytics, exports, and self-hosting."
 >
   <Header />
 

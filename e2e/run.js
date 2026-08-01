@@ -236,6 +236,7 @@ async function main() {
     join(E2E_DIR, 'tests', 'scenarios', 'episode-alerts.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'call-meetings.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'episode-project-zip.js'),
+    join(E2E_DIR, 'tests', 'scenarios', 'episode-archive.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'segment-manage-project.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'segment-tracks-editor.js'),
     join(E2E_DIR, 'tests', 'scenarios', 'segment-tracks-bootstrap.js'),

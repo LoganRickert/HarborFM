@@ -13,6 +13,8 @@ interface UseFeedAudioPlayerParams {
   audioUrl: string | null;
   podcastSlug?: string;
   episodeSlug?: string;
+  /** Episode id for website retention beacons. */
+  episodeId?: string;
   durationSec?: number;
   waveformUrlFn?: (podcastSlug: string, episodeSlug: string) => string;
   privateWaveformUrl?: string | null;
@@ -28,6 +30,7 @@ export function useFeedAudioPlayer({
   audioUrl,
   podcastSlug,
   episodeSlug,
+  episodeId,
   durationSec = 0,
   waveformUrlFn,
   privateWaveformUrl,
@@ -51,6 +54,7 @@ export function useFeedAudioPlayer({
   const restoredPositionRef = useRef(false);
   const pendingSeekRef = useRef<number | null>(null);
   const wasActiveRef = useRef(isActive);
+  const retentionSentRef = useRef<Set<number>>(new Set());
   const soundbiteSessionRef = useRef<{
     endSec: number;
     onClipEnd?: () => void;
@@ -107,7 +111,33 @@ export function useFeedAudioPlayer({
 
   useEffect(() => {
     restoredPositionRef.current = false;
-  }, [persistPlaybackPosition, podcastSlug, episodeSlug, audioUrl, hasWaveform]);
+    retentionSentRef.current = new Set();
+  }, [persistPlaybackPosition, podcastSlug, episodeSlug, episodeId, audioUrl, hasWaveform]);
+
+  const reportRetention = useCallback(
+    (playheadSec: number) => {
+      if (!episodeId || durationSec <= 0) return;
+      const pct = Math.min(100, Math.max(0, (playheadSec / durationSec) * 100));
+      const bucket = Math.floor(pct / 10) * 10;
+      if (bucket > 90) return;
+      const sent = retentionSentRef.current;
+      // Send this bucket and any skipped lower buckets (seek-forward).
+      for (let b = 0; b <= bucket; b += 10) {
+        if (sent.has(b)) continue;
+        sent.add(b);
+        void fetch('/api/public/analytics/retention', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ episodeId, percent: b }),
+          keepalive: true,
+          credentials: 'omit',
+        }).catch(() => {
+          /* best-effort beacon */
+        });
+      }
+    },
+    [episodeId, durationSec],
+  );
 
   // Pause when another feed episode becomes active (only on active to inactive transition).
   useEffect(() => {
@@ -189,6 +219,7 @@ export function useFeedAudioPlayer({
     };
     const onTimeUpdate = () => {
       setCurrentTime(el.currentTime);
+      reportRetention(el.currentTime);
       const session = soundbiteSessionRef.current;
       if (session && el.currentTime >= session.endSec - 0.05) {
         const onClipEnd = session.onClipEnd;
@@ -244,6 +275,7 @@ export function useFeedAudioPlayer({
     podcastSlug,
     episodeSlug,
     clearSoundbiteSession,
+    reportRetention,
   ]);
 
   useEffect(() => {

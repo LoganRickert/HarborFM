@@ -50,6 +50,7 @@ import { showNotesRoutes } from "./modules/showNotes/index.js";
 import { episodeFilesRoutes } from "./modules/episodeFiles/index.js";
 import { rssRoutes } from "./modules/rss/index.js";
 import { exportRoutes } from "./modules/exports/index.js";
+import { archiveRoutes } from "./modules/archive/index.js";
 import { settingsRoutes } from "./modules/settings/index.js";
 import { llmRoutes } from "./modules/llm/index.js";
 import { usersRoutes } from "./modules/users/index.js";
@@ -330,6 +331,7 @@ async function main() {
   await app.register(episodeFilesRoutes, { prefix: apiPrefix });
   await app.register(rssRoutes, { prefix: apiPrefix });
   await app.register(exportRoutes, { prefix: apiPrefix });
+  await app.register(archiveRoutes, { prefix: apiPrefix });
   await app.register(settingsRoutes, { prefix: apiPrefix });
   await app.register(llmRoutes, { prefix: apiPrefix });
   await app.register(usersRoutes, { prefix: apiPrefix });

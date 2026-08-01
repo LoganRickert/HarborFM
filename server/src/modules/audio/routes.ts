@@ -55,7 +55,7 @@ import { readSettings } from "../settings/index.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 import { getSingleRangeRequestedLength } from "../../utils/parseRange.js";
 import { isPodcastListenerUserAgent } from "../../utils/podcastTrafficClass.js";
-import { podcastSourceFromUserAgent } from "../../utils/podcastSourceFromUserAgent.js";
+import { podcastSourceFromRequest } from "../../utils/podcastSourceFromUserAgent.js";
 
 export async function audioRoutes(app: FastifyInstance) {
   app.post(
@@ -653,7 +653,21 @@ export async function audioRoutes(app: FastifyInstance) {
         const ip = getClientIp(request);
         const ua = getUserAgent(request);
         const isBot = !isPodcastListenerUserAgent(ua);
-        const source = podcastSourceFromUserAgent(ua);
+        const q = request.query as { hf_src?: string | string[] };
+        const hfSrcRaw = q?.hf_src;
+        const hfSrc = Array.isArray(hfSrcRaw) ? hfSrcRaw[0] : hfSrcRaw;
+        const refererHeader = request.headers.referer ?? request.headers.referrer;
+        const referer =
+          typeof refererHeader === "string"
+            ? refererHeader
+            : Array.isArray(refererHeader)
+              ? refererHeader[0]
+              : undefined;
+        const source = podcastSourceFromRequest({
+          userAgent: ua,
+          referer,
+          hfSrc,
+        });
 
         const fileSize = statSync(safePath).size;
         const r = request.headers["range"];

@@ -99,7 +99,7 @@ export async function api<T>(
       throw Object.assign(new Error(msg), { status: 429 });
     }
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    const errBody = err as { error?: string; message?: string };
+    const errBody = err as { error?: string; message?: string; code?: string };
     const errMsg =
       errBody.error ||
       errBody.message ||
@@ -107,6 +107,7 @@ export async function api<T>(
       "Something went wrong";
     const apiErr = Object.assign(new Error(errMsg), {
       status: res.status,
+      code: errBody.code,
     });
     throw apiErr;
   }
