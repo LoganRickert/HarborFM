@@ -11,8 +11,12 @@ import { getClientIp } from "../../services/loginAttempts.js";
 import { verifyCaptcha } from "../../services/captcha.js";
 import { sendMail, buildReviewVerificationEmail } from "../../services/email.js";
 import { sha256Hex } from "../../utils/hash.js";
-import { getPodcastIdBySlug } from "../public/repo.js";
-import { getPublishedEpisodeBySlug } from "../public/repo.js";
+import {
+  getPodcastIdBySlug,
+  getPublishedEpisodeBySlug,
+  getEpisodeIdBySlugForReviews,
+  isEpisodeAwaitingReleaseForReviews,
+} from "../public/repo.js";
 import { SUBSCRIBER_TOKENS_COOKIE } from "../public/utils.js";
 import { validateSubscriberTokenByValue } from "../../services/subscriberTokens.js";
 import { spamCheckReview } from "../llm/utils.js";
@@ -148,6 +152,11 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
       if (episodeSlug) {
         const ep = getPublishedEpisodeBySlug(podcastId, episodeSlug);
         if (!ep) {
+          if (isEpisodeAwaitingReleaseForReviews(podcastId, episodeSlug)) {
+            return reply.status(400).send({
+              error: "Reviews are only available after the episode is published.",
+            });
+          }
           return reply.status(404).send({ error: "Episode not found" });
         }
         episodeId = ep.id;
@@ -475,8 +484,14 @@ export async function registerReviewPublicRoutes(app: FastifyInstance) {
       }
       let episodeId: string | null = null;
       if (query.episodeSlug?.trim()) {
-        const ep = getPublishedEpisodeBySlug(podcastId, query.episodeSlug.trim());
-        if (ep) episodeId = ep.id;
+        const resolvedId = getEpisodeIdBySlugForReviews(
+          podcastId,
+          query.episodeSlug.trim(),
+        );
+        if (!resolvedId) {
+          return reply.status(404).send({ error: "Episode not found" });
+        }
+        episodeId = resolvedId;
       }
       const settings = readSettings();
       const publishNonVerified =

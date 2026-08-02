@@ -78,6 +78,9 @@ function dialInPayloadFields(): {
   };
 }
 
+const EXPOSE_EMAIL_OPEN_TOKENS =
+  process.env.E2E_EXPOSE_EMAIL_OPEN_TOKENS === "1";
+
 function serializeMeeting(
   meeting: NonNullable<ReturnType<typeof getMeetingById>>,
   origin: string,
@@ -91,6 +94,16 @@ function serializeMeeting(
     joinUrl: inviteJoinUrl(meeting, absOrigin, inv),
     createdAt: inv.createdAt,
     lastSentAt: inv.lastSentAt,
+    inviteOpenedAt: inv.inviteOpenedAt ?? null,
+    reminderOpenedAt: inv.reminderOpenedAt ?? null,
+    inviteOpenTracked: Boolean(inv.inviteOpenToken),
+    reminderOpenTracked: Boolean(inv.reminderOpenToken),
+    ...(EXPOSE_EMAIL_OPEN_TOKENS
+      ? {
+          inviteOpenToken: inv.inviteOpenToken ?? null,
+          reminderOpenToken: inv.reminderOpenToken ?? null,
+        }
+      : {}),
   }));
   const joinUrl = inviteJoinUrl(meeting, absOrigin, null);
   const startMs = new Date(meeting.scheduledStartAt).getTime();
@@ -609,20 +622,31 @@ export async function registerMeetingRoutes(app: FastifyInstance): Promise<void>
         emailSent = result.sent;
         emailError = result.error;
       }
+      const fresh = getInviteById(invite.id) ?? invite;
 
       return reply.send({
         invite: {
-          id: invite.id,
-          email: invite.email,
-          displayName: invite.displayName,
-          inviteToken: invite.inviteToken,
-          joinUrl: inviteJoinUrl(meeting, origin, invite),
-          createdAt: invite.createdAt,
-          lastSentAt: invite.lastSentAt,
+          id: fresh.id,
+          email: fresh.email,
+          displayName: fresh.displayName,
+          inviteToken: fresh.inviteToken,
+          joinUrl: inviteJoinUrl(meeting, origin, fresh),
+          createdAt: fresh.createdAt,
+          lastSentAt: fresh.lastSentAt,
+          inviteOpenedAt: fresh.inviteOpenedAt ?? null,
+          reminderOpenedAt: fresh.reminderOpenedAt ?? null,
+          inviteOpenTracked: Boolean(fresh.inviteOpenToken),
+          reminderOpenTracked: Boolean(fresh.reminderOpenToken),
+          ...(EXPOSE_EMAIL_OPEN_TOKENS
+            ? {
+                inviteOpenToken: fresh.inviteOpenToken ?? null,
+                reminderOpenToken: fresh.reminderOpenToken ?? null,
+              }
+            : {}),
           emailSent,
           emailError,
         },
-        joinUrl: inviteJoinUrl(meeting, origin, invite),
+        joinUrl: inviteJoinUrl(meeting, origin, fresh),
       });
     },
   );

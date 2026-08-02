@@ -131,7 +131,7 @@ export function ReviewsCard({
         </>
       ) : (
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>
-          No reviews yet. Be the first to leave one.
+          {showWriteButton ? 'No reviews yet. Be the first to leave one.' : 'No reviews yet.'}
         </p>
       )}
       <ReviewSubmitModal

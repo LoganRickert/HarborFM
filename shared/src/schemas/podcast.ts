@@ -183,6 +183,16 @@ export const podcastUpdateSchema = podcastCreateSchema
     feedShowPodroll: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     feedShowCast: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
     feedShowVideos: z.union([z.boolean(), z.literal(0), z.literal(1)]).optional(),
+    /**
+     * Meta Pixel ID for public feed pages. Digits only; empty string clears.
+     */
+    feedMetaPixelId: emptyStringToNull(
+      z
+        .string()
+        .regex(/^\d{1,20}$/, { error: 'Enter a valid Meta Pixel ID (digits only)' })
+        .nullable()
+        .optional(),
+    ),
     /** DNS: link domain (hostname only, no https://). */
     linkDomain: z.string().nullable().optional(),
     /** DNS: managed domain (hostname only, no https://). */

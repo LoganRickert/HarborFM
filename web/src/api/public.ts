@@ -63,6 +63,8 @@ export interface PublicPodcast {
   feedShowPodroll?: boolean;
   feedShowCast?: boolean;
   feedShowVideos?: boolean;
+  /** Meta Pixel ID for public feed pages (digits only). */
+  feedMetaPixelId?: string | null;
 }
 
 /** camelCase shape for public episode (transformed from server snake_case). */
@@ -208,6 +210,12 @@ function toPublicPodcast(r: Record<string, unknown>): PublicPodcast {
     feedShowPodroll: asPublicBool(r.feed_show_podroll ?? r.feedShowPodroll, true),
     feedShowCast: asPublicBool(r.feed_show_cast ?? r.feedShowCast, true),
     feedShowVideos: asPublicBool(r.feed_show_videos ?? r.feedShowVideos, true),
+    feedMetaPixelId: (() => {
+      const raw = r.feed_meta_pixel_id ?? r.feedMetaPixelId;
+      if (typeof raw !== 'string') return null;
+      const t = raw.trim();
+      return t.length > 0 ? t : null;
+    })(),
   };
 }
 
@@ -370,10 +378,17 @@ export function getPublicEpisodes(
   }));
 }
 
-export function getPublicEpisode(podcastSlug: string, episodeSlug: string) {
-  return apiGet<Record<string, unknown>>(`/public/podcasts/${podcastSlug}/episodes/${episodeSlug}`).then((r) =>
-    toPublicEpisode(r)
-  );
+export function getPublicEpisode(
+  podcastSlug: string,
+  episodeSlug: string,
+  opts?: { reviewToken?: string | null },
+) {
+  const q = opts?.reviewToken?.trim()
+    ? `?review=${encodeURIComponent(opts.reviewToken.trim())}`
+    : '';
+  return apiGet<Record<string, unknown>>(
+    `/public/podcasts/${podcastSlug}/episodes/${episodeSlug}${q}`,
+  ).then((r) => toPublicEpisode(r));
 }
 
 export interface PublicCastMember {

@@ -71,5 +71,5 @@ export function useConsent() {
     consentGiven === null &&
     !hasGpcSignal();
 
-  return { consentGiven, showBanner, accept, reject };
+  return { consentGiven, showBanner, bannerEnabled, accept, reject };
 }

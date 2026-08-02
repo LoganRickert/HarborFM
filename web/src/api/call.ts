@@ -74,6 +74,15 @@ export interface CallMeetingInvite {
   joinUrl: string;
   createdAt: string;
   lastSentAt: string | null;
+  inviteOpenedAt?: string | null;
+  reminderOpenedAt?: string | null;
+  /** True when an invite-email open pixel was issued for this invite. */
+  inviteOpenTracked?: boolean;
+  /** True when a reminder-email open pixel was issued for this invite. */
+  reminderOpenTracked?: boolean;
+  /** E2E only when server sets E2E_EXPOSE_EMAIL_OPEN_TOKENS=1. */
+  inviteOpenToken?: string | null;
+  reminderOpenToken?: string | null;
   emailSent?: boolean;
   emailError?: string;
 }

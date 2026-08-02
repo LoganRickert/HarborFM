@@ -145,6 +145,8 @@ export interface Podcast {
   feedShowPodroll?: number | boolean;
   feedShowCast?: number | boolean;
   feedShowVideos?: number | boolean;
+  /** Meta Pixel ID for public feed pages (digits only). */
+  feedMetaPixelId?: string | null;
   /** 1 = podcast owner has transcription permission (for graying out Generate Transcript when not). */
   ownerCanTranscribe?: number;
   /** DNS: link domain (hostname). */
@@ -587,6 +589,14 @@ export function updateCast(podcastId: string, castId: string, body: CastUpdate) 
 
 export function deleteCast(podcastId: string, castId: string) {
   return apiDelete(`/podcasts/${podcastId}/cast/${castId}`);
+}
+
+/** Email the cast member asking them to reply with photo / social link updates. */
+export function requestCastInfoUpdate(podcastId: string, castId: string) {
+  return apiPost<{ ok: boolean }>(
+    `/podcasts/${podcastId}/cast/${castId}/request-info`,
+    {},
+  );
 }
 
 export async function uploadCastPhoto(podcastId: string, castId: string, file: File): Promise<CastMember> {

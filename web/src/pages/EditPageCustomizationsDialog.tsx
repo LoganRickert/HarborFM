@@ -40,6 +40,7 @@ type FormState = {
   feedShowPodroll: boolean;
   feedShowCast: boolean;
   feedShowVideos: boolean;
+  feedMetaPixelId: string;
 };
 
 const DEFAULT_FORM: FormState = {
@@ -54,6 +55,7 @@ const DEFAULT_FORM: FormState = {
   feedShowPodroll: true,
   feedShowCast: true,
   feedShowVideos: true,
+  feedMetaPixelId: '',
 };
 
 function asBool(v: unknown, fallback: boolean): boolean {
@@ -152,6 +154,10 @@ export function EditPageCustomizationsDialog({
         feedShowPodroll: asBool(podcast.feedShowPodroll, true),
         feedShowCast: asBool(podcast.feedShowCast, true),
         feedShowVideos: asBool(podcast.feedShowVideos, true),
+        feedMetaPixelId:
+          typeof podcast.feedMetaPixelId === 'string'
+            ? podcast.feedMetaPixelId.trim()
+            : '',
       };
       setForm(initial);
       setFormBaseline(snapshotForDirty(initial));
@@ -185,6 +191,7 @@ export function EditPageCustomizationsDialog({
       feedShowPodroll: form.feedShowPodroll,
       feedShowCast: form.feedShowCast,
       feedShowVideos: form.feedShowVideos,
+      feedMetaPixelId: form.feedMetaPixelId.trim() || null,
     };
     mutation.mutate(payload);
   }
@@ -399,6 +406,33 @@ export function EditPageCustomizationsDialog({
                   checked={form.feedShowVideos}
                   onChange={(feedShowVideos) => setForm((f) => ({ ...f, feedShowVideos }))}
                 />
+
+                <h3 className={localStyles.sectionTitleSpaced}>Tracking</h3>
+                <div className={localStyles.field}>
+                  <label className={styles.label} htmlFor="feed-meta-pixel-id">
+                    Meta Pixel ID
+                  </label>
+                  <input
+                    id="feed-meta-pixel-id"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    className={styles.input}
+                    value={form.feedMetaPixelId}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        feedMetaPixelId: e.target.value.replace(/\D/g, '').slice(0, 20),
+                      }))
+                    }
+                    placeholder="e.g. 123456789012345"
+                    aria-describedby="feed-meta-pixel-hint"
+                  />
+                  <p id="feed-meta-pixel-hint" className={localStyles.fieldHint}>
+                    Optional. When set, Meta&apos;s pixel loads on your public podcast and episode
+                    feed pages.
+                  </p>
+                </div>
               </form>
             )}
           </div>

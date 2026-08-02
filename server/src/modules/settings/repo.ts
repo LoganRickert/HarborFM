@@ -218,6 +218,10 @@ export function writeSettings(settings: AppSettings): void {
   );
   upsert("reviews_enabled", String(settings.reviews_enabled));
   upsert(
+    "email_event_tracking_enabled",
+    String(settings.email_event_tracking_enabled),
+  );
+  upsert(
     "reviews_publish_non_verified",
     String(settings.reviews_publish_non_verified),
   );

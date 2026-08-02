@@ -149,6 +149,11 @@ export interface AppSettings {
   email_signin_disabled: boolean;
   /** When true, public feed pages show reviews and accept submissions. */
   reviews_enabled: boolean;
+  /**
+   * When true, meeting invite/reminder emails may include open-tracking pixels
+   * and the Schedule Meeting UI can show open status.
+   */
+  email_event_tracking_enabled: boolean;
   /** When true, public feed may show approved but non-verified reviews. */
   reviews_publish_non_verified: boolean;
   /** When true and LLM provider set, run spam check on new reviews (fail open). */
@@ -277,6 +282,7 @@ export const DEFAULTS: AppSettings = {
   two_factor_enforced: false,
   email_signin_disabled: false,
   reviews_enabled: true,
+  email_event_tracking_enabled: true,
   reviews_publish_non_verified: false,
   reviews_llm_spam_check: false,
   email_enable_review_verification: true,
@@ -525,6 +531,9 @@ export function buildAppSettingsFromRows(
         row.value === "true";
     else if (row.key === "reviews_enabled")
       (settings as Partial<AppSettings>).reviews_enabled = row.value === "true";
+    else if (row.key === "email_event_tracking_enabled")
+      (settings as Partial<AppSettings>).email_event_tracking_enabled =
+        row.value === "true";
     else if (row.key === "reviews_publish_non_verified")
       (settings as Partial<AppSettings>).reviews_publish_non_verified =
         row.value === "true";
@@ -727,6 +736,9 @@ export function buildAppSettingsFromRows(
       DEFAULTS.email_signin_disabled,
     reviews_enabled:
       (settings as Partial<AppSettings>).reviews_enabled ?? DEFAULTS.reviews_enabled,
+    email_event_tracking_enabled:
+      (settings as Partial<AppSettings>).email_event_tracking_enabled ??
+      DEFAULTS.email_event_tracking_enabled,
     reviews_publish_non_verified:
       (settings as Partial<AppSettings>).reviews_publish_non_verified ??
       DEFAULTS.reviews_publish_non_verified,
@@ -857,6 +869,7 @@ export function settingsToApiResponse(
     emailEnableContact: settings.email_enable_contact,
     emailEnableReviewVerification: settings.email_enable_review_verification,
     reviewsEnabled: settings.reviews_enabled,
+    emailEventTrackingEnabled: settings.email_event_tracking_enabled,
     reviewsPublishNonVerified: settings.reviews_publish_non_verified,
     reviewsLlmSpamCheck: settings.reviews_llm_spam_check,
     welcomeBanner: settings.welcome_banner,

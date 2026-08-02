@@ -11,6 +11,8 @@ import {
   listEmailedInvites,
   markInviteSent,
   MEETING_REMINDER_BEFORE_MS,
+  rotateInviteOpenToken,
+  rotateReminderOpenToken,
   type MeetingInviteRow,
   type MeetingRow,
 } from "./meetings.js";
@@ -29,6 +31,22 @@ import {
   type GroupCallMeetingEmailOptions,
 } from "../../services/email.js";
 import { API_PREFIX } from "../../config.js";
+
+function isEmailEventTrackingEnabled(): boolean {
+  const settings = readSettings();
+  return (
+    (settings as { email_event_tracking_enabled?: boolean })
+      .email_event_tracking_enabled ?? true
+  );
+}
+
+function meetingEmailOpenPixelUrl(
+  fallbackOrigin: string,
+  openToken: string,
+): string {
+  const origin = absoluteOrigin(fallbackOrigin);
+  return `${origin}/${API_PREFIX}/public/meeting-email-open/${encodeURIComponent(openToken)}.gif`;
+}
 
 /** Prefer request origin; fall back to settings hostname so join URLs are always absolute for email/ICS. */
 function absoluteOrigin(fallbackOrigin: string): string {
@@ -226,11 +244,17 @@ export async function sendMeetingInviteEmail(
   });
   const gcal = buildGoogleCalendarUrl(cal);
   const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
+  let trackingPixelUrl: string | null = null;
+  if (isEmailEventTrackingEnabled()) {
+    const openToken = rotateInviteOpenToken(invite.id);
+    trackingPixelUrl = meetingEmailOpenPixelUrl(fallbackOrigin, openToken);
+  }
   const content = buildGroupCallMeetingInviteEmail({
     ...meetingEmailSharedOpts(meeting, fallbackOrigin, invite),
     googleCalendarUrl: gcal,
     guestName: invite.displayName,
     eventJsonLd,
+    trackingPixelUrl,
   });
   const result = await sendMail({
     to: email,
@@ -282,6 +306,7 @@ export async function notifyEmailedInvitesReminder(
     });
   }
 
+  const trackingEnabled = isEmailEventTrackingEnabled();
   for (const invite of invites) {
     const email = invite.email?.trim();
     if (!email) continue;
@@ -293,12 +318,18 @@ export async function notifyEmailedInvitesReminder(
     });
     const gcal = buildGoogleCalendarUrl(cal);
     const { icalEvent, eventJsonLd } = meetingIcalAndJsonLd(cal);
+    let trackingPixelUrl: string | null = null;
+    if (trackingEnabled) {
+      const openToken = rotateReminderOpenToken(invite.id);
+      trackingPixelUrl = meetingEmailOpenPixelUrl(fallbackOrigin, openToken);
+    }
     const content = buildGroupCallMeetingReminderEmail({
       ...meetingEmailSharedOpts(meeting, fallbackOrigin, invite),
       googleCalendarUrl: gcal,
       guestName: invite.displayName,
       eventJsonLd,
       reminderLeadPhrase: leadPhrase,
+      trackingPixelUrl,
     });
     await sendMail({
       to: email,

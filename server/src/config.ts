@@ -451,6 +451,12 @@ export const RENDER_RATE_LIMIT_WINDOW_MS =
     ? Number(process.env.RENDER_RATE_LIMIT_WINDOW_MS)
     : 30_000;
 
+/** Cast profile update request email: min ms between sends per user. 0 = no limit (e.g. for e2e). Env: CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS. Default 30000 (30s). */
+export const CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS =
+  process.env.CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS !== undefined
+    ? Number(process.env.CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS)
+    : 30_000;
+
 /** Import project/segment/Reaper rate limit: min ms between imports per user. 0 = no limit (e.g. for e2e). Env: IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS. Default 30000. */
 export const IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS =
   process.env.IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS !== undefined

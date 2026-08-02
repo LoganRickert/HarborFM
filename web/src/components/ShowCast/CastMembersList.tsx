@@ -1,4 +1,4 @@
-import { Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Mail, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { CastMember } from '../../api/podcasts';
 import { CastMemberRow } from './CastMemberRow';
 import sharedStyles from '../PodcastDetail/shared.module.css';
@@ -14,6 +14,7 @@ export interface CastMembersListProps {
   podcastId: string;
   canEdit: (c: CastMember) => boolean;
   canDelete: (c: CastMember) => boolean;
+  onRequestInfo: (c: CastMember) => void;
   onEdit: (c: CastMember) => void;
   onDelete: (c: CastMember) => void;
   onPrevPage: () => void;
@@ -29,6 +30,7 @@ export function CastMembersList({
   podcastId,
   canEdit,
   canDelete,
+  onRequestInfo,
   onEdit,
   onDelete,
   onPrevPage,
@@ -53,6 +55,17 @@ export function CastMembersList({
       <ul className={styles.castList}>
         {cast.map((c) => (
           <CastMemberRow key={c.id} member={c} podcastId={podcastId}>
+            {canEdit(c) && Boolean(c.email?.trim()) && (
+              <button
+                type="button"
+                className={`${styles.cancel} ${styles.castRowEditBtn}`}
+                onClick={() => onRequestInfo(c)}
+                aria-label={`Request profile update from ${c.name}`}
+              >
+                <Mail size={16} aria-hidden />
+                Update
+              </button>
+            )}
             {canEdit(c) && (
               <button
                 type="button"

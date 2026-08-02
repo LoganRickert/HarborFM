@@ -28,10 +28,22 @@ import {
   pathRelativeToData,
   resolveDataPath,
 } from "../../services/paths.js";
-import { ARTWORK_MAX_BYTES, ARTWORK_MAX_MB } from "../../config.js";
+import {
+  API_PREFIX,
+  ARTWORK_MAX_BYTES,
+  ARTWORK_MAX_MB,
+  CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS,
+} from "../../config.js";
 import { EXT_DOT_TO_MIMETYPE, MIMETYPE_TO_EXT } from "../../utils/artwork.js";
 import { ARTWORK_FILENAME_REGEX } from "./utils.js";
 import { afterUpdatePodcast } from "./service.js";
+import {
+  buildCastInfoRequestEmail,
+  sendMail,
+} from "../../services/email.js";
+import { getUserById } from "../users/repo.js";
+import { absoluteOrigin } from "../call/meetingMail.js";
+import { userRateLimitPreHandler } from "../../services/rateLimit.js";
 
 /** Cast row from DB (camelCase). isPublic is 0/1 for API. */
 type CastRow = {
@@ -89,6 +101,51 @@ function canEditCastForRole(
 ): boolean {
   if (castRole === "host") return canAddEditHost(userRole);
   return canAddEditGuest(userRole);
+}
+
+/** Publicly reachable absolute photo URL for email embedding, when available. */
+function castPhotoAbsoluteUrlForEmail(
+  cast: CastRow,
+  fallbackOrigin: string,
+): { photoUrl: string | null; photoOnFileUnlinked: boolean } {
+  const remote = cast.photoUrl?.trim();
+  if (remote && /^https?:\/\//i.test(remote)) {
+    return { photoUrl: remote, photoOnFileUnlinked: false };
+  }
+  const path = cast.photoPath?.trim();
+  if (!path) {
+    return { photoUrl: null, photoOnFileUnlinked: false };
+  }
+  const filename = basename(path);
+  if (!filename || !ARTWORK_FILENAME_REGEX.test(filename)) {
+    return { photoUrl: null, photoOnFileUnlinked: true };
+  }
+  // Public artwork route only serves public cast photos.
+  if (cast.isPublic !== 1) {
+    return { photoUrl: null, photoOnFileUnlinked: true };
+  }
+  const origin = absoluteOrigin(fallbackOrigin);
+  return {
+    photoUrl: `${origin}/${API_PREFIX}/public/artwork/${encodeURIComponent(cast.podcastId)}/cast/${encodeURIComponent(cast.id)}/${encodeURIComponent(filename)}`,
+    photoOnFileUnlinked: false,
+  };
+}
+
+/** Absolute podcast cover URL for cast request-info emails. */
+function podcastCoverAbsoluteUrlForEmail(
+  podcastId: string,
+  artworkUrl: string | null | undefined,
+  artworkPath: string | null | undefined,
+  fallbackOrigin: string,
+): string | null {
+  const remote = artworkUrl?.trim();
+  if (remote && /^https?:\/\//i.test(remote)) return remote;
+  const path = artworkPath?.trim();
+  if (!path) return null;
+  const filename = basename(path);
+  if (!filename) return null;
+  const origin = absoluteOrigin(fallbackOrigin);
+  return `${origin}/${API_PREFIX}/public/artwork/${encodeURIComponent(podcastId)}/${encodeURIComponent(filename)}`;
 }
 
 export async function registerCastRoutes(app: FastifyInstance) {
@@ -554,6 +611,144 @@ export async function registerCastRoutes(app: FastifyInstance) {
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
       afterUpdatePodcast(podcastId);
       return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    "/podcasts/:podcastId/cast/:castId/request-info",
+    {
+      preHandler: [
+        requireAuth,
+        requireNotReadOnly,
+        userRateLimitPreHandler({
+          bucket: "cast-request-info",
+          windowMs: CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS,
+          actionLabel: "send a cast profile update email",
+        }),
+      ],
+      schema: {
+        tags: ["Podcasts"],
+        summary: "Email cast member a profile update request",
+        description:
+          "Sends the cast member an email asking them to reply with an updated photo and social links. Reply-To is the authenticated user who sends the request. Rate limited to once every 30 seconds per user (CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS).",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            castId: { type: "string" },
+          },
+          required: ["podcastId", "castId"],
+        },
+        response: {
+          200: { description: "Email sent" },
+          400: { description: "Missing email or sender email" },
+          403: { description: "Permission denied" },
+          404: { description: "Not found" },
+          502: { description: "Email send failed" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, castId } = request.params as {
+        podcastId: string;
+        castId: string;
+      };
+      if (!request.userId || !canAccessPodcast(request.userId, podcastId)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const role = getPodcastRole(request.userId, podcastId);
+      const existing = drizzleDb
+        .select(castSelectFields)
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
+      if (!existing) {
+        return reply.status(404).send({ error: "Cast member not found" });
+      }
+      const castRole = existing.role as "host" | "guest";
+      if (!canEditCastForRole(role, castRole)) {
+        return reply.status(403).send({
+          error:
+            castRole === "host"
+              ? "Only owners and managers can email hosts."
+              : "You do not have permission to email this cast member.",
+        });
+      }
+      const toEmail = existing.email?.trim();
+      if (!toEmail) {
+        return reply.status(400).send({
+          error: "This cast member has no email address.",
+        });
+      }
+      const clicker = request.userId ? getUserById(request.userId) : undefined;
+      const replyTo = clicker?.email?.trim();
+      if (!replyTo) {
+        return reply.status(400).send({
+          error: "Your account has no email address to use as Reply-To.",
+        });
+      }
+      const podcast = drizzleDb
+        .select({
+          title: podcasts.title,
+          artworkUrl: podcasts.artworkUrl,
+          artworkPath: podcasts.artworkPath,
+        })
+        .from(podcasts)
+        .where(eq(podcasts.id, podcastId))
+        .limit(1)
+        .get();
+      if (!podcast) {
+        return reply.status(404).send({ error: "Podcast not found" });
+      }
+      const fallbackOrigin =
+        (request.headers["origin"] as string | undefined) ||
+        (typeof request.headers["referer"] === "string"
+          ? (() => {
+              try {
+                return new URL(request.headers["referer"]).origin;
+              } catch {
+                return "";
+              }
+            })()
+          : "") ||
+        "http://localhost";
+      const { photoUrl, photoOnFileUnlinked } = castPhotoAbsoluteUrlForEmail(
+        existing,
+        fallbackOrigin,
+      );
+      const coverArtUrl = podcastCoverAbsoluteUrlForEmail(
+        podcastId,
+        podcast.artworkUrl,
+        podcast.artworkPath,
+        fallbackOrigin,
+      );
+      const content = buildCastInfoRequestEmail({
+        castName: existing.name,
+        podcastTitle: podcast.title,
+        coverArtUrl,
+        photoUrl,
+        photoOnFileUnlinked,
+        socialLinks: parseCastSocialLinks(existing.socialLinks),
+        replyToEmail: replyTo,
+        baseUrl: absoluteOrigin(fallbackOrigin),
+      });
+      const result = await sendMail({
+        to: toEmail,
+        replyTo,
+        ...content,
+      });
+      if (!result.sent) {
+        return reply.status(502).send({
+          error: result.error || "Failed to send email",
+        });
+      }
+      return { ok: true };
     },
   );
 

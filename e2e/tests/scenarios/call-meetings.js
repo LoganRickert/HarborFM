@@ -35,6 +35,19 @@ function emailContents(catcher) {
     .filter((c) => c.length > 0);
 }
 
+/** HTML bodies from webhook email posts (tracking pixels live here, not in stripped text). */
+/** @param {Awaited<ReturnType<typeof startHttpCatcher>>} catcher */
+function emailHtmlBodies(catcher) {
+  return catcher.requests
+    .map((r) => {
+      if (r.json && typeof r.json === 'object' && r.json !== null && 'html' in r.json) {
+        return String(/** @type {{ html?: unknown }} */ (r.json).html ?? '');
+      }
+      return '';
+    })
+    .filter((c) => c.length > 0);
+}
+
 export async function run({ runOne }) {
   const results = [];
 
@@ -341,6 +354,149 @@ export async function run({ runOne }) {
         const info = await infoRes.json();
         if (info.inviteDisplayName !== 'Guest Ada') {
           throw new Error(`Expected inviteDisplayName Guest Ada, got ${info.inviteDisplayName}`);
+        }
+      }),
+    );
+
+    results.push(
+      await runOne('Meeting invite email open tracking pixel', async () => {
+        const enableRes = await apiFetch(
+          '/settings',
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emailEventTrackingEnabled: true }),
+          },
+          jar,
+        );
+        if (enableRes.status !== 200) {
+          throw new Error(`Expected 200 enabling tracking, got ${enableRes.status}`);
+        }
+
+        catcher.reset();
+        const inviteRes = await apiFetch(
+          `/call/meetings/${meetingId}/invites`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: 'Open Track Eve',
+              email: `open-track-${ts}@e2e.test`,
+            }),
+          },
+          jar,
+        );
+        if (inviteRes.status !== 200) {
+          throw new Error(`Open-track invite failed: ${inviteRes.status} ${await inviteRes.text()}`);
+        }
+        const inviteBody = await inviteRes.json();
+        const openToken = inviteBody.invite?.inviteOpenToken;
+        if (!openToken || typeof openToken !== 'string') {
+          throw new Error(
+            `Expected inviteOpenToken (E2E_EXPOSE_EMAIL_OPEN_TOKENS=1), got ${JSON.stringify(inviteBody.invite)}`,
+          );
+        }
+        if (inviteBody.invite.inviteOpenTracked !== true) {
+          throw new Error('Expected inviteOpenTracked true when tracking enabled');
+        }
+        if (inviteBody.invite.inviteOpenedAt != null) {
+          throw new Error('Expected inviteOpenedAt null before pixel hit');
+        }
+
+        await catcher.waitFor(1, 10000);
+        const htmlBodies = emailHtmlBodies(catcher);
+        const pixelNeedle = `meeting-email-open/${openToken}.gif`;
+        if (!htmlBodies.some((html) => html.includes(pixelNeedle))) {
+          throw new Error(
+            `Expected tracking pixel in invite email HTML, got: ${JSON.stringify(htmlBodies.map((h) => h.slice(0, 200)))}`,
+          );
+        }
+
+        const pixelRes = await fetch(
+          `${baseURL}/public/meeting-email-open/${encodeURIComponent(openToken)}.gif`,
+        );
+        if (pixelRes.status !== 200) {
+          throw new Error(`Expected 200 from open pixel, got ${pixelRes.status}`);
+        }
+        const ct = pixelRes.headers.get('content-type') || '';
+        if (!ct.includes('image/gif')) {
+          throw new Error(`Expected image/gif, got ${ct}`);
+        }
+
+        const meetingRes = await apiFetch(
+          `/call/meetings?episodeId=${encodeURIComponent(episode.id)}`,
+          {},
+          jar,
+        );
+        if (meetingRes.status !== 200) {
+          throw new Error(`Expected 200 meeting GET, got ${meetingRes.status}`);
+        }
+        const meetingData = await meetingRes.json();
+        const tracked = (meetingData.meeting?.invites ?? []).find(
+          (inv) => inv.id === inviteBody.invite.id,
+        );
+        if (!tracked?.inviteOpenedAt) {
+          throw new Error(
+            `Expected inviteOpenedAt after pixel hit, got ${JSON.stringify(tracked)}`,
+          );
+        }
+
+        const disableRes = await apiFetch(
+          '/settings',
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emailEventTrackingEnabled: false }),
+          },
+          jar,
+        );
+        if (disableRes.status !== 200) {
+          throw new Error(`Expected 200 disabling tracking, got ${disableRes.status}`);
+        }
+
+        catcher.reset();
+        const untrackedRes = await apiFetch(
+          `/call/meetings/${meetingId}/invites`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: 'No Track Ned',
+              email: `no-track-${ts}@e2e.test`,
+            }),
+          },
+          jar,
+        );
+        if (untrackedRes.status !== 200) {
+          throw new Error(`Untracked invite failed: ${untrackedRes.status}`);
+        }
+        const untrackedBody = await untrackedRes.json();
+        if (untrackedBody.invite?.inviteOpenToken) {
+          throw new Error('Expected no inviteOpenToken when tracking disabled');
+        }
+        if (untrackedBody.invite?.inviteOpenTracked) {
+          throw new Error('Expected inviteOpenTracked false when tracking disabled');
+        }
+        await catcher.waitFor(1, 10000);
+        const untrackedHtml = emailHtmlBodies(catcher);
+        if (untrackedHtml.some((html) => /meeting-email-open/i.test(html))) {
+          throw new Error('Expected no tracking pixel when Email Event Tracking is off');
+        }
+        if (untrackedHtml.length === 0) {
+          throw new Error('Expected invite email HTML when tracking is off');
+        }
+
+        const reenable = await apiFetch(
+          '/settings',
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emailEventTrackingEnabled: true }),
+          },
+          jar,
+        );
+        if (reenable.status !== 200) {
+          throw new Error(`Expected 200 re-enabling tracking, got ${reenable.status}`);
         }
       }),
     );

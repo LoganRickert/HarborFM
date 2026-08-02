@@ -3,6 +3,7 @@
  * - Auth cast CRUD returns/persists email
  * - Public cast DTOs never expose email
  * - Episode cast includes email for authenticated clients
+ * - Cast request-info emails profile update request (reply-to = clicker)
  * - Meeting invite with cast name+email works (quick-invite path)
  */
 import {
@@ -247,6 +248,101 @@ export async function run({ runOne }) {
       for (const c of pubData.cast ?? []) assertNoEmailField(c, 'public episode cast');
       if (JSON.stringify(pubData).toLowerCase().includes(castEmail.toLowerCase())) {
         throw new Error('Public episode cast must not contain private cast email');
+      }
+    }),
+  );
+
+  results.push(
+    await runOne('POST cast request-info emails profile update request', async () => {
+      const catcher = await startHttpCatcher();
+      try {
+        const photoUrl = 'https://example.com/cast-photo.jpg';
+        const socialUrl = 'https://example.com/social';
+        const patchRes = await apiFetch(
+          `/podcasts/${podcast.id}/cast/${castId}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: castEmail,
+              photoUrl,
+              socialLinks: [socialUrl],
+            }),
+          },
+          jar,
+        );
+        if (patchRes.status !== 200) {
+          throw new Error(
+            `PATCH cast for request-info: expected 200, got ${patchRes.status} ${await patchRes.text()}`,
+          );
+        }
+
+        const settingsRes = await apiFetch(
+          '/settings',
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              emailProvider: 'webhook',
+              emailWebhookUrl: catcher.baseUrl,
+            }),
+          },
+          jar,
+        );
+        if (settingsRes.status !== 200) {
+          throw new Error(`Expected 200 settings PATCH, got ${settingsRes.status}`);
+        }
+
+        catcher.reset();
+        const sendRes = await apiFetch(
+          `/podcasts/${podcast.id}/cast/${castId}/request-info`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+          jar,
+        );
+        if (sendRes.status !== 200) {
+          throw new Error(
+            `request-info: expected 200, got ${sendRes.status} ${await sendRes.text()}`,
+          );
+        }
+        const sendBody = await sendRes.json();
+        if (sendBody.ok !== true) throw new Error(`Expected ok true, got ${JSON.stringify(sendBody)}`);
+
+        await catcher.waitFor(1, 10000);
+        const emails = emailContents(catcher);
+        if (
+          !emails.some(
+            (e) =>
+              /update your cast profile/i.test(e) &&
+              /Email Host/i.test(e) &&
+              /E2E Cast Email Show/i.test(e) &&
+              /reply/i.test(e) &&
+              /social/i.test(e) &&
+              /example\.com\/social/i.test(e),
+          )
+        ) {
+          throw new Error(`Expected cast request-info email, got: ${JSON.stringify(emails)}`);
+        }
+        const webhook = catcher.requests.find((r) => r.json && typeof r.json === 'object');
+        const payload = webhook?.json && typeof webhook.json === 'object' ? webhook.json : null;
+        if (payload && typeof payload.reply_to === 'string') {
+          if (!/admin@e2e\.test/i.test(payload.reply_to)) {
+            throw new Error(`Expected reply_to admin@e2e.test, got ${payload.reply_to}`);
+          }
+        }
+        if (payload && typeof payload.to === 'string' && payload.to !== castEmail) {
+          throw new Error(`Expected to ${castEmail}, got ${payload.to}`);
+        }
+      } finally {
+        await apiFetch(
+          '/settings',
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emailProvider: 'none' }),
+          },
+          jar,
+        ).catch(() => {});
+        await catcher.close();
       }
     }),
   );

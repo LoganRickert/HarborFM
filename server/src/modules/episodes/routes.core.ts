@@ -559,6 +559,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
 
       // Fire episode alerts when an episode newly becomes alertable
       // (released and not unlisted), including clearing Unlisted later.
+      // Also: guest review emails on draft > scheduled or published+unlisted;
+      // revoke reviews on draft.
       try {
         const wasReleased =
           currentEpisode.status === "published" &&
@@ -574,6 +576,52 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         const nowUnlisted = Boolean(row.unlisted);
         const wasAlertable = wasReleased && !wasUnlisted;
         const nowAlertable = nowReleased && !nowUnlisted;
+        const origin =
+          (request.headers["origin"] as string | undefined) ||
+          (typeof request.headers["referer"] === "string"
+            ? new URL(request.headers["referer"]).origin
+            : "http://localhost");
+
+        if (
+          currentEpisode.status === "draft" &&
+          (row.status === "scheduled"
+          || (row.status === "published" && row.unlisted === true))
+        ) {
+          try {
+            const { notifyGuestReviewOnPreviewEligible } = await import(
+              "../episodeGuestReview/notify.js"
+            );
+            void notifyGuestReviewOnPreviewEligible(id, origin).catch((err) => {
+              console.warn(
+                "[episodeGuestReview] preview-eligible notify failed:",
+                err instanceof Error ? err.message : err,
+              );
+            });
+          } catch (err) {
+            console.warn(
+              "[episodeGuestReview] schedule notify import failed:",
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+
+        if (
+          currentEpisode.status !== "draft" &&
+          row.status === "draft"
+        ) {
+          try {
+            const { revokeReviewsForEpisode } = await import(
+              "../episodeGuestReview/repo.js"
+            );
+            revokeReviewsForEpisode(id);
+          } catch (err) {
+            console.warn(
+              "[episodeGuestReview] revoke on draft failed:",
+              err instanceof Error ? err.message : err,
+            );
+          }
+        }
+
         if (nowAlertable && !wasAlertable) {
           void dispatchEpisodeAlerts(id).catch((err) => {
             console.warn(
@@ -585,11 +633,6 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             const { notifyMeetingInvitesOnEpisodePublish } = await import(
               "../call/meetingPublishNotify.js"
             );
-            const origin =
-              (request.headers["origin"] as string | undefined) ||
-              (typeof request.headers["referer"] === "string"
-                ? new URL(request.headers["referer"]).origin
-                : "http://localhost");
             void notifyMeetingInvitesOnEpisodePublish(id, origin).catch((err) => {
               console.warn(
                 "[callMeetings] publish notify failed:",

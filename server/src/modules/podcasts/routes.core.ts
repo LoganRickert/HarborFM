@@ -1052,6 +1052,13 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       if (data.feedShowVideos !== undefined) {
         set.feedShowVideos = Boolean(data.feedShowVideos);
       }
+      if (data.feedMetaPixelId !== undefined) {
+        const raw =
+          data.feedMetaPixelId == null
+            ? null
+            : String(data.feedMetaPixelId).trim();
+        set.feedMetaPixelId = raw && raw.length > 0 ? raw : null;
+      }
       if (data.fundingLinks !== undefined) set.fundingLinks = jsonArrayOrNull(data.fundingLinks);
       if (data.persons !== undefined) set.persons = data.persons;
       if (data.updateFrequency !== undefined) {

@@ -479,6 +479,27 @@
   white-space: nowrap;
 }
 
+.inviteOpenStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.05rem;
+}
+
+.inviteOpenFlag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.inviteOpenFlag svg {
+  flex-shrink: 0;
+}
+
 .inviteActions {
   display: flex;
   align-items: center;

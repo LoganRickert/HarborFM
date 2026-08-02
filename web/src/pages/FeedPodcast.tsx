@@ -34,6 +34,7 @@ import {
   SubscriptionInfoDialog,
 } from '../components/Feed';
 import { LiquidFeedPage, type LiquidFeedBlocks } from '../components/Feed/LiquidFeedPage';
+import { FeedMetaPixel } from '../components/Feed/FeedMetaPixel';
 import type { HarborfmActionHandlers } from '../components/Feed/harborfmActions';
 import { ShareDialog } from '../components/ShareDialog';
 import { ReviewSubmitModal } from '../components/Feed/ReviewSubmitModal';
@@ -399,6 +400,7 @@ export function FeedPodcast({ podcastSlugOverride }: { podcastSlugOverride?: str
 
   const modals = (
     <>
+      <FeedMetaPixel pixelId={podcast.feedMetaPixelId} />
       <FeedbackModal
         open={feedbackOpen}
         onOpenChange={setFeedbackOpen}

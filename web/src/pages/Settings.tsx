@@ -191,6 +191,7 @@ export function Settings() {
         emailEnableContact: form.emailEnableContact,
         emailEnableReviewVerification: form.emailEnableReviewVerification,
         reviewsEnabled: form.reviewsEnabled,
+        emailEventTrackingEnabled: form.emailEventTrackingEnabled,
         reviewsPublishNonVerified: form.reviewsPublishNonVerified,
         reviewsLlmSpamCheck: form.reviewsLlmSpamCheck,
         welcomeBanner: form.welcomeBanner,

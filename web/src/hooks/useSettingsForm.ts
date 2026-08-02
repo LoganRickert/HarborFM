@@ -59,6 +59,7 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   emailEnableContact: true,
   emailEnableReviewVerification: true,
   reviewsEnabled: true,
+  emailEventTrackingEnabled: true,
   reviewsPublishNonVerified: false,
   reviewsLlmSpamCheck: false,
   welcomeBanner: '',

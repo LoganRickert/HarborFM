@@ -177,6 +177,31 @@ export function getActiveMeetingForEpisode(
   return rows.find((r) => isActiveMeetingRow(r, nowMs));
 }
 
+/**
+ * Prefer an active scheduled/live meeting; otherwise the most recently updated
+ * meeting for the episode (including ended/expired/cancelled). Used for
+ * post-call guest review emails when the live window has closed.
+ */
+export function getLatestMeetingForEpisode(
+  episodeId: string,
+  nowMs: number = Date.now(),
+): MeetingRow | undefined {
+  const active = getActiveMeetingForEpisode(episodeId, nowMs);
+  if (active) return active;
+  expireStaleMeetings(nowMs);
+  const rows = drizzleDb
+    .select()
+    .from(episodeGroupCallMeetings)
+    .where(eq(episodeGroupCallMeetings.episodeId, episodeId))
+    .all();
+  if (rows.length === 0) return undefined;
+  return [...rows].sort((a, b) => {
+    const aT = Date.parse(a.updatedAt || a.createdAt || "") || 0;
+    const bT = Date.parse(b.updatedAt || b.createdAt || "") || 0;
+    return bT - aT;
+  })[0];
+}
+
 export function getMeetingById(id: string): MeetingRow | undefined {
   expireStaleMeetings();
   return drizzleDb
@@ -389,6 +414,18 @@ export function setEpisodePublishedNotified(id: string): void {
     .run();
 }
 
+export function setGuestReviewNotified(id: string): void {
+  const nowIso = new Date().toISOString();
+  drizzleDb
+    .update(episodeGroupCallMeetings)
+    .set({
+      guestReviewNotifiedAt: nowIso,
+      updatedAt: nowIso,
+    })
+    .where(eq(episodeGroupCallMeetings.id, id))
+    .run();
+}
+
 /**
  * Meetings due for a 4-hour invitee reminder:
  * scheduled, not yet reminded, originally scheduled 5+ hours out,
@@ -510,6 +547,80 @@ export function markInviteSent(inviteId: string): void {
     .set({ lastSentAt: nowIso })
     .where(eq(episodeGroupCallMeetingInvites.id, inviteId))
     .run();
+}
+
+/** Rotate invite open-tracking token and clear prior open timestamp. Returns the new token. */
+export function rotateInviteOpenToken(inviteId: string): string {
+  const token = nanoid(24);
+  drizzleDb
+    .update(episodeGroupCallMeetingInvites)
+    .set({ inviteOpenToken: token, inviteOpenedAt: null })
+    .where(eq(episodeGroupCallMeetingInvites.id, inviteId))
+    .run();
+  return token;
+}
+
+/** Rotate reminder open-tracking token and clear prior open timestamp. Returns the new token. */
+export function rotateReminderOpenToken(inviteId: string): string {
+  const token = nanoid(24);
+  drizzleDb
+    .update(episodeGroupCallMeetingInvites)
+    .set({ reminderOpenToken: token, reminderOpenedAt: null })
+    .where(eq(episodeGroupCallMeetingInvites.id, inviteId))
+    .run();
+  return token;
+}
+
+export type MeetingEmailOpenKind = "invite" | "reminder";
+
+/**
+ * Record first open for invite or reminder tracking token.
+ * Returns the kind recorded, or null if token unknown / already opened.
+ */
+export function recordMeetingEmailOpen(
+  token: string,
+): MeetingEmailOpenKind | null {
+  const raw = token.trim();
+  if (!raw) return null;
+  const nowIso = new Date().toISOString();
+
+  const byInvite = drizzleDb
+    .select()
+    .from(episodeGroupCallMeetingInvites)
+    .where(eq(episodeGroupCallMeetingInvites.inviteOpenToken, raw))
+    .limit(1)
+    .get();
+  if (byInvite) {
+    if (!byInvite.inviteOpenedAt) {
+      drizzleDb
+        .update(episodeGroupCallMeetingInvites)
+        .set({ inviteOpenedAt: nowIso })
+        .where(eq(episodeGroupCallMeetingInvites.id, byInvite.id))
+        .run();
+      return "invite";
+    }
+    return "invite";
+  }
+
+  const byReminder = drizzleDb
+    .select()
+    .from(episodeGroupCallMeetingInvites)
+    .where(eq(episodeGroupCallMeetingInvites.reminderOpenToken, raw))
+    .limit(1)
+    .get();
+  if (byReminder) {
+    if (!byReminder.reminderOpenedAt) {
+      drizzleDb
+        .update(episodeGroupCallMeetingInvites)
+        .set({ reminderOpenedAt: nowIso })
+        .where(eq(episodeGroupCallMeetingInvites.id, byReminder.id))
+        .run();
+      return "reminder";
+    }
+    return "reminder";
+  }
+
+  return null;
 }
 
 export function deleteInvite(inviteId: string): boolean {

@@ -17,6 +17,10 @@ import {
   publicEpisodeDto,
 } from "./utils.js";
 import { isCurrentlySubscriberOnly } from "../../utils/subscriberOnlyWindow.js";
+import {
+  isPreviewEligible,
+  resolveReviewFromRawToken,
+} from "../episodeGuestReview/repo.js";
 import * as repo from "./repo.js";
 
 export async function registerEpisodesRoutes(app: FastifyInstance) {
@@ -189,21 +193,60 @@ export async function registerEpisodesRoutes(app: FastifyInstance) {
       )
         return reply.status(404).send({ error: "Podcast not found" });
 
-      const row = repo.getPublicEpisodeBySlug(
-        podcast.id,
-        episodeSlug,
-        podcast.showScheduledEpisodes === 1,
+      const q = request.query as { review?: string | string[] };
+      const reviewRaw = Array.isArray(q.review) ? q.review[0] : q.review;
+      const reviewToken =
+        typeof reviewRaw === "string" ? reviewRaw.trim() : "";
+      const reviewResolved = reviewToken
+        ? resolveReviewFromRawToken(reviewToken)
+        : null;
+      const reviewLooksValid = Boolean(
+        reviewResolved &&
+          reviewResolved.episode.podcastId === podcast.id &&
+          isPreviewEligible(reviewResolved.episode),
       );
+
+      // Prefer review-aware fetch when token is present so listed+scheduled works
+      // even when showScheduledEpisodes is off.
+      const row = reviewLooksValid
+        ? repo.getEpisodeBySlugForGuestReview(podcast.id, episodeSlug) ??
+          (reviewResolved!.episode.slug
+            ? repo.getEpisodeBySlugForGuestReview(
+                podcast.id,
+                reviewResolved!.episode.slug,
+              )
+            : undefined)
+        : repo.getPublicEpisodeBySlug(
+            podcast.id,
+            episodeSlug,
+            podcast.showScheduledEpisodes === 1,
+          );
       if (!row) return reply.status(404).send({ error: "Episode not found" });
+
+      const reviewUnlock = Boolean(
+        reviewLooksValid &&
+          reviewResolved &&
+          reviewResolved.episode.id === row.id,
+      );
+      let reviewAudioUrl: string | null = null;
+      let reviewWaveformUrl: string | null = null;
+      if (reviewUnlock && reviewToken && row.audioFinalPath) {
+        const enc = encodeURIComponent(reviewToken);
+        reviewAudioUrl = `/${API_PREFIX}/public/episode-review/audio?token=${enc}`;
+        reviewWaveformUrl = `/${API_PREFIX}/public/episode-review/waveform?token=${enc}`;
+      }
 
       const episode = publicEpisodeDto(podcast.id, row, {
         subscriberOnlyFeed: podcast.publicFeedDisabled === 1,
         podcastSlug,
+        reviewUnlock,
+        reviewAudioUrl,
+        reviewWaveformUrl,
       }) as Record<string, unknown>;
 
       const scheduledNotReleased = episode.scheduled_not_released === 1;
       const cookieValue = request.cookies[SUBSCRIBER_TOKENS_COOKIE];
-      if (cookieValue && !scheduledNotReleased) {
+      if (cookieValue && !scheduledNotReleased && !reviewUnlock) {
         try {
           const tokenMap = JSON.parse(cookieValue);
           if (typeof tokenMap === "object" && !Array.isArray(tokenMap)) {

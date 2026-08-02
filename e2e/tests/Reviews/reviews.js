@@ -1,4 +1,4 @@
-import { apiFetch, loginAsAdmin, createShow } from '../../lib/helpers.js';
+import { apiFetch, loginAsAdmin, createShow, createEpisode } from '../../lib/helpers.js';
 
 export async function run({ runOne }) {
   const results = [];
@@ -151,6 +151,85 @@ export async function run({ runOne }) {
       const review = listData.reviews?.find((r) => r.id === reviewId);
       if (!review) throw new Error('Review not found in list');
       if (!review.approved) throw new Error('Expected review to be approved');
+    })
+  );
+
+  results.push(
+    await runOne('Scheduled episode reviews: empty list, not podcast reviews; write rejected', async () => {
+      const podcast = await createShow(jar, { slug: `e2e-reviews-sched-${Date.now()}` });
+      const base = process.env.E2E_BASE_URL || 'http://127.0.0.1:3099/api';
+      const podcastReview = await fetch(`${base}/public/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          podcastSlug: podcast.slug,
+          name: 'Podcast Reviewer',
+          email: `podcast-rev-${Date.now()}@e2e.test`,
+          rating: 5,
+          body: 'This is an awesome podcast with enough characters.',
+        }),
+      });
+      if (podcastReview.status !== 200) {
+        throw new Error(`Podcast review submit expected 200, got ${podcastReview.status} ${await podcastReview.text()}`);
+      }
+
+      const episode = await createEpisode(jar, podcast.id, {
+        title: 'Scheduled Review Episode',
+        status: 'draft',
+      });
+      const future = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      const epSlug = `sched-rev-${Date.now()}`;
+      const patchRes = await apiFetch(
+        `/episodes/${episode.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'scheduled',
+            unlisted: 0,
+            publishAt: future,
+            slug: epSlug,
+          }),
+        },
+        jar,
+      );
+      if (patchRes.status !== 200) {
+        throw new Error(`Schedule episode failed: ${patchRes.status} ${await patchRes.text()}`);
+      }
+
+      const listRes = await fetch(
+        `${base}/public/podcasts/${encodeURIComponent(podcast.slug)}/reviews?episodeSlug=${encodeURIComponent(epSlug)}`,
+      );
+      if (listRes.status !== 200) {
+        throw new Error(`Episode reviews list expected 200, got ${listRes.status} ${await listRes.text()}`);
+      }
+      const listData = await listRes.json();
+      if (!Array.isArray(listData.reviews)) throw new Error('Expected reviews array');
+      if (listData.reviews.length !== 0) {
+        throw new Error(
+          `Expected no podcast reviews on scheduled episode page, got ${listData.reviews.length}`,
+        );
+      }
+
+      const writeRes = await fetch(`${base}/public/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          podcastSlug: podcast.slug,
+          episodeSlug: epSlug,
+          name: 'Early Reviewer',
+          email: `early-rev-${Date.now()}@e2e.test`,
+          rating: 4,
+          body: 'Trying to review before the episode is published.',
+        }),
+      });
+      if (writeRes.status !== 400) {
+        throw new Error(`Write review on scheduled episode expected 400, got ${writeRes.status} ${await writeRes.text()}`);
+      }
+      const writeBody = await writeRes.json().catch(() => ({}));
+      if (!/published/i.test(String(writeBody.error || ''))) {
+        throw new Error(`Expected published-only error, got ${JSON.stringify(writeBody)}`);
+      }
     })
   );
 

@@ -345,7 +345,7 @@ export function CastMemberDialog({
         >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>
-              {isEdit ? 'Edit cast member' : 'Add cast member'}
+              {isEdit ? 'Edit Cast Member' : 'Add Cast Member'}
             </Dialog.Title>
             <button
               type="button"
@@ -529,7 +529,7 @@ export function CastMemberDialog({
                   disabled={isPending || !canAddSocialLink}
                 >
                   <Plus size={16} strokeWidth={2.25} aria-hidden />
-                  Add link
+                  Add Link
                 </button>
               </div>
 

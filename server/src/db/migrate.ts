@@ -107,6 +107,9 @@ import * as m105 from "./migrations/105_segment_final_gain.js";
 import * as m106 from "./migrations/106_episodes_youtube_url.js";
 import * as m107 from "./migrations/107_podcast_stats_retention_reach.js";
 import * as m108 from "./migrations/108_episode_archive.js";
+import * as m109 from "./migrations/109_episode_guest_reviews.js";
+import * as m110 from "./migrations/110_podcasts_feed_meta_pixel_id.js";
+import * as m111 from "./migrations/111_meeting_invite_email_open_tracking.js";
 import { syncServerThemesFromDisk } from "../modules/themes/builtins.js";
 
 const migrations = [
@@ -218,6 +221,9 @@ const migrations = [
   { name: "106_episodes_youtube_url", ...m106 },
   { name: "107_podcast_stats_retention_reach", ...m107 },
   { name: "108_episode_archive", ...m108 },
+  { name: "109_episode_guest_reviews", ...m109 },
+  { name: "110_podcasts_feed_meta_pixel_id", ...m110 },
+  { name: "111_meeting_invite_email_open_tracking", ...m111 },
 ];
 
 const MIGRATIONS_TABLE = `

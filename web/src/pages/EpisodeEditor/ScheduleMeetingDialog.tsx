@@ -82,6 +82,7 @@ export function ScheduleMeetingDialog({
     queryKey: ['call-meeting', episodeId],
     queryFn: () => getEpisodeMeeting(episodeId),
     enabled: open,
+    refetchInterval: open ? 12_000 : false,
   });
 
   const { data: episodeCastData } = useQuery({
@@ -361,13 +362,51 @@ export function ScheduleMeetingDialog({
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
 
-  const renderInviteRow = (inv: (typeof emailedInvites)[number], detail: string) => (
+  const emailedInviteOpenFlags = (
+    inv: (typeof emailedInvites)[number],
+  ): Array<{ label: string; opened: boolean }> => {
+    const flags: Array<{ label: string; opened: boolean }> = [];
+    if (inv.inviteOpenedAt || inv.inviteOpenTracked) {
+      flags.push({ label: 'Opened', opened: Boolean(inv.inviteOpenedAt) });
+    }
+    if (inv.reminderOpenedAt || inv.reminderOpenTracked) {
+      flags.push({ label: 'Reminder', opened: Boolean(inv.reminderOpenedAt) });
+    }
+    return flags;
+  };
+
+  const renderInviteRow = (
+    inv: (typeof emailedInvites)[number],
+    detail: string,
+    openFlags: Array<{ label: string; opened: boolean }> = [],
+  ) => (
     <li key={inv.id} className={styles.inviteItem}>
       <div className={styles.inviteMeta}>
         <span className={styles.inviteName}>
           {inv.displayName?.trim() || inv.email?.trim() || 'Guest'}
         </span>
         <span className={styles.inviteDetail}>{detail}</span>
+        {openFlags.length > 0 ? (
+          <span
+            className={styles.inviteOpenStatus}
+            data-testid="meeting-invite-open-status"
+          >
+            {openFlags.map((flag) => (
+              <span
+                key={flag.label}
+                className={styles.inviteOpenFlag}
+                aria-label={flag.opened ? `${flag.label}: yes` : `${flag.label}: no`}
+              >
+                {flag.opened ? (
+                  <Check size={12} strokeWidth={2.5} aria-hidden />
+                ) : (
+                  <X size={12} strokeWidth={2.5} aria-hidden />
+                )}
+                <span aria-hidden>{flag.label}</span>
+              </span>
+            ))}
+          </span>
+        ) : null}
       </div>
       <div className={styles.inviteActions}>
         <button
@@ -565,6 +604,7 @@ export function ScheduleMeetingDialog({
                                 inv.displayName?.trim()
                                   ? inv.email!.trim()
                                   : 'Invited by email',
+                                emailedInviteOpenFlags(inv),
                               ),
                             )}
                           </ul>

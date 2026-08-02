@@ -473,6 +473,7 @@ All environment variables supported by the server work the same in Docker. Set t
 | `RATE_LIMIT_TIME_WINDOW` | `1 minute` | Global rate limit time window |
 | `REGISTRATION_RATE_LIMIT_MAX` | `5` | Max registration requests per IP per minute. Set higher (e.g. 100) for e2e tests. |
 | `RENDER_RATE_LIMIT_WINDOW_MS` | `30000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |
+| `CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS` | `30000` | Min ms between Show Cast profile update request emails per user. Set to `0` to disable (e.g. for e2e tests). |
 | `MEETING_INVITE_RATE_LIMIT_WINDOW_MS` | `300000` | Window for meeting invite creates (share links / emails) per user. Set to `0` to disable (e.g. for e2e tests). |
 | `MEETING_INVITE_RATE_LIMIT_MAX` | `5` | Max meeting invite creates per user per window. |
 | **Podcast stats** | | |
@@ -557,6 +558,10 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Group calls.** Record remote guests via WebRTC; host starts an ad-hoc call or a **scheduled meeting** with a reserved join link/code, email or share invites, and calendar attachments; guests join by link or 4-digit code (or phone dial-in when enabled); in-call chat, soundboard, and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
 
+- **Guest episode review.** When you move an episode from draft to scheduled (or to published and unlisted), HarborFM emails preview links to the meeting host and emailed invitees so they can listen, approve, or leave feedback before the public release. Preview links unlock audio for scheduled episodes; listed published episodes open the normal public page.
+
+- **Show cast.** Maintain hosts and guests with optional private email and social links. From the cast list, **Update** emails a member asking them to reply with a new photo and social links (includes what is already on file; replies go to the person who clicked Send).
+
 - **Real-time collaboration.** Episode editor WebSocket; collaborators see live segment, call, and render updates.
 
 - **Library.** Upload reusable audio (intros, outros, bumpers, ads). Tag them and insert them into any episode as segments.
@@ -574,6 +579,8 @@ pm2 start ecosystem.config.cjs --only harborfm
 - **Episode Alerts.** When a show publishes (or a scheduled episode becomes live), HarborFM can email listeners and post to communities. Destinations include built-in or BYO email, Discord, Slack, Telegram, Mastodon, Matrix, Lemmy, Bluesky, and JSON webhooks. See [Episode Alerts](#episode-alerts).
 
 - **Page themes.** Replace the default public SPA feed with a packaged Liquid theme (built-in Fluid / Folio, an imported zip, or a gallery theme). Multi-page themes expose routes such as about and crew; those pages appear in the podcast sitemap. Browse previews on the docs [Themes](https://harborfm.com/themes/) page. See [Page themes](#page-themes).
+
+- **Meta Pixel.** Under Edit Page Customizations, set an optional Meta Pixel ID. Public podcast and episode pages inject the pixel; when the site consent banner is enabled, the pixel loads only after analytics consent.
 
 ## Stripe payments
 
@@ -729,7 +736,7 @@ Alerts run when an episode becomes released (publish from the editor, or the ~15
 
 Public shows use the default React SPA feed unless you pick a **page theme** under Edit Page Customizations. Packaged themes are Liquid templates with CSS, optional images/fonts, and HarborFM mount points (`{% render 'harborfm/…' %}`) for interactive blocks (episodes, player, cast, reviews, and so on). Themes can also wire native controls with `data-harborfm-action` (message, alerts, share, subscribe, feed, write-review). Dialogs open under themed chrome so theme CSS can style them.
 
-Page Customizations uses a visual theme picker with package preview images. When a theme sets `homepage` in `theme.json`, Preview opens that live URL.
+Page Customizations uses a visual theme picker with package preview images. When a theme sets `homepage` in `theme.json`, Preview opens that live URL. You can also set a Meta Pixel ID for feed tracking (respects the consent banner when GDPR consent is enabled).
 
 ### Built-ins and custom themes
 

@@ -227,7 +227,17 @@ export async function sendMail(
         : "");
     const content = `Subject: ${toTitleCase(options.subject)}\n\n${textContent}`.trim();
     try {
-      const payload: Record<string, string> = { [fieldKey]: content };
+      const payload: Record<string, string> = {
+        [fieldKey]: content,
+        to: options.to,
+      };
+      // Keep HTML for webhook consumers / e2e (plain content strips tags, including tracking pixels).
+      if (options.html?.trim()) {
+        payload.html = options.html;
+      }
+      if (options.replyTo?.trim()) {
+        payload.reply_to = options.replyTo.trim();
+      }
       const webhookAttachments = [
         ...attachments.map((a) => ({
           filename: a.filename,
@@ -1285,6 +1295,8 @@ export interface GroupCallMeetingEmailOptions {
   coverArtUrl?: string | null;
   /** schema.org EventReservation JSON-LD for Gmail event chips. */
   eventJsonLd?: Record<string, unknown> | null;
+  /** Absolute 1x1 open-tracking pixel URL (invite / reminder emails). */
+  trackingPixelUrl?: string | null;
 }
 
 function meetingTimeZone(timeZone?: string | null): string {
@@ -1412,6 +1424,7 @@ function wrapMeetingEmail(opts: {
   introHtml: string;
   detailsHtml: string;
   eventJsonLd?: Record<string, unknown> | null;
+  trackingPixelUrl?: string | null;
 }): string {
   const jsonLd =
     opts.eventJsonLd && typeof opts.eventJsonLd === "object"
@@ -1419,6 +1432,9 @@ function wrapMeetingEmail(opts: {
 ${JSON.stringify(opts.eventJsonLd).replace(/</g, "\\u003c")}
 </script>`
       : "";
+  const pixel = opts.trackingPixelUrl?.trim()
+    ? `<img src="${escapeHtml(opts.trackingPixelUrl.trim())}" width="1" height="1" alt="" style="display:none;width:1px;height:1px;border:0;" />`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1443,6 +1459,7 @@ ${JSON.stringify(opts.eventJsonLd).replace(/</g, "\\u003c")}
     </p>
   </div>
   </div>
+  ${pixel}
 </body>
 </html>`;
 }
@@ -1498,6 +1515,7 @@ export function buildGroupCallMeetingInviteEmail(
     introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} You're invited to a group call.</p>`,
     detailsHtml: meetingDetailsHtml(opts),
     eventJsonLd: opts.eventJsonLd,
+    trackingPixelUrl: opts.trackingPixelUrl,
   });
   return { subject, text, html };
 }
@@ -1541,6 +1559,7 @@ export function buildGroupCallMeetingReminderEmail(
       <p style="margin: 0 0 24px; font-size: 0.9375rem; color: ${STYLE.textMuted};">Starts <strong style="color: ${STYLE.text};">${escapeHtml(when)}</strong>. Double-check that time if your calendar uses a different time zone.</p>`,
     detailsHtml: meetingDetailsHtml(opts),
     eventJsonLd: opts.eventJsonLd,
+    trackingPixelUrl: opts.trackingPixelUrl,
   });
   return { subject, text, html };
 }
@@ -1661,6 +1680,237 @@ export function buildGroupCallMeetingEpisodePublishedEmail(
     introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} <strong>${escapeHtml(opts.podcastTitle)}</strong> just published <strong>${escapeHtml(opts.episodeTitle)}</strong>. Your scheduled group call details are below.</p>`,
     detailsHtml: meetingDetailsHtml(opts),
     eventJsonLd: opts.eventJsonLd,
+  });
+  return { subject, text, html };
+}
+
+function guestReviewDetailsHtml(opts: {
+  podcastTitle: string;
+  episodeTitle: string;
+  previewUrl: string;
+  coverArtUrl?: string | null;
+}): string {
+  const cover = opts.coverArtUrl?.trim()
+    ? `<p style="margin: 0 0 20px; text-align: center;">
+        <img src="${escapeHtml(opts.coverArtUrl.trim())}" alt="" width="120" height="120" style="display: inline-block; width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 1px solid ${STYLE.border};" />
+      </p>`
+    : "";
+  return `
+      ${cover}
+      <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
+      <p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.text};">${escapeHtml(opts.episodeTitle)}</p>
+      <p style="margin: 0 0 12px; text-align: center;">
+        <a href="${escapeHtml(opts.previewUrl)}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Preview Episode</a>
+      </p>
+      <p style="margin: 0 0 4px; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">Or copy this link:</p>
+      <p style="margin: 0; font-size: 0.8125rem; word-break: break-all; text-align: center;">
+        <a href="${escapeHtml(opts.previewUrl)}" style="color: ${STYLE.accent}; text-decoration: underline;">${escapeHtml(opts.previewUrl)}</a>
+      </p>
+  `;
+}
+
+export function buildEpisodeGuestReviewInviteEmail(opts: {
+  guestName?: string | null;
+  podcastTitle: string;
+  episodeTitle: string;
+  previewUrl: string;
+  baseUrl: string;
+  coverArtUrl?: string | null;
+}): { subject: string; text: string; html: string } {
+  const greeting = opts.guestName?.trim()
+    ? `Hi ${opts.guestName.trim()},`
+    : "Hi,";
+  const subject = `Please Review: ${opts.episodeTitle}`;
+  const text = [
+    greeting,
+    "",
+    `Editing is finished for "${opts.episodeTitle}" on ${opts.podcastTitle}.`,
+    "Please preview the episode, then approve it or leave feedback on the page.",
+    "",
+    `Show: ${opts.podcastTitle}`,
+    `Episode: ${opts.episodeTitle}`,
+    "",
+    "Preview episode:",
+    opts.previewUrl,
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.baseUrl || opts.previewUrl);
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Episode ready for review",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} Editing is finished. Please preview the episode, then approve it or leave feedback on the page.</p>`,
+    detailsHtml: guestReviewDetailsHtml({
+      podcastTitle: opts.podcastTitle,
+      episodeTitle: opts.episodeTitle,
+      previewUrl: opts.previewUrl,
+      coverArtUrl: opts.coverArtUrl,
+    }),
+  });
+  return { subject, text, html };
+}
+
+export function buildEpisodeGuestReviewResponseEmail(opts: {
+  responderName?: string | null;
+  responderEmail: string;
+  podcastTitle: string;
+  episodeTitle: string;
+  episodeUrl: string;
+  kind: "approved" | "feedback";
+  feedbackText?: string | null;
+  baseUrl: string;
+  coverArtUrl?: string | null;
+}): { subject: string; text: string; html: string } {
+  const who =
+    opts.responderName?.trim() ||
+    opts.responderEmail.trim() ||
+    "A guest";
+  const approved = opts.kind === "approved";
+  const subject = approved
+    ? `Episode approved: ${opts.episodeTitle}`
+    : `Episode feedback: ${opts.episodeTitle}`;
+  const feedback = opts.feedbackText?.trim() || "";
+  const text = [
+    approved
+      ? `${who} (${opts.responderEmail}) approved "${opts.episodeTitle}" on ${opts.podcastTitle}.`
+      : `${who} (${opts.responderEmail}) left feedback on "${opts.episodeTitle}" on ${opts.podcastTitle}.`,
+    feedback ? `\n${feedback}\n` : "",
+    `Show: ${opts.podcastTitle}`,
+    `Episode: ${opts.episodeTitle}`,
+    "",
+    opts.episodeUrl,
+    "",
+    APP_NAME,
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.baseUrl || opts.episodeUrl);
+  const cover = opts.coverArtUrl?.trim()
+    ? `<p style="margin: 0 0 20px; text-align: center;">
+        <img src="${escapeHtml(opts.coverArtUrl.trim())}" alt="" width="120" height="120" style="display: inline-block; width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 1px solid ${STYLE.border};" />
+      </p>`
+    : "";
+  const feedbackBlock = feedback
+    ? `<p style="margin: 0 0 24px; font-size: 0.9375rem; color: ${STYLE.text}; white-space: pre-wrap; border-left: 3px solid ${STYLE.accent}; padding-left: 12px;">${escapeHtml(feedback)}</p>`
+    : "";
+  const detailsHtml = `
+      ${cover}
+      <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
+      <p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.text};">${escapeHtml(opts.episodeTitle)}</p>
+      ${feedbackBlock}
+      <p style="margin: 0; text-align: center;">
+        <a href="${escapeHtml(opts.episodeUrl)}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Open Episode</a>
+      </p>
+  `;
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: approved ? "Episode approved" : "Episode feedback",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};"><strong>${escapeHtml(who)}</strong> (${escapeHtml(opts.responderEmail)}) ${approved ? "approved" : "left feedback on"} this episode.</p>`,
+    detailsHtml,
+  });
+  return { subject, text, html };
+}
+
+export function buildCastInfoRequestEmail(opts: {
+  castName?: string | null;
+  podcastTitle: string;
+  /** Absolute podcast cover URL for the email header. */
+  coverArtUrl?: string | null;
+  photoUrl?: string | null;
+  /** True when a photo exists on file but cannot be linked publicly in the email. */
+  photoOnFileUnlinked?: boolean;
+  socialLinks?: string[];
+  /** Clicker email shown as an alternate contact address. */
+  replyToEmail: string;
+  baseUrl: string;
+}): { subject: string; text: string; html: string } {
+  const greeting = opts.castName?.trim()
+    ? `Hi ${opts.castName.trim()},`
+    : "Hi,";
+  const subject = `Update your cast profile: ${opts.podcastTitle}`;
+  const links = (opts.socialLinks ?? [])
+    .map((u) => u.trim())
+    .filter(Boolean);
+  const photoUrl = opts.photoUrl?.trim() || "";
+  const replyToEmail = opts.replyToEmail.trim();
+  const photoNote = photoUrl
+    ? "Your current photo is included below."
+    : opts.photoOnFileUnlinked
+      ? "We already have a photo on file for you (not linked here)."
+      : "No Photo Yet";
+  const linksText =
+    links.length > 0
+      ? ["Current Social Links:", ...links.map((u) => `- ${u}`)]
+      : ["Current Social Links: None"];
+  const replySection = replyToEmail
+    ? `Please reply to this email, or send an email directly to ${replyToEmail}`
+    : "";
+  const text = [
+    greeting,
+    "",
+    `Please reply to this email with an updated photo (attach the image or provide a link) and any social links you want to add or update for ${opts.podcastTitle}.`,
+    "",
+    photoNote,
+    "",
+    ...linksText,
+    ...(replySection ? ["", replySection] : []),
+    "",
+    APP_NAME,
+  ].join("\n");
+
+  const baseUrl = safeEmailBaseUrl(opts.baseUrl);
+  const cover = opts.coverArtUrl?.trim()
+    ? `<p style="margin: 0 0 20px; text-align: center;">
+        <img src="${escapeHtml(opts.coverArtUrl.trim())}" alt="" width="120" height="120" style="display: inline-block; width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 1px solid ${STYLE.border};" />
+      </p>`
+    : "";
+  const noPhotoPlaceholder = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 20px; width: 120px; height: 120px; border-collapse: separate;">
+        <tr>
+          <td width="120" height="120" align="center" valign="middle" style="width: 120px; height: 120px; border-radius: 12px; border: 1px dashed ${STYLE.border}; background: ${STYLE.bg}; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: ${STYLE.textMuted};">
+            No Photo Yet
+          </td>
+        </tr>
+      </table>`;
+  const photoHtml = photoUrl
+    ? `<p style="margin: 0 0 20px; text-align: center;">
+        <img src="${escapeHtml(photoUrl)}" alt="" width="120" height="120" style="display: inline-block; width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 1px solid ${STYLE.border};" />
+      </p>
+      <p style="margin: 0 0 16px; font-size: 0.8125rem; color: ${STYLE.textMuted}; text-align: center;">Your current photo</p>`
+    : opts.photoOnFileUnlinked
+      ? `<p style="margin: 0 0 16px; font-size: 0.9375rem; color: ${STYLE.textMuted};">We already have a photo on file for you (not linked in this email).</p>`
+      : noPhotoPlaceholder;
+  const linksHtml =
+    links.length > 0
+      ? `<p style="margin: 0 0 8px; font-size: 0.8125rem; font-weight: 600; color: ${STYLE.textMuted};">Current Social Links</p>
+      <ul style="margin: 0 0 20px; padding-left: 1.25rem; font-size: 0.9375rem; color: ${STYLE.text};">
+        ${links
+          .map(
+            (u) =>
+              `<li style="margin: 0 0 6px; word-break: break-all;"><a href="${escapeHtml(u)}" style="color: ${STYLE.accent}; text-decoration: underline;">${escapeHtml(u)}</a></li>`,
+          )
+          .join("")}
+      </ul>`
+      : `<p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.textMuted};">Current Social Links: None</p>`;
+  const replyHtml = replyToEmail
+    ? `<p style="margin: 0; font-size: 0.9375rem; color: ${STYLE.text};">Please reply to this email, or send an email directly to <a href="mailto:${escapeHtml(replyToEmail)}" style="color: ${STYLE.accent}; text-decoration: underline;">${escapeHtml(replyToEmail)}</a></p>`
+    : "";
+
+  const detailsHtml = `
+      ${cover}
+      <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
+      <p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.text};">Please reply to this email with an updated photo (attach the image or provide a link) and any social links to add or update.</p>
+      ${photoHtml}
+      ${linksHtml}
+      ${replyHtml}
+  `;
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Cast Profile Update",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)}</p>`,
+    detailsHtml,
   });
   return { subject, text, html };
 }

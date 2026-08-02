@@ -5,11 +5,13 @@ import { UserPlus } from 'lucide-react';
 import {
   listCast,
   deleteCast,
+  requestCastInfoUpdate,
   type CastMember,
 } from '../../api/podcasts';
 import { CastMembersList } from './CastMembersList';
 import { CastMemberDialog } from './CastMemberDialog';
 import { CastDeleteDialog } from './CastDeleteDialog';
+import { CastRequestInfoDialog } from './CastRequestInfoDialog';
 import sharedStyles from '../PodcastDetail/shared.module.css';
 import localStyles from './ShowCast.module.css';
 
@@ -31,6 +33,8 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCast, setEditingCast] = useState<CastMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CastMember | null>(null);
+  const [requestInfoTarget, setRequestInfoTarget] = useState<CastMember | null>(null);
+  const [requestInfoError, setRequestInfoError] = useState<string | null>(null);
 
   const canAddHost = myRole === 'owner' || myRole === 'manager';
   const canAddGuest = myRole === 'owner' || myRole === 'manager' || myRole === 'editor';
@@ -57,6 +61,19 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cast', podcastId] });
       setDeleteTarget(null);
+    },
+  });
+
+  const requestInfoMutation = useMutation({
+    mutationFn: (castId: string) => requestCastInfoUpdate(podcastId, castId),
+    onSuccess: () => {
+      setRequestInfoError(null);
+      setRequestInfoTarget(null);
+    },
+    onError: (err: unknown) => {
+      setRequestInfoError(
+        err instanceof Error ? err.message : 'Failed to send email',
+      );
     },
   });
 
@@ -160,6 +177,10 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
           podcastId={podcastId}
           canEdit={canEdit}
           canDelete={canDelete}
+          onRequestInfo={(c) => {
+            setRequestInfoError(null);
+            setRequestInfoTarget(c);
+          }}
           onEdit={handleEdit}
           onDelete={setDeleteTarget}
           onPrevPage={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
@@ -186,6 +207,22 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
         onClose={() => setDeleteTarget(null)}
         onConfirm={(castId) => deleteMutation.mutate(castId)}
         isPending={deleteMutation.isPending}
+      />
+
+      <CastRequestInfoDialog
+        cast={requestInfoTarget}
+        isOpen={!!requestInfoTarget}
+        onClose={() => {
+          if (requestInfoMutation.isPending) return;
+          setRequestInfoTarget(null);
+          setRequestInfoError(null);
+        }}
+        onConfirm={(castId) => {
+          setRequestInfoError(null);
+          requestInfoMutation.mutate(castId);
+        }}
+        isPending={requestInfoMutation.isPending}
+        error={requestInfoError}
       />
     </div>
   );

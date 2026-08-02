@@ -247,6 +247,12 @@
   line-height: 1.4;
 }
 
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
 .accentField {
   display: flex;
   flex-direction: column;

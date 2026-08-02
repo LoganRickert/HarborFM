@@ -475,6 +475,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.reviewsEnabled !== undefined
           ? Boolean(body.reviewsEnabled)
           : (current as { reviews_enabled?: boolean }).reviews_enabled ?? true;
+      const email_event_tracking_enabled =
+        body.emailEventTrackingEnabled !== undefined
+          ? Boolean(body.emailEventTrackingEnabled)
+          : (current as { email_event_tracking_enabled?: boolean })
+              .email_event_tracking_enabled ?? true;
       const reviews_publish_non_verified =
         body.reviewsPublishNonVerified !== undefined
           ? Boolean(body.reviewsPublishNonVerified)
@@ -740,6 +745,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         email_enable_contact,
         email_enable_review_verification,
         reviews_enabled,
+        email_event_tracking_enabled,
         reviews_publish_non_verified,
         reviews_llm_spam_check,
         welcome_banner,

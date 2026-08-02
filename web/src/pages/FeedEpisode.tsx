@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Play, Pause } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,6 +19,7 @@ import { FeedUnavailable } from '../components/FeedUnavailable';
 import { FeedbackModal } from '../components/FeedbackModal';
 import { GetAlertsModal } from '../components/GetAlertsModal';
 import { getPublicEpisodeAlerts } from '../api/episodeAlerts';
+import { getEpisodeGuestReview } from '../api/episodeGuestReview';
 import { useMeta } from '../hooks/useMeta';
 import { getSiteDisplayName } from '../utils/siteBranding';
 import { isLiquidFeedTheme } from '../utils/feedTheme';
@@ -45,6 +46,8 @@ import {
   FeedFundingSupport,
 } from '../components/Feed';
 import { LiquidFeedPage, type LiquidFeedBlocks } from '../components/Feed/LiquidFeedPage';
+import { EpisodeGuestReviewBar } from '../components/Feed/EpisodeGuestReviewBar';
+import { FeedMetaPixel } from '../components/Feed/FeedMetaPixel';
 import type { HarborfmActionHandlers } from '../components/Feed/harborfmActions';
 import { ShareDialog } from '../components/ShareDialog';
 import { ReviewSubmitModal } from '../components/Feed/ReviewSubmitModal';
@@ -62,6 +65,9 @@ export function FeedEpisode({
   episodeSlugOverride?: string;
 } = {}) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reviewToken = (searchParams.get('review') || '').trim();
   const params = useParams<{ podcastSlug: string; episodeSlug: string }>();
   const podcastSlug = podcastSlugOverride ?? params.podcastSlug ?? '';
   const episodeSlug = episodeSlugOverride ?? params.episodeSlug ?? '';
@@ -72,20 +78,49 @@ export function FeedEpisode({
   const [writeReviewOpen, setWriteReviewOpen] = useState(false);
   const [showLockInfo, setShowLockInfo] = useManageSubscriptionDialog();
   const [audioLoadFailed, setAudioLoadFailed] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState<string | null>(null);
 
   // Cancel any active import polling when on feed pages
   useEffect(() => {
     queryClient.cancelQueries({ queryKey: ['activeImport'] });
     queryClient.removeQueries({ queryKey: ['activeImport'] });
   }, [queryClient]);
+
+  const { data: guestReview } = useQuery({
+    queryKey: ['episode-guest-review', reviewToken],
+    queryFn: () => getEpisodeGuestReview(reviewToken),
+    enabled: !!reviewToken,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!guestReview || guestReview.state !== 'redirect_public') return;
+    const path = isCustomFeed
+      ? `/${episodeSlug}`
+      : `/feed/${podcastSlug}/${episodeSlug}`;
+    navigate(path, { replace: true });
+  }, [guestReview, navigate, isCustomFeed, podcastSlug, episodeSlug]);
+
+  useEffect(() => {
+    if (guestReview?.state === 'review') {
+      setReviewStatus(guestReview.status);
+    } else {
+      setReviewStatus(null);
+    }
+  }, [guestReview]);
+
   const { data: podcast, isLoading: podcastLoading, isError: podcastError, error: podcastQueryError, refetch: refetchPodcast } = useQuery({
     queryKey: ['public-podcast', podcastSlug],
     queryFn: () => getPublicPodcast(podcastSlug!),
     enabled: !!podcastSlug,
   });
   const { data: episode, isLoading: episodeLoading, isError: episodeError, error: episodeQueryError, refetch: refetchEpisode } = useQuery({
-    queryKey: ['public-episode', podcastSlug, episodeSlug],
-    queryFn: () => getPublicEpisode(podcastSlug!, episodeSlug!) as Promise<PublicEpisodeWithAuth>,
+    queryKey: ['public-episode', podcastSlug, episodeSlug, reviewToken || null],
+    queryFn: () =>
+      getPublicEpisode(podcastSlug!, episodeSlug!, {
+        reviewToken: reviewToken || null,
+      }) as Promise<PublicEpisodeWithAuth>,
     enabled: !!podcastSlug && !!episodeSlug,
   });
   const { data: publicConfig } = useQuery({
@@ -138,8 +173,16 @@ export function FeedEpisode({
     [episodeCast],
   );
 
-  // Use private URLs if available, otherwise fallback to public
-  const audioUrl = episode?.privateAudioUrl || episode?.audioUrl || null;
+  // Prefer review-token media for guest preview, then private/public episode URLs.
+  const reviewAudioUrl =
+    guestReview?.state === 'review' ? guestReview.audioUrl : null;
+  const reviewWaveformUrl =
+    guestReview?.state === 'review' ? guestReview.waveformUrl ?? null : null;
+  const audioUrl =
+    reviewAudioUrl ||
+    episode?.privateAudioUrl ||
+    episode?.audioUrl ||
+    null;
   const durationSec = episode?.audioDurationSec ?? 0;
 
   useEffect(() => setAudioLoadFailed(false), [audioUrl]);
@@ -164,7 +207,8 @@ export function FeedEpisode({
     episodeId: episode?.id,
     durationSec,
     waveformUrlFn: publicEpisodeWaveformUrl,
-    privateWaveformUrl: episode?.privateWaveformUrl,
+    privateWaveformUrl:
+      reviewWaveformUrl || episode?.privateWaveformUrl || null,
     persistPlaybackPosition: true,
   });
 
@@ -188,8 +232,15 @@ export function FeedEpisode({
     appleTouchIcon: publicConfig?.customFeedSlug ? podcastArtwork : undefined,
   });
 
+  // Guest review unlocks audio before publishAt; still block writing reviews until release.
+  const episodeReleasedForReviews =
+    !!episode &&
+    (!episode.publishAt || new Date(episode.publishAt).getTime() <= Date.now());
   const canWriteReview =
-    podcast && episode && (!podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug));
+    podcast &&
+    episode &&
+    episodeReleasedForReviews &&
+    (!podcast.subscriberOnlyReviews || isAuthenticatedForPodcast(podcastSlug));
   const canShowMessage =
     podcast && episode && (!podcast.subscriberOnlyMessages || isAuthenticatedForPodcast(podcastSlug));
 
@@ -207,7 +258,9 @@ export function FeedEpisode({
     ? `<iframe src="${embedUrl}" width="100%" height="200" frameborder="0" allowfullscreen></iframe>`
     : '';
 
-  const scheduledNotReleased = Boolean(episode?.scheduledNotReleased);
+  // Guest review unlocks listening before publishAt; don't show premiere placeholder.
+  const scheduledNotReleased =
+    Boolean(episode?.scheduledNotReleased) && !reviewAudioUrl && !audioUrl;
   const videosHidden =
     scheduledNotReleased || podcast?.feedShowVideos === false;
   const youtubeEmbed =
@@ -537,8 +590,22 @@ export function FeedEpisode({
     return feedErrorLayout(<FeedUnavailable onRetry={() => void refetchThemeRender()} />);
   }
 
+  const activeGuestReview =
+    reviewToken && guestReview?.state === 'review' ? guestReview : null;
+  const showGuestReviewBar = !!activeGuestReview && reviewStatus != null;
+
+  const guestReviewChrome = showGuestReviewBar && activeGuestReview ? (
+    <EpisodeGuestReviewBar
+      token={reviewToken}
+      displayName={activeGuestReview.displayName}
+      status={reviewStatus}
+      onStatusChange={setReviewStatus}
+    />
+  ) : null;
+
   const modals = (
     <>
+      <FeedMetaPixel pixelId={podcast.feedMetaPixelId} />
       <FeedbackModal
         open={feedbackOpen}
         onOpenChange={setFeedbackOpen}
@@ -585,6 +652,7 @@ export function FeedEpisode({
           episodeSlug={episodeSlug}
         />
       )}
+      {guestReviewChrome}
     </>
   );
 
@@ -602,7 +670,13 @@ export function FeedEpisode({
   }
 
   return (
-    <div className={sharedStyles.wrapper} style={feedAccentCssVars(podcast.feedAccent)}>
+    <div
+      className={sharedStyles.wrapper}
+      style={{
+        ...feedAccentCssVars(podcast.feedAccent),
+        ...(showGuestReviewBar ? { paddingBottom: '9rem' } : null),
+      }}
+    >
       <div className={sharedStyles.container}>
         <FeedSiteHeader />
         <main>

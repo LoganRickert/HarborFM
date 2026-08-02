@@ -164,6 +164,7 @@ export const podcasts = sqliteTable(
     feedShowPodroll: integer("feed_show_podroll", { mode: "boolean" }).default(true),
     feedShowCast: integer("feed_show_cast", { mode: "boolean" }).default(true),
     feedShowVideos: integer("feed_show_videos", { mode: "boolean" }).default(true),
+    feedMetaPixelId: text("feed_meta_pixel_id"),
     feedTheme: text("feed_theme").default("default"),
     episodeAlertsEnabled: integer("episode_alerts_enabled", {
       mode: "boolean",
@@ -1308,6 +1309,8 @@ export const episodeGroupCallMeetings = sqliteTable(
     status: text("status").notNull().default("scheduled"),
     liveSessionId: text("live_session_id"),
     episodePublishedNotifiedAt: text("episode_published_notified_at"),
+    /** Set when guest/host review emails were sent (draft → scheduled or published+unlisted). */
+    guestReviewNotifiedAt: text("guest_review_notified_at"),
     /** Set when the 4-hour invitee reminder email was sent. */
     reminderSentAt: text("reminder_sent_at"),
     icsSequence: integer("ics_sequence").notNull().default(0),
@@ -1324,6 +1327,36 @@ export const episodeGroupCallMeetings = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Episode guest review invites (109)
+// ---------------------------------------------------------------------------
+export const episodeGuestReviews = sqliteTable(
+  "episode_guest_reviews",
+  {
+    id: text("id").primaryKey(),
+    episodeId: text("episode_id")
+      .notNull()
+      .references(() => episodes.id, { onDelete: "cascade" }),
+    meetingId: text("meeting_id").references(
+      () => episodeGroupCallMeetings.id,
+      { onDelete: "set null" },
+    ),
+    email: text("email").notNull(),
+    displayName: text("display_name"),
+    tokenHash: text("token_hash").notNull().unique(),
+    status: text("status").notNull().default("pending"),
+    feedbackText: text("feedback_text"),
+    respondedAt: text("responded_at"),
+    lastSentAt: text("last_sent_at"),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    revokedAt: text("revoked_at"),
+  },
+  (table) => [
+    index("idx_episode_guest_reviews_episode_id").on(table.episodeId),
+    index("idx_episode_guest_reviews_token_hash").on(table.tokenHash),
+  ],
+);
+
 export const episodeGroupCallMeetingInvites = sqliteTable(
   "episode_group_call_meeting_invites",
   {
@@ -1336,6 +1369,12 @@ export const episodeGroupCallMeetingInvites = sqliteTable(
     inviteToken: text("invite_token").notNull().unique(),
     createdAt: text("created_at").notNull().default(sqlNow()),
     lastSentAt: text("last_sent_at"),
+    /** Opaque token for invite-email open pixel (unique when set). */
+    inviteOpenToken: text("invite_open_token").unique(),
+    inviteOpenedAt: text("invite_opened_at"),
+    /** Opaque token for reminder-email open pixel (unique when set). */
+    reminderOpenToken: text("reminder_open_token").unique(),
+    reminderOpenedAt: text("reminder_opened_at"),
   },
   (table) => [
     index("idx_egcmi_meeting_id").on(table.meetingId),

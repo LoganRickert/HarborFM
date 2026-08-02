@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.27.0 - 8-2-2026
+
+- **Guest episode review:** When an episode first becomes preview-eligible (draft to scheduled, or draft to published and unlisted), HarborFM emails review preview links to the meeting host and emailed invitees. Guests can preview audio, approve, or leave feedback; the host is notified on response. Listed published episodes redirect preview links to the public episode URL. Reverting to draft revokes outstanding review tokens.
+- **Scheduled episode reviews:** Episode pages and preview links show episode reviews only (not podcast-level reviews). Writing a new review is blocked until the episode is released.
+- **Meta Pixel:** Page Customizations can set a Meta Pixel ID. Public podcast and episode pages load the pixel, respecting the site consent banner when GDPR consent is enabled.
+- **Show cast Update:** On Show Cast, cast members with an email get an Update action that emails a profile update request (current photo and social links included when available). Reply-To is the person who sends the request.
+- **Meeting email open tracking:** Invite and reminder emails can report when the tracking image loads. Schedule Meeting shows open status per invitee. Controlled by Email Event Tracking in Settings (on by default).
+
 ## v1.26.2 - 8-1-2026
 
 - **Custom domain favicon:** Crawler HTML on managed/custom domains now sets `rel="icon"` to the podcast cover (same as apple-touch-icon), so Google Search no longer picks the HarborFM logo from the SPA shell.

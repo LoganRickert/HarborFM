@@ -217,5 +217,76 @@ export async function run({ runOne }) {
     }),
   );
 
+  results.push(
+    await runOne('PATCH feedMetaPixelId; public GET returns it; clear to null', async () => {
+      const pixelId = '123456789012345';
+      const patchRes = await apiFetch(
+        `/podcasts/${podcast.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedMetaPixelId: pixelId }),
+        },
+        jar,
+      );
+      if (patchRes.status !== 200) {
+        throw new Error(`PATCH expected 200, got ${patchRes.status}: ${await patchRes.text()}`);
+      }
+      const auth = await patchRes.json();
+      if (auth.feedMetaPixelId !== pixelId) {
+        throw new Error(
+          `Auth GET expected feedMetaPixelId ${pixelId}, got ${JSON.stringify(auth.feedMetaPixelId)}`,
+        );
+      }
+
+      const pubRes = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}`);
+      if (pubRes.status !== 200) throw new Error(`Expected 200, got ${pubRes.status}`);
+      const pub = await pubRes.json();
+      const got = pub.feed_meta_pixel_id ?? pub.feedMetaPixelId;
+      if (got !== pixelId) {
+        throw new Error(`Public GET expected feed_meta_pixel_id ${pixelId}, got ${JSON.stringify(got)}`);
+      }
+
+      const bad = await apiFetch(
+        `/podcasts/${podcast.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedMetaPixelId: 'not-a-pixel' }),
+        },
+        jar,
+      );
+      if (bad.status !== 400) {
+        throw new Error(`Expected 400 for invalid pixel id, got ${bad.status}`);
+      }
+
+      const clearRes = await apiFetch(
+        `/podcasts/${podcast.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedMetaPixelId: '' }),
+        },
+        jar,
+      );
+      if (clearRes.status !== 200) {
+        throw new Error(`Clear PATCH expected 200, got ${clearRes.status}: ${await clearRes.text()}`);
+      }
+      const cleared = await clearRes.json();
+      if (cleared.feedMetaPixelId != null && cleared.feedMetaPixelId !== '') {
+        throw new Error(
+          `Expected feedMetaPixelId cleared, got ${JSON.stringify(cleared.feedMetaPixelId)}`,
+        );
+      }
+
+      const pubClear = await fetch(`${baseURL}/public/podcasts/${encodeURIComponent(slug)}`);
+      const pubClearData = await pubClear.json();
+      const clearedPub = pubClearData.feed_meta_pixel_id ?? pubClearData.feedMetaPixelId;
+      if (clearedPub != null && clearedPub !== '') {
+        throw new Error(`Public GET expected null pixel id, got ${JSON.stringify(clearedPub)}`);
+      }
+    }),
+  );
+
   return results;
 }

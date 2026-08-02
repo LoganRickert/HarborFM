@@ -187,6 +187,12 @@ export function publicPodcastDto(
       (row as { feedShowCast?: number | boolean | null }).feedShowCast ?? 1,
     feed_show_videos:
       (row as { feedShowVideos?: number | boolean | null }).feedShowVideos ?? 1,
+    feed_meta_pixel_id: (() => {
+      const raw = (row as { feedMetaPixelId?: string | null }).feedMetaPixelId;
+      if (typeof raw !== "string") return null;
+      const t = raw.trim();
+      return t.length > 0 ? t : null;
+    })(),
     episode_alerts_enabled:
       (row as { episodeAlertsEnabled?: number | boolean | null })
         .episodeAlertsEnabled ?? 0,
@@ -196,19 +202,31 @@ export function publicPodcastDto(
 export function publicEpisodeDto(
   podcastId: string,
   row: Record<string, unknown>,
-  opts: { subscriberOnlyFeed?: boolean; podcastSlug?: string } = {},
+  opts: {
+    subscriberOnlyFeed?: boolean;
+    podcastSlug?: string;
+    /** Guest-review preview: bypass publishAt / scheduled gate for media. */
+    reviewUnlock?: boolean;
+    /** When set, expose audio via the guest-review stream. */
+    reviewAudioUrl?: string | null;
+    /** When set, expose waveform via the guest-review stream. */
+    reviewWaveformUrl?: string | null;
+  } = {},
 ) {
   const subscriberOnlyFeed = opts.subscriberOnlyFeed ?? false;
+  const reviewUnlock = Boolean(opts.reviewUnlock || opts.reviewAudioUrl);
   const audioBytes =
     row.audioBytes != null ? Number(row.audioBytes) : null;
   const hasAudio =
-    Boolean(row.audioFinalPath) && (audioBytes == null || audioBytes > 0);
+    Boolean(row.audioFinalPath) &&
+    (reviewUnlock || audioBytes == null || audioBytes > 0);
   const hasVideo = Boolean(row.videoFinalPath);
   const subscriberOnly = isCurrentlySubscriberOnly(row);
   const subscriberOnlyFlagOn =
     row.subscriberOnly === true || row.subscriberOnly === 1;
   const publishAtRaw = row.publishAt;
   const isScheduledNotReleased =
+    !reviewUnlock &&
     publishAtRaw != null &&
     typeof publishAtRaw === "string" &&
     new Date(publishAtRaw) > new Date();
@@ -328,9 +346,11 @@ export function publicEpisodeDto(
     // Site/theme players append hf_src=web for Website attribution. RSS enclosure
     // URLs (episodeEnclosureUrl) stay unmarked so published feed identity is stable.
     audio_url:
-      hasAudio && allowPublicAudio
-        ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}.mp3?hf_src=web`
-        : null,
+      hasAudio && opts.reviewAudioUrl
+        ? opts.reviewAudioUrl
+        : hasAudio && allowPublicAudio
+          ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}.mp3?hf_src=web`
+          : null,
     video_url:
       hasVideo && allowPublicAudio
         ? `/${API_PREFIX}/${podcastId}/episodes/${String(row.id)}/video`
@@ -363,6 +383,9 @@ export function publicEpisodeDto(
     markers,
     soundbites,
     funding_links: parseFundingLinks(row.fundingLinks ?? null),
+    ...(opts.reviewWaveformUrl?.trim()
+      ? { private_waveform_url: opts.reviewWaveformUrl.trim() }
+      : {}),
   };
 }
 

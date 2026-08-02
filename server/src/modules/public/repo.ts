@@ -131,6 +131,7 @@ export function getPodcastBySlug(slug: string) {
       feedShowPodroll: sql<number>`COALESCE(${podcasts.feedShowPodroll}, 1)`.as("feedShowPodroll"),
       feedShowCast: sql<number>`COALESCE(${podcasts.feedShowCast}, 1)`.as("feedShowCast"),
       feedShowVideos: sql<number>`COALESCE(${podcasts.feedShowVideos}, 1)`.as("feedShowVideos"),
+      feedMetaPixelId: podcasts.feedMetaPixelId,
       episodeAlertsEnabled: sql<number>`COALESCE(${podcasts.episodeAlertsEnabled}, 0)`.as(
         "episodeAlertsEnabled",
       ),
@@ -508,6 +509,59 @@ export function listPublishedEpisodes(
   return { rows, total };
 }
 
+/**
+ * Resolve episode id for public reviews listing.
+ * Includes scheduled and published (listed or unlisted); excludes drafts.
+ * Callers must not fall back to podcast-level reviews when this returns an id.
+ */
+export function getEpisodeIdBySlugForReviews(
+  podcastId: string,
+  episodeSlug: string,
+): string | undefined {
+  const row = drizzleDb
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.podcastId, podcastId),
+        eq(episodes.slug, episodeSlug),
+        inArray(episodes.status, ["scheduled", "published"]),
+        episodeNotExpiredSql,
+      ),
+    )
+    .limit(1)
+    .get();
+  return row?.id;
+}
+
+/** True when an episode exists as scheduled/published but is not yet publicly released. */
+export function isEpisodeAwaitingReleaseForReviews(
+  podcastId: string,
+  episodeSlug: string,
+): boolean {
+  const row = drizzleDb
+    .select({
+      id: episodes.id,
+      status: episodes.status,
+      publishAt: episodes.publishAt,
+    })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.podcastId, podcastId),
+        eq(episodes.slug, episodeSlug),
+        inArray(episodes.status, ["scheduled", "published"]),
+        episodeNotExpiredSql,
+      ),
+    )
+    .limit(1)
+    .get();
+  if (!row) return false;
+  if (row.status !== "published") return true;
+  if (row.publishAt == null || String(row.publishAt).trim() === "") return false;
+  return new Date(String(row.publishAt)) > new Date();
+}
+
 /** Get a single published episode by podcast id and episode slug. */
 export function getPublishedEpisodeBySlug(podcastId: string, episodeSlug: string) {
   return drizzleDb
@@ -618,6 +672,59 @@ export function getPublicEpisodeBySlug(
     })
     .from(episodes)
     .where(or(listedWhere, unlistedDirectWhere))
+    .limit(1)
+    .get();
+}
+
+/**
+ * Episode by slug for guest-review preview: scheduled or published, listed or
+ * unlisted (drafts excluded). Caller must validate the review token separately.
+ */
+export function getEpisodeBySlugForGuestReview(
+  podcastId: string,
+  episodeSlug: string,
+) {
+  return drizzleDb
+    .select({
+      id: episodes.id,
+      podcastId: episodes.podcastId,
+      title: episodes.title,
+      slug: episodes.slug,
+      subtitle: episodes.subtitle,
+      description: episodes.description,
+      descriptionCopyrightSnapshot: episodes.descriptionCopyrightSnapshot,
+      guid: episodes.guid,
+      seasonNumber: episodes.seasonNumber,
+      episodeNumber: episodes.episodeNumber,
+      episodeType: episodes.episodeType,
+      explicit: episodes.explicit,
+      publishAt: episodes.publishAt,
+      artworkUrl: episodes.artworkUrl,
+      artworkPath: episodes.artworkPath,
+      audioMime: episodes.audioMime,
+      audioBytes: episodes.audioBytes,
+      audioDurationSec: episodes.audioDurationSec,
+      audioFinalPath: episodes.audioFinalPath,
+      videoFinalPath: episodes.videoFinalPath,
+      youtubeUrl: episodes.youtubeUrl,
+      finalMarkers: episodes.finalMarkers,
+      finalSoundbites: episodes.finalSoundbites,
+      subscriberOnly: sql<number>`COALESCE(${episodes.subscriberOnly}, 0)`.as("subscriberOnly"),
+      subscriberOnlyStartsAt: episodes.subscriberOnlyStartsAt,
+      subscriberOnlyEndsAt: episodes.subscriberOnlyEndsAt,
+      createdAt: episodes.createdAt,
+      updatedAt: episodes.updatedAt,
+      fundingLinks: episodes.fundingLinks,
+    })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.podcastId, podcastId),
+        eq(episodes.slug, episodeSlug),
+        inArray(episodes.status, ["scheduled", "published"]),
+        episodeNotExpiredSql,
+      ),
+    )
     .limit(1)
     .get();
 }

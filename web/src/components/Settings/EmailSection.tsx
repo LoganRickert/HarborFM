@@ -269,6 +269,26 @@ export function EmailSection({
                 </label>
               </div>
             </div>
+            <div className={styles.emailNotificationsGroup}>
+              <h4 className={styles.emailNotificationsGroupTitle}>Event tracking</h4>
+              <p className={styles.emailNotificationsGroupHelp}>
+                When enabled, meeting invite and reminder emails include a tracking image so
+                HarborFM can show whether the message was opened in the Schedule Meeting dialog.
+              </p>
+              <div className={styles.emailNotificationsGrid}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={form.emailEventTrackingEnabled !== false}
+                    onChange={(e) =>
+                      onFormChange({ emailEventTrackingEnabled: e.target.checked })
+                    }
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Email Event Tracking</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       )}
