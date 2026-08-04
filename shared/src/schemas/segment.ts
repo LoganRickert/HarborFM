@@ -108,6 +108,7 @@ export const segmentUpdateBodySchema = z.object({
   audioEq: audioEqSchema,
   disabled: z.boolean().optional(),
   loudnessTargetingEnabled: z.boolean().optional(),
+  multiTrackWhisperEnabled: z.boolean().optional(),
   /** Fixed dB gain on Generate Final (-24..+6). Default 0. */
   finalGainDb: z.number().min(-24).max(6).optional(),
 });
@@ -169,10 +170,11 @@ export const segmentEpisodeTranscriptBodySchema = z.object({
 
 /** Query for POST /episodes/:episodeId/segments/:segmentId/transcript (start generate; returns 202, poll transcript-status). */
 export const segmentTranscriptGenerateQuerySchema = z.object({
+  /** Accept string or boolean; some proxies/coercers turn ?regenerate=true into a boolean. */
   regenerate: z
-    .enum(['true', 'false'])
+    .union([z.literal('true'), z.literal('false'), z.boolean()])
     .optional()
-    .transform((v) => v === 'true'),
+    .transform((v) => v === true || v === 'true'),
 });
 
 /** Query for DELETE /episodes/:episodeId/segments/:segmentId/transcript. */
@@ -208,6 +210,11 @@ export const segmentResponseSchema = z.object({
   disabled: z.boolean().optional(),
   /** When true, exclusive host gates from host_ducking.json are applied on remake. */
   hostDuckingEnabled: z.boolean().optional(),
+  /**
+   * When true, prefer per-host-track Whisper merge when 2+ included tracks exist.
+   * Default true. No-op when not multitrack or fewer than 2 included tracks.
+   */
+  multiTrackWhisperEnabled: z.boolean().optional(),
   /**
    * When false, Generate Final Episode skips loudnorm for this segment
    * (mixed path). Default true.
@@ -381,9 +388,15 @@ export const segmentTrackClipSchema = z
     lengthMs: z.number().finite().positive().optional(),
     participantName: z.string().nullable().optional(),
     participantId: z.string().nullable().optional(),
+    castId: z.string().nullable().optional(),
     producerId: z.string().optional(),
     volume: z.number().finite().optional(),
     muted: z.boolean().optional(),
+    /**
+     * When true, include this clip's take in multi-track Whisper merge.
+     * When unset: true for call host/guest clips, false for soundboard/import/library.
+     */
+    includeInTranscript: z.boolean().nullable().optional(),
     playRate: z.number().finite().positive().optional(),
     preservePitch: z.boolean().optional(),
     pitchSemitones: z.number().finite().optional(),
@@ -411,6 +424,37 @@ export const segmentTrackClipSchema = z
   .passthrough();
 
 export type SegmentTrackClip = z.infer<typeof segmentTrackClipSchema>;
+
+/** Default include-in-transcript when the clip field is unset. */
+export function defaultIncludeInTranscript(clip: {
+  source?: string | null;
+  soundboardAssetId?: string | null;
+  participantId?: string | null;
+}): boolean {
+  if (clip.source === 'soundboard' || clip.source === 'import' || clip.source === 'library') {
+    return false;
+  }
+  if (
+    typeof clip.soundboardAssetId === 'string' &&
+    clip.soundboardAssetId.trim().length > 0
+  ) {
+    return false;
+  }
+  const pid =
+    typeof clip.participantId === 'string' ? clip.participantId.trim() : '';
+  return Boolean(pid);
+}
+
+/** Resolve includeInTranscript with host-on / non-host-off defaults. */
+export function resolveIncludeInTranscript(clip: {
+  includeInTranscript?: boolean | null;
+  source?: string | null;
+  soundboardAssetId?: string | null;
+  participantId?: string | null;
+}): boolean {
+  if (typeof clip.includeInTranscript === 'boolean') return clip.includeInTranscript;
+  return defaultIncludeInTranscript(clip);
+}
 
 /** Take lane summary for GET .../tracks. */
 export const segmentTrackTakeSchema = z.object({

@@ -87,8 +87,10 @@ export function ManageSegmentDialog({
   const canProject = hasAudio;
   const duckingEnabled = Boolean(segment?.hostDuckingEnabled);
   const loudnessTargetingEnabled = segment?.loudnessTargetingEnabled !== false;
+  const multiTrackWhisperEnabled = segment?.multiTrackWhisperEnabled !== false;
   const showLoudnessTargeting = Boolean(hasAudio) && !readOnly;
   const showHostDucking = Boolean(segment?.hasRecordings) && !readOnly;
+  const showMultiTrackWhisper = Boolean(segment?.hasRecordings) && !readOnly;
 
   const FINAL_GAIN_DB_MIN = -24;
   const FINAL_GAIN_DB_MAX = 6;
@@ -331,6 +333,25 @@ export function ManageSegmentDialog({
     } catch (err) {
       setWaitError(
         err instanceof Error ? err.message : 'Failed to update loudness targeting',
+      );
+      setWaitKind('update');
+    }
+  }
+
+  async function handleMultiTrackWhisperToggle(enabled: boolean) {
+    if (!segment || busy || readOnly) return;
+    if ((segment.multiTrackWhisperEnabled !== false) === enabled) return;
+    setWaitError(null);
+    try {
+      await updateSegment(episodeId, segment.id, {
+        multiTrackWhisperEnabled: enabled,
+      });
+      onImported();
+    } catch (err) {
+      setWaitError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to update multi-track Whisper',
       );
       setWaitKind('update');
     }
@@ -684,6 +705,52 @@ export function ManageSegmentDialog({
                       disabled={busy}
                       title={duckingBusy ? duckingInProgressTitle : undefined}
                       onClick={() => handleHostDuckingToggle(true)}
+                    >
+                      Enabled
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {showMultiTrackWhisper ? (
+                <div
+                  className={styles.hostDuckingSetting}
+                  title="When on, HarborFM transcribes each included host/guest track and merges them. Falls back to the mix when there are fewer than two included tracks."
+                >
+                  <span className={styles.hostDuckingSettingLabel}>
+                    Multi-Track Whisper
+                  </span>
+                  <span className={styles.manageSegmentActionHint}>
+                    Per-host transcripts when two or more included tracks exist
+                  </span>
+                  <div
+                    className={styles.hostDuckingSegmented}
+                    role="group"
+                    aria-label="Multi-Track Whisper"
+                  >
+                    <button
+                      type="button"
+                      className={
+                        !multiTrackWhisperEnabled
+                          ? styles.hostDuckingSegmentedActive
+                          : styles.hostDuckingSegmentedBtn
+                      }
+                      aria-pressed={!multiTrackWhisperEnabled}
+                      disabled={busy}
+                      onClick={() => void handleMultiTrackWhisperToggle(false)}
+                    >
+                      Disabled
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        multiTrackWhisperEnabled
+                          ? styles.hostDuckingSegmentedActive
+                          : styles.hostDuckingSegmentedBtn
+                      }
+                      aria-pressed={multiTrackWhisperEnabled}
+                      disabled={busy}
+                      onClick={() => void handleMultiTrackWhisperToggle(true)}
                     >
                       Enabled
                     </button>

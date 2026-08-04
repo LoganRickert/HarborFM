@@ -105,6 +105,107 @@
   word-break: break-word;
 }
 
+.messageLink {
+  color: var(--accent, #00d4aa);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.messageLink:hover {
+  filter: brightness(1.15);
+}
+
+.messageImage {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.25rem 0 0.35rem;
+  object-fit: contain;
+  background: var(--bg-muted, #252525);
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.imagePreviewRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.imagePreviewThumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border, #333);
+}
+
+.clearImageBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.clearImageBtn:hover {
+  color: var(--text, #e5e5e5);
+  border-color: var(--accent, #00d4aa);
+}
+
+.composeError {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #f87171;
+}
+
+.fileInputHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.attachBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  color: var(--text-muted, #888);
+  background: var(--bg-muted, #252525);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.attachBtn:hover:not(:disabled) {
+  color: var(--text, #e5e5e5);
+  border-color: var(--accent, #00d4aa);
+}
+
+.attachBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .inputRow {
   display: flex;
   gap: 0.5rem;

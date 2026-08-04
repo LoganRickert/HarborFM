@@ -155,6 +155,7 @@ export function Settings() {
         gdprConsentBannerEnabled: form.gdprConsentBannerEnabled,
         websubDiscoveryEnabled: form.websubDiscoveryEnabled,
         hostname: form.hostname,
+        timezone: form.timezone,
         websubHub: form.websubHub,
         finalBitrateKbps: form.finalBitrateKbps,
         finalChannels: form.finalChannels,

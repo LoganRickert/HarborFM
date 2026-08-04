@@ -186,6 +186,89 @@ test.describe('Call recording core', () => {
     }
   });
 
+  test('records castId on tracks_manifest when guest name matches show cast', async ({ page, context }) => {
+    test.setTimeout(90000);
+    const baseURL = `http://127.0.0.1:${PORT}`;
+    const csrf = (await page.context().storageState()).cookies.find((c) => c.name === 'harborfm_csrf')?.value;
+    expect(csrf).toBeTruthy();
+    const castName = `E2E Cast Guest ${Date.now()}`;
+    const castRes = await page.request.post(`${API_BASE}/podcasts/${podcastId}/cast`, {
+      headers: { 'x-csrf-token': csrf! },
+      data: {
+        name: castName,
+        role: 'guest',
+        photoUrl: 'https://example.com/cast-photo.jpg',
+        isPublic: 1,
+      },
+    });
+    expect(castRes.ok()).toBeTruthy();
+    const cast = (await castRes.json()) as { id: string };
+
+    await page.goto(`/episodes/${episodeId}`);
+    await page.getByRole('button', { name: /start group call/i }).click();
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({ timeout: 20000 });
+
+    const joinUrlRaw = await page.getByRole('textbox', { name: 'Join link' }).inputValue();
+    const joinUrl = joinUrlRaw.startsWith('/') ? `${baseURL}${joinUrlRaw}` : joinUrlRaw;
+
+    const browser = context.browser()!;
+    const guestContext = await browser.newContext({ baseURL, permissions: ['microphone'] });
+    const guestPage = await guestContext.newPage();
+    try {
+      await guestPage.route('https://example.com/cast-photo.jpg', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'image/png',
+          body: Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            'base64',
+          ),
+        });
+      });
+      await guestPage.goto(joinUrl);
+      await guestPage.getByLabel(/your name/i).fill(castName);
+      await guestPage.getByRole('button', { name: /join call/i }).click();
+      await expect(guestPage.getByText(/you're in the call/i)).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(/Participants \(2\)/)).toBeVisible({ timeout: 10000 });
+
+      const recordBtn = page.getByRole('button', { name: /record segment/i });
+      await expect(recordBtn).toHaveAttribute('data-producer-ready', 'true', { timeout: 25000 });
+      await recordBtn.click();
+      await expect(page.getByRole('button', { name: /stop recording/i })).toBeVisible({ timeout: 10000 });
+      await page.waitForTimeout(5000);
+      await page.getByRole('button', { name: /stop recording/i }).click();
+      await page
+        .getByRole('status')
+        .filter({ hasText: /recording stopped successfully|segment added successfully|finalizing|processing/i })
+        .waitFor({ state: 'visible', timeout: 30000 });
+
+      let recorded: { id?: string; duration_sec?: number } | undefined;
+      for (let i = 0; i < 30; i++) {
+        await page.waitForTimeout(500);
+        const segmentsRes = await page.request.get(`${API_BASE}/episodes/${episodeId}/segments`);
+        expect(segmentsRes.ok()).toBeTruthy();
+        const { segments } = await segmentsRes.json();
+        recorded = segments.find((s: { duration_sec?: number }) => s.duration_sec != null);
+        if (recorded) break;
+      }
+      expect(recorded?.id).toBeTruthy();
+      const mtDir = findMtDir(join(DATA_DIR, 'uploads', podcastId, episodeId, 'recordings'), recorded!.id!);
+      expect(mtDir).toBeTruthy();
+      const manifest = JSON.parse(readFileSync(join(mtDir!, 'tracks_manifest.json'), 'utf8')) as {
+        segments: Array<{ participantName?: string; castId?: string; source?: string }>;
+      };
+      const guestSegs = (manifest.segments || []).filter(
+        (s) => s.participantName === castName && s.source !== 'soundboard',
+      );
+      expect(guestSegs.length).toBeGreaterThanOrEqual(1);
+      for (const seg of guestSegs) {
+        expect(seg.castId).toBe(cast.id);
+      }
+    } finally {
+      await guestContext.close();
+    }
+  });
+
   test('recording continues when guest leaves mid-recording', async ({ page, context }) => {
     test.setTimeout(60000);
     const baseURL = `http://127.0.0.1:${PORT}`;

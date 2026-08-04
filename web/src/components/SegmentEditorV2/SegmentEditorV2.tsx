@@ -23,12 +23,19 @@ import {
   CircleAlert,
   MapPin,
   Settings,
+  User,
+  Captions,
 } from 'lucide-react';
-import type { Marker } from '@harborfm/shared';
+import type {
+  Marker,
+  SegmentTrackClip,
+  SegmentTracksResponse,
+} from '@harborfm/shared';
 import type { EpisodeSegment } from '../../api/segments';
 import {
   addSegmentTrackMedia,
   getSegmentTracks,
+  getSegmentTranscript,
   saveSegmentTracks,
   startRemakeSegmentTracks,
   getSegmentTracksApplyStatus,
@@ -36,6 +43,11 @@ import {
   fetchSegmentWaveformsBulk,
   updateSegment,
 } from '../../api/segments';
+import {
+  castPhotoUrl,
+  listCast,
+  type CastMember,
+} from '../../api/podcasts';
 import { pollUntil } from '../../utils/projectZipTransfer';
 import { setSegmentEditorMode } from '../../utils/segmentEditorMode';
 import { WaveformCanvas, type WaveformData } from '../../pages/EpisodeEditor/WaveformCanvas';
@@ -60,6 +72,7 @@ import {
 import { ClipPreviewEngine } from './clipPreviewEngine';
 import { ClipWaveform } from './ClipWaveform';
 import { AddTrackDialog } from './AddTrackDialog';
+import { AssignTrackCastDialog } from './AssignTrackCastDialog';
 import { MarkerEditDialog, MARKER_COLORS } from './MarkerEditDialog';
 import { TrackSettingsDialog } from './TrackSettingsDialog';
 import {
@@ -76,6 +89,7 @@ import {
   collectLanePeaks,
   MIN_AUTO_PEAKS,
 } from './trackFxAnalyze';
+import { cuesByLaneKey, type LaneTranscriptCue } from './transcriptLanes';
 import {
   cloneEditorSnapshot,
   createEditorHistory,
@@ -107,6 +121,7 @@ export type AdvancedTool = 'select' | 'blade';
 
 export interface SegmentEditorV2Props {
   episodeId: string;
+  podcastId: string;
   segment: EpisodeSegment;
   segmentId: string;
   segmentName: string;
@@ -114,6 +129,77 @@ export interface SegmentEditorV2Props {
   onClose: () => void;
   onSwitchToSimple: () => void;
   readOnly?: boolean;
+}
+
+function rekeyLaneRecord<T>(
+  prev: Record<string, T>,
+  fromKey: string,
+  toKey: string,
+): Record<string, T> {
+  if (fromKey === toKey || !(fromKey in prev)) return prev;
+  const { [fromKey]: value, ...rest } = prev;
+  return { ...rest, [toKey]: value as T };
+}
+
+function castMemberPhotoSrc(
+  podcastId: string,
+  member: Pick<CastMember, 'id' | 'photoFilename' | 'photoUrl'> | undefined,
+): string | null {
+  if (!member) return null;
+  if (member.photoFilename) {
+    return castPhotoUrl(podcastId, member.id, member.photoFilename);
+  }
+  const url = member.photoUrl?.trim() ?? '';
+  if (!url) return null;
+  if (url.startsWith('/') && !url.startsWith('//')) return url;
+  try {
+    const parsed = new URL(
+      url,
+      typeof window !== 'undefined' ? window.location.origin : 'https://x',
+    );
+    if (['https:', 'http:', 'blob:'].includes(parsed.protocol.toLowerCase())) {
+      return parsed.href;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function takeFileBasename(filePath: string): string {
+  return filePath.replace(/\\/g, '/').split('/').pop() || filePath;
+}
+
+/** Keep take summaries aligned with saved clip participant names. */
+function takesAfterClipSave(
+  clips: SegmentTrackClip[],
+  prevTakes: SegmentTracksResponse['takes'] | undefined,
+): SegmentTracksResponse['takes'] {
+  const nameByFile = new Map<string, string | null>();
+  for (const c of clips) {
+    const base = takeFileBasename(c.filePath);
+    if (nameByFile.has(base)) continue;
+    const name =
+      typeof c.participantName === 'string' && c.participantName.trim()
+        ? c.participantName.trim()
+        : null;
+    nameByFile.set(base, name);
+  }
+  if (prevTakes && prevTakes.length > 0) {
+    return prevTakes.map((t) => ({
+      ...t,
+      participantName: nameByFile.has(t.filePath)
+        ? nameByFile.get(t.filePath)!
+        : (t.participantName ?? null),
+    }));
+  }
+  return [...nameByFile.entries()].map(([filePath, participantName]) => ({
+    filePath,
+    participantName,
+    soundboardAssetId: null,
+    source: null,
+    waveformExists: false,
+  }));
 }
 
 const DEFAULT_VIEW_MS = 60_000;
@@ -181,6 +267,7 @@ function fetchTakeWaveform(
 
 export function SegmentEditorV2({
   episodeId,
+  podcastId,
   segment,
   segmentId,
   segmentName,
@@ -217,6 +304,8 @@ export function SegmentEditorV2({
   /** Skip the trailing click after a horizontal clip slide. */
   const suppressClipClickRef = useRef(false);
   const viewWindowMsRef = useRef(DEFAULT_VIEW_MS);
+  /** After save we update the tracks query cache; skip re-hydrating editor state. */
+  const suppressTracksHydrateRef = useRef(false);
 
   const [clips, setClips] = useState<EditorClip[]>([]);
   const [baseline, setBaseline] = useState<string>('');
@@ -238,6 +327,7 @@ export function SegmentEditorV2({
   /** Bumps when undo/redo stack changes so toolbar disabled state updates. */
   const [historyTick, setHistoryTick] = useState(0);
   const [tool, setTool] = useState<AdvancedTool>('select');
+  const [showTranscriptLanes, setShowTranscriptLanes] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [playheadMs, setPlayheadMs] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -248,6 +338,12 @@ export function SegmentEditorV2({
   const [renamingLaneKey, setRenamingLaneKey] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const renameOriginalRef = useRef('');
+  const [castAssignLaneKey, setCastAssignLaneKey] = useState<string | null>(
+    null,
+  );
+  const [extraCastById, setExtraCastById] = useState<
+    Record<string, CastMember>
+  >({});
   const [addTrackOpen, setAddTrackOpen] = useState(false);
   const [addingTrack, setAddingTrack] = useState(false);
   const [trackSettingsLaneKey, setTrackSettingsLaneKey] = useState<string | null>(
@@ -298,6 +394,37 @@ export function SegmentEditorV2({
     retry: false,
   });
 
+  const { data: showCastData } = useQuery({
+    queryKey: ['cast', podcastId, { forTrackPhotos: true }],
+    queryFn: () => listCast(podcastId, { limit: 100, offset: 0 }),
+    enabled: !!podcastId,
+  });
+
+  const { data: segmentTranscriptData } = useQuery({
+    queryKey: ['segment-transcript', episodeId, segmentId],
+    queryFn: async () => {
+      try {
+        return await getSegmentTranscript(episodeId, segmentId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (/not found/i.test(msg)) return { text: '' };
+        throw err;
+      }
+    },
+    retry: false,
+  });
+  const hasSegmentTranscript = Boolean(segmentTranscriptData?.text?.trim());
+  const castById = useMemo(() => {
+    const map = new Map<string, CastMember>();
+    for (const member of showCastData?.cast ?? []) {
+      map.set(member.id, member);
+    }
+    for (const member of Object.values(extraCastById)) {
+      map.set(member.id, member);
+    }
+    return map;
+  }, [showCastData?.cast, extraCastById]);
+
   const currentHistorySnapshot = useCallback((): EditorHistorySnapshot => {
     return cloneEditorSnapshot({
       clips: clipsRef.current,
@@ -346,6 +473,10 @@ export function SegmentEditorV2({
 
   useEffect(() => {
     if (!data) return;
+    if (suppressTracksHydrateRef.current) {
+      suppressTracksHydrateRef.current = false;
+      return;
+    }
     const next = toEditorClips(data.clips);
     setClips(next);
     setLaneFxDefaults(buildLaneFxDefaults(next));
@@ -372,6 +503,15 @@ export function SegmentEditorV2({
       );
     }
   }, [isError, queryError]);
+
+  useEffect(() => {
+    return () => {
+      // Drop cached GET .../tracks so the next open does not flash pre-save names.
+      queryClient.removeQueries({
+        queryKey: ['segment-tracks', episodeId, segmentId],
+      });
+    };
+  }, [queryClient, episodeId, segmentId]);
 
   useEffect(() => {
     const el = tracksColRef.current;
@@ -604,11 +744,14 @@ export function SegmentEditorV2({
     if (scrubbingRef.current || panningRef.current || !followPlayheadRef.current) {
       return;
     }
-    const win = viewWindowMs;
+    // Use the actual visible span (clamped by duration), not the requested window.
+    const win = visibleWindowMs;
     if (win <= 1) return;
 
     if (isPlaying) {
-      if (playheadMs > viewEndMs || playheadMs < viewStartMs) {
+      // Page forward once the playhead reaches/passes the right edge so it never
+      // sits off-screen during playback.
+      if (playheadMs >= viewEndMs - 1 || playheadMs < viewStartMs) {
         const next = clampViewStart(playheadMs - win * 0.05);
         if (Math.abs(next - viewStartMs) >= 1) setViewStartMs(next);
       }
@@ -629,11 +772,15 @@ export function SegmentEditorV2({
     playheadMs,
     viewStartMs,
     viewEndMs,
-    viewWindowMs,
+    visibleWindowMs,
     isPlaying,
     clampViewStart,
   ]);
 
+  // Playing always re-enables follow (covers any path that starts playback).
+  useEffect(() => {
+    if (isPlaying) followPlayheadRef.current = true;
+  }, [isPlaying]);
   const lanes = useMemo(() => {
     const grouped = groupClipsByLane(clips);
     const takeMeta = new Map(
@@ -647,11 +794,12 @@ export function SegmentEditorV2({
               fromClip.filePath,
           )
         : undefined;
+      // Prefer clip participantName (rename / cast assign) over take sidecar meta.
       const participant =
-        meta?.participantName?.trim() ||
         (typeof fromClip?.participantName === 'string'
           ? fromClip.participantName.trim()
           : '') ||
+        meta?.participantName?.trim() ||
         '';
       const isSoundboard =
         meta?.source === 'soundboard' || fromClip?.source === 'soundboard';
@@ -671,11 +819,20 @@ export function SegmentEditorV2({
             ? fromClip.filePath.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ||
               fromClip.filePath
             : laneKey);
+      const castId =
+        laneClips
+          .map((c) =>
+            typeof c.castId === 'string' && c.castId.trim()
+              ? c.castId.trim()
+              : '',
+          )
+          .find((id) => id.length > 0) || null;
       return {
         laneKey,
         label,
         clips: laneClips,
         isHost,
+        castId,
         earliestMs: clipStartMs(laneClips[0]!),
       };
     });
@@ -688,12 +845,43 @@ export function SegmentEditorV2({
       if (byLabel !== 0) return byLabel;
       return a.earliestMs - b.earliestMs || a.laneKey.localeCompare(b.laneKey);
     });
-    return built.map(({ laneKey, label, clips: laneClips }) => ({
-      laneKey,
-      label,
-      clips: laneClips,
-    }));
+    return built.map(
+      ({ laneKey, label, clips: laneClips, isHost, castId }) => ({
+        laneKey,
+        label,
+        clips: laneClips,
+        isHost,
+        castId,
+      }),
+    );
   }, [clips, data?.takes]);
+
+  const transcriptCuesByLane = useMemo(() => {
+    if (!showTranscriptLanes || !hasSegmentTranscript) {
+      return new Map<string, LaneTranscriptCue[]>();
+    }
+    return cuesByLaneKey({
+      srtText: segmentTranscriptData!.text,
+      lanes: lanes.map((l) => ({
+        laneKey: l.laneKey,
+        label: l.label,
+        castId: l.castId,
+      })),
+      castById,
+    });
+  }, [
+    showTranscriptLanes,
+    hasSegmentTranscript,
+    segmentTranscriptData,
+    lanes,
+    castById,
+  ]);
+
+  useEffect(() => {
+    if (!hasSegmentTranscript && showTranscriptLanes) {
+      setShowTranscriptLanes(false);
+    }
+  }, [hasSegmentTranscript, showTranscriptLanes]);
 
   const selected = clips.find((c) => c.uiId === selectedId) ?? null;
 
@@ -790,6 +978,28 @@ export function SegmentEditorV2({
     [viewWindowMs, clampViewStart],
   );
 
+  /** After a manual pan while playing, resume follow and jump to the playhead if off-screen. */
+  const resumeFollowAfterPan = useCallback(() => {
+    const engine = previewRef.current;
+    if (!engine?.isPlaying) {
+      followPlayheadRef.current = false;
+      return;
+    }
+    followPlayheadRef.current = true;
+    const ms = engine.getPlayheadMs();
+    setPlayheadMs(ms);
+    setViewStartMs((viewStart) => {
+      const win = viewWindowMsRef.current;
+      const duration = durationMsRef.current;
+      const viewEnd = Math.min(duration, viewStart + win);
+      if (ms >= viewStart && ms <= viewEnd) return viewStart;
+      const visible = Math.max(1, viewEnd - viewStart);
+      const maxStart = Math.max(0, duration - win);
+      const next = Math.max(0, Math.min(ms - visible * 0.05, maxStart));
+      return Math.abs(next - viewStart) >= 1 ? next : viewStart;
+    });
+  }, []);
+
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       const pan = panningRef.current;
@@ -815,19 +1025,22 @@ export function SegmentEditorV2({
       const resume = scrubResumeRef.current;
       scrubResumeRef.current = false;
       scrubbingRef.current = false;
-      if (pan?.moved) {
-        followPlayheadRef.current = false;
-      }
+      const panMoved = Boolean(pan?.moved);
       panningRef.current = null;
       document.body.style.removeProperty('cursor');
       // Ruler click (no drag): seek playhead like before.
-      if (pan?.fromRuler && !pan.moved) {
+      if (pan?.fromRuler && !panMoved) {
         followPlayheadRef.current = true;
         const ms = skipOutOfTrimMs(clientXToMs(pan.startX));
         setPlayheadMs(ms);
         previewRef.current?.setPlayheadMs(ms, {
           resumeIfPlaying: previewRef.current.isPlaying,
         });
+        return;
+      }
+      // Finished a pan: if still playing, jump back to the playhead when off-screen.
+      if (panMoved) {
+        resumeFollowAfterPan();
         return;
       }
       if (resume) {
@@ -858,8 +1071,7 @@ export function SegmentEditorV2({
       window.removeEventListener('pointercancel', onUp);
       window.removeEventListener('mousedown', onMouseDown, true);
     };
-  }, [clientXToMs, applyPanDeltaPx, skipOutOfTrimMs]);
-
+  }, [clientXToMs, applyPanDeltaPx, skipOutOfTrimMs, resumeFollowAfterPan]);
   const beginRulerPan = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0 && e.button !== 1) return;
@@ -1155,6 +1367,11 @@ export function SegmentEditorV2({
     return lanes.find((l) => l.laneKey === trackSettingsLaneKey) ?? null;
   }, [lanes, trackSettingsLaneKey]);
 
+  const castAssignLane = useMemo(() => {
+    if (!castAssignLaneKey) return null;
+    return lanes.find((l) => l.laneKey === castAssignLaneKey) ?? null;
+  }, [lanes, castAssignLaneKey]);
+
   const trackSettings = useMemo(() => {
     if (!trackSettingsLaneKey) return null;
     return (
@@ -1403,6 +1620,63 @@ export function SegmentEditorV2({
     );
   }, [renamingLaneKey, renameDraft, readOnly, pushHistory]);
 
+  const assignLaneCast = useCallback(
+    (laneKey: string, member: CastMember | null) => {
+      if (readOnly) return;
+      const sample = clipsRef.current.find((c) => editorLaneKey(c) === laneKey);
+      if (!sample) return;
+      const nextCastId = member?.id ?? null;
+      const nextName = member ? member.name.trim() : null;
+      const currentCastId =
+        typeof sample.castId === 'string' && sample.castId.trim()
+          ? sample.castId.trim()
+          : null;
+      const currentName =
+        typeof sample.participantName === 'string'
+          ? sample.participantName.trim()
+          : '';
+      if (
+        currentCastId === nextCastId &&
+        (!member || currentName === nextName)
+      ) {
+        setCastAssignLaneKey(null);
+        return;
+      }
+      if (member) {
+        setExtraCastById((prev) =>
+          prev[member.id] ? prev : { ...prev, [member.id]: member },
+        );
+      }
+      const preview: EditorClip = {
+        ...sample,
+        castId: nextCastId,
+        ...(member ? { participantName: nextName } : {}),
+      };
+      const nextKey = editorLaneKey(preview);
+      pushHistory();
+      setClips((prev) =>
+        prev.map((c) => {
+          if (editorLaneKey(c) !== laneKey) return c;
+          if (member) {
+            return {
+              ...c,
+              participantName: member.name.trim(),
+              castId: member.id,
+            };
+          }
+          return { ...c, castId: null };
+        }),
+      );
+      if (nextKey !== laneKey) {
+        setLaneSolo((prev) => rekeyLaneRecord(prev, laneKey, nextKey));
+        setLaneFxDefaults((prev) => rekeyLaneRecord(prev, laneKey, nextKey));
+        setTrackSettingsLaneKey((cur) => (cur === laneKey ? nextKey : cur));
+      }
+      setCastAssignLaneKey(null);
+    },
+    [readOnly, pushHistory],
+  );
+
   const insertMediaAtPlayhead = useCallback(
     async (opts: { file?: File; libraryAssetId?: string; trackName?: string }) => {
       setAddingTrack(true);
@@ -1569,6 +1843,16 @@ export function SegmentEditorV2({
           return merged;
         });
         setBaseline(JSON.stringify(toApiClips(next)));
+        // Keep reopen from serving a stale pre-save GET .../tracks payload.
+        suppressTracksHydrateRef.current = true;
+        queryClient.setQueryData(
+          ['segment-tracks', episodeId, segmentId],
+          (old: SegmentTracksResponse | undefined): SegmentTracksResponse => ({
+            clips: saved.clips,
+            timelineDurationMs: saved.timelineDurationMs,
+            takes: takesAfterClipSave(saved.clips, old?.takes),
+          }),
+        );
       }
       if (trimsDirty || markersDirty) {
         const merged = mergeTrimRanges(trimRanges);
@@ -2079,6 +2363,31 @@ export function SegmentEditorV2({
                   >
                     <ZoomOut size={14} aria-hidden />
                   </button>
+                  <button
+                    type="button"
+                    className={`${
+                      showTranscriptLanes
+                        ? styles.segmentEditorV2ToolActive
+                        : styles.segmentEditorV2Tool
+                    } ${styles.segmentEditorV2ToolIcon}`}
+                    onClick={() => setShowTranscriptLanes((v) => !v)}
+                    disabled={!hasSegmentTranscript}
+                    title={
+                      hasSegmentTranscript
+                        ? showTranscriptLanes
+                          ? 'Hide transcript lanes'
+                          : 'Show transcript lanes under each track'
+                        : 'Generate a segment transcript to show cue lanes'
+                    }
+                    aria-label={
+                      showTranscriptLanes
+                        ? 'Hide transcript lanes'
+                        : 'Show transcript lanes'
+                    }
+                    aria-pressed={showTranscriptLanes}
+                  >
+                    <Captions size={14} aria-hidden />
+                  </button>
                 </div>
                 {!readOnly && (
                   <div className={styles.segmentEditorV2ToolbarEnd}>
@@ -2308,13 +2617,50 @@ export function SegmentEditorV2({
                     {lanes.map((lane) => {
                       const muted = lane.clips.every((c) => c.muted === true);
                       const soloed = Boolean(laneSolo[lane.laneKey]);
+                      const castMember = lane.castId
+                        ? castById.get(lane.castId)
+                        : undefined;
+                      const castPhoto = castMember
+                        ? castMemberPhotoSrc(podcastId, castMember)
+                        : null;
                       return (
+                        <div key={lane.laneKey} className={styles.segmentEditorV2LaneStack}>
                         <div
-                          key={lane.laneKey}
                           className={`${styles.segmentEditorV2LaneLabel} ${
                             muted ? styles.segmentEditorV2LaneLabelMuted : ''
                           }`}
                         >
+                          {lane.isHost && (
+                            <button
+                              type="button"
+                              className={styles.segmentEditorV2LaneCastBtn}
+                              title={
+                                castMember
+                                  ? `Cast: ${castMember.name}`
+                                  : 'Assign cast member'
+                              }
+                              aria-label={
+                                castMember
+                                  ? `Cast: ${castMember.name}. Change cast assignment`
+                                  : 'Assign cast member'
+                              }
+                              disabled={readOnly || busy || !podcastId}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCastAssignLaneKey(lane.laneKey);
+                              }}
+                            >
+                              {castPhoto ? (
+                                <img
+                                  src={castPhoto}
+                                  alt=""
+                                  className={styles.segmentEditorV2LaneCastImg}
+                                />
+                              ) : (
+                                <User size={14} aria-hidden />
+                              )}
+                            </button>
+                          )}
                           {renamingLaneKey === lane.laneKey ? (
                             <input
                               className={styles.segmentEditorV2LaneNameInput}
@@ -2387,6 +2733,13 @@ export function SegmentEditorV2({
                               <Headphones size={14} aria-hidden />
                             </button>
                           </div>
+                        </div>
+                        {showTranscriptLanes && hasSegmentTranscript && (
+                          <div
+                            className={styles.segmentEditorV2TranscriptLabel}
+                            aria-hidden
+                          />
+                        )}
                         </div>
                       );
                     })}
@@ -2464,8 +2817,8 @@ export function SegmentEditorV2({
                         />
                       )}
                     {lanes.map((lane) => (
+                      <div key={lane.laneKey} className={styles.segmentEditorV2LaneStack}>
                       <div
-                        key={lane.laneKey}
                         className={`${styles.segmentEditorV2LaneTrack} ${
                           lane.clips.every((c) => c.muted === true)
                             ? styles.segmentEditorV2LaneTrackMuted
@@ -2560,6 +2913,42 @@ export function SegmentEditorV2({
                           );
                         })}
                       </div>
+                      {showTranscriptLanes && hasSegmentTranscript && (
+                        <div
+                          className={styles.segmentEditorV2TranscriptLane}
+                          aria-label={`${lane.label} transcript`}
+                        >
+                          {(transcriptCuesByLane.get(lane.laneKey) ?? []).map(
+                            (cue, cueIdx) => {
+                              if (
+                                cue.endMs <= viewStartMs ||
+                                cue.startMs >= viewEndMs
+                              ) {
+                                return null;
+                              }
+                              const visStart = Math.max(cue.startMs, viewStartMs);
+                              const visEnd = Math.min(cue.endMs, viewEndMs);
+                              const left = msToPct(visStart);
+                              const width =
+                                ((visEnd - visStart) / visibleWindowMs) * 100;
+                              return (
+                                <div
+                                  key={`${lane.laneKey}-cue-${cueIdx}-${cue.startMs}`}
+                                  className={styles.segmentEditorV2TranscriptCue}
+                                  style={{
+                                    left: `${left}%`,
+                                    width: `${Math.max(width, 0.15)}%`,
+                                  }}
+                                  title={cue.text}
+                                >
+                                  {cue.text}
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
+                      )}
+                      </div>
                     ))}
                     {!readOnly && (
                       <div className={styles.segmentEditorV2LaneTrackSpacer} aria-hidden />
@@ -2579,6 +2968,21 @@ export function SegmentEditorV2({
                   insertMediaAtPlayhead({ libraryAssetId, trackName })
                 }
               />
+
+              {castAssignLane && podcastId ? (
+                <AssignTrackCastDialog
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) setCastAssignLaneKey(null);
+                  }}
+                  podcastId={podcastId}
+                  trackLabel={castAssignLane.label}
+                  currentCastId={castAssignLane.castId}
+                  onSelect={(member) =>
+                    assignLaneCast(castAssignLane.laneKey, member)
+                  }
+                />
+              ) : null}
 
               {trackSettingsLane && trackSettings ? (
                 <TrackSettingsDialog

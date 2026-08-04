@@ -8,6 +8,39 @@ const optionalLimitField = z.preprocess(
 /** Coerce null/undefined to empty string so omitted keys still parse as string. */
 const stringOrEmpty = z.preprocess((v) => (v == null ? '' : v), z.string());
 
+/** Empty string = use process/OS default. Non-empty must be a valid IANA time zone. */
+export function isValidIanaTimeZone(timeZone: string): boolean {
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const optionalAppTimeZone = z
+  .string()
+  .optional()
+  .superRefine((val, ctx) => {
+    if (val == null || val === '') return;
+    if (!isValidIanaTimeZone(val)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid IANA time zone',
+      });
+    }
+  });
+
+const appTimeZoneString = z.string().superRefine((val, ctx) => {
+  if (val === '') return;
+  if (!isValidIanaTimeZone(val)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Invalid IANA time zone',
+    });
+  }
+});
+
 /** OIDC provider config for SSO settings. */
 const ssoOidcProviderSchema = z
   .object({
@@ -76,6 +109,8 @@ export const settingsPatchBodySchema = z.object({
   publicFeedsEnabled: z.boolean().optional(),
   websubDiscoveryEnabled: z.boolean().optional(),
   hostname: z.string().optional(),
+  /** IANA time zone for analytics day/hour buckets. Empty = process/OS default. */
+  timezone: optionalAppTimeZone,
   websubHub: z.string().optional(),
   finalBitrateKbps: z.coerce.number().int().min(16).max(320).optional(),
   finalChannels: z.enum(['mono', 'stereo']).optional(),
@@ -189,6 +224,10 @@ export const settingsResponseSchema = z.object({
   publicFeedsEnabled: z.boolean(),
   websubDiscoveryEnabled: z.boolean(),
   hostname: z.string(),
+  /** Configured IANA zone; empty means use process/OS default. */
+  timezone: appTimeZoneString,
+  /** Resolved zone used for analytics (configured or process default). Read-only. */
+  effectiveTimezone: z.string(),
   websubHub: z.string(),
   finalBitrateKbps: z.number(),
   finalChannels: z.enum(['mono', 'stereo']),

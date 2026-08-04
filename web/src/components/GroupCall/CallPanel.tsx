@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
-import { Copy, PhoneOff, Users, User, Crown, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, Settings, X, Phone } from 'lucide-react';
-import { callWebSocketUrl, getActiveSession } from '../../api/call';
+import { Copy, PhoneOff, Users, Mic, Square, MicOff, UserX, Minimize2, Maximize2, Pencil, Check, MessageCircle, Music2, Settings, X } from 'lucide-react';
+import { callWebSocketUrl, getActiveSession, uploadCallChatImage } from '../../api/call';
 import { DEVICE_ID_KEY, getAgcKey, getMicVolumeKey } from '../../constants/micSettings';
 import { formatDurationHMS } from '../../utils/format';
 import { useMediasoupRoom } from '../../hooks/useMediasoupRoom';
 import { useMicSilenceWarning } from '../../hooks/useMicSilenceWarning';
 import { useWakeLock } from '../../hooks/useWakeLock';
 import { RemoteAudio, AudioUnlockBanner } from './RemoteAudio';
-import { AudioUnlockProvider } from './AudioUnlockContext';
+import { AudioUnlockProvider, RemoteLevelMeterUnlock } from './AudioUnlockContext';
 import { CallSoundboardPanel } from './CallSoundboardPanel';
 import { CallSettingsPanel } from './CallSettingsPanel';
-import { CallChatPanel, type ChatMessage } from './CallChatPanel';
+import { CallChatPanel, type ChatMessage, type ChatSendPayload } from './CallChatPanel';
+import { ParticipantRoleIcon } from './ParticipantRoleIcon';
 import styles from './CallPanel.module.css';
 
 export interface CallParticipant {
@@ -23,11 +24,16 @@ export interface CallParticipant {
   /** When true, host muted this participant; host can unmute. When false, participant muted themselves; host cannot unmute. */
   mutedByHost?: boolean;
   source?: "phone";
+  castId?: string;
+  castPhotoUrl?: string;
+  castLocked?: boolean;
 }
 
 export interface CallPanelProps {
   sessionId: string;
   joinUrl: string;
+  /** Call join token (for chat image upload). When omitted, parsed from joinUrl. */
+  token?: string;
   /** 4-digit code for quick join from Dashboard. */
   joinCode?: string;
   /** When set with dial-in enabled, show phone number + code for PSTN guests. */
@@ -80,7 +86,7 @@ function normalizeParticipants(list: CallParticipant[]): CallParticipant[] {
   return list.filter((p) => p.id !== '__pending_host__');
 }
 
-export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dialInEnabled, webrtcUrl, roomId, hostToken, initialParticipants, episodeId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onRecordingStateChange, onEndRequest, onRegisterEndCall, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
+export function CallPanel({ sessionId, joinUrl, token: tokenProp, joinCode, dialInPhoneNumber, dialInEnabled, webrtcUrl, roomId, hostToken, initialParticipants, episodeId, mediaUnavailable, onEnd, onCallEnded, onSegmentRecorded, onRecordingStateChange, onEndRequest, onRegisterEndCall, recordDisabled = false, recordDisabledMessage }: CallPanelProps) {
   const [displayName, setDisplayName] = useState(() => {
     if (typeof window === 'undefined') return '';
     return localStorage.getItem(DISPLAY_NAME_KEY)?.trim() || '';
@@ -109,6 +115,10 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
   const [soundboardMinimized, setSoundboardMinimized] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsMinimized, setSettingsMinimized] = useState(false);
+  const [settingsTargetId, setSettingsTargetId] = useState<string>('self');
+  const [micSettingsByParticipantId, setMicSettingsByParticipantId] = useState<
+    Record<string, { deviceLabel: string; autoGainControl: boolean; micVolume: number }>
+  >({});
   const initialParticipantsRef = useRef(initialParticipants);
   useEffect(() => {
     initialParticipantsRef.current = initialParticipants;
@@ -149,6 +159,8 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
   const chatOpenRef = useRef(chatOpen);
   const chatMinimizedRef = useRef(chatMinimized);
   const myParticipantIdRef = useRef<string | undefined>(undefined);
+  const deviceIdRef = useRef(deviceId);
+  deviceIdRef.current = deviceId;
   chatOpenRef.current = chatOpen;
   chatMinimizedRef.current = chatMinimized;
   myParticipantIdRef.current = participants.find((p) => p.isHost)?.id;
@@ -203,7 +215,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
       .catch(() => {});
   }, [effectiveWebrtcUrl, effectiveRoomId, refreshDevices]);
 
-  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, micBackgroundNotice, livePublisherIds, publishersTracked, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, soundboardVolumeFromRoom, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume, leaveRoom } = useMediasoupRoom(
+  const { remoteTracks, remoteMicLevels, error: mediaError, ready: producerReady, micLevel, micBackgroundNotice, livePublisherIds, publishersTracked, setMuted, playSoundboard, stopSoundboard, setSoundboardVolume, soundboardVolumeFromRoom, resumeSoundboardContext, setSoundboardPanelOpen, onSoundboardStoppedRef, onSoundboardErrorRef, listenToSelf, toggleListenToSelf, stopListenToSelf, setProducerVolume, leaveRoom, resumeRemoteLevelMeters } = useMediasoupRoom(
     effectiveWebrtcUrl,
     effectiveRoomId,
     deviceId || undefined,
@@ -212,6 +224,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
     effectiveHostToken,
     autoGainControl,
     micVolume,
+    myParticipant?.castId ?? null,
   );
 
   const hostMuted = Boolean(myParticipant?.muted);
@@ -236,6 +249,32 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
       stopListenToSelf();
     }
   }, [settingsOpen, settingsMinimized, listenToSelf, stopListenToSelf]);
+
+  useEffect(() => {
+    if (settingsTargetId === 'self') return;
+    const stillHere = participants.some(
+      (p) => p.id === settingsTargetId && p.source !== 'phone' && !p.isHost,
+    );
+    if (!stillHere) setSettingsTargetId('self');
+  }, [participants, settingsTargetId]);
+
+  // Announce host mic settings so the panel map stays consistent if needed later.
+  useEffect(() => {
+    const pid = myParticipant?.id;
+    const ws = wsRef.current;
+    if (!pid || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const label =
+      devices.find((d) => d.deviceId === deviceId)?.label ||
+      (deviceId ? `Microphone ${deviceId.slice(0, 8)}` : 'Default microphone');
+    ws.send(
+      JSON.stringify({
+        type: 'participantMicSettings',
+        deviceLabel: label,
+        autoGainControl,
+        micVolume,
+      }),
+    );
+  }, [myParticipant?.id, deviceId, devices, autoGainControl, micVolume, wsConnected]);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
@@ -428,13 +467,42 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
           }, 2000);
         } else if (msg.type === 'setMute') {
           setMuted(msg.muted === true);
+        } else if (msg.type === 'participantMicSettings') {
+          const pid = typeof msg.participantId === 'string' ? msg.participantId : '';
+          if (!pid) return;
+          const deviceLabel = typeof msg.deviceLabel === 'string' ? msg.deviceLabel : '';
+          const agc = msg.autoGainControl !== false;
+          let volume = 1;
+          if (typeof msg.micVolume === 'number' && Number.isFinite(msg.micVolume)) {
+            volume = Math.max(0, Math.min(8, msg.micVolume));
+          }
+          setMicSettingsByParticipantId((prev) => ({
+            ...prev,
+            [pid]: { deviceLabel, autoGainControl: agc, micVolume: volume },
+          }));
+        } else if (msg.type === 'setParticipantMicSettings') {
+          // Host should not normally receive this; apply if we ever do.
+          const agc = msg.autoGainControl !== false;
+          const id = deviceIdRef.current || 'default';
+          setAutoGainControl(agc);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(getAgcKey(id), String(agc));
+          }
+          if (typeof msg.micVolume === 'number' && Number.isFinite(msg.micVolume)) {
+            const volume = Math.max(0, Math.min(8, msg.micVolume));
+            setMicVolume(volume);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(getMicVolumeKey(id), String(volume));
+            }
+          }
         } else if (msg.type === 'chat') {
           setChatMessages((prev) => [
             ...prev,
             {
               participantId: msg.participantId,
               participantName: msg.participantName ?? 'Unknown',
-              text: msg.text ?? '',
+              text: typeof msg.text === 'string' ? msg.text : '',
+              imageUrl: typeof msg.imageUrl === 'string' ? msg.imageUrl : null,
               timestamp: Date.now(),
             },
           ]);
@@ -571,10 +639,44 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
     }
   };
 
-  const handleChatSend = (text: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'chat', text }));
+  const handleChatSend = async ({ text, imageFile }: ChatSendPayload) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      throw new Error('Not connected to chat');
     }
+    const trimmed = text.trim();
+    let imageId: string | undefined;
+    if (imageFile) {
+      const callToken =
+        tokenProp?.trim() ||
+        (() => {
+          try {
+            const u = new URL(joinUrl, window.location.origin);
+            const m = u.pathname.match(/\/call\/join\/([^/]+)/);
+            return m ? decodeURIComponent(m[1]) : '';
+          } catch {
+            const m = joinUrl.match(/\/call\/join\/([^/?#]+)/);
+            return m ? decodeURIComponent(m[1]) : '';
+          }
+        })();
+      const participantId = myParticipantIdRef.current;
+      if (!callToken || !participantId) {
+        throw new Error('Cannot upload image right now');
+      }
+      const uploaded = await uploadCallChatImage({
+        token: callToken,
+        participantId,
+        file: imageFile,
+      });
+      imageId = uploaded.id;
+    }
+    if (!trimmed && !imageId) return;
+    wsRef.current.send(
+      JSON.stringify({
+        type: 'chat',
+        ...(trimmed ? { text: trimmed } : {}),
+        ...(imageId ? { imageId } : {}),
+      }),
+    );
   };
 
   const handleChatOpen = () => {
@@ -654,6 +756,73 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
     }
   };
 
+  const settingsOtherParticipants = participants
+    .filter((p) => !p.isHost && p.source !== 'phone')
+    .map((p) => ({ id: p.id, name: p.name }));
+
+  const remoteMicSettings =
+    settingsTargetId !== 'self' ? micSettingsByParticipantId[settingsTargetId] : undefined;
+
+  const handleRemoteAutoGainControlChange = (enabled: boolean) => {
+    if (settingsTargetId === 'self') return;
+    const prev = micSettingsByParticipantId[settingsTargetId];
+    const micVolumeNext = prev?.micVolume ?? 1;
+    setMicSettingsByParticipantId((map) => ({
+      ...map,
+      [settingsTargetId]: {
+        deviceLabel: prev?.deviceLabel ?? '',
+        autoGainControl: enabled,
+        micVolume: micVolumeNext,
+      },
+    }));
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'setParticipantMicSettings',
+          participantId: settingsTargetId,
+          autoGainControl: enabled,
+          ...(enabled ? {} : { micVolume: micVolumeNext }),
+        }),
+      );
+    }
+  };
+
+  const handleRemoteMicVolumeChange = (volume: number) => {
+    if (settingsTargetId === 'self') return;
+    const v = Math.max(0, Math.min(8, volume));
+    const prev = micSettingsByParticipantId[settingsTargetId];
+    setMicSettingsByParticipantId((map) => ({
+      ...map,
+      [settingsTargetId]: {
+        deviceLabel: prev?.deviceLabel ?? '',
+        autoGainControl: false,
+        micVolume: v,
+      },
+    }));
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'setParticipantMicSettings',
+          participantId: settingsTargetId,
+          autoGainControl: false,
+          micVolume: v,
+        }),
+      );
+    }
+  };
+
+  const settingsPanelPersonProps = {
+    otherParticipants: settingsOtherParticipants,
+    selectedParticipantId: settingsTargetId,
+    onSelectedParticipantChange: setSettingsTargetId,
+    remoteDeviceLabel: remoteMicSettings?.deviceLabel ?? null,
+    remoteSettingsReady: !!remoteMicSettings,
+    remoteAutoGainControl: remoteMicSettings?.autoGainControl ?? true,
+    onRemoteAutoGainControlChange: handleRemoteAutoGainControlChange,
+    remoteMicVolume: remoteMicSettings?.micVolume ?? 1,
+    onRemoteMicVolumeChange: handleRemoteMicVolumeChange,
+  };
+
   const handleMigrate = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'migrateHost' }));
@@ -690,6 +859,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
 
   const panelContent = (
     <AudioUnlockProvider>
+    <RemoteLevelMeterUnlock resume={resumeRemoteLevelMeters} />
     <div className={styles.panel} role="region" aria-label={`Group call (${participants.length} participants)`} data-minimized={minimized || undefined}>
       <div className={styles.header}>
         <Users size={18} strokeWidth={2} aria-hidden />
@@ -821,9 +991,14 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
                   !livePublisherIds.has(p.id));
               return (
             <li key={p.id} className={styles.participantCard} data-host={p.isHost || undefined} data-source={p.source || undefined} data-testid={p.source === 'phone' ? 'call-participant-phone' : undefined}>
-              <span className={styles.participantRoleIcon} aria-hidden>
-                {p.isHost ? <Crown size={14} /> : p.source === 'phone' ? <Phone size={14} /> : <User size={14} />}
-              </span>
+                <ParticipantRoleIcon
+                  key={p.castPhotoUrl ?? p.id}
+                  isHost={p.isHost}
+                  source={p.source}
+                  castPhotoUrl={p.castPhotoUrl}
+                  className={styles.participantRoleIcon}
+                  photoClassName={styles.participantCastPhoto}
+                />
               <span className={styles.participantInfo}>
                 {p.isHost ? (
                   <>
@@ -994,6 +1169,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
           micVolume={micVolume}
           onMicVolumeChange={handleMicVolumeChange}
           embedded
+          {...settingsPanelPersonProps}
         />
       )}
       {!showChatView && !showSoundboardView && !showSettingsView && (
@@ -1108,6 +1284,7 @@ export function CallPanel({ sessionId, joinUrl, joinCode, dialInPhoneNumber, dia
               onAutoGainControlChange={handleAutoGainControlChange}
               micVolume={micVolume}
               onMicVolumeChange={handleMicVolumeChange}
+              {...settingsPanelPersonProps}
             />
           </div>
         )}

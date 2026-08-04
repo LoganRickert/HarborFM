@@ -11,6 +11,60 @@ export async function run({ runOne }) {
       const data = await res.json();
       if (typeof data.registrationEnabled !== 'boolean') throw new Error('Expected registrationEnabled');
       if (typeof data.publicFeedsEnabled !== 'boolean') throw new Error('Expected publicFeedsEnabled');
+      if (typeof data.timezone !== 'string') throw new Error('Expected timezone string');
+      if (typeof data.effectiveTimezone !== 'string' || !data.effectiveTimezone.trim()) {
+        throw new Error('Expected non-empty effectiveTimezone');
+      }
+    })
+  );
+
+  results.push(
+    await runOne('PATCH /settings can set timezone to a valid IANA zone', async () => {
+      const patchRes = await apiFetch('/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone: 'America/Chicago' }),
+      }, adminJar);
+      if (patchRes.status !== 200) throw new Error(`Expected 200, got ${patchRes.status}`);
+      const patched = await patchRes.json();
+      if (patched.timezone !== 'America/Chicago') {
+        throw new Error(`Expected timezone America/Chicago, got ${patched.timezone}`);
+      }
+      if (patched.effectiveTimezone !== 'America/Chicago') {
+        throw new Error(`Expected effectiveTimezone America/Chicago, got ${patched.effectiveTimezone}`);
+      }
+      const getRes = await apiFetch('/settings', {}, adminJar);
+      const data = await getRes.json();
+      if (data.timezone !== 'America/Chicago') {
+        throw new Error(`GET Expected timezone America/Chicago, got ${data.timezone}`);
+      }
+    })
+  );
+
+  results.push(
+    await runOne('PATCH /settings rejects invalid timezone', async () => {
+      const res = await apiFetch('/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone: 'Not/A_Real_Zone' }),
+      }, adminJar);
+      if (res.status !== 400) throw new Error(`Expected 400 for invalid timezone, got ${res.status}`);
+    })
+  );
+
+  results.push(
+    await runOne('PATCH /settings can clear timezone to system default', async () => {
+      const res = await apiFetch('/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone: '' }),
+      }, adminJar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      if (data.timezone !== '') throw new Error(`Expected empty timezone, got ${data.timezone}`);
+      if (typeof data.effectiveTimezone !== 'string' || !data.effectiveTimezone.trim()) {
+        throw new Error('Expected effectiveTimezone after clear');
+      }
     })
   );
 

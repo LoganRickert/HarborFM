@@ -451,6 +451,42 @@ export const RENDER_RATE_LIMIT_WINDOW_MS =
     ? Number(process.env.RENDER_RATE_LIMIT_WINDOW_MS)
     : 30_000;
 
+/** Cast profile self-update public submit: max submissions per cast per window. Env: CAST_PROFILE_UPDATE_MAX. Default 3. */
+export const CAST_PROFILE_UPDATE_MAX =
+  Number(process.env.CAST_PROFILE_UPDATE_MAX) || 3;
+/** Cast profile self-update public submit window (ms). Env: CAST_PROFILE_UPDATE_WINDOW_MS. Default 3600000 (1 hour). */
+export const CAST_PROFILE_UPDATE_WINDOW_MS =
+  process.env.CAST_PROFILE_UPDATE_WINDOW_MS !== undefined
+    ? Number(process.env.CAST_PROFILE_UPDATE_WINDOW_MS)
+    : 60 * 60 * 1000;
+/** Soft IP bucket for cast profile self-update submits (max per window). Env: CAST_PROFILE_UPDATE_IP_MAX. Default 30. */
+export const CAST_PROFILE_UPDATE_IP_MAX =
+  Number(process.env.CAST_PROFILE_UPDATE_IP_MAX) || 30;
+/** Max bytes for cast profile self-update photo (1MB). */
+export const CAST_PROFILE_PHOTO_MAX_BYTES = 1 * 1024 * 1024;
+/** Max longest side (px) for cast profile self-update photo. */
+export const CAST_PROFILE_PHOTO_MAX_SIDE = 1500;
+/** Max bytes for live call chat images (1MB after client JPEG compress). */
+export const CALL_CHAT_IMAGE_MAX_BYTES = 1 * 1024 * 1024;
+/** Max longest side (px) for live call chat images. */
+export const CALL_CHAT_IMAGE_MAX_SIDE = 1000;
+/** Call chat image upload rate limit window (ms). Env: CALL_CHAT_IMAGE_UPLOAD_WINDOW_MS. Default 5 minutes. 0 = no limit. */
+export const CALL_CHAT_IMAGE_UPLOAD_WINDOW_MS =
+  process.env.CALL_CHAT_IMAGE_UPLOAD_WINDOW_MS !== undefined
+    ? Number(process.env.CALL_CHAT_IMAGE_UPLOAD_WINDOW_MS)
+    : 5 * 60 * 1000;
+/** Max call chat image uploads per participant per window. Env: CALL_CHAT_IMAGE_UPLOAD_MAX. Default 30. */
+export const CALL_CHAT_IMAGE_UPLOAD_MAX =
+  Number(process.env.CALL_CHAT_IMAGE_UPLOAD_MAX) || 30;
+/** Soft IP bucket for call chat image uploads. Env: CALL_CHAT_IMAGE_UPLOAD_IP_MAX. Default 60. */
+export const CALL_CHAT_IMAGE_UPLOAD_IP_MAX =
+  Number(process.env.CALL_CHAT_IMAGE_UPLOAD_IP_MAX) || 60;
+/** Cast profile self-update invite link lifetime (days). Env: CAST_PROFILE_TOKEN_TTL_DAYS. Default 14. */
+export const CAST_PROFILE_TOKEN_TTL_DAYS =
+  Number(process.env.CAST_PROFILE_TOKEN_TTL_DAYS) || 14;
+export const CAST_PROFILE_TOKEN_TTL_MS =
+  CAST_PROFILE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
+
 /** Cast profile update request email: min ms between sends per user. 0 = no limit (e.g. for e2e). Env: CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS. Default 30000 (30s). */
 export const CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS =
   process.env.CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS !== undefined

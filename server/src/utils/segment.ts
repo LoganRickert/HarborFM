@@ -31,6 +31,7 @@ export function redactSegmentForClient(
     hostDuckingEnabled: segment.hostDuckingEnabled,
     loudnessTargetingEnabled: segment.loudnessTargetingEnabled,
     finalGainDb: segment.finalGainDb,
+    multiTrackWhisperEnabled: segment.multiTrackWhisperEnabled,
     hasRecordings: segment.hasRecordings,
     hasOriginalTracksManifest: segment.hasOriginalTracksManifest,
     canBootstrapAdvancedEditor: segment.canBootstrapAdvancedEditor,

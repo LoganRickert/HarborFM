@@ -1270,6 +1270,7 @@ export function EpisodeEditorContent({
         <CallPanel
           sessionId={activeCall.sessionId}
           joinUrl={activeCall.joinUrl}
+          token={activeCall.token}
           joinCode={activeCall.joinCode}
           dialInEnabled={activeCall.dialInEnabled}
           dialInPhoneNumber={activeCall.dialInPhoneNumber}
@@ -1346,6 +1347,7 @@ export function EpisodeEditorContent({
             <SegmentEditorV2
               key={`v2-${segmentIdForInfo}`}
               episodeId={id}
+              podcastId={podcastId}
               segment={seg}
               segmentId={segmentIdForInfo}
               segmentName={seg.name?.trim() || 'Section'}

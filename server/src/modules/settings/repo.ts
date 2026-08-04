@@ -14,6 +14,7 @@ import {
   WEBRTC_SERVICE_URL,
   WEBRTC_PUBLIC_WS_URL,
 } from "../../config.js";
+import { setAppTimeZoneOverride } from "../../utils/datetime.js";
 
 function parseSettingRow(row: Record<string, unknown>): { key: string; value: string } {
   const key = row.key ?? row["key"];
@@ -88,12 +89,16 @@ export function getSsoSamlProvidersForSettings(): Array<Record<string, unknown>>
 export function readSettings(): AppSettings {
   const rows = getAllSettingsRows();
   if (rows.length === 0) {
+    setAppTimeZoneOverride(DEFAULTS.timezone);
     return { ...DEFAULTS };
   }
-  return buildAppSettingsFromRows(rows);
+  const settings = buildAppSettingsFromRows(rows);
+  setAppTimeZoneOverride(settings.timezone);
+  return settings;
 }
 
 export function writeSettings(settings: AppSettings): void {
+  setAppTimeZoneOverride(settings.timezone);
   const now = sqlNow();
   function upsert(key: string, value: string) {
     drizzleDb
@@ -136,6 +141,7 @@ export function writeSettings(settings: AppSettings): void {
     String(settings.websub_discovery_enabled),
   );
   upsert("hostname", settings.hostname);
+  upsert("timezone", settings.timezone ?? "");
   upsert("websub_hub", settings.websub_hub);
   upsert("final_bitrate_kbps", String(settings.final_bitrate_kbps));
   upsert("final_channels", settings.final_channels);
@@ -355,6 +361,7 @@ export function migrateSettingsFromFile(): void {
       ),
     );
     upsertSetting("hostname", settings.hostname ?? "");
+    upsertSetting("timezone", (settings as Partial<AppSettings>).timezone ?? "");
     upsertSetting("websub_hub", settings.websub_hub ?? "");
     upsertSetting(
       "final_bitrate_kbps",

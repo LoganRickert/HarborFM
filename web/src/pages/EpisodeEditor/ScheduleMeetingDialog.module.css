@@ -226,6 +226,19 @@
   color: var(--text-muted);
 }
 
+.quickInviteMailIcon[hidden] {
+  display: none;
+}
+
+.quickInvitePhoto {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--bg-muted);
+}
+
 .quickInviteName {
   flex: 1;
   min-width: 0;

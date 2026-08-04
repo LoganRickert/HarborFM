@@ -1,7 +1,17 @@
-import { useCallback, useRef, useState } from 'react';
-import { AudioUnlockContext } from './audioUnlockContext';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AudioUnlockContext, useAudioUnlock } from './audioUnlockContext';
 
 type RetryFn = () => void;
+
+/** Registers meter AudioContext resume with "Click to enable audio". */
+export function RemoteLevelMeterUnlock({ resume }: { resume: () => void }) {
+  const unlock = useAudioUnlock();
+  useEffect(() => {
+    if (!unlock) return;
+    return unlock.register('remote-levels', resume);
+  }, [unlock, resume]);
+  return null;
+}
 
 export function AudioUnlockProvider({ children }: { children: React.ReactNode }) {
   const retryFnsRef = useRef<Map<string, RetryFn>>(new Map());

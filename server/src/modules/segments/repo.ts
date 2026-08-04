@@ -41,6 +41,7 @@ export type SegmentListRow = {
   hostDuckingEnabled: boolean;
   loudnessTargetingEnabled: boolean;
   finalGainDb: number;
+  multiTrackWhisperEnabled: boolean;
 };
 
 /** List segments for episode with leftJoin reusableAssets for assetName. */
@@ -66,6 +67,7 @@ export function listSegmentsForEpisode(episodeId: string): SegmentListRow[] {
       hostDuckingEnabled: episodeSegments.hostDuckingEnabled,
       loudnessTargetingEnabled: episodeSegments.loudnessTargetingEnabled,
       finalGainDb: episodeSegments.finalGainDb,
+      multiTrackWhisperEnabled: episodeSegments.multiTrackWhisperEnabled,
     })
     .from(episodeSegments)
     .leftJoin(
@@ -420,6 +422,18 @@ export function updateSegmentFinalGainDb(
   drizzleDb
     .update(episodeSegments)
     .set({ finalGainDb })
+    .where(updateWhere(segmentId, episodeId))
+    .run();
+}
+
+export function updateSegmentMultiTrackWhisperEnabled(
+  segmentId: string,
+  episodeId: string,
+  multiTrackWhisperEnabled: boolean,
+): void {
+  drizzleDb
+    .update(episodeSegments)
+    .set({ multiTrackWhisperEnabled })
     .where(updateWhere(segmentId, episodeId))
     .run();
 }

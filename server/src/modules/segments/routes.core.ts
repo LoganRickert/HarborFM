@@ -451,11 +451,12 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.audioEq !== undefined ||
         body.disabled !== undefined ||
         body.loudnessTargetingEnabled !== undefined ||
+        body.multiTrackWhisperEnabled !== undefined ||
         body.finalGainDb !== undefined;
       if (!hasUpdates) {
         return reply.status(400).send({
           error:
-            "At least one of name, trimRanges, markers, audioEq, disabled, loudnessTargetingEnabled, or finalGainDb must be provided",
+            "At least one of name, trimRanges, markers, audioEq, disabled, loudnessTargetingEnabled, multiTrackWhisperEnabled, or finalGainDb must be provided",
         });
       }
       const row = repo.getSegmentDuration(segmentId, episodeId);
@@ -534,6 +535,13 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           segmentId,
           episodeId,
           body.loudnessTargetingEnabled,
+        );
+      }
+      if (body.multiTrackWhisperEnabled !== undefined) {
+        repo.updateSegmentMultiTrackWhisperEnabled(
+          segmentId,
+          episodeId,
+          body.multiTrackWhisperEnabled,
         );
       }
       if (body.finalGainDb !== undefined) {

@@ -43,6 +43,7 @@ import {
   updateSegmentAudio,
   updateSegmentHostDuckingEnabled,
   updateSegmentLoudnessTargetingEnabled,
+  updateSegmentMultiTrackWhisperEnabled,
   updateSegmentFinalGainDb,
   updateSegmentMarkers,
 } from "../segments/repo.js";
@@ -454,6 +455,14 @@ export async function applySegmentFolderOntoExisting(opts: {
       segmentId,
       episodeId,
       Boolean(segMeta.loudnessTargetingEnabled),
+    );
+  }
+
+  if (segMeta.multiTrackWhisperEnabled !== undefined) {
+    updateSegmentMultiTrackWhisperEnabled(
+      segmentId,
+      episodeId,
+      Boolean(segMeta.multiTrackWhisperEnabled),
     );
   }
 

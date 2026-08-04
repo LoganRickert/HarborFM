@@ -1,4 +1,4 @@
-import { Mail, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Mail, Pencil, Trash2, ChevronLeft, ChevronRight, Clock, Eye } from 'lucide-react';
 import type { CastMember } from '../../api/podcasts';
 import { CastMemberRow } from './CastMemberRow';
 import sharedStyles from '../PodcastDetail/shared.module.css';
@@ -15,6 +15,8 @@ export interface CastMembersListProps {
   canEdit: (c: CastMember) => boolean;
   canDelete: (c: CastMember) => boolean;
   onRequestInfo: (c: CastMember) => void;
+  onViewUpdate: (c: CastMember) => void;
+  onExpireInvite: (c: CastMember) => void;
   onEdit: (c: CastMember) => void;
   onDelete: (c: CastMember) => void;
   onPrevPage: () => void;
@@ -31,6 +33,8 @@ export function CastMembersList({
   canEdit,
   canDelete,
   onRequestInfo,
+  onViewUpdate,
+  onExpireInvite,
   onEdit,
   onDelete,
   onPrevPage,
@@ -53,43 +57,70 @@ export function CastMembersList({
   return (
     <>
       <ul className={styles.castList}>
-        {cast.map((c) => (
-          <CastMemberRow key={c.id} member={c} podcastId={podcastId}>
-            {canEdit(c) && Boolean(c.email?.trim()) && (
-              <button
-                type="button"
-                className={`${styles.cancel} ${styles.castRowEditBtn}`}
-                onClick={() => onRequestInfo(c)}
-                aria-label={`Request profile update from ${c.name}`}
-              >
-                <Mail size={16} aria-hidden />
-                Update
-              </button>
-            )}
-            {canEdit(c) && (
-              <button
-                type="button"
-                className={`${styles.cancel} ${styles.castRowEditBtn}`}
-                onClick={() => onEdit(c)}
-                aria-label={`Edit ${c.name}`}
-              >
-                <Pencil size={16} aria-hidden />
-                Edit
-              </button>
-            )}
-            {canDelete(c) && (
-              <button
-                type="button"
-                className={`${styles.exportDeleteBtn} ${styles.castRowDeleteBtn}`}
-                onClick={() => onDelete(c)}
-                disabled={isDeleting}
-                aria-label={`Delete ${c.name}`}
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
-          </CastMemberRow>
-        ))}
+        {cast.map((c) => {
+          const showMailActions = canEdit(c) && Boolean(c.email?.trim());
+          const pending = Boolean(c.hasPendingProfileUpdate);
+          const activeInvite = Boolean(c.hasActiveProfileInvite);
+          return (
+            <CastMemberRow key={c.id} member={c} podcastId={podcastId}>
+              {showMailActions && pending && (
+                <button
+                  type="button"
+                  className={`${styles.cancel} ${styles.castRowEditBtn} ${styles.castRowViewUpdateBtn}`}
+                  onClick={() => onViewUpdate(c)}
+                  aria-label={`View profile update from ${c.name}`}
+                >
+                  <Eye size={16} aria-hidden />
+                  View Update
+                </button>
+              )}
+              {showMailActions && !pending && activeInvite && (
+                <button
+                  type="button"
+                  className={`${styles.cancel} ${styles.castRowEditBtn}`}
+                  onClick={() => onExpireInvite(c)}
+                  aria-label={`Expire update link for ${c.name}`}
+                >
+                  <Clock size={16} aria-hidden />
+                  Expire
+                </button>
+              )}
+              {showMailActions && !pending && !activeInvite && (
+                <button
+                  type="button"
+                  className={`${styles.cancel} ${styles.castRowEditBtn}`}
+                  onClick={() => onRequestInfo(c)}
+                  aria-label={`Request profile update from ${c.name}`}
+                >
+                  <Mail size={16} aria-hidden />
+                  Update
+                </button>
+              )}
+              {canEdit(c) && (
+                <button
+                  type="button"
+                  className={`${styles.cancel} ${styles.castRowEditBtn}`}
+                  onClick={() => onEdit(c)}
+                  aria-label={`Edit ${c.name}`}
+                >
+                  <Pencil size={16} aria-hidden />
+                  Edit
+                </button>
+              )}
+              {canDelete(c) && (
+                <button
+                  type="button"
+                  className={`${styles.exportDeleteBtn} ${styles.castRowDeleteBtn}`}
+                  onClick={() => onDelete(c)}
+                  disabled={isDeleting}
+                  aria-label={`Delete ${c.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </CastMemberRow>
+          );
+        })}
       </ul>
       {total > limit && (
       <div className={styles.castPagination}>

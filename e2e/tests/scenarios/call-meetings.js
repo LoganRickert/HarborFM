@@ -694,6 +694,8 @@ export async function run({ runOne }) {
             podcastTitle: 'E2E Meeting Show',
             episodeTitle: 'E2E Topics Episode',
             scheduledStartAt: isoIn(4 * 60 * 60 * 1000),
+            hostTimeZone: 'America/New_York',
+            displayTimeZone: 'America/Los_Angeles',
             joinUrl: `http://127.0.0.1/call/join/${token}?invite=${inviteToken}`,
             topicsUrl: `http://127.0.0.1/call/join/${token}/topics?invite=${inviteToken}`,
             joinCode: '1234',
@@ -702,6 +704,12 @@ export async function run({ runOne }) {
           const blob = `${reminder.subject}\n${reminder.text}\n${reminder.html}`;
           if (!/\/topics/i.test(blob) || !(/suggest topics/i.test(blob) || /topics to discuss or avoid/i.test(blob))) {
             throw new Error('Reminder email builder missing topics link');
+          }
+          if (!/shown in your time zone/i.test(blob)) {
+            throw new Error('Reminder with displayTimeZone should say time is in recipient zone');
+          }
+          if (/different time zone/i.test(blob)) {
+            throw new Error('Reminder with displayTimeZone should not ask to double-check TZ');
           }
         } catch (err) {
           if (err && typeof err === 'object' && 'code' in err && err.code === 'ERR_MODULE_NOT_FOUND') {

@@ -42,6 +42,7 @@ import {
   cancelMeeting,
   countActiveMeetingsForUser,
   createInvite,
+  castBelongsToPodcast,
   createMeeting,
   deleteInvite,
   ensureMeetingHostTimeZone,
@@ -600,6 +601,14 @@ export async function registerMeetingRoutes(app: FastifyInstance): Promise<void>
       );
       const name = bodyParsed.data.name?.trim() || null;
       const email = bodyParsed.data.email?.trim() || null;
+      const castIdRaw = bodyParsed.data.castId?.trim() || null;
+      let castId: string | null = null;
+      if (castIdRaw) {
+        if (!castBelongsToPodcast(castIdRaw, meeting.podcastId)) {
+          return reply.status(400).send({ error: "Invalid cast member" });
+        }
+        castId = castIdRaw;
+      }
 
       // Blank name + no email: return generic meeting join URL (no row).
       if (!name && !email) {
@@ -613,6 +622,7 @@ export async function registerMeetingRoutes(app: FastifyInstance): Promise<void>
         meetingId: meeting.id,
         email,
         displayName: name,
+        castId,
       });
 
       let emailSent = false;

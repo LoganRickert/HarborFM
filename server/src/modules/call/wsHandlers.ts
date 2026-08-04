@@ -11,8 +11,24 @@ import {
   addParticipant,
   verifyPassword,
   setParticipantName,
+  setParticipantCastAvatar,
   clearHostDisconnected,
 } from "../../services/callSession.js";
+import { resolveCastForInvite, resolvePublicCastByName } from "./castAvatar.js";
+import { getInviteByToken } from "./meetings.js";
+
+function syncUnlockedPublicCastAvatar(
+  sessionId: string,
+  participantId: string,
+  podcastId: string,
+  displayName: string,
+): void {
+  const session = getSessionById(sessionId);
+  const p = session?.participants.find((x) => x.id === participantId);
+  if (!p || p.castLocked || p.source === "phone") return;
+  const avatar = resolvePublicCastByName(podcastId, displayName);
+  setParticipantCastAvatar(sessionId, participantId, avatar);
+}
 import { getWebRtcConfig, webrtcRequestHeaders } from "../../services/webrtcConfig.js";
 import { getPodcastOwnerId } from "../../services/access.js";
 import { wouldExceedStorageLimit } from "../../services/storageLimit.js";
@@ -151,6 +167,22 @@ export function handleHostJoin(
       state.initialized = true;
       if (state.participantId && hostName != null && String(hostName).trim()) {
         setParticipantName(state.sessionId, state.participantId, String(hostName).trim());
+        syncUnlockedPublicCastAvatar(
+          state.sessionId,
+          state.participantId,
+          session.podcastId,
+          String(hostName).trim(),
+        );
+      } else if (state.participantId) {
+        const hostP = session.participants.find((p) => p.id === state.participantId);
+        if (hostP) {
+          syncUnlockedPublicCastAvatar(
+            state.sessionId,
+            state.participantId,
+            session.podcastId,
+            hostP.name,
+          );
+        }
       }
       let set = sessionSockets.get(state.sessionId);
       if (!set) {
@@ -235,7 +267,13 @@ export function handleMigrateHost(
   state.initialized = true;
   pendingMigrateHosts.delete(socket as unknown as WebSocket);
   updateHostHeartbeat(sid);
-  if (hn) setParticipantName(sid, pid, hn);
+  if (hn) {
+    setParticipantName(sid, pid, hn);
+    syncUnlockedPublicCastAvatar(sid, pid, sess.podcastId, hn);
+  } else {
+    const hostP = sess.participants.find((p) => p.id === pid);
+    if (hostP) syncUnlockedPublicCastAvatar(sid, pid, sess.podcastId, hostP.name);
+  }
   let newSet = sessionSockets.get(sid);
   if (!newSet) {
     newSet = new Set();
@@ -265,12 +303,14 @@ export function handleMigrateHost(
 export function handleGuestJoin(
   socket: WebSocket,
   req: FastifyRequest,
-  msg: { token?: string; name?: string; password?: string },
+  msg: { token?: string; name?: string; password?: string; invite?: string },
   state: WsState
 ): boolean {
   const guestToken = msg.token;
   const name = msg.name;
   const password = msg.password;
+  const inviteToken =
+    typeof msg.invite === "string" && msg.invite.trim() ? msg.invite.trim() : "";
   if (!guestToken) {
     socket.send(JSON.stringify({ type: "error", error: "Token required" }));
     socket.close();
@@ -306,8 +346,23 @@ export function handleGuestJoin(
     socket.close();
     return true;
   }
+  const displayName = (name ?? "Guest").trim() || "Guest";
+  let castOpts:
+    | { castId: string; castPhotoUrl: string; castLocked: boolean }
+    | undefined;
+  if (inviteToken && session.meetingId) {
+    const invite = getInviteByToken(inviteToken);
+    if (invite && invite.meetingId === session.meetingId) {
+      const locked = resolveCastForInvite(session.podcastId, invite);
+      if (locked) castOpts = locked;
+    }
+  }
+  if (!castOpts) {
+    const publicMatch = resolvePublicCastByName(session.podcastId, displayName);
+    if (publicMatch) castOpts = publicMatch;
+  }
   const pid = nanoid();
-  const p = addParticipant(session.sessionId, pid, name ?? "Guest");
+  const p = addParticipant(session.sessionId, pid, displayName, castOpts);
   if (!p) {
     socket.send(JSON.stringify({ type: "error", error: "Could not join" }));
     socket.close();

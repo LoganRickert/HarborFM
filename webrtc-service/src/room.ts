@@ -17,7 +17,10 @@ export type RecordingState = import("./recording/RecordingManager.js").Recording
 
 const rooms = new Map<string, RoomState>();
 const producerSourceMap = new Map<string, string>();
-const producerParticipantMap = new Map<string, { participantId: string; participantName: string }>();
+const producerParticipantMap = new Map<
+  string,
+  { participantId: string; participantName: string; castId?: string }
+>();
 const producerSoundboardAssetMap = new Map<string, string>();
 const soundboardVolumeByRoom = new Map<string, number>();
 const soundboardVolumeAtStop = new Map<string, number>();

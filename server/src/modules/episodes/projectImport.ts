@@ -324,7 +324,10 @@ export async function importProjectZip(
         subscriberOnlyStartsAt: episodeData.subscriberOnlyStartsAt ?? null,
         subscriberOnlyEndsAt: episodeData.subscriberOnlyEndsAt ?? null,
         unlisted: false,
-        showNotesGuestVisible: Boolean(episodeData.showNotesGuestVisible),
+        showNotesGuestVisible:
+          episodeData.showNotesGuestVisible == null
+            ? true
+            : Boolean(episodeData.showNotesGuestVisible),
         finalMarkers: stringifyJsonField(episodeData.finalMarkers),
         finalSoundbites: stringifyJsonField(episodeData.finalSoundbites),
         contentLinks: stringifyJsonField(episodeData.contentLinks),

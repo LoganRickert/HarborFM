@@ -299,7 +299,7 @@ All users can view a profile page where they can see their basic account informa
 
 ![HarborFM](screenshots/screenshota_10.jpg)
 
-Lastly, there is an analytics page for views and listens on the public feed. HarborFM classifies traffic as listeners vs crawlers (directory agents and bots) and skips tiny audio probes; overview charts emphasize listeners. Treat the numbers as a general feel rather than a specialized analytics product. Remote exports (S3, FTP, and so on) are not counted.
+Lastly, there is an analytics page for the public feed. Primary metrics are Downloads (unique filtered audio downloads) and Unique listeners, plus Apps, Locations, Feed health, and optional retention for website plays. HarborFM classifies traffic as listeners vs crawlers and skips tiny audio probes. Treat the numbers as a general feel rather than a specialized analytics product. Remote exports (S3, FTP, and so on) are not counted.
 
 ![HarborFM](screenshots/screenshota_11.jpg)
 
@@ -474,6 +474,10 @@ All environment variables supported by the server work the same in Docker. Set t
 | `REGISTRATION_RATE_LIMIT_MAX` | `5` | Max registration requests per IP per minute. Set higher (e.g. 100) for e2e tests. |
 | `RENDER_RATE_LIMIT_WINDOW_MS` | `30000` | Min ms between "Make Final Episode" requests per user. Set to `0` to disable (e.g. for e2e tests). |
 | `CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS` | `30000` | Min ms between Show Cast profile update request emails per user. Set to `0` to disable (e.g. for e2e tests). |
+| `CAST_PROFILE_UPDATE_MAX` | `3` | Max public cast profile self-update submits per cast per window. |
+| `CAST_PROFILE_UPDATE_WINDOW_MS` | `3600000` | Window (ms) for cast profile self-update submit throttle (default 1 hour). |
+| `CAST_PROFILE_UPDATE_IP_MAX` | `30` | Soft per-IP max for cast profile self-update submits per window. |
+| `CAST_PROFILE_TOKEN_TTL_DAYS` | `14` | How long a cast profile self-update invite link stays valid. Host Expire (or sending a new Update) invalidates it earlier. |
 | `MEETING_INVITE_RATE_LIMIT_WINDOW_MS` | `300000` | Window for meeting invite creates (share links / emails) per user. Set to `0` to disable (e.g. for e2e tests). |
 | `MEETING_INVITE_RATE_LIMIT_MAX` | `5` | Max meeting invite creates per user per window. |
 | **Podcast stats** | | |
@@ -548,7 +552,7 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 ## Features
 
-- **Podcasts and episodes.** Create podcasts with metadata (artwork, categories, explicit, etc.). Add episodes with title, description, season/episode numbers, and status (draft, scheduled, published).
+- **Podcasts and episodes.** Create podcasts with metadata (artwork, categories, explicit, etc.). Add episodes with title, description, season/episode numbers, and status (draft, scheduled, published). Mark an episode **Unlisted** so anyone with the link can open it when released, while it stays off the public feed list, RSS, and sitemap.
 
 - **Segments.** Each episode is a sequence of segments. A segment is either recorded (audio uploaded for that episode) or reusable (from your library). Reorder, trim, split, and remove silence. The app uses ffmpeg to concatenate segments into the final episode audio. From **Manage segment**, editors can download a trimmed MP3, download or import a segment project zip (overwrite in place), or delete the section.
 
@@ -556,17 +560,19 @@ pm2 start ecosystem.config.cjs --only harborfm
 
 - **Episode archive and backup.** Configure Archive Settings per show (one remote destination). Archive uploads a project zip, verifies it, and frees local project files while keeping feed audio. Backup / Dated Backup upload without deleting local files; restore from a listed backup or restore an archived episode without overwriting metadata.
 
-- **Group calls.** Record remote guests via WebRTC; host starts an ad-hoc call or a **scheduled meeting** with a reserved join link/code, email or share invites, and calendar attachments; guests join by link or 4-digit code (or phone dial-in when enabled); in-call chat, soundboard, and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
+- **Group calls.** Record remote guests via WebRTC; host starts an ad-hoc call or a **scheduled meeting** with a reserved join link/code, email or share invites, and calendar attachments; guests join by link or 4-digit code (or phone dial-in when enabled); in-call chat, soundboard, show notes (shared with guests by default), and settings; recordings become segments. Requires webrtc-service (see [WebRTC (group calls)](#webrtc-group-calls)).
 
-- **Guest episode review.** When you move an episode from draft to scheduled (or to published and unlisted), HarborFM emails preview links to the meeting host and emailed invitees so they can listen, approve, or leave feedback before the public release. Preview links unlock audio for scheduled episodes; listed published episodes open the normal public page.
+- **Guest episode review.** When you move an episode from draft to scheduled (or to published and unlisted), HarborFM emails preview links to the meeting host, emailed invitees, and episode cast members who have an email so they can listen, approve, or leave feedback before the public release. Preview links unlock audio for scheduled episodes; listed published episodes open the normal public page.
 
-- **Show cast.** Maintain hosts and guests with optional private email and social links. From the cast list, **Update** emails a member asking them to reply with a new photo and social links (includes what is already on file; replies go to the person who clicked Send).
+- **Show cast.** Maintain hosts and guests with optional private email, nickname (for transcript speaker labels), social links, and a private time zone for meeting invite times. **Update** emails a profile link so they can propose changes (name, nickname, bio, photo, socials, time zone); you review, approve, or disregard. Links last 14 days. Meeting Calendar can quick-invite cast members who have an email.
 
 - **Real-time collaboration.** Episode editor WebSocket; collaborators see live segment, call, and render updates.
 
 - **Library.** Upload reusable audio (intros, outros, bumpers, ads). Tag them and insert them into any episode as segments.
 
-- **Transcripts.** For recorded segments you can generate transcripts (via a configurable Whisper ASR URL), edit text, and use SRT-style timings. Optional LLM integration (Ollama or OpenAI) lets you ask questions about a segment’s transcript (e.g. summarise or suggest copy).
+- **Transcripts.** Generate transcripts via a configurable Whisper ASR URL. Multi-track recordings can transcribe each take and merge into one timeline. Build an episode transcript from segment transcripts (download SRT or TXT), edit cues, and optionally show caption lanes in Advanced Editor. Optional LLM integration (Ollama or OpenAI) lets you ask questions about a segment transcript (e.g. summarise or suggest copy).
+
+- **Compute workers.** Optionally offload transcripts, multi-track remakes, episode videos, and final episode builds to remote workers (Settings > Compute Workers), with local fallback when workers are off or busy.
 
 - **RSS.** Each podcast has an RSS feed. The app can serve it from the same host or you can deploy it elsewhere via S3 export.
 

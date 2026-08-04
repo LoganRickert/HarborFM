@@ -17,6 +17,8 @@ export function useMediasoupRoom(
   autoGainControl: boolean = true,
   /** Manual gain 0..8 when AGC off. Applied to live send and recording. Default 1. */
   micVolume: number = 1,
+  /** Show cast member id when this participant is bound to a cast (for recording manifest). */
+  castId?: string | null,
 ) {
   const [remoteTracks, setRemoteTracks] = useState<Map<string, RemoteTrackInfo>>(new Map());
   const [remoteMicLevels, setRemoteMicLevels] = useState<Map<string, number>>(new Map());
@@ -35,6 +37,10 @@ export function useMediasoupRoom(
   const myProducerIdRef = useRef<string | null>(null);
   const recreateMicProducerRef = useRef<(() => Promise<void>) | null>(null);
   const syncSendTrackModeRef = useRef<(() => Promise<void>) | null>(null);
+  /** Remic via getUserMedia when AGC flips; applyConstraints alone often fails to re-enable AGC. */
+  const remicForAgcChangeRef = useRef<(() => Promise<void>) | null>(null);
+  const agcRemicGenerationRef = useRef(0);
+  const prevAutoGainControlRef = useRef(autoGainControl);
   const userMutedRef = useRef(false);
   const setMutedRef = useRef<(muted: boolean) => void>((muted) => {
     userMutedRef.current = muted;
@@ -66,6 +72,10 @@ export function useMediasoupRoom(
   setListenToSelfStateRef.current = setListenToSelfState;
   const [soundboardVolumeFromRoom, setSoundboardVolumeFromRoom] = useState<number>(1);
   const mediaStreamsRef = useRef<{ micStream: MediaStream | null; localStream: MediaStream | null }>({ micStream: null, localStream: null });
+  /** producerId → participantId for remote level bars (survives across consume/associate). */
+  const producerParticipantMapRef = useRef(new Map<string, string>());
+  /** Resume remote-level AudioContext (wired to audio unlock + pointerdown). */
+  const resumeRemoteLevelMetersRef = useRef<() => void>(() => {});
   /** Bumped to tear down and re-join the mediasoup room when WS/transport died while backgrounded. */
   const [reconnectNonce, setReconnectNonce] = useState(0);
   const requestReconnectRef = useRef<() => void>(() => {});
@@ -94,12 +104,14 @@ export function useMediasoupRoom(
     let needsRecoverOnVisible = false;
     let wasHidden = false;
     const producerParticipantMap = new Map<string, string>();
+    const producerParticipantMapForCleanup = producerParticipantMapRef.current;
     type Pending = { resolve: (value: unknown) => void; reject: (err: Error) => void };
     const pendingResolvers = new Map<string, Pending[]>();
 
     function addLivePublisher(producerId: string, pid: string): void {
       if (!pid) return;
       producerParticipantMap.set(producerId, pid);
+      producerParticipantMapRef.current.set(producerId, pid);
       setLivePublisherIds((prev) => {
         if (prev.has(pid)) return prev;
         const next = new Set(prev);
@@ -111,6 +123,7 @@ export function useMediasoupRoom(
     function removeLivePublisherByProducer(producerId: string): void {
       const pid = producerParticipantMap.get(producerId);
       producerParticipantMap.delete(producerId);
+      producerParticipantMapRef.current.delete(producerId);
       if (!pid) return;
       for (const remaining of producerParticipantMap.values()) {
         if (remaining === pid) return;
@@ -361,6 +374,8 @@ export function useMediasoupRoom(
         silentGain.connect(ctx.destination);
 
         let sendTrackIsProcessed = false;
+        let processedSendDest: MediaStreamAudioDestinationNode | null = null;
+        let micSourceNode: MediaStreamAudioSourceNode | null = micSource;
         let playbackGraphConnected = true;
         const connectPlaybackGraph = () => {
           if (playbackGraphConnected) return;
@@ -405,8 +420,17 @@ export function useMediasoupRoom(
         }
 
         function createProcessedSendTrack(): MediaStreamTrack | null {
+          if (processedSendDest) {
+            try {
+              micVolumeGain.disconnect(processedSendDest);
+            } catch {
+              /* ignore */
+            }
+            processedSendDest = null;
+          }
           const sendDest = ctx.createMediaStreamDestination();
           micVolumeGain.connect(sendDest);
+          processedSendDest = sendDest;
           return sendDest.stream.getAudioTracks()[0] ?? null;
         }
 
@@ -461,6 +485,122 @@ export function useMediasoupRoom(
           sendTrackIsProcessed = wantProcessed;
         }
         syncSendTrackModeRef.current = syncSendTrackMode;
+
+        /**
+         * Browser AGC often cannot be toggled via applyConstraints on an existing track.
+         * Remic with getUserMedia and replace the producer track (keep mediasoup room).
+         */
+        async function remicForAgcChange(): Promise<void> {
+          if (closed || userMutedRef.current) return;
+          const audioCtx = ctxRef.current;
+          const gainNode = micVolumeGainRef.current;
+          if (!audioCtx || !gainNode) return;
+
+          const gen = ++agcRemicGenerationRef.current;
+          const agcNow = autoGainControlRef.current;
+          const micVol = Math.max(0, Math.min(8, micVolumeRef.current));
+
+          const constraints: MediaTrackConstraints = {
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            sampleRate: { ideal: 48000 },
+            autoGainControl: agcNow,
+            noiseSuppression: false,
+            ...(!agcNow ? { echoCancellation: false } : {}),
+          };
+
+          let newMicStream: MediaStream;
+          try {
+            newMicStream = await navigator.mediaDevices.getUserMedia({
+              audio: constraints,
+              video: false,
+            });
+          } catch {
+            return;
+          }
+          if (closed || gen !== agcRemicGenerationRef.current) {
+            newMicStream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+
+          const newMicTrack = newMicStream.getAudioTracks()[0];
+          if (!newMicTrack) {
+            newMicStream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+
+          mediaStreamsRef.current.micStream?.getTracks().forEach((t) => {
+            try {
+              t.stop();
+            } catch {
+              /* ignore */
+            }
+          });
+          if (micSourceNode) {
+            try {
+              micSourceNode.disconnect();
+            } catch {
+              /* ignore */
+            }
+            micSourceNode = null;
+          }
+
+          micTrackRef.current = newMicTrack;
+          mediaStreamsRef.current.micStream = newMicStream;
+          gainNode.gain.value = agcNow ? 1 : micVol;
+
+          try {
+            const nextSource = audioCtx.createMediaStreamSource(newMicStream);
+            nextSource.connect(gainNode);
+            micSourceNode = nextSource;
+          } catch {
+            return;
+          }
+
+          if (closed || gen !== agcRemicGenerationRef.current) return;
+
+          const wantProcessed = needsProcessedSend();
+          const next = createSendTrack(wantProcessed);
+          if (!next) return;
+          if (closed || gen !== agcRemicGenerationRef.current) {
+            try {
+              next.stop();
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
+
+          if (producerRef.current && !producerRef.current.closed) {
+            const ok = await replaceProducerSendTrack(next);
+            if (!ok) {
+              try {
+                next.stop();
+              } catch {
+                /* ignore */
+              }
+              // One silent retry with a fresh track.
+              if (closed || gen !== agcRemicGenerationRef.current) return;
+              const retry = createSendTrack(wantProcessed);
+              if (!retry) return;
+              const ok2 = await replaceProducerSendTrack(retry);
+              if (!ok2) {
+                try {
+                  retry.stop();
+                } catch {
+                  /* ignore */
+                }
+                return;
+              }
+              sendTrackIsProcessed = wantProcessed;
+              return;
+            }
+          } else {
+            stopLocalSendTracks();
+            mediaStreamsRef.current.localStream = new MediaStream([next]);
+          }
+          sendTrackIsProcessed = wantProcessed;
+        }
+        remicForAgcChangeRef.current = remicForAgcChange;
 
         // Prefer raw mic for the initial producer (works across background/lock).
         const sendTrack = createRawSendTrack();
@@ -549,6 +689,7 @@ export function useMediasoupRoom(
                 producerId: producedMsg.id,
                 participantId,
                 participantName,
+                ...(castId ? { castId } : {}),
               });
             }
             callback({ id: producedMsg.id });
@@ -620,8 +761,17 @@ export function useMediasoupRoom(
                 micTrackRef.current = newMicTrack;
                 mediaStreamsRef.current.micStream = newMicStream;
                 liveMic = newMicTrack;
-                const micSource = audioCtx.createMediaStreamSource(newMicStream);
-                micSource.connect(micVolumeGain);
+                if (micSourceNode) {
+                  try {
+                    micSourceNode.disconnect();
+                  } catch {
+                    /* ignore */
+                  }
+                  micSourceNode = null;
+                }
+                const nextSource = audioCtx.createMediaStreamSource(newMicStream);
+                nextSource.connect(micVolumeGain);
+                micSourceNode = nextSource;
               }
             } catch {
               if (micDead) return null;
@@ -709,6 +859,7 @@ export function useMediasoupRoom(
                 producerId: newProducer.id,
                 participantId,
                 participantName,
+                ...(castId ? { castId } : {}),
               });
             }
             return true;
@@ -1052,6 +1203,7 @@ export function useMediasoupRoom(
       setLivePublisherIds(new Set());
       recreateMicProducerRef.current = null;
       syncSendTrackModeRef.current = null;
+      remicForAgcChangeRef.current = null;
       myProducerIdRef.current = null;
       if (heartbeatIntervalId) {
         clearInterval(heartbeatIntervalId);
@@ -1060,6 +1212,8 @@ export function useMediasoupRoom(
       stopMediaTracks();
       webrtcWsRef.current = null;
       setRemoteMicLevels(new Map());
+      producerParticipantMap.clear();
+      producerParticipantMapForCleanup.clear();
       listenToSelfRestoreRef.current = listenToSelfRef.current;
       selfListenGainRef.current = null;
       micVolumeGainRef.current = null;
@@ -1076,20 +1230,25 @@ export function useMediasoupRoom(
       sendTransport?.close();
       recvTransport?.close();
     };
-  }, [webrtcUrl, roomId, deviceId, participantId, participantName, hostToken, autoGainControl, reconnectNonce]);
+  // autoGainControl / micVolume apply via the effect below (remic on AGC flip; gain+sync for volume),
+  // not by tearing down the mediasoup room.
+  }, [webrtcUrl, roomId, deviceId, participantId, participantName, castId, hostToken, reconnectNonce]);
 
   useEffect(() => {
+    const agcChanged = prevAutoGainControlRef.current !== autoGainControl;
+    prevAutoGainControlRef.current = autoGainControl;
+
     const gain = micVolumeGainRef.current;
     if (gain) {
       gain.gain.value = autoGainControl ? 1 : Math.max(0, Math.min(8, micVolume));
     }
-    const track = micTrackRef.current;
-    if (track) {
-      track.applyConstraints({
-        autoGainControl,
-        ...(!autoGainControl ? { echoCancellation: false } : {}),
-      }).catch(() => {});
+
+    if (agcChanged) {
+      // applyConstraints cannot reliably re-enable browser AGC; remic instead.
+      void remicForAgcChangeRef.current?.();
+      return;
     }
+
     void syncSendTrackModeRef.current?.();
   }, [autoGainControl, micVolume]);
 
@@ -1097,15 +1256,24 @@ export function useMediasoupRoom(
     const entries = Array.from(remoteTracks.entries()).filter(
       ([, info]) => info.source !== 'soundboard'
     );
-    if (entries.length === 0) return;
+    if (entries.length === 0) {
+      setRemoteMicLevels(new Map());
+      resumeRemoteLevelMetersRef.current = () => {};
+      return;
+    }
 
     const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     const ctx = new AudioCtx();
     const processors: { producerId: string; computeLevel: () => number }[] = [];
+    const meterTracks: MediaStreamTrack[] = [];
 
     for (const [, info] of entries) {
       try {
-        const src = ctx.createMediaStreamSource(new MediaStream([info.track]));
+        // Clone so RemoteAudio keeps exclusive use of the live track; Chrome often
+        // feeds silence to AnalyserNode when the same track is also on an <audio> element.
+        const meterTrack = info.track.clone();
+        meterTracks.push(meterTrack);
+        const src = ctx.createMediaStreamSource(new MediaStream([meterTrack]));
         const analyser = ctx.createAnalyser();
         const silentGain = ctx.createGain();
         silentGain.gain.value = 0;
@@ -1118,40 +1286,88 @@ export function useMediasoupRoom(
       }
     }
 
-    const producerIdToParticipantId = new Map<string, string>();
-    for (const [, info] of remoteTracks) {
-      if (info.participantId) producerIdToParticipantId.set(info.producerId, info.participantId);
+    function resolveParticipantId(producerId: string): string | undefined {
+      for (const [, info] of remoteTracks) {
+        if (info.producerId === producerId && info.participantId) return info.participantId;
+      }
+      return producerParticipantMapRef.current.get(producerId);
+    }
+
+    const knownParticipantIds = new Set<string>();
+    for (const { producerId } of processors) {
+      const pid = resolveParticipantId(producerId);
+      if (pid) knownParticipantIds.add(pid);
     }
 
     let rafId: number | undefined;
     let lastLevels = new Map<string, number>();
     const LEVEL_THRESHOLD = 0.02;
+
+    function resumeMeterCtx(): void {
+      if (ctx.state === 'suspended') {
+        void ctx.resume().catch(() => {});
+      }
+    }
+    resumeRemoteLevelMetersRef.current = resumeMeterCtx;
+
     function tick() {
       if (processors.length === 0) return;
+      resumeMeterCtx();
       const next = new Map<string, number>();
       let changed = false;
       for (const { producerId, computeLevel } of processors) {
-        const participantId = producerIdToParticipantId.get(producerId);
-        if (participantId) {
-          const level = computeLevel();
-          next.set(participantId, level);
-          const prev = lastLevels.get(participantId) ?? -1;
-          if (Math.abs(level - prev) >= LEVEL_THRESHOLD) changed = true;
+        const participantId = resolveParticipantId(producerId);
+        if (!participantId) continue;
+        knownParticipantIds.add(participantId);
+        const level = computeLevel();
+        next.set(participantId, level);
+        const prev = lastLevels.get(participantId) ?? -1;
+        if (Math.abs(level - prev) >= LEVEL_THRESHOLD) changed = true;
+      }
+      // Keep zeros for known peers that briefly failed resolve this frame.
+      for (const pid of knownParticipantIds) {
+        if (!next.has(pid)) {
+          next.set(pid, 0);
+          if ((lastLevels.get(pid) ?? -1) !== 0) changed = true;
         }
       }
-      if (changed) {
+      if (changed || lastLevels.size !== next.size) {
         lastLevels = next;
-        setRemoteMicLevels(next);
+        setRemoteMicLevels(new Map(next));
       }
       rafId = requestAnimationFrame(tick);
     }
-    ctx.resume().then(() => { rafId = requestAnimationFrame(tick); }).catch(() => {});
+
+    // Always run the loop; resume may succeed later via unlock / pointerdown.
+    void ctx.resume().catch(() => {});
+    rafId = requestAnimationFrame(tick);
+
+    const onPointerDown = () => resumeMeterCtx();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') resumeMeterCtx();
+    };
+    document.addEventListener('pointerdown', onPointerDown, { passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       if (rafId != null) cancelAnimationFrame(rafId);
-      ctx.close();
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('visibilitychange', onVisibility);
+      resumeRemoteLevelMetersRef.current = () => {};
+      for (const t of meterTracks) {
+        try {
+          t.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+      void ctx.close();
     };
   }, [remoteTracks]);
+
+  const resumeRemoteLevelMeters = useCallback(() => {
+    resumeRemoteLevelMetersRef.current();
+  }, []);
 
   const setMuted = useCallback((muted: boolean) => {
     setMutedRef.current(muted);
@@ -1245,5 +1461,6 @@ export function useMediasoupRoom(
     stopListenToSelf,
     setProducerVolume,
     leaveRoom,
+    resumeRemoteLevelMeters,
   };
 }

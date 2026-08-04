@@ -1,8 +1,26 @@
 # Changelog
 
+## v1.28.0 - 8-3-2026
+
+- **Call chat images:** Paste or attach a photo in live call chat. Links in chat open in a new tab. Images stay private to the call and are removed when it ends.
+- **Multi-track transcripts:** When a segment has multiple host/guest takes, HarborFM transcribes each person and merges them into one timeline (with a Manage Segment toggle to turn this off).
+- **Cast nicknames:** Give cast members a short Nickname for transcript speaker labels.
+- **Include in transcript:** In Track or Clip Settings, choose which lanes count toward multi-track transcription.
+- **Episode transcript:** Building the episode transcript pulls segment transcripts together in order. Regenerate Transcript redoes that stitch without rebuilding the episode.
+- **Edit transcript cues:** Tap the pencil on a cue to fix the wording (Enter to save, Escape to cancel).
+- **Captions in Advanced Editor:** Toggle Captions to see one-line transcript lanes under each track.
+- **Call roster photos:** Participant icons can show matching show-cast photos. Invite guests keep their cast photo for the call even if they rename.
+- **Guest call settings:** Hosts can adjust a guest's Auto Gain Control and mic volume from Call Settings.
+- **Mic meters and AGC:** Remote guest level meters stay accurate, and turning Auto Gain Control back on actually restores gain.
+- **Cast profile updates:** Email cast a link to propose profile changes (name, nickname, bio, photo, socials, time zone). You review, approve, or disregard. Links last 14 days.
+- **Cast time zone:** Set a private time zone on a cast member so meeting emails show the time in their zone.
+- **Soundboard clip length:** Soundboard one-shots in Advanced Editor match their real length instead of stretching to the end of the recording.
+- **Show notes for guests:** Show notes are shared with call guests by default.
+- **Guest episode review recipients:** Preview emails also go to episode cast members who have an email and were not already on the meeting invite list.
+
 ## v1.27.0 - 8-2-2026
 
-- **Guest episode review:** When an episode first becomes preview-eligible (draft to scheduled, or draft to published and unlisted), HarborFM emails review preview links to the meeting host and emailed invitees. Guests can preview audio, approve, or leave feedback; the host is notified on response. Listed published episodes redirect preview links to the public episode URL. Reverting to draft revokes outstanding review tokens.
+- **Guest episode review:** When an episode first becomes preview-eligible (draft to scheduled, or draft to published and unlisted), HarborFM emails review preview links to the meeting host, emailed invitees, and episode cast with an email. Guests can preview audio, approve, or leave feedback; the host is notified on response. Listed published episodes redirect preview links to the public episode URL. Reverting to draft revokes outstanding review tokens.
 - **Scheduled episode reviews:** Episode pages and preview links show episode reviews only (not podcast-level reviews). Writing a new review is blocked until the episode is released.
 - **Meta Pixel:** Page Customizations can set a Meta Pixel ID. Public podcast and episode pages load the pixel, respecting the site consent banner when GDPR consent is enabled.
 - **Show cast Update:** On Show Cast, cast members with an email get an Update action that emails a profile update request (current photo and social links included when available). Reply-To is the person who sends the request.

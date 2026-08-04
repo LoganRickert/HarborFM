@@ -7,6 +7,7 @@ import {
   podcastCast,
   podcasts,
 } from "../../db/schema.js";
+import { isPrivateCastLockedInLiveCall } from "../../services/callSession.js";
 
 /** Get podcast id by slug (for subscriber-auth and private routes). */
 export function getPodcastIdBySlug(slug: string): string | undefined {
@@ -255,12 +256,12 @@ export function getEpisodeArtworkPath(
   return row?.artworkPath ?? undefined;
 }
 
-/** Get cast member photo path (public cast only). */
+/** Get cast member photo path (public cast, or private when invite-locked in a live call). */
 export function getCastPhotoPath(
   castId: string,
   podcastId: string,
 ): string | null | undefined {
-  const row = drizzleDb
+  const publicRow = drizzleDb
     .select({ photoPath: podcastCast.photoPath })
     .from(podcastCast)
     .where(
@@ -272,7 +273,23 @@ export function getCastPhotoPath(
     )
     .limit(1)
     .get();
-  return row?.photoPath ?? undefined;
+  if (publicRow?.photoPath) return publicRow.photoPath;
+
+  if (!isPrivateCastLockedInLiveCall(podcastId, castId)) return undefined;
+
+  const privateRow = drizzleDb
+    .select({ photoPath: podcastCast.photoPath })
+    .from(podcastCast)
+    .where(
+      and(
+        eq(podcastCast.id, castId),
+        eq(podcastCast.podcastId, podcastId),
+        eq(podcastCast.isPublic, false),
+      ),
+    )
+    .limit(1)
+    .get();
+  return privateRow?.photoPath ?? undefined;
 }
 
 /** Get podcast id by slug where unlisted=0 (for listing/discovery only; cast uses getPodcastIdBySlug). */

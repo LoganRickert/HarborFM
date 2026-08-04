@@ -83,6 +83,8 @@ export const callMeetingInviteBodySchema = z
   .object({
     name: z.string().max(120).optional().nullable(),
     email: z.string().email({ message: 'Valid email is required' }).optional().nullable(),
+    /** Optional show-cast member id (quick invite); binds roster photo even if guest renames. */
+    castId: z.string().min(1).max(64).optional().nullable(),
     /** Optional; fills in host time zone when the meeting was created without one. */
     timeZone: callMeetingTimeZoneSchema.optional(),
   })

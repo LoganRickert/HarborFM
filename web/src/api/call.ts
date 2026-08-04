@@ -151,6 +151,28 @@ export function callWebSocketUrl(): string {
   return `${wsProtocol}//${host}/api/call/ws`;
 }
 
+/** Upload a resized JPEG for live call chat. Requires join token + participant id. */
+export async function uploadCallChatImage(opts: {
+  token: string;
+  participantId: string;
+  file: File;
+}): Promise<{ id: string; url: string }> {
+  const form = new FormData();
+  form.append('token', opts.token);
+  form.append('participantId', opts.participantId);
+  form.append('image', opts.file);
+  const res = await fetch('/api/call/chat-images', {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? res.statusText);
+  }
+  return res.json();
+}
+
 export function getEpisodeMeeting(episodeId: string): Promise<CallMeetingResponse> {
   return apiGet<CallMeetingResponse>(`/call/meetings?episodeId=${encodeURIComponent(episodeId)}`);
 }
@@ -194,7 +216,7 @@ export function startEpisodeMeeting(meetingId: string): Promise<CallStartRespons
 
 export function createMeetingInvite(
   meetingId: string,
-  body: { name?: string | null; email?: string | null },
+  body: { name?: string | null; email?: string | null; castId?: string | null },
 ): Promise<{
   joinUrl: string;
   invite: CallMeetingInvite | null;

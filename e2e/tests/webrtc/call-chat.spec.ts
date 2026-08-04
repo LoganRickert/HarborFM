@@ -223,4 +223,66 @@ test.describe('Call chat', () => {
     await chatPanel.getByRole('button', { name: /maximize/i }).click();
     await expect(chatPanel.getByTestId('chat-message-list')).toBeVisible();
   });
+
+  test('Chat image upload works live and 404s after call ends', async ({ page }) => {
+    test.setTimeout(45000);
+    await gotoEpisodeAndStartCall(page, episodeId);
+    await expect(page.getByRole('button', { name: /record segment/i })).toBeVisible({
+      timeout: 20000,
+    });
+
+    const sessionRes = await page.request.get(
+      `${API_BASE}/call/session?episodeId=${encodeURIComponent(episodeId)}`,
+    );
+    expect(sessionRes.ok()).toBeTruthy();
+    const session = await sessionRes.json();
+    const callToken = session.token as string;
+    const sessionId = session.sessionId as string;
+    const host = (session.participants as { id: string; isHost?: boolean }[]).find(
+      (p) => p.isHost,
+    );
+    expect(callToken).toBeTruthy();
+    expect(sessionId).toBeTruthy();
+    expect(host?.id).toBeTruthy();
+
+    // Minimal valid 1x1 JPEG
+    const jpeg = Buffer.from(
+      '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGfAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//Z',
+      'base64',
+    );
+
+    const uploadRes = await page.request.post(`${API_BASE}/call/chat-images`, {
+      multipart: {
+        token: callToken,
+        participantId: host!.id,
+        image: {
+          name: 'chat.jpg',
+          mimeType: 'image/jpeg',
+          buffer: jpeg,
+        },
+      },
+    });
+    if (!uploadRes.ok()) {
+      throw new Error(`Upload failed: ${uploadRes.status()} ${await uploadRes.text()}`);
+    }
+    const uploaded = await uploadRes.json();
+    expect(uploaded.id).toBeTruthy();
+    expect(uploaded.url).toMatch(/\/call\/chat-images\//);
+
+    const liveGet = await page.request.get(
+      `${API_BASE}/call/chat-images/${encodeURIComponent(sessionId)}/${encodeURIComponent(uploaded.id)}?token=${encodeURIComponent(callToken)}`,
+    );
+    expect(liveGet.status()).toBe(200);
+    expect(liveGet.headers()['content-type'] || '').toMatch(/image\/jpeg/i);
+
+    await endCallIfActive(page);
+    await expect(page.getByRole('button', { name: /record segment/i })).toHaveCount(0, {
+      timeout: 15000,
+    });
+
+    const endedGet = await page.request.get(
+      `${API_BASE}/call/chat-images/${encodeURIComponent(sessionId)}/${encodeURIComponent(uploaded.id)}?token=${encodeURIComponent(callToken)}`,
+    );
+    expect(endedGet.status()).toBe(404);
+  });
 });

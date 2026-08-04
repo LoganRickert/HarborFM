@@ -11,7 +11,8 @@ function prune(now: number) {
   // Best-effort pruning to avoid unbounded growth.
   if (now - lastPruneAt < 60_000) return;
   lastPruneAt = now;
-  const cutoff = now - 5 * 60_000; // keep 5 minutes of history
+  // Keep enough history for long windows (e.g. cast profile 1h submit throttle).
+  const cutoff = now - 2 * 60 * 60_000;
   for (const [k, ts] of lastSeen) {
     if (ts < cutoff) lastSeen.delete(k);
   }
@@ -71,55 +72,72 @@ export function userRateLimitPreHandler(opts: {
     // windowMs <= 0 disables the limiter (e.g. e2e overrides).
     if (windowMs <= 0) return;
 
-    const now = Date.now();
-    prune(now);
-
-    const key: BucketKey = `${bucket}:${userId}`;
-
-    if (max <= 1) {
-      const prev = lastSeen.get(key);
-      if (prev !== undefined && now - prev < windowMs) {
-        const retryAfterSec = Math.max(
-          1,
-          Math.ceil((windowMs - (now - prev)) / 1000),
-        );
-        reply
-          .code(429)
-          .header("Retry-After", String(retryAfterSec))
-          .send({
-            error: rateLimitErrorMessage({
-              windowMs,
-              retryAfterSec,
-              actionLabel,
-            }),
-          });
-        return;
-      }
-      lastSeen.set(key, now);
-      return;
-    }
-
-    let arr = timestamps.get(key) ?? [];
-    arr = arr.filter((t) => now - t < windowMs);
-    if (arr.length >= max) {
-      const oldestInWindow = arr[0]!;
-      const retryAfterSec = Math.max(
-        1,
-        Math.ceil((windowMs - (now - oldestInWindow)) / 1000),
-      );
+    const result = checkKeyRateLimit({
+      key: `${bucket}:${userId}`,
+      windowMs,
+      max,
+      actionLabel,
+    });
+    if (!result.ok) {
       reply
         .code(429)
-        .header("Retry-After", String(retryAfterSec))
-        .send({
-          error: rateLimitErrorMessage({
-            windowMs,
-            retryAfterSec,
-            actionLabel,
-          }),
-        });
-      return;
+        .header("Retry-After", String(result.retryAfterSec))
+        .send({ error: result.error });
     }
-    arr.push(now);
-    timestamps.set(key, arr);
   };
+}
+
+/**
+ * Check an arbitrary rate-limit key (cast id, IP, etc.). Returns ok or a 429 payload.
+ * windowMs <= 0 disables the limiter.
+ */
+export function checkKeyRateLimit(opts: {
+  key: string;
+  windowMs: number;
+  max?: number;
+  actionLabel?: string;
+}): { ok: true } | { ok: false; retryAfterSec: number; error: string } {
+  const windowMs = opts.windowMs;
+  const max = opts.max ?? 1;
+  const actionLabel = opts.actionLabel;
+  if (windowMs <= 0) return { ok: true };
+
+  const now = Date.now();
+  prune(now);
+  const key = opts.key as BucketKey;
+
+  if (max <= 1) {
+    const prev = lastSeen.get(key);
+    if (prev !== undefined && now - prev < windowMs) {
+      const retryAfterSec = Math.max(
+        1,
+        Math.ceil((windowMs - (now - prev)) / 1000),
+      );
+      return {
+        ok: false,
+        retryAfterSec,
+        error: rateLimitErrorMessage({ windowMs, retryAfterSec, actionLabel }),
+      };
+    }
+    lastSeen.set(key, now);
+    return { ok: true };
+  }
+
+  let arr = timestamps.get(key) ?? [];
+  arr = arr.filter((t) => now - t < windowMs);
+  if (arr.length >= max) {
+    const oldestInWindow = arr[0]!;
+    const retryAfterSec = Math.max(
+      1,
+      Math.ceil((windowMs - (now - oldestInWindow)) / 1000),
+    );
+    return {
+      ok: false,
+      retryAfterSec,
+      error: rateLimitErrorMessage({ windowMs, retryAfterSec, actionLabel }),
+    };
+  }
+  arr.push(now);
+  timestamps.set(key, arr);
+  return { ok: true };
 }

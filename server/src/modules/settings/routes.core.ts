@@ -294,6 +294,10 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         body.hostname !== undefined
           ? normalizeHostname(String(body.hostname))
           : current.hostname;
+      const timezone =
+        body.timezone !== undefined
+          ? String(body.timezone).trim()
+          : current.timezone ?? "";
       const websub_hub =
         body.websubHub !== undefined
           ? String(body.websubHub).trim()
@@ -710,6 +714,7 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         public_feeds_enabled,
         websub_discovery_enabled,
         hostname,
+        timezone,
         websub_hub,
         final_bitrate_kbps,
         final_channels,

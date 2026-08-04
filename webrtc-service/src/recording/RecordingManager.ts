@@ -36,6 +36,8 @@ export type FinalizedSegmentInfo = {
   producerId: string;
   filePathRelative: string;
   startedAt: number;
+  /** Wall-clock ms when this take finished (producer stopped / finalized). */
+  endedAt: number;
   source?: string;
   soundboardAssetId?: string;
   /** Soundboard segment volume 0..1 applied at finalization (default 1) */
@@ -73,7 +75,9 @@ export type RecordingManagerDeps = {
   recordingByRoom: Map<string, RecordingState>;
   mainAppUrl: string;
   getProducerSource?: (producerId: string) => string | undefined;
-  getProducerParticipant?: (producerId: string) => { participantId: string; participantName: string } | undefined;
+  getProducerParticipant?: (
+    producerId: string,
+  ) => { participantId: string; participantName: string; castId?: string } | undefined;
   getProducerSoundboardAsset?: (producerId: string) => string | undefined;
   /** Volume for soundboard segment; prefers value captured when user stopped that item */
   getSoundboardVolumeForSegment?: (roomId: string, producerId: string) => number;
@@ -266,7 +270,8 @@ export class RecordingManager {
     const result = await seg.recorder.stop(15000);
     clearTimeout(sigkill);
     if (this.deps.recordingByRoom.get(roomId) !== state) return;
-    const endMs = Date.now() - state.recordingStartedAt;
+    const endedAt = Date.now();
+    const endMs = endedAt - state.recordingStartedAt;
     if (result.success && result.filePath) {
       let volume: number | undefined;
       if (seg.source === "soundboard") {
@@ -279,6 +284,7 @@ export class RecordingManager {
         producerId,
         filePathRelative: result.filePath,
         startedAt: seg.startedAt,
+        endedAt,
         ...(seg.source ? { source: seg.source } : {}),
         ...(seg.soundboardAssetId
           ? { soundboardAssetId: seg.soundboardAssetId }
@@ -319,7 +325,7 @@ export class RecordingManager {
     }
 
     const epochMs = state.recordingEpochMs ?? state.recordingStartedAt;
-    const endMs = typeof recordingEndedAtMs === "number" ? recordingEndedAtMs : Date.now();
+    const sessionEndMs = typeof recordingEndedAtMs === "number" ? recordingEndedAtMs : Date.now();
     const dataDir = this.deps.recordingDataDir;
     mkdirSync(dirname(finalPath), { recursive: true });
 
@@ -329,16 +335,25 @@ export class RecordingManager {
       const soundboardAssetId =
         s.soundboardAssetId ??
         this.deps.getProducerSoundboardAsset?.(s.producerId);
+      // Prefer per-take finalize time; fall back to session end for legacy rows.
+      const takeEndedAt =
+        typeof s.endedAt === "number" && s.endedAt >= s.startedAt
+          ? s.endedAt
+          : sessionEndMs;
+      const startMs = Math.max(0, Math.round(s.startedAt - epochMs));
+      const endMs = Math.max(startMs, Math.round(takeEndedAt - epochMs));
       const seg: Record<string, unknown> = {
         segmentId: s.segmentId,
         producerId: s.producerId,
         participantId: participant?.participantId ?? null,
-        startMs: s.startedAt - epochMs,
-        endMs: epochMs ? endMs - epochMs : 0,
+        startMs,
+        endMs,
+        lengthMs: endMs - startMs,
         filePath: s.filePathRelative,
         codec: "libmp3lame",
       };
       if (participant?.participantName) seg.participantName = participant.participantName;
+      if (participant?.castId) seg.castId = participant.castId;
       if (source === "soundboard" || source === "phone") seg.source = source;
       if (source === "soundboard") {
         if (soundboardAssetId) seg.soundboardAssetId = soundboardAssetId;
@@ -394,7 +409,7 @@ export class RecordingManager {
       return;
     }
 
-    const recordingDurationMs = endMs - epochMs;
+    const recordingDurationMs = sessionEndMs - epochMs;
     const filterParts: string[] = [];
     const inputArgs: string[] = [];
     let inputIdx = 0;

@@ -170,7 +170,10 @@ export function TrackSettingsDialog({
       onReset();
       return;
     }
-    onChange({ ...DEFAULT_TRACK_SETTINGS });
+    onChange({
+      ...DEFAULT_TRACK_SETTINGS,
+      includeInTranscript: settings.includeInTranscript,
+    });
   };
 
   const applyAutoComp = () => {
@@ -530,6 +533,39 @@ export function TrackSettingsDialog({
                   {analyzeHint}
                 </p>
               ) : null}
+
+              <section className={styles.trackSettingsCard}>
+                <div className={styles.trackSettingsCardHead}>
+                  <h3 className={styles.trackSettingsCardTitle}>Transcript</h3>
+                  <button
+                    type="button"
+                    className={
+                      settings.includeInTranscript
+                        ? styles.trackSettingsMuteActive
+                        : styles.trackSettingsMute
+                    }
+                    aria-pressed={settings.includeInTranscript}
+                    aria-label={
+                      settings.includeInTranscript
+                        ? 'Exclude from transcript'
+                        : 'Include in transcript'
+                    }
+                    disabled={readOnly}
+                    onClick={() =>
+                      patch({
+                        includeInTranscript: !settings.includeInTranscript,
+                      })
+                    }
+                  >
+                    {settings.includeInTranscript ? 'On' : 'Off'}
+                  </button>
+                </div>
+                <p className={styles.trackSettingsHint}>
+                  Include this {isClip ? 'clip' : 'track'} when generating a
+                  multi-track transcript. Off by default for music and imported
+                  files.
+                </p>
+              </section>
             </div>
 
             {!readOnly ? (

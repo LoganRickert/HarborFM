@@ -1283,6 +1283,11 @@ export interface GroupCallMeetingEmailOptions {
   scheduledStartAt: string;
   /** IANA time zone from the host who scheduled (e.g. America/New_York). */
   hostTimeZone?: string | null;
+  /**
+   * IANA zone for the "When:" line (cast member zone when set).
+   * Falls back to hostTimeZone, then UTC.
+   */
+  displayTimeZone?: string | null;
   joinUrl: string;
   /** Suggest discuss/avoid topics page (same invite query as joinUrl when personalized). */
   topicsUrl?: string | null;
@@ -1308,6 +1313,16 @@ function meetingTimeZone(timeZone?: string | null): string {
   } catch {
     return "UTC";
   }
+}
+
+/** Zone used for email "When:" prose (display → host → UTC). */
+function meetingDisplayTimeZone(opts: {
+  displayTimeZone?: string | null;
+  hostTimeZone?: string | null;
+}): string {
+  const display = opts.displayTimeZone?.trim();
+  if (display) return meetingTimeZone(display);
+  return meetingTimeZone(opts.hostTimeZone);
 }
 
 /** Host-local date/time with AM/PM (e.g. Wed, Jul 22, 2026, 3:00 PM EDT). */
@@ -1341,7 +1356,10 @@ function safeEmailBaseUrl(joinUrl: string): string {
 }
 
 function meetingDetailsText(opts: GroupCallMeetingEmailOptions): string[] {
-  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const when = formatMeetingWhen(
+    opts.scheduledStartAt,
+    meetingDisplayTimeZone(opts),
+  );
   const lines = [
     `Show: ${opts.podcastTitle}`,
     `Episode: ${opts.episodeTitle}`,
@@ -1374,7 +1392,10 @@ function meetingDetailsText(opts: GroupCallMeetingEmailOptions): string[] {
 }
 
 function meetingDetailsHtml(opts: GroupCallMeetingEmailOptions): string {
-  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const when = formatMeetingWhen(
+    opts.scheduledStartAt,
+    meetingDisplayTimeZone(opts),
+  );
   const cover = opts.coverArtUrl?.trim()
     ? `<p style="margin: 0 0 20px; text-align: center;">
         <img src="${escapeHtml(opts.coverArtUrl.trim())}" alt="" width="120" height="120" style="display: inline-block; width: 120px; height: 120px; border-radius: 12px; object-fit: cover; border: 1px solid ${STYLE.border};" />
@@ -1533,8 +1554,18 @@ export function buildGroupCallMeetingReminderEmail(
     /\.$/,
     "",
   );
-  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const when = formatMeetingWhen(
+    opts.scheduledStartAt,
+    meetingDisplayTimeZone(opts),
+  );
   const subject = `REMINDER: ${opts.podcastTitle} - ${opts.episodeTitle}`;
+  const usedCastTimeZone = Boolean(opts.displayTimeZone?.trim());
+  const tzCheckText = usedCastTimeZone
+    ? "This time is shown in your time zone."
+    : "Double-check the time above in case your calendar is in a different time zone.";
+  const tzCheckHtml = usedCastTimeZone
+    ? "This time is shown in your time zone."
+    : "Double-check that time if your calendar uses a different time zone.";
   const text = [
     greeting,
     "",
@@ -1542,7 +1573,7 @@ export function buildGroupCallMeetingReminderEmail(
     "",
     `When: ${when}`,
     "",
-    "Double-check the time above in case your calendar is in a different time zone.",
+    tzCheckText,
     "",
     ...meetingDetailsText(opts),
     "",
@@ -1556,7 +1587,7 @@ export function buildGroupCallMeetingReminderEmail(
     subject,
     eyebrow: "Reminder",
     introHtml: `<p style="margin: 0 0 16px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)} <strong>In just ${escapeHtml(lead)}</strong>: your group call is coming up.</p>
-      <p style="margin: 0 0 24px; font-size: 0.9375rem; color: ${STYLE.textMuted};">Starts <strong style="color: ${STYLE.text};">${escapeHtml(when)}</strong>. Double-check that time if your calendar uses a different time zone.</p>`,
+      <p style="margin: 0 0 24px; font-size: 0.9375rem; color: ${STYLE.textMuted};">Starts <strong style="color: ${STYLE.text};">${escapeHtml(when)}</strong>. ${escapeHtml(tzCheckHtml)}</p>`,
     detailsHtml: meetingDetailsHtml(opts),
     eventJsonLd: opts.eventJsonLd,
     trackingPixelUrl: opts.trackingPixelUrl,
@@ -1572,7 +1603,7 @@ export function buildGroupCallMeetingRescheduledEmail(
     : "Hi,";
   const subject = `Meeting rescheduled: ${opts.podcastTitle} - ${opts.episodeTitle}`;
   const prev = opts.previousScheduledStartAt
-    ? `Previously: ${formatMeetingWhen(opts.previousScheduledStartAt, opts.hostTimeZone)}`
+    ? `Previously: ${formatMeetingWhen(opts.previousScheduledStartAt, meetingDisplayTimeZone(opts))}`
     : null;
   const text = [
     greeting,
@@ -1610,6 +1641,7 @@ export function buildGroupCallMeetingCancelledEmail(
     | "episodeTitle"
     | "scheduledStartAt"
     | "hostTimeZone"
+    | "displayTimeZone"
     | "guestName"
     | "joinUrl"
     | "coverArtUrl"
@@ -1620,7 +1652,10 @@ export function buildGroupCallMeetingCancelledEmail(
     ? `Hi ${opts.guestName.trim()},`
     : "Hi,";
   const subject = `Meeting cancelled: ${opts.podcastTitle} - ${opts.episodeTitle}`;
-  const when = formatMeetingWhen(opts.scheduledStartAt, opts.hostTimeZone);
+  const when = formatMeetingWhen(
+    opts.scheduledStartAt,
+    meetingDisplayTimeZone(opts),
+  );
   const text = [
     greeting,
     "",
@@ -1825,6 +1860,8 @@ export function buildCastInfoRequestEmail(opts: {
   /** Clicker email shown as an alternate contact address. */
   replyToEmail: string;
   baseUrl: string;
+  /** Self-serve profile update form URL (latest invite token). */
+  updateUrl?: string | null;
 }): { subject: string; text: string; html: string } {
   const greeting = opts.castName?.trim()
     ? `Hi ${opts.castName.trim()},`
@@ -1835,6 +1872,7 @@ export function buildCastInfoRequestEmail(opts: {
     .filter(Boolean);
   const photoUrl = opts.photoUrl?.trim() || "";
   const replyToEmail = opts.replyToEmail.trim();
+  const updateUrl = opts.updateUrl?.trim() || "";
   const photoNote = photoUrl
     ? "Your current photo is included below."
     : opts.photoOnFileUnlinked
@@ -1844,13 +1882,23 @@ export function buildCastInfoRequestEmail(opts: {
     links.length > 0
       ? ["Current Social Links:", ...links.map((u) => `- ${u}`)]
       : ["Current Social Links: None"];
+  const formSection = updateUrl
+    ? [
+        "Use this link to update your preferred name, nickname, description, photo, and social links:",
+        updateUrl,
+        "",
+        "Your changes go to the show team for approval. You will get an email when they are approved.",
+      ]
+    : [
+        `Please reply to this email with an updated photo (attach the image or provide a link) and any social links you want to add or update for ${opts.podcastTitle}.`,
+      ];
   const replySection = replyToEmail
-    ? `Please reply to this email, or send an email directly to ${replyToEmail}`
+    ? `You can also reply to this email, or send an email directly to ${replyToEmail}`
     : "";
   const text = [
     greeting,
     "",
-    `Please reply to this email with an updated photo (attach the image or provide a link) and any social links you want to add or update for ${opts.podcastTitle}.`,
+    ...formSection,
     "",
     photoNote,
     "",
@@ -1893,14 +1941,20 @@ export function buildCastInfoRequestEmail(opts: {
           .join("")}
       </ul>`
       : `<p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.textMuted};">Current Social Links: None</p>`;
+  const ctaHtml = updateUrl
+    ? `<p style="margin: 0 0 16px; font-size: 0.9375rem; color: ${STYLE.text};">Update your preferred name, nickname, description, photo, and social links. Changes go to the show team for approval.</p>
+      <p style="margin: 0 0 20px; text-align: center;">
+        <a href="${escapeHtml(updateUrl)}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Update Your Profile</a>
+      </p>`
+    : `<p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.text};">Please reply to this email with an updated photo (attach the image or provide a link) and any social links to add or update.</p>`;
   const replyHtml = replyToEmail
-    ? `<p style="margin: 0; font-size: 0.9375rem; color: ${STYLE.text};">Please reply to this email, or send an email directly to <a href="mailto:${escapeHtml(replyToEmail)}" style="color: ${STYLE.accent}; text-decoration: underline;">${escapeHtml(replyToEmail)}</a></p>`
+    ? `<p style="margin: 0; font-size: 0.9375rem; color: ${STYLE.text};">You can also reply to this email, or send an email directly to <a href="mailto:${escapeHtml(replyToEmail)}" style="color: ${STYLE.accent}; text-decoration: underline;">${escapeHtml(replyToEmail)}</a></p>`
     : "";
 
   const detailsHtml = `
       ${cover}
       <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
-      <p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.text};">Please reply to this email with an updated photo (attach the image or provide a link) and any social links to add or update.</p>
+      ${ctaHtml}
       ${photoHtml}
       ${linksHtml}
       ${replyHtml}
@@ -1909,6 +1963,71 @@ export function buildCastInfoRequestEmail(opts: {
     baseUrl,
     subject,
     eyebrow: "Cast Profile Update",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)}</p>`,
+    detailsHtml,
+  });
+  return { subject, text, html };
+}
+
+export function buildCastProfilePendingNotifyEmail(opts: {
+  castName?: string | null;
+  podcastTitle: string;
+  manageUrl: string;
+  baseUrl: string;
+}): { subject: string; text: string; html: string } {
+  const castLabel = opts.castName?.trim() || "A cast member";
+  const subject = `Cast profile update pending: ${opts.podcastTitle}`;
+  const text = [
+    `${castLabel} submitted a profile update for ${opts.podcastTitle}.`,
+    "",
+    "Open Show Cast in HarborFM to review and approve the changes.",
+    opts.manageUrl,
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.baseUrl);
+  const detailsHtml = `
+      <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
+      <p style="margin: 0 0 20px; font-size: 0.9375rem; color: ${STYLE.text};">${escapeHtml(castLabel)} submitted a profile update. Open Show Cast to review and approve.</p>
+      <p style="margin: 0; text-align: center;">
+        <a href="${escapeHtml(opts.manageUrl)}" style="display: inline-block; padding: 12px 24px; background: ${STYLE.accent}; color: ${STYLE.bg}; font-weight: 600; text-decoration: none; border-radius: 8px;">Open Show Cast</a>
+      </p>
+  `;
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Pending Cast Update",
+    introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">A cast profile update is waiting for your review.</p>`,
+    detailsHtml,
+  });
+  return { subject, text, html };
+}
+
+export function buildCastProfileApprovedEmail(opts: {
+  castName?: string | null;
+  podcastTitle: string;
+  baseUrl: string;
+}): { subject: string; text: string; html: string } {
+  const greeting = opts.castName?.trim()
+    ? `Hi ${opts.castName.trim()},`
+    : "Hi,";
+  const subject = `Your cast profile was updated: ${opts.podcastTitle}`;
+  const text = [
+    greeting,
+    "",
+    `Your profile update for ${opts.podcastTitle} was approved and is now live.`,
+    "",
+    APP_NAME,
+  ].join("\n");
+  const baseUrl = safeEmailBaseUrl(opts.baseUrl);
+  const detailsHtml = `
+      <p style="margin: 0 0 8px; font-size: 0.9375rem; color: ${STYLE.text};"><strong>${escapeHtml(opts.podcastTitle)}</strong></p>
+      <p style="margin: 0; font-size: 0.9375rem; color: ${STYLE.text};">Your profile update was approved and is now live on the show.</p>
+  `;
+  const html = wrapMeetingEmail({
+    baseUrl,
+    subject,
+    eyebrow: "Profile Update Approved",
     introHtml: `<p style="margin: 0 0 24px; font-size: 1rem; color: ${STYLE.text};">${escapeHtml(greeting)}</p>`,
     detailsHtml,
   });

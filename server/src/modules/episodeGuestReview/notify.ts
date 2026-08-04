@@ -12,6 +12,7 @@ import {
   getEpisodeAlertPublicOrigin,
 } from "../episodeAlerts/publicUrls.js";
 import type { EpisodeForAlert } from "../episodeAlerts/repo.js";
+import { getEpisodeCast } from "../episodes/repo.js";
 import {
   buildEpisodeGuestReviewInviteEmail,
   buildEpisodeGuestReviewResponseEmail,
@@ -57,7 +58,7 @@ type Recipient = {
   isHost: boolean;
 };
 
-function collectRecipients(meeting: MeetingRow): Recipient[] {
+function collectRecipients(meeting: MeetingRow, episodeId: string): Recipient[] {
   const ctx = getMeetingContext(meeting);
   const byEmail = new Map<string, Recipient>();
   const hostEmail = ctx.hostEmail?.trim();
@@ -76,6 +77,18 @@ function collectRecipients(meeting: MeetingRow): Recipient[] {
     byEmail.set(key, {
       email,
       displayName: invite.displayName,
+      isHost: false,
+    });
+  }
+  // Episode cast with email who were not already meeting recipients.
+  for (const member of getEpisodeCast(episodeId)) {
+    const email = member.email?.trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (byEmail.has(key)) continue;
+    byEmail.set(key, {
+      email,
+      displayName: member.name || null,
       isHost: false,
     });
   }
@@ -124,8 +137,8 @@ function ensureReviewRow(
 
 /**
  * When an episode first becomes preview-eligible (scheduled, or published and
- * unlisted), email the meeting host and emailed invitees a review preview link.
- * Idempotent via guestReviewNotifiedAt.
+ * unlisted), email the meeting host, emailed invitees, and episode cast members
+ * who have an email a review preview link. Idempotent via guestReviewNotifiedAt.
  */
 export async function notifyGuestReviewOnPreviewEligible(
   episodeId: string,
@@ -143,7 +156,7 @@ export async function notifyGuestReviewOnPreviewEligible(
   if (!meeting) return;
   if (meeting.guestReviewNotifiedAt) return;
 
-  const recipients = collectRecipients(meeting);
+  const recipients = collectRecipients(meeting, episodeId);
   if (recipients.length === 0) {
     setGuestReviewNotified(meeting.id);
     return;

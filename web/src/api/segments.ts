@@ -607,10 +607,19 @@ export function generateSegmentTranscript(episodeId: string, segmentId: string, 
     method: 'POST',
     credentials: 'include',
     headers: csrfHeaders(),
-  }).then((r) => {
+  }).then(async (r) => {
     if (r.status === 202 || r.status === 409) return;
-    if (r.status === 200) return; // existing text returned when regenerate not set
-    if (!r.ok) return r.json().then((err: { error?: string }) => { throw new Error(err.error ?? r.statusText); });
+    // Existing transcript only when regenerate was not requested.
+    if (r.status === 200 && !regenerate) return;
+    if (r.status === 200 && regenerate) {
+      throw new Error(
+        'Regenerate did not start (server returned existing transcript). Try again.',
+      );
+    }
+    if (!r.ok) {
+      const err = (await r.json().catch(() => ({}))) as { error?: string };
+      throw new Error(err.error ?? r.statusText);
+    }
   });
 }
 

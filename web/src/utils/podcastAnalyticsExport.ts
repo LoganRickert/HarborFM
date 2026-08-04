@@ -1,4 +1,5 @@
 import type { PodcastAnalytics } from '../api/podcasts';
+import { serverLocalToUtcDateHour } from './analyticsHourTimezone';
 
 export type AnalyticsDateRange = { startDate: string; endDate: string };
 
@@ -11,6 +12,7 @@ export type AnalyticsExportPodcast = {
 type LongRow = {
   table: string;
   date: string;
+  hour: string | number | '';
   episode_id: string;
   episode_title: string;
   location: string;
@@ -29,6 +31,8 @@ const METRIC_DEFINITIONS = {
   rawAudioFetches:
     'Full-file or 250 KB+ audio requests before daily dedup. Tiny probes are excluded.',
   downloadsByLocation: 'Human Downloads broken down by location (when available).',
+  downloadsByHour:
+    'Downloads by hour of day in the selected date range. In this export, date and hour are UTC.',
   listeners: 'Human clients (human_count).',
   crawlers: 'Bots and directory crawlers (bot_count).',
   retention:
@@ -38,6 +42,7 @@ const METRIC_DEFINITIONS = {
 const CSV_COLUMNS = [
   'table',
   'date',
+  'hour',
   'episode_id',
   'episode_title',
   'location',
@@ -153,6 +158,7 @@ function buildLongRows(
     rows.push({
       table: 'meta',
       date: field,
+      hour: '',
       episode_id: '',
       episode_title: '',
       location: '',
@@ -166,6 +172,7 @@ function buildLongRows(
     rows.push({
       table: 'episodes',
       date: '',
+      hour: '',
       episode_id: ep.id,
       episode_title: ep.title,
       location: '',
@@ -179,6 +186,7 @@ function buildLongRows(
     rows.push({
       table: 'feed_health',
       date: row.statDate,
+      hour: '',
       episode_id: '',
       episode_title: '',
       location: '',
@@ -192,6 +200,7 @@ function buildLongRows(
     rows.push({
       table: 'raw_audio_fetches',
       date: row.statDate,
+      hour: '',
       episode_id: row.episodeId,
       episode_title: titles.get(row.episodeId) ?? '',
       location: '',
@@ -205,6 +214,7 @@ function buildLongRows(
     rows.push({
       table: 'downloads',
       date: row.statDate,
+      hour: '',
       episode_id: row.episodeId,
       episode_title: titles.get(row.episodeId) ?? '',
       location: '',
@@ -218,9 +228,25 @@ function buildLongRows(
     rows.push({
       table: 'downloads_by_location',
       date: row.statDate,
+      hour: '',
       episode_id: row.episodeId,
       episode_title: titles.get(row.episodeId) ?? '',
       location: row.location,
+      source: row.source,
+      listeners: row.humanCount,
+      crawlers: row.botCount,
+    });
+  }
+
+  for (const row of analytics.episodeListensHourly) {
+    const utc = serverLocalToUtcDateHour(row.statDate, row.statHour, analytics.statTimezone);
+    rows.push({
+      table: 'downloads_by_hour',
+      date: utc.date,
+      hour: utc.hour,
+      episode_id: row.episodeId,
+      episode_title: titles.get(row.episodeId) ?? '',
+      location: '',
       source: row.source,
       listeners: row.humanCount,
       crawlers: row.botCount,
@@ -248,6 +274,9 @@ function buildExportMeta(
     downloads: METRIC_DEFINITIONS.downloads,
     uniqueListeners: METRIC_DEFINITIONS.uniqueListeners,
     downloadsByLocation: METRIC_DEFINITIONS.downloadsByLocation,
+    downloadsByHour: METRIC_DEFINITIONS.downloadsByHour,
+    statTimezone: analytics?.statTimezone ?? '',
+    hourlyExportTimezone: 'UTC',
     retention: METRIC_DEFINITIONS.retention,
     listeners: METRIC_DEFINITIONS.listeners,
     crawlers: METRIC_DEFINITIONS.crawlers,
@@ -288,6 +317,18 @@ export function downloadAnalyticsJson(
   analytics: PodcastAnalytics,
   range: AnalyticsDateRange = resolveAnalyticsDateRange(analytics),
 ): void {
+  const episodeListensHourlyUtc = analytics.episodeListensHourly.map((row) => {
+    const utc = serverLocalToUtcDateHour(row.statDate, row.statHour, analytics.statTimezone);
+    return {
+      episodeId: row.episodeId,
+      statDate: utc.date,
+      statHour: utc.hour,
+      source: row.source,
+      botCount: row.botCount,
+      humanCount: row.humanCount,
+      timezone: 'UTC',
+    };
+  });
   const payload = {
     meta: buildExportMeta(podcast, range, analytics),
     rssDaily: analytics.rssDaily,
@@ -295,9 +336,11 @@ export function downloadAnalyticsJson(
     episodeDaily: analytics.episodeDaily,
     episodeLocationDaily: analytics.episodeLocationDaily,
     episodeListensDaily: analytics.episodeListensDaily,
+    episodeListensHourly: episodeListensHourlyUtc,
     uniqueListeners: analytics.uniqueListeners,
     uniqueListenersByEpisode: analytics.uniqueListenersByEpisode,
     retentionByEpisode: analytics.retentionByEpisode,
+    statTimezone: analytics.statTimezone,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   downloadBlob(blob, buildAnalyticsExportFilename(podcast, range, 'json'));
@@ -429,6 +472,36 @@ export async function downloadAnalyticsExcel(
   locationSheet.getColumn(5).width = 24;
   locationSheet.getColumn(6).width = 12;
   locationSheet.getColumn(7).width = 12;
+
+  const hourlySheet = workbook.addWorksheet('Downloads by hour');
+  hourlySheet.addRow([
+    'date',
+    'hour',
+    'episode_id',
+    'episode_title',
+    'source',
+    'listeners',
+    'crawlers',
+  ]);
+  for (const row of analytics.episodeListensHourly) {
+    const utc = serverLocalToUtcDateHour(row.statDate, row.statHour, analytics.statTimezone);
+    hourlySheet.addRow([
+      utc.date,
+      utc.hour,
+      row.episodeId,
+      titles.get(row.episodeId) ?? '',
+      row.source,
+      row.humanCount,
+      row.botCount,
+    ]);
+  }
+  hourlySheet.getColumn(1).width = 14;
+  hourlySheet.getColumn(2).width = 8;
+  hourlySheet.getColumn(3).width = 36;
+  hourlySheet.getColumn(4).width = 40;
+  hourlySheet.getColumn(5).width = 24;
+  hourlySheet.getColumn(6).width = 12;
+  hourlySheet.getColumn(7).width = 12;
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {

@@ -469,6 +469,23 @@
   flex-wrap: wrap;
 }
 
+@media (max-width: 480px) {
+  .analyticsTabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .analyticsTab,
+  .analyticsTabActive {
+    flex: unset;
+    width: 100%;
+    min-width: 0;
+    padding: 0.5rem 0.5rem;
+    font-size: 0.8125rem;
+  }
+}
+
 .analyticsTab {
   flex: 1;
   padding: 0.5rem 1rem;

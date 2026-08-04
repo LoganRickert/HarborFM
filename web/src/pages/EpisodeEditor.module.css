@@ -3945,6 +3945,20 @@
     flex: 1;
   }
 }
+.transcriptCardsToolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+
+.transcriptCardsToolbar .episodeTranscriptUploadBtn {
+  width: auto;
+}
+
+.transcriptGenerateError {
+  margin: 10px 0 0.75rem;
+}
+
 .transcriptCards {
   display: flex;
   flex-direction: column;
@@ -3975,6 +3989,19 @@
   flex: 1;
   min-width: 0;
 }
+@media (max-width: 640px) {
+  .transcriptCardInner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .transcriptCardActions {
+    margin: 0 0.75rem 0.75rem;
+    justify-content: center;
+  }
+  .transcriptCardInner .transcriptCardTextEdit {
+    width: 100%;
+  }
+}
 .transcriptCardText {
   padding: 0.75rem;
   font-size: 0.9375rem;
@@ -3987,6 +4014,29 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.transcriptCardTextEdit {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.75rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  resize: none;
+  field-sizing: content;
+}
+.transcriptCardTextEdit:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 .transcriptCardFooter {
   display: flex;
@@ -4165,23 +4215,19 @@
   flex-grow: 1;
 }
 .episodeTranscriptUploadRow {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
 }
 @media (max-width: 640px) {
   .episodeTranscriptUploadRow {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .episodeTranscriptUploadBtn {
-    width: 100%;
-    justify-content: center;
+    grid-template-columns: 1fr;
   }
 }
 .episodeTranscriptUploadBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   font-size: 0.9375rem;
@@ -4191,9 +4237,11 @@
   cursor: pointer;
   color: var(--text);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: 100%;
   white-space: nowrap;
+}
+.episodeTranscriptUploadBtn > svg {
+  flex-shrink: 0;
 }
 .episodeTranscriptUploadBtn:hover:not(:disabled) {
   border-color: var(--accent);
@@ -6395,6 +6443,53 @@ a.manageSegmentAction .manageSegmentActionHint {
   gap: 0.5rem;
 }
 
+.segmentEditorV2LaneStack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.segmentEditorV2TranscriptLabel {
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.segmentEditorV2TranscriptLane {
+  position: relative;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.segmentEditorV2TranscriptCue {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  box-sizing: border-box;
+  padding: 1px 4px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  align-items: unset;
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text-muted);
+  background: rgba(0, 80, 70, 0.45);
+  border: 1px solid rgba(0, 212, 170, 0.22);
+  border-radius: 3px;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  pointer-events: none;
+  min-width: 4px;
+}
+
 .segmentEditorV2TracksCol {
   grid-column: 2;
   grid-row: 3;
@@ -6483,6 +6578,71 @@ a.manageSegmentAction .manageSegmentActionHint {
 }
 
 .segmentEditorV2LaneNameBtn:disabled {
+  cursor: default;
+}
+
+.segmentEditorV2LaneCastBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.segmentEditorV2LaneCastBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 212, 170, 0.1);
+}
+
+.segmentEditorV2LaneCastBtn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.segmentEditorV2LaneCastImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.assignTrackCastDialog {
+  max-width: min(480px, calc(100vw - 20px));
+  width: 100%;
+  gap: 0.75rem;
+}
+
+.assignTrackCastClearRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.assignTrackCastClearRow .secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.assignTrackCastSelectActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: rgba(0, 212, 170, 0.12);
+  color: var(--accent);
   cursor: default;
 }
 

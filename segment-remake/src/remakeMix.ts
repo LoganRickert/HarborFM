@@ -77,6 +77,8 @@ export type MultitrackSegmentEntry = {
   lengthMs?: number;
   participantName?: string | null;
   participantId?: string | null;
+  /** Show cast member id when this take belongs to a cast-bound participant. */
+  castId?: string | null;
   source?: string | null;
   soundboardAssetId?: string | null;
   /** Reaper item PLAYRATE first param (timeline speed). Default 1. */

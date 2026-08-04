@@ -178,7 +178,7 @@ export function ShowNotesPanel({ episodeId, canEdit }: ShowNotesPanelProps) {
   });
 
   const items = data?.items;
-  const guestVisible = data?.guestVisible ?? false;
+  const guestVisible = data?.guestVisible ?? true;
   const noteItems = useMemo(
     () => (items ?? []).filter((i) => i.tag === 'none'),
     [items],

@@ -6,6 +6,7 @@ import {
   HOST_AWAY_GRACE_WITH_GUESTS_MS,
 } from "../config.js";
 import { listReservedJoinCodes, markMeetingEndedBySessionId } from "../modules/call/meetings.js";
+import { deleteCallChatImagesForSession } from "../modules/call/chatImages.js";
 
 export interface CallParticipant {
   id: string;
@@ -19,6 +20,12 @@ export interface CallParticipant {
   disconnected?: boolean;
   /** How the participant joined. Phone dial-in (incl. FakeDialIn) uses "phone". */
   source?: "phone";
+  /** Show-cast member bound for roster avatar. */
+  castId?: string;
+  /** Photo URL for roster avatar (external or public artwork path). */
+  castPhotoUrl?: string;
+  /** True when bound via meeting invite; name changes must not clear cast; may be private. */
+  castLocked?: boolean;
 }
 
 export interface RecordingEvent {
@@ -82,6 +89,7 @@ function ensureHostAwayChecker(
   if (hostAwayCheckInterval != null) return;
   hostAwayCheckInterval = setInterval(() => {
     const now = Date.now();
+    const toEnd: string[] = [];
     for (const session of sessionsById.values()) {
       if (session.ended) continue;
       let shouldEnd = false;
@@ -93,14 +101,16 @@ function ensureHostAwayChecker(
         const grace = getHostDisconnectGraceMs(session);
         shouldEnd = now - session.lastHostHeartbeatAt >= grace;
       }
-      if (shouldEnd) {
-        session.ended = true;
-        const result = onSessionEnd(session);
-        if (result && typeof (result as Promise<unknown>).catch === "function") {
-          (result as Promise<void>).catch((err) =>
-            console.error("[hostAwayChecker] onSessionEnd failed:", err),
-          );
-        }
+      if (shouldEnd) toEnd.push(session.sessionId);
+    }
+    for (const sessionId of toEnd) {
+      const endedSession = endSession(sessionId);
+      if (!endedSession) continue;
+      const result = onSessionEnd(endedSession);
+      if (result && typeof (result as Promise<unknown>).catch === "function") {
+        (result as Promise<void>).catch((err) =>
+          console.error("[hostAwayChecker] onSessionEnd failed:", err),
+        );
       }
     }
   }, HOST_AWAY_CHECK_INTERVAL_MS);
@@ -232,7 +242,12 @@ export function addParticipant(
   sessionId: string,
   participantId: string,
   name: string,
-  opts?: { source?: "phone" },
+  opts?: {
+    source?: "phone";
+    castId?: string;
+    castPhotoUrl?: string;
+    castLocked?: boolean;
+  },
 ): CallParticipant | null {
   const session = sessionsById.get(sessionId);
   if (!session || session.ended) return null;
@@ -243,6 +258,11 @@ export function addParticipant(
     joinedAt: Date.now(),
     ...(opts?.source === "phone" ? { source: "phone" as const } : {}),
   };
+  if (opts?.castId && opts?.castPhotoUrl) {
+    p.castId = opts.castId;
+    p.castPhotoUrl = opts.castPhotoUrl;
+    if (opts.castLocked) p.castLocked = true;
+  }
   session.participants.push(p);
   return p;
 }
@@ -326,6 +346,50 @@ export function setParticipantName(
   return true;
 }
 
+/** Apply or clear unlocked cast avatar fields. No-op when castLocked. */
+export function setParticipantCastAvatar(
+  sessionId: string,
+  participantId: string,
+  avatar: { castId: string; castPhotoUrl: string; castLocked?: boolean } | null,
+): boolean {
+  const session = sessionsById.get(sessionId);
+  if (!session || session.ended) return false;
+  const p = session.participants.find((x) => x.id === participantId);
+  if (!p) return false;
+  if (p.castLocked && !avatar?.castLocked) return false;
+  if (!avatar) {
+    if (p.castLocked) return false;
+    delete p.castId;
+    delete p.castPhotoUrl;
+    delete p.castLocked;
+    return true;
+  }
+  p.castId = avatar.castId;
+  p.castPhotoUrl = avatar.castPhotoUrl;
+  if (avatar.castLocked) p.castLocked = true;
+  else delete p.castLocked;
+  return true;
+}
+
+/** True when a live session for this podcast has an invite-locked participant with this castId. */
+export function isPrivateCastLockedInLiveCall(
+  podcastId: string,
+  castId: string,
+): boolean {
+  for (const session of sessionsById.values()) {
+    if (session.ended) continue;
+    if (session.podcastId !== podcastId) continue;
+    if (
+      session.participants.some(
+        (p) => p.castLocked === true && p.castId === castId,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function endSession(sessionId: string): CallSession | null {
   const session = sessionsById.get(sessionId);
   if (!session) return null;
@@ -339,6 +403,11 @@ export function endSession(sessionId: string): CallSession | null {
     } catch (err) {
       console.error("[callSession] markMeetingEndedBySessionId failed:", err);
     }
+  }
+  try {
+    deleteCallChatImagesForSession(sessionId);
+  } catch (err) {
+    console.error("[callSession] deleteCallChatImagesForSession failed:", err);
   }
   return session;
 }

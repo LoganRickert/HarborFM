@@ -240,6 +240,17 @@ export interface PodcastAnalytics {
     botCount: number;
     humanCount: number;
   }>;
+  /** Hourly Downloads (server-local date + hour). */
+  episodeListensHourly: Array<{
+    episodeId: string;
+    statDate: string;
+    statHour: number;
+    source: string;
+    botCount: number;
+    humanCount: number;
+  }>;
+  /** IANA timezone used for stat_date / stat_hour storage. */
+  statTimezone: string;
   /** Distinct clients with a Download in the selected range. */
   uniqueListeners: number;
   uniqueListenersByEpisode: Array<{ episodeId: string; uniqueListeners: number }>;
@@ -253,6 +264,7 @@ export interface PodcastAnalytics {
     uniqueListeners?: string;
     feedHealth?: string;
     retention?: string;
+    downloadsByHour?: string;
   };
 }
 
@@ -262,17 +274,27 @@ function mapAnalyticsFromServer(raw: {
   episode_daily?: Array<{ episode_id?: string; stat_date?: string; source?: string; bot_count?: number; human_count?: number }>;
   episode_location_daily?: Array<{ episode_id?: string; stat_date?: string; location?: string; source?: string; bot_count?: number; human_count?: number }>;
   episode_listens_daily?: Array<{ episode_id?: string; stat_date?: string; source?: string; bot_count?: number; human_count?: number }>;
+  episode_listens_hourly?: Array<{
+    episode_id?: string;
+    stat_date?: string;
+    stat_hour?: number;
+    source?: string;
+    bot_count?: number;
+    human_count?: number;
+  }>;
   unique_listeners?: number;
   unique_listeners_by_episode?: Array<{ episode_id?: string; unique_listeners?: number }>;
   retention_by_episode?: Array<{
     episode_id?: string;
     buckets?: Array<{ bucket?: number; clients?: number; pct?: number }>;
   }>;
+  stat_timezone?: string;
   methodology?: {
     downloads?: string;
     unique_listeners?: string;
     feed_health?: string;
     retention?: string;
+    downloads_by_hour?: string;
   };
 }): PodcastAnalytics {
   return {
@@ -305,6 +327,15 @@ function mapAnalyticsFromServer(raw: {
       botCount: r.bot_count ?? 0,
       humanCount: r.human_count ?? 0,
     })),
+    episodeListensHourly: (raw.episode_listens_hourly ?? []).map((r) => ({
+      episodeId: r.episode_id ?? '',
+      statDate: r.stat_date ?? '',
+      statHour: r.stat_hour ?? 0,
+      source: r.source ?? 'Other',
+      botCount: r.bot_count ?? 0,
+      humanCount: r.human_count ?? 0,
+    })),
+    statTimezone: raw.stat_timezone || 'UTC',
     uniqueListeners: raw.unique_listeners ?? 0,
     uniqueListenersByEpisode: (raw.unique_listeners_by_episode ?? []).map((r) => ({
       episodeId: r.episode_id ?? '',
@@ -324,6 +355,7 @@ function mapAnalyticsFromServer(raw: {
           uniqueListeners: raw.methodology.unique_listeners,
           feedHealth: raw.methodology.feed_health,
           retention: raw.methodology.retention,
+          downloadsByHour: raw.methodology.downloads_by_hour,
         }
       : undefined,
   };
@@ -556,7 +588,11 @@ export function deleteSubscriberToken(podcastId: string, tokenId: string) {
 }
 
 // Show cast (hosts and guests)
-export type CastMember = CastResponse & { photoFilename?: string | null };
+export type CastMember = CastResponse & {
+  photoFilename?: string | null;
+  hasPendingProfileUpdate?: boolean;
+  hasActiveProfileInvite?: boolean;
+};
 
 export function listCast(
   podcastId: string,
@@ -567,6 +603,8 @@ export function listCast(
     sort?: 'newest' | 'oldest';
     /** Exclude cast already assigned to this episode */
     episodeId?: string;
+    /** Only cast with a pending profile update */
+    pendingOnly?: boolean;
   }
 ) {
   const search = new URLSearchParams();
@@ -575,6 +613,7 @@ export function listCast(
   if (params?.q) search.set('q', params.q);
   if (params?.sort) search.set('sort', params.sort);
   if (params?.episodeId) search.set('episodeId', params.episodeId);
+  if (params?.pendingOnly) search.set('pendingOnly', '1');
   const query = search.toString();
   return apiGet<{ cast: CastMember[]; total: number }>(`/podcasts/${podcastId}/cast${query ? `?${query}` : ''}`);
 }
@@ -591,11 +630,93 @@ export function deleteCast(podcastId: string, castId: string) {
   return apiDelete(`/podcasts/${podcastId}/cast/${castId}`);
 }
 
-/** Email the cast member asking them to reply with photo / social link updates. */
+/** Email the cast member a self-serve profile update link. */
 export function requestCastInfoUpdate(podcastId: string, castId: string) {
   return apiPost<{ ok: boolean }>(
     `/podcasts/${podcastId}/cast/${castId}/request-info`,
     {},
+  );
+}
+
+export function expireCastProfileInvite(podcastId: string, castId: string) {
+  return apiPost<CastMember>(
+    `/podcasts/${podcastId}/cast/${castId}/profile-invite/expire`,
+    {},
+  );
+}
+
+export type CastProfilePendingPayload = {
+  current: CastMember;
+  pending: {
+    name: string;
+    nickname: string | null;
+    description: string | null;
+    socialLinks: string[];
+    timeZone: string | null;
+    photoPath: string | null;
+    photoUrl: string | null;
+    submittedAt: string;
+    updatedAt: string;
+  };
+};
+
+export function getCastProfilePending(podcastId: string, castId: string) {
+  return apiGet<CastProfilePendingPayload>(
+    `/podcasts/${podcastId}/cast/${castId}/profile-pending`,
+  );
+}
+
+export function disregardCastProfilePending(podcastId: string, castId: string) {
+  return apiPost<CastMember>(
+    `/podcasts/${podcastId}/cast/${castId}/profile-pending/disregard`,
+    {},
+  );
+}
+
+export async function approveCastProfilePending(
+  podcastId: string,
+  castId: string,
+  body: {
+    name: string;
+    nickname: string;
+    description: string;
+    socialLinks: string[];
+    timeZone?: string | null;
+    photo?: File | null;
+  },
+): Promise<CastMember> {
+  if (body.photo) {
+    const form = new FormData();
+    form.append('name', body.name);
+    form.append('nickname', body.nickname);
+    form.append('description', body.description);
+    form.append('socialLinks', JSON.stringify(body.socialLinks));
+    form.append('timeZone', body.timeZone ?? '');
+    form.append('photo', body.photo);
+    const res = await fetch(
+      `${BASE}/podcasts/${podcastId}/cast/${castId}/profile-pending/approve`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrfHeaders(),
+        body: form,
+      },
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as { error?: string }).error ?? res.statusText);
+    }
+    return res.json();
+  }
+  return apiPost<CastMember>(
+    `/podcasts/${podcastId}/cast/${castId}/profile-pending/approve`,
+    {
+      name: body.name,
+      nickname: body.nickname || null,
+      description: body.description || null,
+      socialLinks: body.socialLinks,
+      timeZone: body.timeZone || null,
+    },
   );
 }
 

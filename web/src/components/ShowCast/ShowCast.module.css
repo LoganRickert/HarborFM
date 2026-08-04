@@ -102,7 +102,8 @@
   }
 
   .castRow {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .castRowMeta {
@@ -124,11 +125,15 @@
   }
 
   .castRowActions {
-    flex-shrink: 0;
+    flex-basis: 100%;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-top: 0.15rem;
   }
 
   .castRowEditBtn {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
   }
 
@@ -537,4 +542,154 @@
 .castSocialLinkAdd:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.castRowViewUpdateBtn {
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-muted));
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.castRowViewUpdateBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 32%, var(--bg-muted));
+}
+
+.castPendingDialog {
+  max-width: min(52rem, calc(100vw - 2rem));
+  width: 100%;
+}
+
+.castPendingCompare {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 1rem;
+  margin: 0.75rem 0 1rem;
+}
+
+@media (max-width: 720px) {
+  .castPendingCompare {
+    grid-template-columns: 1fr;
+  }
+}
+
+.castPendingCurrent,
+.castPendingProposed {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.castPendingSectionTitle {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.castPendingMuted {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.castPendingThumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.castPendingThumbPlaceholder {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.castPendingLinks {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.castPendingPhotoEdit {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.castPendingPhotoControls {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.castPendingFileInputHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.castPendingChoosePhotoBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.castPendingChoosePhotoBtn:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
+
+.castPendingChoosePhotoBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.castPendingPhotoFileName {
+  font-size: 0.8125rem;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.castPendingPhotoFileNameMuted {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.castPendingDialogLeftActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }

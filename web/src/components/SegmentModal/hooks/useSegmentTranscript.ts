@@ -10,7 +10,7 @@ import {
 } from '../../../api/segments';
 import { parseSrt, parseSrtTimeToSeconds, formatSrtTimeFromSeconds } from '../utils/srt';
 
-const SEGMENT_TRANSCRIPT_POLL_INTERVAL_MS = 5000;
+const SEGMENT_TRANSCRIPT_POLL_INTERVAL_MS = 1500;
 
 export function useSegmentTranscript(
   episodeId: string,
@@ -83,13 +83,17 @@ export function useSegmentTranscript(
     setGenerateError(null);
     try {
       await generateSegmentTranscript(episodeId, segmentId, true);
+      // Wait until we observe a fresh done (skip a stale done that was cleared
+      // before this job, and require transcribing or a post-start done).
+      let sawTranscribing = false;
+      const startedAt = Date.now();
+      const timeoutMs = 30 * 60 * 1000;
       for (;;) {
-        if (generateCancelledRef.current || generateGenRef.current !== gen) return;
-        await new Promise((r) => setTimeout(r, SEGMENT_TRANSCRIPT_POLL_INTERVAL_MS));
         if (generateCancelledRef.current || generateGenRef.current !== gen) return;
         const { status, error } = await getSegmentTranscriptStatus(episodeId, segmentId);
         if (generateCancelledRef.current || generateGenRef.current !== gen) return;
-        if (status === 'done') {
+        if (status === 'transcribing') sawTranscribing = true;
+        if (status === 'done' && (sawTranscribing || Date.now() - startedAt > 2000)) {
           const r = await getSegmentTranscript(episodeId, segmentId);
           if (generateCancelledRef.current || generateGenRef.current !== gen) return;
           setText(r.text);
@@ -97,8 +101,17 @@ export function useSegmentTranscript(
           return;
         }
         if (status === 'failed') {
-          throw new Error(error ?? 'Failed to generate transcript');
+          throw new Error(
+            error?.trim()
+              ? `Regenerate failed: ${error.trim()}`
+              : 'Regenerate failed. Check Settings and try again.',
+          );
         }
+        if (Date.now() - startedAt > timeoutMs) {
+          throw new Error('Regenerate timed out. Try again.');
+        }
+        await new Promise((r) => setTimeout(r, SEGMENT_TRANSCRIPT_POLL_INTERVAL_MS));
+        if (generateCancelledRef.current || generateGenRef.current !== gen) return;
       }
     } catch (err) {
       if (generateCancelledRef.current || generateGenRef.current !== gen) return;
@@ -256,6 +269,27 @@ export function useSegmentTranscript(
       });
   }
 
+  function updateTranscriptEntryText(entryIndex: number, newText: string) {
+    if (!srtEntries) return;
+    const entry = srtEntries[entryIndex];
+    if (!entry) return;
+    const next = newText.replace(/\r\n/g, '\n').trim();
+    if (next === entry.text.trim()) return;
+
+    const updatedEntries = [...srtEntries];
+    updatedEntries[entryIndex] = { ...entry, text: next };
+    const updatedSrt = updatedEntries
+      .map((e, i) => `${i + 1}\n${e.start} --> ${e.end}\n${e.text}\n`)
+      .join('\n');
+
+    const prevText = text;
+    setText(updatedSrt);
+    updateSegmentTranscript(episodeId, segmentId, updatedSrt).catch((err) => {
+      console.error('Failed to update transcript text:', err);
+      setText(prevText ?? '');
+    });
+  }
+
   return {
     text,
     setText,
@@ -270,6 +304,7 @@ export function useSegmentTranscript(
     handleDeleteEntry,
     handlePlayEntry,
     adjustTranscriptTime,
+    updateTranscriptEntryText,
     deleteMutationPending: deleteMutation.isPending,
   };
 }

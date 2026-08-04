@@ -38,6 +38,7 @@ import { SubscribeSuccess } from './pages/SubscribeSuccess';
 import { EmbedEpisode } from './pages/EmbedEpisode';
 import { CallJoin } from './pages/CallJoin';
 import { CallJoinIndex } from './pages/CallJoinIndex';
+import { CastProfileUpdate } from './pages/CastProfileUpdate';
 import { CallMeetingTopics } from './pages/CallMeetingTopics';
 import { Library } from './pages/Library';
 import { Themes } from './pages/Themes';
@@ -328,6 +329,7 @@ export default function App() {
           <Route path="/call/join" element={<CallJoinIndex />} />
           <Route path="/call/join/:token/topics" element={<CallMeetingTopics />} />
           <Route path="/call/join/:token" element={<CallJoin />} />
+          <Route path="/cast-profile-update" element={<CastProfileUpdate />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/login" element={<SetupGuard><RequireGuest><Login /></RequireGuest></SetupGuard>} />
           <Route path="/login/2fa-setup" element={<SetupGuard><RequireGuest><Login2FASetup /></RequireGuest></SetupGuard>} />

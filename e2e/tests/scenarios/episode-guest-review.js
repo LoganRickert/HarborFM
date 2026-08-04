@@ -1,8 +1,8 @@
 /**
  * E2E: Guest episode review emails and tokenized preview APIs.
- * Draft → scheduled or published+unlisted sends review mail;
- * preview valid while unlisted or listed+scheduled; listed+published redirects;
- * approve/feedback notify host.
+ * Draft → scheduled or published+unlisted sends review mail to meeting host,
+ * emailed invitees, and episode cast with email; preview valid while unlisted
+ * or listed+scheduled; listed+published redirects; approve/feedback notify host.
  */
 import {
   apiFetch,
@@ -133,6 +133,45 @@ export async function run({ runOne }) {
     );
 
     results.push(
+      await runOne('Add episode cast member with email (not on meeting invite)', async () => {
+        const castRes = await apiFetch(
+          `/podcasts/${podcast.id}/cast`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: 'Cast Morgan',
+              role: 'guest',
+              email: `cast-review-${ts}@example.com`,
+              isPublic: 1,
+            }),
+          },
+          jar,
+        );
+        if (castRes.status !== 200 && castRes.status !== 201) {
+          throw new Error(`Create cast failed: ${castRes.status} ${await castRes.text()}`);
+        }
+        const cast = await castRes.json();
+        const castId = cast.id || cast.cast?.id;
+        if (!castId) {
+          throw new Error(`Expected cast id in response: ${JSON.stringify(cast)}`);
+        }
+        const assignRes = await apiFetch(
+          `/podcasts/${podcast.id}/episodes/${episode.id}/cast`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ castIds: [castId] }),
+          },
+          jar,
+        );
+        if (assignRes.status !== 200) {
+          throw new Error(`Assign episode cast failed: ${assignRes.status} ${await assignRes.text()}`);
+        }
+      }),
+    );
+
+    results.push(
       await runOne('Draft → scheduled (listed) sends review emails once', async () => {
         catcher.reset();
         const res = await apiFetch(
@@ -154,16 +193,19 @@ export async function run({ runOne }) {
         }
 
         await sleep(400);
-        await catcher.waitFor(2, 15000);
+        await catcher.waitFor(3, 15000);
         const emails = emailContents(catcher);
         const reviewEmails = emails.filter((e) => /please review/i.test(e));
-        if (reviewEmails.length < 2) {
+        if (reviewEmails.length < 3) {
           throw new Error(
-            `Expected review emails for host and guest, got ${reviewEmails.length}: ${JSON.stringify(emails)}`,
+            `Expected review emails for host, meeting guest, and episode cast, got ${reviewEmails.length}: ${JSON.stringify(emails)}`,
           );
         }
         if (!reviewEmails.some((e) => /Guest Riley/i.test(e))) {
           throw new Error(`Expected guest greeting in review email: ${JSON.stringify(reviewEmails)}`);
+        }
+        if (!reviewEmails.some((e) => /Cast Morgan/i.test(e))) {
+          throw new Error(`Expected episode cast greeting in review email: ${JSON.stringify(reviewEmails)}`);
         }
         if (!reviewEmails.some((e) => /Preview Episode/i.test(e) || /preview episode/i.test(e))) {
           throw new Error(`Expected Preview Episode CTA: ${JSON.stringify(reviewEmails)}`);
@@ -173,7 +215,7 @@ export async function run({ runOne }) {
           const token = extractReviewToken(e);
           if (!token) continue;
           if (/Guest Riley/i.test(e)) guestToken = token;
-          else hostToken = token;
+          else if (!hostToken && !/Cast Morgan/i.test(e)) hostToken = token;
         }
         if (!guestToken) {
           // Host email may not include display name; take first unused token as guest if needed

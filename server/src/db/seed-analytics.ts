@@ -84,6 +84,10 @@ function main() {
     INSERT INTO podcast_stats_episode_listens_daily (episode_id, stat_date, source, bot_count, human_count)
     VALUES (?, ?, ?, ?, ?)
   `);
+  const insertListensHourly = db.prepare(`
+    INSERT INTO podcast_stats_episode_listens_hourly (episode_id, stat_date, stat_hour, source, bot_count, human_count)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
   const insertLocation = db.prepare(`
     INSERT INTO podcast_stats_episode_location_daily (episode_id, stat_date, location, source, bot_count, human_count)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -112,6 +116,9 @@ function main() {
         `DELETE FROM podcast_stats_episode_listens_daily WHERE episode_id IN (${placeholders}) AND stat_date >= ? AND stat_date <= ?`
       ).run(...episodeIds, dateStart, dateEnd);
       db.prepare(
+        `DELETE FROM podcast_stats_episode_listens_hourly WHERE episode_id IN (${placeholders}) AND stat_date >= ? AND stat_date <= ?`
+      ).run(...episodeIds, dateStart, dateEnd);
+      db.prepare(
         `DELETE FROM podcast_stats_episode_location_daily WHERE episode_id IN (${placeholders}) AND stat_date >= ? AND stat_date <= ?`
       ).run(...episodeIds, dateStart, dateEnd);
     }
@@ -136,6 +143,35 @@ function main() {
           const listenHuman = Math.min(reqHuman, randomInt(0, 50));
           const listenBot = Math.min(reqBot, randomInt(0, 20));
           insertListens.run(episodeId, statDate, source, listenBot, listenHuman);
+
+          // Spread daily listens across hours with morning / lunch / evening peaks.
+          if (listenHuman > 0 || listenBot > 0) {
+            const weights = Array.from({ length: 24 }, (_, h) => {
+              if (h >= 7 && h <= 9) return 3;
+              if (h >= 11 && h <= 13) return 4;
+              if (h >= 17 && h <= 21) return 5;
+              if (h >= 0 && h <= 5) return 0.3;
+              return 1;
+            });
+            const weightSum = weights.reduce((a, b) => a + b, 0);
+            let humanLeft = listenHuman;
+            let botLeft = listenBot;
+            for (let h = 0; h < 24; h++) {
+              const isLast = h === 23;
+              const share = weights[h]! / weightSum;
+              const hHuman = isLast
+                ? humanLeft
+                : Math.min(humanLeft, Math.floor(listenHuman * share + Math.random()));
+              const hBot = isLast
+                ? botLeft
+                : Math.min(botLeft, Math.floor(listenBot * share + Math.random()));
+              humanLeft -= hHuman;
+              botLeft -= hBot;
+              if (hHuman > 0 || hBot > 0) {
+                insertListensHourly.run(episodeId, statDate, h, source, hBot, hHuman);
+              }
+            }
+          }
 
           const numLocs = randomInt(1, 4);
           const shuffled = [...LOCATIONS].sort(() => Math.random() - 0.5);

@@ -242,6 +242,7 @@ export async function packSegmentIntoDir(
     disabled: seg.disabled,
     hostDuckingEnabled: Boolean(seg.hostDuckingEnabled),
     loudnessTargetingEnabled: seg.loudnessTargetingEnabled !== false,
+    multiTrackWhisperEnabled: seg.multiTrackWhisperEnabled !== false,
     finalGainDb:
       typeof seg.finalGainDb === "number" && Number.isFinite(seg.finalGainDb)
         ? seg.finalGainDb

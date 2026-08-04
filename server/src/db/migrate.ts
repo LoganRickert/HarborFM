@@ -110,6 +110,13 @@ import * as m108 from "./migrations/108_episode_archive.js";
 import * as m109 from "./migrations/109_episode_guest_reviews.js";
 import * as m110 from "./migrations/110_podcasts_feed_meta_pixel_id.js";
 import * as m111 from "./migrations/111_meeting_invite_email_open_tracking.js";
+import * as m112 from "./migrations/112_meeting_invite_cast_id.js";
+import * as m113 from "./migrations/113_podcast_stats_episode_listens_hourly.js";
+import * as m114 from "./migrations/114_podcast_cast_nickname.js";
+import * as m115 from "./migrations/115_segment_multi_track_whisper.js";
+import * as m116 from "./migrations/116_cast_profile_self_update.js";
+import * as m117 from "./migrations/117_cast_time_zone.js";
+import * as m118 from "./migrations/118_show_notes_guest_visible_default.js";
 import { syncServerThemesFromDisk } from "../modules/themes/builtins.js";
 
 const migrations = [
@@ -224,6 +231,13 @@ const migrations = [
   { name: "109_episode_guest_reviews", ...m109 },
   { name: "110_podcasts_feed_meta_pixel_id", ...m110 },
   { name: "111_meeting_invite_email_open_tracking", ...m111 },
+  { name: "112_meeting_invite_cast_id", ...m112 },
+  { name: "113_podcast_stats_episode_listens_hourly", ...m113 },
+  { name: "114_podcast_cast_nickname", ...m114 },
+  { name: "115_segment_multi_track_whisper", ...m115 },
+  { name: "116_cast_profile_self_update", ...m116 },
+  { name: "117_cast_time_zone", ...m117 },
+  { name: "118_show_notes_guest_visible_default", ...m118 },
 ];
 
 const MIGRATIONS_TABLE = `

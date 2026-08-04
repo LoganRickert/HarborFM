@@ -188,6 +188,7 @@ export type CastRowWithFilename = {
   id: string;
   podcastId: string;
   name: string;
+  nickname: string | null;
   role: string;
   description: string | null;
   photoPath: string | null;
@@ -206,6 +207,7 @@ export function getEpisodeCast(episodeId: string): CastRowWithFilename[] {
       id: podcastCast.id,
       podcastId: podcastCast.podcastId,
       name: podcastCast.name,
+      nickname: podcastCast.nickname,
       role: podcastCast.role,
       description: podcastCast.description,
       photoPath: podcastCast.photoPath,

@@ -6,12 +6,15 @@ import {
   listCast,
   deleteCast,
   requestCastInfoUpdate,
+  expireCastProfileInvite,
   type CastMember,
 } from '../../api/podcasts';
 import { CastMembersList } from './CastMembersList';
 import { CastMemberDialog } from './CastMemberDialog';
 import { CastDeleteDialog } from './CastDeleteDialog';
 import { CastRequestInfoDialog } from './CastRequestInfoDialog';
+import { CastExpireInviteDialog } from './CastExpireInviteDialog';
+import { CastProfilePendingDialog } from './CastProfilePendingDialog';
 import sharedStyles from '../PodcastDetail/shared.module.css';
 import localStyles from './ShowCast.module.css';
 
@@ -29,25 +32,34 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
   const [search, setSearch] = useState('');
   const searchDebounced = useDebouncedValue(search);
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
+  const [pendingOnly, setPendingOnly] = useState(false);
   const [offset, setOffset] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCast, setEditingCast] = useState<CastMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CastMember | null>(null);
   const [requestInfoTarget, setRequestInfoTarget] = useState<CastMember | null>(null);
   const [requestInfoError, setRequestInfoError] = useState<string | null>(null);
+  const [expireTarget, setExpireTarget] = useState<CastMember | null>(null);
+  const [expireError, setExpireError] = useState<string | null>(null);
+  const [viewUpdateTarget, setViewUpdateTarget] = useState<CastMember | null>(null);
 
   const canAddHost = myRole === 'owner' || myRole === 'manager';
   const canAddGuest = myRole === 'owner' || myRole === 'manager' || myRole === 'editor';
   const canAdd = canAddHost || canAddGuest;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['cast', podcastId, { limit: PAGE_SIZE, offset, q: searchDebounced, sort }],
+    queryKey: [
+      'cast',
+      podcastId,
+      { limit: PAGE_SIZE, offset, q: searchDebounced, sort, pendingOnly },
+    ],
     queryFn: () =>
       listCast(podcastId, {
         limit: PAGE_SIZE,
         offset,
         q: searchDebounced.trim() || undefined,
         sort,
+        pendingOnly: pendingOnly || undefined,
       }),
     enabled: !!podcastId,
   });
@@ -69,11 +81,24 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
     onSuccess: () => {
       setRequestInfoError(null);
       setRequestInfoTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['cast', podcastId] });
     },
     onError: (err: unknown) => {
       setRequestInfoError(
         err instanceof Error ? err.message : 'Failed to send email',
       );
+    },
+  });
+
+  const expireMutation = useMutation({
+    mutationFn: (castId: string) => expireCastProfileInvite(podcastId, castId),
+    onSuccess: () => {
+      setExpireError(null);
+      setExpireTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['cast', podcastId] });
+    },
+    onError: (err: unknown) => {
+      setExpireError(err instanceof Error ? err.message : 'Failed to expire link');
     },
   });
 
@@ -164,6 +189,30 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
               Oldest
             </button>
           </div>
+          <div className={styles.statusToggle} role="group" aria-label="Pending updates filter">
+            <button
+              type="button"
+              className={!pendingOnly ? styles.statusToggleActive : styles.statusToggleBtn}
+              onClick={() => {
+                setPendingOnly(false);
+                setOffset(0);
+              }}
+              aria-pressed={!pendingOnly}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={pendingOnly ? styles.statusToggleActive : styles.statusToggleBtn}
+              onClick={() => {
+                setPendingOnly(true);
+                setOffset(0);
+              }}
+              aria-pressed={pendingOnly}
+            >
+              Pending Updates
+            </button>
+          </div>
         </div>
 
       {isLoading ? (
@@ -180,6 +229,11 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
           onRequestInfo={(c) => {
             setRequestInfoError(null);
             setRequestInfoTarget(c);
+          }}
+          onViewUpdate={(c) => setViewUpdateTarget(c)}
+          onExpireInvite={(c) => {
+            setExpireError(null);
+            setExpireTarget(c);
           }}
           onEdit={handleEdit}
           onDelete={setDeleteTarget}
@@ -223,6 +277,32 @@ export function ShowCastCard({ podcastId, myRole }: ShowCastCardProps) {
         }}
         isPending={requestInfoMutation.isPending}
         error={requestInfoError}
+      />
+
+      <CastExpireInviteDialog
+        cast={expireTarget}
+        isOpen={!!expireTarget}
+        onClose={() => {
+          if (expireMutation.isPending) return;
+          setExpireTarget(null);
+          setExpireError(null);
+        }}
+        onConfirm={(castId) => {
+          setExpireError(null);
+          expireMutation.mutate(castId);
+        }}
+        isPending={expireMutation.isPending}
+        error={expireError}
+      />
+
+      <CastProfilePendingDialog
+        cast={viewUpdateTarget}
+        podcastId={podcastId}
+        isOpen={!!viewUpdateTarget}
+        onClose={() => setViewUpdateTarget(null)}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['cast', podcastId] });
+        }}
       />
     </div>
   );

@@ -28,6 +28,8 @@ export RENDER_RATE_LIMIT_WINDOW_MS="${RENDER_RATE_LIMIT_WINDOW_MS:-1000}"
 export IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS="${IMPORT_PROJECT_RATE_LIMIT_WINDOW_MS:-0}"
 # Meeting invites: disable so suites can create multiple invite links/emails.
 export MEETING_INVITE_RATE_LIMIT_WINDOW_MS="${MEETING_INVITE_RATE_LIMIT_WINDOW_MS:-0}"
+# Cast Update emails: disable so suites can send multiple profile-update invites.
+export CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS="${CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS:-0}"
 # Expose meeting email open-tracking tokens on invite API responses for pixel e2e.
 export E2E_EXPOSE_EMAIL_OPEN_TOKENS="${E2E_EXPOSE_EMAIL_OPEN_TOKENS:-1}"
 # Theme ZIP import: short window so suites can import repeatedly while still testing 429.

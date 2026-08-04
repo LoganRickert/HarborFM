@@ -310,6 +310,104 @@ type TranscriptionProviderCall = (
   allowedBaseDir: string,
 ) => Promise<string | null>;
 
+type WhisperWord = {
+  word?: string;
+  start?: number;
+  end?: number;
+  probability?: number;
+};
+
+type WhisperSegment = {
+  start?: number;
+  end?: number;
+  text?: string;
+  words?: WhisperWord[];
+  no_speech_prob?: number;
+};
+
+/**
+ * Lone filler tokens Whisper often invents on quiet/bleed audio, stretched to
+ * ~1s+. Keep this narrow so real sentences are never dropped.
+ */
+const WHISPER_STRETCHED_SINGLETONS = new Set(["you", "i"]);
+
+function spokenTokens(text: string): string[] {
+  return (text.match(/[A-Za-z']+/g) ?? []).map((w) => w.toLowerCase());
+}
+
+/**
+ * Build SRT cues from Whisper JSON segments, preferring first/last word times
+ * when word_timestamps are present (fixes leading-silence cue starts).
+ */
+export function srtEntriesFromWhisperSegments(
+  segments: WhisperSegment[],
+): SrtEntry[] {
+  const out: SrtEntry[] = [];
+  let index = 1;
+  for (const seg of segments) {
+    const text = typeof seg.text === "string" ? seg.text.trim() : "";
+    if (!text) continue;
+    const words = Array.isArray(seg.words)
+      ? seg.words.filter(
+          (w) =>
+            typeof w.start === "number" &&
+            Number.isFinite(w.start) &&
+            typeof w.end === "number" &&
+            Number.isFinite(w.end) &&
+            typeof w.word === "string" &&
+            w.word.trim().length > 0,
+        )
+      : [];
+    let start =
+      typeof seg.start === "number" && Number.isFinite(seg.start)
+        ? seg.start
+        : 0;
+    let end =
+      typeof seg.end === "number" && Number.isFinite(seg.end) ? seg.end : start;
+    if (words.length > 0) {
+      start = words[0]!.start as number;
+      end = words[words.length - 1]!.end as number;
+    }
+    if (end <= start) continue;
+
+    const tokens = spokenTokens(text);
+    const duration = end - start;
+    // Drop only the known bad pattern: lone "You"/"I" stretched past ~0.85s
+    // (real monosyllables are much shorter; real sentences never match this).
+    if (
+      tokens.length === 1 &&
+      duration >= 0.85 &&
+      WHISPER_STRETCHED_SINGLETONS.has(tokens[0]!)
+    ) {
+      continue;
+    }
+    if (
+      tokens.length === 2 &&
+      duration >= 1.2 &&
+      tokens[0] === "thank" &&
+      tokens[1] === "you"
+    ) {
+      continue;
+    }
+    // Empty-ish junk with extreme no-speech confidence and no word timings.
+    if (
+      words.length === 0 &&
+      typeof seg.no_speech_prob === "number" &&
+      seg.no_speech_prob > 0.85
+    ) {
+      continue;
+    }
+
+    out.push({
+      index: index++,
+      start: formatSrtTime(start),
+      end: formatSrtTime(end),
+      text,
+    });
+  }
+  return out;
+}
+
 async function transcribeWithProvider(
   audioPath: string,
   allowedBaseDir: string,
@@ -334,6 +432,48 @@ async function transcribeWithProvider(
     });
   }
   return null;
+}
+
+/**
+ * Transcribe to SRT entries, using word-level timestamps when the provider
+ * supports them (multi-speaker cue starts). Falls back to plain SRT parse.
+ */
+export async function runTranscriptionToEntries(
+  audioPath: string,
+  allowedBaseDir: string,
+  settings: ReturnType<typeof readSettings>,
+): Promise<SrtEntry[]> {
+  assertPathUnder(audioPath, allowedBaseDir);
+  if (settings.transcription_provider === "self_hosted") {
+    const whisperUrl = settings.whisper_asr_url?.trim();
+    if (!whisperUrl) {
+      throw new Error(
+        "Transcription service failed. Check Settings and try again.",
+      );
+    }
+    const entries = await generateSrtEntriesFromWhisper(
+      audioPath,
+      allowedBaseDir,
+      whisperUrl,
+    );
+    if (entries) return entries;
+  } else if (settings.transcription_provider === "openai") {
+    const url =
+      settings.openai_transcription_url?.trim() ||
+      OPENAI_TRANSCRIPTION_DEFAULT_URL;
+    const apiKey = settings.openai_transcription_api_key?.trim();
+    const model = settings.transcription_model?.trim() || "whisper-1";
+    if (apiKey) {
+      const entries = await generateSrtEntriesFromOpenAI(
+        audioPath,
+        allowedBaseDir,
+        { url, apiKey, model },
+      );
+      if (entries) return entries;
+    }
+  }
+  const srt = await runTranscription(audioPath, allowedBaseDir, settings);
+  return parseSrt(srt);
 }
 
 type MarkerLike = {
@@ -466,6 +606,9 @@ export async function runTranscription(
         allowedBaseDir,
         startSec,
         chunkDuration,
+        // Non-zero input seeks on MP3 drift; accurate seek keeps chunk
+        // timestamps aligned when we add offsetSec back.
+        startSec > 0.05 ? { accurateSeek: true } : undefined,
       );
       tempChunks.push(chunkPath);
 
@@ -495,6 +638,83 @@ export async function runTranscription(
   }
 }
 
+async function postWhisperAsr(
+  audioPath: string,
+  allowedBaseDir: string,
+  whisperAsrUrl: string,
+  searchParams: Record<string, string>,
+): Promise<Response> {
+  const u = new URL(whisperAsrUrl.trim());
+  const pathname = u.pathname.replace(/\/$/, "") || "";
+  if (!pathname.endsWith("asr")) {
+    u.pathname = pathname ? `${pathname}/asr` : "/asr";
+  }
+  for (const [key, value] of Object.entries(searchParams)) {
+    u.searchParams.set(key, value);
+  }
+  assertPathUnder(audioPath, allowedBaseDir);
+  const buffer = readFileSync(audioPath);
+  const mime = contentTypeFromAudioPath(audioPath);
+  const ext = (extname(audioPath).replace(/^\./, "") || "mp3").toLowerCase();
+  const form = new FormData();
+  form.append(
+    "audio_file",
+    new Blob([new Uint8Array(buffer)], { type: mime }),
+    `audio.${ext}`,
+  );
+  return fetch(u.toString(), {
+    method: "POST",
+    body: form,
+    dispatcher: transcriptionAgent,
+  } as FetchWithDispatcher);
+}
+
+/**
+ * Whisper ASR with word timestamps -> SRT entries (cue starts from first word).
+ * Returns null on transport/parse failure so callers can fall back to plain SRT.
+ */
+export async function generateSrtEntriesFromWhisper(
+  audioPath: string,
+  allowedBaseDir: string,
+  whisperAsrUrl: string,
+): Promise<SrtEntry[] | null> {
+  const url = whisperAsrUrl.trim();
+  if (!url) return null;
+  try {
+    const res = await postWhisperAsr(audioPath, allowedBaseDir, url, {
+      output: "json",
+      word_timestamps: "true",
+    });
+    if (!res.ok) {
+      const bodySnippet = await res.text().catch(() => "");
+      logTranscriptionHttpFailure("whisper", res.status, bodySnippet);
+      throwIfChunkTooLarge(res.status);
+      throw new Error(
+        `Whisper ASR failed (HTTP ${res.status})${
+          bodySnippet
+            ? `: ${bodySnippet.replace(/\s+/g, " ").trim().slice(0, 160)}`
+            : ""
+        }`,
+      );
+    }
+    const data = (await res.json()) as {
+      segments?: WhisperSegment[];
+    };
+    if (!Array.isArray(data?.segments)) return null;
+    return srtEntriesFromWhisperSegments(data.segments);
+  } catch (err) {
+    if (err instanceof Error && err.message === "CHUNK_TOO_LARGE") throw err;
+    if (err instanceof Error && err.message.startsWith("Whisper ASR failed")) {
+      throw err;
+    }
+    if (isFetchTimeoutError(err)) {
+      throw new Error(transcriptionTimeoutMessage());
+    }
+    console.error("[transcription] whisper word-timestamp request error", err);
+    return null;
+  }
+}
+
 /**
  * Call Whisper ASR with an audio file and return SRT text, or null on failure.
  * Used for segment transcripts and for episode-level transcript after render.
@@ -507,33 +727,20 @@ export async function generateSrtFromWhisper(
   const url = whisperAsrUrl.trim();
   if (!url) return null;
   try {
-    const u = new URL(url);
-    const pathname = u.pathname.replace(/\/$/, "") || "";
-    if (!pathname.endsWith("asr")) {
-      u.pathname = pathname ? `${pathname}/asr` : "/asr";
-    }
-    u.searchParams.set("output", "srt");
-    const whisperUrl = u.toString();
-    assertPathUnder(audioPath, allowedBaseDir);
-    const buffer = readFileSync(audioPath);
-    const mime = contentTypeFromAudioPath(audioPath);
-    const ext = (extname(audioPath).replace(/^\./, "") || "mp3").toLowerCase();
-    const form = new FormData();
-    form.append(
-      "audio_file",
-      new Blob([new Uint8Array(buffer)], { type: mime }),
-      `audio.${ext}`,
-    );
-    const res = await fetch(whisperUrl, {
-      method: "POST",
-      body: form,
-      dispatcher: transcriptionAgent,
-    } as FetchWithDispatcher);
+    const res = await postWhisperAsr(audioPath, allowedBaseDir, url, {
+      output: "srt",
+    });
     if (!res.ok) {
       const bodySnippet = await res.text().catch(() => "");
       logTranscriptionHttpFailure("whisper", res.status, bodySnippet);
       throwIfChunkTooLarge(res.status);
-      return null;
+      throw new Error(
+        `Whisper ASR failed (HTTP ${res.status})${
+          bodySnippet
+            ? `: ${bodySnippet.replace(/\s+/g, " ").trim().slice(0, 160)}`
+            : ""
+        }`,
+      );
     }
     const contentType = res.headers.get("content-type") || "";
     let text: string;
@@ -567,6 +774,96 @@ export async function generateSrtFromWhisper(
       text = (await res.text()).trim();
     }
     return text || null;
+  } catch (err) {
+    if (err instanceof Error && err.message === "CHUNK_TOO_LARGE") throw err;
+    if (err instanceof Error && err.message.startsWith("Whisper ASR failed")) {
+      throw err;
+    }
+    if (isFetchTimeoutError(err)) {
+      throw new Error(transcriptionTimeoutMessage());
+    }
+    console.error("[transcription] whisper request error", err);
+    return null;
+  }
+}
+
+/**
+ * OpenAI whisper-1 verbose_json with word timestamps -> SRT entries.
+ * Returns null when unsupported or on failure (caller falls back to plain SRT).
+ */
+export async function generateSrtEntriesFromOpenAI(
+  audioPath: string,
+  allowedBaseDir: string,
+  options: { url: string; apiKey: string; model: string },
+): Promise<SrtEntry[] | null> {
+  const { url, apiKey, model } = options;
+  if (!url?.trim() || !apiKey?.trim()) return null;
+  const modelVal = (model || "whisper-1").trim();
+  // Only whisper-1 supports verbose_json + word timestamp_granularities.
+  if (modelVal.toLowerCase() !== "whisper-1") return null;
+  try {
+    assertPathUnder(audioPath, allowedBaseDir);
+    const buffer = readFileSync(audioPath);
+    const mime = contentTypeFromAudioPath(audioPath);
+    const ext = (extname(audioPath).replace(/^\./, "") || "mp3").toLowerCase();
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([new Uint8Array(buffer)], { type: mime }),
+      `audio.${ext}`,
+    );
+    form.append("model", modelVal);
+    form.append("response_format", "verbose_json");
+    form.append("timestamp_granularities[]", "word");
+    form.append("timestamp_granularities[]", "segment");
+    const res = await fetch(url.trim(), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+      dispatcher: transcriptionAgent,
+    } as FetchWithDispatcher);
+    const bodyText = await res.text();
+    if (!res.ok) {
+      logTranscriptionHttpFailure("openai", res.status, bodyText);
+      throwIfChunkTooLarge(res.status);
+      return null;
+    }
+    try {
+      const data = JSON.parse(bodyText) as {
+        segments?: WhisperSegment[];
+        words?: WhisperWord[];
+      };
+      if (Array.isArray(data?.segments) && data.segments.length > 0) {
+        // OpenAI may put words at top level; attach by time when segment.words missing.
+        const topWords = Array.isArray(data.words) ? data.words : [];
+        const segments = data.segments.map((seg) => {
+          if (Array.isArray(seg.words) && seg.words.length > 0) return seg;
+          if (topWords.length === 0) return seg;
+          const segStart =
+            typeof seg.start === "number" && Number.isFinite(seg.start)
+              ? seg.start
+              : 0;
+          const segEnd =
+            typeof seg.end === "number" && Number.isFinite(seg.end)
+              ? seg.end
+              : segStart;
+          return {
+            ...seg,
+            words: topWords.filter(
+              (w) =>
+                typeof w.start === "number" &&
+                typeof w.end === "number" &&
+                w.start >= segStart - 0.05 &&
+                w.end <= segEnd + 0.05,
+            ),
+          };
+        });
+        return srtEntriesFromWhisperSegments(segments);
+      }
+      return null;
+    } catch {
+      return null;
+    }
   } catch (err) {
     if (err instanceof Error && err.message === "CHUNK_TOO_LARGE") throw err;
     if (isFetchTimeoutError(err)) {

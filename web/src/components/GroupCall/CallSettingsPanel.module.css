@@ -89,6 +89,32 @@
   gap: 0.5rem;
 }
 
+.personSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.readOnlyMic {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.875rem;
+  color: var(--text-muted, #888);
+  background: var(--bg, #0c0e12);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  line-height: 1.35;
+  word-break: break-word;
+  opacity: 0.7;
+  cursor: not-allowed;
+  user-select: none;
+}
+
+.toggleDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .agcRow {
   margin-top: 0.5rem;
   display: flex;

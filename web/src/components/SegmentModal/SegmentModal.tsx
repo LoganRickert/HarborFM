@@ -440,6 +440,7 @@ export function SegmentModal({
         onDeleteEntry={trimActions.handleSoftDeleteEntry}
         onPlayEntry={transcript.handlePlayEntry!}
         onAdjustTime={transcript.adjustTranscriptTime}
+        onUpdateText={transcript.updateTranscriptEntryText}
         onRestoreEntry={trimActions.handleRestoreEntry}
         isRateLimitMessage={isRateLimitMessage}
         deleteMutationPending={false}

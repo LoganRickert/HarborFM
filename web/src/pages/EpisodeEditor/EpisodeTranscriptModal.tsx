@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Upload, Download } from 'lucide-react';
-import { getEpisodeTranscript, updateEpisodeTranscript } from '../../api/segments';
+import { X, Upload, Download, RotateCcw } from 'lucide-react';
+import {
+  getEpisodeTranscript,
+  getTranscriptStatus,
+  startGenerateEpisodeTranscript,
+  updateEpisodeTranscript,
+} from '../../api/segments';
 import { UnsavedChangesConfirmDialog } from '../../components/UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { parseSrt } from '../../components/SegmentModal/utils/srt';
 import styles from '../EpisodeEditor.module.css';
+
+const TRANSCRIPT_POLL_INTERVAL_MS = 2000;
 
 export interface EpisodeTranscriptModalProps {
   episodeId: string;
@@ -66,6 +73,7 @@ export function EpisodeTranscriptModal({
   const transcriptRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [regenError, setRegenError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const handleUploadFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,6 +88,34 @@ export function EpisodeTranscriptModal({
       }
     };
     reader.readAsText(file);
+  };
+
+  const loadTranscript = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const r = await getEpisodeTranscript(episodeId);
+      setText(r.text);
+      setEditValue(r.text);
+      setError(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load transcript';
+      if (msg.includes('not found') || msg.includes('Not found') || (err as { status?: number })?.status === 404) {
+        setText('');
+        setEditValue('');
+        setError(null);
+      } else if (!opts?.silent) {
+        setError(msg);
+        setText(null);
+        setEditValue('');
+      } else {
+        setRegenError(msg);
+      }
+    } finally {
+      if (!opts?.silent) setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -122,6 +158,28 @@ export function EpisodeTranscriptModal({
     },
   });
 
+  const regenerateMutation = useMutation({
+    mutationFn: async () => {
+      setRegenError(null);
+      await startGenerateEpisodeTranscript(episodeId);
+      for (;;) {
+        await new Promise((r) => setTimeout(r, TRANSCRIPT_POLL_INTERVAL_MS));
+        const { status, error: statusError } = await getTranscriptStatus(episodeId);
+        if (status === 'done') return;
+        if (status === 'failed') {
+          throw new Error(statusError ?? 'Transcript generation failed');
+        }
+      }
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['episode', episodeId] });
+      await loadTranscript({ silent: true });
+    },
+    onError: (err: Error) => {
+      setRegenError(err.message || 'Transcript generation failed');
+    },
+  });
+
   const handleSave = () => {
     if (!canEdit) return;
     updateMutation.mutate(editValue);
@@ -129,8 +187,10 @@ export function EpisodeTranscriptModal({
 
   const hasChanges = canEdit && text != null && editValue !== text;
   const isSaving = updateMutation.isPending;
+  const isRegenerating = regenerateMutation.isPending;
+  const busy = isSaving || isRegenerating;
   const sourceText = canEdit ? editValue : (text ?? '');
-  const canDownload = sourceText.trim().length > 0;
+  const canDownload = sourceText.trim().length > 0 && !isRegenerating;
 
   const downloadBase = transcriptDownloadBasename(episodeTitle);
 
@@ -159,7 +219,7 @@ export function EpisodeTranscriptModal({
     handleConfirmOpenChange,
     handleDiscard,
     dialogContentProps,
-  } = useDialogCloseGuard({ isDirty: hasChanges, onClose });
+  } = useDialogCloseGuard({ isDirty: hasChanges && !isRegenerating, onClose });
 
   const downloadButtons = (
     <>
@@ -167,7 +227,7 @@ export function EpisodeTranscriptModal({
         type="button"
         className={styles.episodeTranscriptUploadBtn}
         onClick={handleDownloadSrt}
-        disabled={!canDownload}
+        disabled={!canDownload || busy}
         aria-label="Download SRT file"
       >
         <Download size={18} strokeWidth={2} aria-hidden />
@@ -177,7 +237,7 @@ export function EpisodeTranscriptModal({
         type="button"
         className={styles.episodeTranscriptUploadBtn}
         onClick={handleDownloadTxt}
-        disabled={!canDownload}
+        disabled={!canDownload || busy}
         aria-label="Download TXT file"
         title="Plain spoken text with no timestamps"
       >
@@ -198,7 +258,7 @@ export function EpisodeTranscriptModal({
         >
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>Episode Transcript</Dialog.Title>
-            <button type="button" className={styles.dialogClose} aria-label="Close" disabled={isSaving} onClick={requestClose}>
+            <button type="button" className={styles.dialogClose} aria-label="Close" disabled={busy} onClick={requestClose}>
               <X size={18} strokeWidth={2} aria-hidden />
             </button>
           </div>
@@ -230,13 +290,35 @@ export function EpisodeTranscriptModal({
                         type="button"
                         className={styles.episodeTranscriptUploadBtn}
                         onClick={() => fileInputRef.current?.click()}
+                        disabled={busy}
                         aria-label="Upload SRT file"
                       >
                         <Upload size={18} strokeWidth={2} aria-hidden />
                         Upload SRT file
                       </button>
                       {downloadButtons}
+                      <button
+                        type="button"
+                        className={styles.episodeTranscriptUploadBtn}
+                        onClick={() => regenerateMutation.mutate()}
+                        disabled={busy}
+                        aria-label={
+                          isRegenerating ? 'Regenerating transcript' : 'Regenerate Transcript'
+                        }
+                        title="Stitch segment transcripts into the episode transcript without rebuilding"
+                      >
+                        <RotateCcw size={18} strokeWidth={2} aria-hidden />
+                        {isRegenerating ? 'Regenerating...' : 'Regenerate'}
+                      </button>
                     </div>
+                    {regenError && (
+                      <p
+                        className={`${styles.episodeTranscriptError} ${styles.transcriptGenerateError}`}
+                        role="alert"
+                      >
+                        {regenError}
+                      </p>
+                    )}
                     <textarea
                       ref={transcriptRef}
                       className={styles.transcriptText}
@@ -246,6 +328,7 @@ export function EpisodeTranscriptModal({
                       spellCheck={false}
                       aria-label="Transcript text"
                       rows={4}
+                      disabled={isRegenerating}
                     />
                   </>
                 ) : (
@@ -262,7 +345,7 @@ export function EpisodeTranscriptModal({
                       type="button"
                       className={styles.cancel}
                       onClick={requestClose}
-                      disabled={isSaving}
+                      disabled={busy}
                       aria-label={hasChanges ? 'Cancel' : 'Close'}
                     >
                       {hasChanges ? 'Cancel' : 'Close'}
@@ -271,7 +354,7 @@ export function EpisodeTranscriptModal({
                       type="button"
                       className={styles.submit}
                       onClick={handleSave}
-                      disabled={isSaving || !hasChanges}
+                      disabled={busy || !hasChanges}
                       aria-label="Save transcript"
                     >
                       {isSaving ? 'Saving...' : 'Save'}

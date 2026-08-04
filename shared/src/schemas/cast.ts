@@ -29,6 +29,8 @@ const socialLinksArraySchema = z
 
 export const castCreateSchema = z.object({
   name: z.string().min(1, { error: 'Name is required' }),
+  /** Short label for transcripts; empty/omitted falls back to name. */
+  nickname: nullableOptionalString,
   role: castRoleSchema,
   description: nullableOptionalString,
   photoUrl: emptyStringToNull(z.string().nullable().optional()),
@@ -41,6 +43,16 @@ export const castCreateSchema = z.object({
     z
       .string()
       .email({ error: 'Enter a valid email' })
+      .nullable()
+      .optional(),
+  ),
+  /** Private IANA zone for meeting emails; not shown on public feeds. */
+  timeZone: emptyStringToNull(
+    z
+      .string()
+      .trim()
+      .max(64)
+      .regex(/^[A-Za-z0-9_+/-]+$/, { error: 'Invalid time zone' })
       .nullable()
       .optional(),
   ),
@@ -64,15 +76,56 @@ export const castResponseSchema = z.object({
   id: z.string(),
   podcastId: z.string(),
   name: z.string(),
+  nickname: z.string().nullable(),
   role: castRoleSchema,
   description: z.string().nullable(),
   photoPath: z.string().nullable(),
   photoUrl: z.string().nullable(),
   socialLinks: z.array(z.string()),
   email: z.string().nullable(),
+  timeZone: z.string().nullable(),
   isPublic: z.union([z.literal(0), z.literal(1)]),
   createdAt: z.string(),
+  /** True when a cast-submitted profile update awaits host approval. */
+  hasPendingProfileUpdate: z.boolean().optional(),
+  /** True when an unused invite link is active (no pending submission yet). */
+  hasActiveProfileInvite: z.boolean().optional(),
 });
+
+/** Public cast profile self-update submit body (text fields). */
+export const castProfileUpdateSubmitSchema = z.object({
+  name: z.string().min(1, { error: 'Preferred Name is required' }),
+  nickname: nullableOptionalString,
+  description: nullableOptionalString,
+  socialLinks: z.preprocess(
+    (v) => (v === undefined || v === null ? [] : v),
+    socialLinksArraySchema,
+  ),
+  /** Private IANA zone for meeting emails; not shown on public feeds. */
+  timeZone: emptyStringToNull(
+    z
+      .string()
+      .trim()
+      .max(64)
+      .regex(/^[A-Za-z0-9_+/-]+$/, { error: 'Invalid time zone' })
+      .nullable()
+      .optional(),
+  ),
+});
+
+export type CastProfileUpdateSubmit = z.infer<
+  typeof castProfileUpdateSubmitSchema
+>;
+
+/** Prefer nickname for transcript speaker labels; fall back to full name. */
+export function castTranscriptLabel(cast: {
+  name: string;
+  nickname?: string | null;
+}): string {
+  const nick = typeof cast.nickname === 'string' ? cast.nickname.trim() : '';
+  if (nick) return nick;
+  return cast.name.trim() || 'Speaker';
+}
 
 export const castListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(10),
@@ -81,6 +134,11 @@ export const castListQuerySchema = z.object({
   sort: z.enum(['newest', 'oldest']).optional().default('newest'),
   /** When provided, excludes cast already assigned to this episode */
   episodeId: z.string().optional().default(''),
+  /** When true, only return cast with a pending profile update. */
+  pendingOnly: z
+    .union([z.literal('1'), z.literal('true'), z.literal(true), z.literal(1)])
+    .optional()
+    .transform((v) => v === '1' || v === 'true' || v === true || v === 1),
 });
 
 export const episodeCastAssignBodySchema = z.object({

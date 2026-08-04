@@ -237,7 +237,7 @@ export const episodes = sqliteTable(
     videoFinalPath: text("video_final_path"),
     showNotesGuestVisible: integer("show_notes_guest_visible", { mode: "boolean" })
       .notNull()
-      .default(false),
+      .default(true),
     episodeAlertsSentAt: text("episode_alerts_sent_at"),
     /** When set, episode project files were uploaded to the podcast archive destination. */
     archivedAt: text("archived_at"),
@@ -426,6 +426,12 @@ export const episodeSegments = sqliteTable(
       .notNull()
       .default(true),
     finalGainDb: real("final_gain_db").notNull().default(0),
+    /** When true, prefer per-host-track Whisper merge when 2+ included tracks exist. */
+    multiTrackWhisperEnabled: integer("multi_track_whisper_enabled", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(true),
   },
   (table) => [index("idx_episode_segments_episode").on(table.episodeId)],
 );
@@ -602,6 +608,26 @@ export const podcastStatsEpisodeListensDaily = sqliteTable(
   },
   (table) => [
     primaryKey({ columns: [table.episodeId, table.statDate, table.source] }),
+  ],
+);
+
+/** Hourly Downloads (server-local date + hour). Migration 113. */
+export const podcastStatsEpisodeListensHourly = sqliteTable(
+  "podcast_stats_episode_listens_hourly",
+  {
+    episodeId: text("episode_id")
+      .notNull()
+      .references(() => episodes.id, { onDelete: "cascade" }),
+    statDate: text("stat_date").notNull(),
+    statHour: integer("stat_hour").notNull(),
+    source: text("source").notNull().default("Other"),
+    botCount: integer("bot_count").notNull().default(0),
+    humanCount: integer("human_count").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.episodeId, table.statDate, table.statHour, table.source],
+    }),
   ],
 );
 
@@ -820,16 +846,71 @@ export const podcastCast = sqliteTable(
       .notNull()
       .references(() => podcasts.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** Short label for multi-speaker transcripts; falls back to name when empty. */
+    nickname: text("nickname"),
     role: text("role", { enum: ["host", "guest"] }).notNull(),
     description: text("description"),
     photoPath: text("photo_path"),
     photoUrl: text("photo_url"),
     socialLinks: text("social_links").notNull().default("[]"),
     email: text("email"),
+    /** Private IANA zone for meeting emails; not shown on public feeds. */
+    timeZone: text("time_zone"),
     isPublic: integer("is_public", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull().default(sqlNow()),
   },
   (table) => [index("idx_podcast_cast_podcast").on(table.podcastId)],
+);
+
+// ---------------------------------------------------------------------------
+// Cast profile self-update tokens + pending (116)
+// ---------------------------------------------------------------------------
+export const podcastCastProfileTokens = sqliteTable(
+  "podcast_cast_profile_tokens",
+  {
+    id: text("id").primaryKey(),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    castId: text("cast_id")
+      .notNull()
+      .references(() => podcastCast.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: text("created_at").notNull().default(sqlNow()),
+    revokedAt: text("revoked_at"),
+  },
+  (table) => [
+    index("idx_cast_profile_tokens_cast_id").on(table.castId),
+    index("idx_cast_profile_tokens_token_hash").on(table.tokenHash),
+    index("idx_cast_profile_tokens_podcast_id").on(table.podcastId),
+  ],
+);
+
+export const podcastCastProfilePending = sqliteTable(
+  "podcast_cast_profile_pending",
+  {
+    castId: text("cast_id")
+      .primaryKey()
+      .references(() => podcastCast.id, { onDelete: "cascade" }),
+    podcastId: text("podcast_id")
+      .notNull()
+      .references(() => podcasts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    nickname: text("nickname"),
+    description: text("description"),
+    socialLinks: text("social_links").notNull().default("[]"),
+    /** Proposed private IANA zone for meeting emails. */
+    timeZone: text("time_zone"),
+    photoPath: text("photo_path"),
+    submittedAt: text("submitted_at").notNull().default(sqlNow()),
+    updatedAt: text("updated_at").notNull().default(sqlNow()),
+  },
+  (table) => [
+    index("idx_cast_profile_pending_podcast_id").on(table.podcastId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -1367,6 +1448,10 @@ export const episodeGroupCallMeetingInvites = sqliteTable(
     email: text("email"),
     displayName: text("display_name"),
     inviteToken: text("invite_token").notNull().unique(),
+    /** Optional show-cast member this invite was created for (roster avatar). */
+    castId: text("cast_id").references(() => podcastCast.id, {
+      onDelete: "set null",
+    }),
     createdAt: text("created_at").notNull().default(sqlNow()),
     lastSentAt: text("last_sent_at"),
     /** Opaque token for invite-email open pixel (unique when set). */
@@ -1379,6 +1464,7 @@ export const episodeGroupCallMeetingInvites = sqliteTable(
   (table) => [
     index("idx_egcmi_meeting_id").on(table.meetingId),
     index("idx_egcmi_invite_token").on(table.inviteToken),
+    index("idx_egcmi_cast_id").on(table.castId),
   ],
 );
 

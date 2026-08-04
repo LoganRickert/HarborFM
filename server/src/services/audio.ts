@@ -956,37 +956,55 @@ export async function probeAudioDurationFloat(
 /**
  * Cut an MP3 chunk to os.tmpdir() for transcription uploads.
  * Source must be under allowedBaseDir; output is under tmpdir().
+ *
+ * By default uses input seeking (`-ss` before `-i`) for speed. Pass
+ * `accurateSeek: true` for output seeking (`-ss` after `-i`) so MP3 cuts
+ * land on the requested timeline (needed for multi-track transcript mapping).
  */
 export async function extractAudioChunkToTmp(
   sourcePath: string,
   allowedBaseDir: string,
   startSec: number,
   durationSec: number,
-  opts?: { bitrateKbps?: number },
+  opts?: { bitrateKbps?: number; accurateSeek?: boolean },
 ): Promise<string> {
   const safeSource = assertPathUnder(sourcePath, allowedBaseDir);
   const outPath = join(tmpdir(), `transcription_chunk_${randomUUID()}.mp3`);
   prepareOutputPath(outPath, allowedBaseDir);
   const bitrateKbps = opts?.bitrateKbps ?? 128;
   const bitrate = `${Math.max(16, bitrateKbps)}k`;
-  await exec(
-    FFMPEG_PATH,
-    [
-      "-ss",
-      String(Math.max(0, startSec)),
-      "-i",
-      safeSource,
-      "-t",
-      String(Math.max(0.1, durationSec)),
-      "-acodec",
-      "libmp3lame",
-      "-b:a",
-      bitrate,
-      "-y",
-      outPath,
-    ],
-    { maxBuffer: 1024 * 1024 },
-  );
+  const start = Math.max(0, startSec);
+  const dur = Math.max(0.1, durationSec);
+  const args = opts?.accurateSeek
+    ? [
+        "-i",
+        safeSource,
+        "-ss",
+        String(start),
+        "-t",
+        String(dur),
+        "-acodec",
+        "libmp3lame",
+        "-b:a",
+        bitrate,
+        "-y",
+        outPath,
+      ]
+    : [
+        "-ss",
+        String(start),
+        "-i",
+        safeSource,
+        "-t",
+        String(dur),
+        "-acodec",
+        "libmp3lame",
+        "-b:a",
+        bitrate,
+        "-y",
+        outPath,
+      ];
+  await exec(FFMPEG_PATH, args, { maxBuffer: 1024 * 1024 });
   return outPath;
 }
 

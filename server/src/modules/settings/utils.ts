@@ -40,6 +40,8 @@ export interface AppSettings {
   /** When true, feed XML can include WebSub hub link; hub URL is in websub_hub. */
   websub_discovery_enabled: boolean;
   hostname: string;
+  /** IANA time zone for analytics day/hour buckets. Empty = process/OS default. */
+  timezone: string;
   /** WebSub hub URL (e.g. https://pubsubhubbub.appspot.com/). Used when websub_discovery_enabled is true. */
   websub_hub: string;
   final_bitrate_kbps: number;
@@ -226,6 +228,7 @@ export const DEFAULTS: AppSettings = {
   public_feeds_enabled: true,
   websub_discovery_enabled: false,
   hostname: "",
+  timezone: "",
   websub_hub: "",
   final_bitrate_kbps: 128,
   final_channels: "mono",
@@ -378,6 +381,7 @@ export function buildAppSettingsFromRows(
     else if (row.key === "websub_discovery_enabled")
       settings.websub_discovery_enabled = parseBool(row.value);
     else if (row.key === "hostname") settings.hostname = row.value;
+    else if (row.key === "timezone") settings.timezone = row.value;
     else if (row.key === "websub_hub") settings.websub_hub = row.value;
     else if (row.key === "final_bitrate_kbps") {
       const v = Number(row.value);
@@ -614,6 +618,7 @@ export function buildAppSettingsFromRows(
     websub_discovery_enabled:
       settings.websub_discovery_enabled ?? DEFAULTS.websub_discovery_enabled,
     hostname: settings.hostname ?? DEFAULTS.hostname,
+    timezone: settings.timezone ?? DEFAULTS.timezone,
     websub_hub: settings.websub_hub ?? DEFAULTS.websub_hub,
     maxmind_account_id:
       settings.maxmind_account_id ?? DEFAULTS.maxmind_account_id,
@@ -834,6 +839,19 @@ export function settingsToApiResponse(
     publicFeedsEnabled: settings.public_feeds_enabled,
     websubDiscoveryEnabled: settings.websub_discovery_enabled,
     hostname: settings.hostname,
+    timezone: settings.timezone ?? "",
+    effectiveTimezone: (() => {
+      const configured = (settings.timezone ?? "").trim();
+      if (configured) {
+        try {
+          Intl.DateTimeFormat("en-US", { timeZone: configured }).format(new Date());
+          return configured;
+        } catch {
+          /* fall through */
+        }
+      }
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    })(),
     websubHub: settings.websub_hub,
     finalBitrateKbps: settings.final_bitrate_kbps,
     finalChannels: settings.final_channels,

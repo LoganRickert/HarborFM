@@ -293,10 +293,11 @@ export const wsHandler = async (socket: any, req: any) => {
       }
 
       if (type === "associateProducer") {
-        const { producerId, participantId, participantName } = msg as {
+        const { producerId, participantId, participantName, castId } = msg as {
           producerId?: string;
           participantId?: string;
           participantName?: string;
+          castId?: string;
         };
         if (!producerId || !participantId || typeof participantName !== "string") return;
         if (producerToSocket.get(producerId) !== socket) return;
@@ -305,10 +306,23 @@ export const wsHandler = async (socket: any, req: any) => {
         } catch {
           return;
         }
+        let safeCastId: string | undefined;
+        if (typeof castId === "string" && castId.trim()) {
+          try {
+            assertSafeId(castId.trim(), "castId");
+            safeCastId = castId.trim();
+          } catch {
+            safeCastId = undefined;
+          }
+        }
         const producer = roomState.producers.get(producerId);
         if (!producer) return;
         const safeName = sanitizeParticipantName(participantName);
-        producerParticipantMapRef.set(producerId, { participantId, participantName: safeName });
+        producerParticipantMapRef.set(producerId, {
+          participantId,
+          participantName: safeName,
+          ...(safeCastId ? { castId: safeCastId } : {}),
+        });
         forEachSocketInRoom(roomId, (s) => {
           if (s !== socket && (s as { readyState?: number }).readyState === 1) {
             (s as { send: (d: string) => void }).send(
@@ -317,6 +331,7 @@ export const wsHandler = async (socket: any, req: any) => {
                 producerId,
                 participantId,
                 participantName: safeName,
+                ...(safeCastId ? { castId: safeCastId } : {}),
               })
             );
           }

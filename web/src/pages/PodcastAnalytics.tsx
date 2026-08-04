@@ -14,6 +14,7 @@ import {
   Download,
   Activity,
   ChevronDown,
+  Clock,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -40,6 +41,7 @@ import {
   downloadAnalyticsExcel,
   downloadAnalyticsJson,
 } from '../utils/podcastAnalyticsExport';
+import { formatHourLabel, serverLocalToBrowserHour } from '../utils/analyticsHourTimezone';
 import styles from './PodcastAnalytics.module.css';
 
 const COLORS = {
@@ -70,6 +72,22 @@ function lastNLocalDateRange(days: number): { startDate: string; endDate: string
   return { startDate: localDateYYYYMMDD(start), endDate: localDateYYYYMMDD(end) };
 }
 
+/** Every local calendar day from startDate through endDate inclusive (YYYY-MM-DD). */
+function eachLocalDateInclusive(startDate: string, endDate: string): string[] {
+  const [sy, sm, sd] = startDate.split('-').map(Number);
+  const [ey, em, ed] = endDate.split('-').map(Number);
+  if (!sy || !sm || !sd || !ey || !em || !ed) return [];
+  const out: string[] = [];
+  const cur = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  if (cur > end) return [];
+  while (cur <= end) {
+    out.push(localDateYYYYMMDD(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
 function filterAnalyticsByEpisodes(
   analytics: PodcastAnalytics,
   selectedIds: Set<string>,
@@ -80,6 +98,9 @@ function filterAnalyticsByEpisodes(
     selectedIds.has(r.episodeId),
   );
   const episodeListensDaily = analytics.episodeListensDaily.filter((r) =>
+    selectedIds.has(r.episodeId),
+  );
+  const episodeListensHourly = analytics.episodeListensHourly.filter((r) =>
     selectedIds.has(r.episodeId),
   );
   const uniqueListenersByEpisode = analytics.uniqueListenersByEpisode.filter((r) =>
@@ -98,6 +119,7 @@ function filterAnalyticsByEpisodes(
     episodeDaily,
     episodeLocationDaily,
     episodeListensDaily,
+    episodeListensHourly,
     uniqueListenersByEpisode,
     retentionByEpisode,
     uniqueListeners,
@@ -251,9 +273,12 @@ function tooltipLabelFormatter(label: unknown): string {
   return String(label ?? '');
 }
 
-type TimeViewType = 'line' | 'area' | 'bar' | 'table';
+type TimeViewType = 'area' | 'bar' | 'table';
+type OverviewViewType = TimeViewType;
 type LocationsViewType = 'pie' | 'bar' | 'table';
 type SourceViewType = 'pie' | 'table';
+type HourOfDayViewType = 'area' | 'table';
+type RetentionViewType = 'line' | 'table';
 type EpisodeEngagementTab = 'downloads' | 'fetches' | 'comparison' | 'table';
 
 const axisProps = {
@@ -308,14 +333,18 @@ export function PodcastAnalytics() {
   const [episodesInitializedFor, setEpisodesInitializedFor] = useState<string | null>(null);
   const [episodeMenuOpen, setEpisodeMenuOpen] = useState(false);
   const episodeMenuRef = useRef<HTMLDivElement>(null);
-  const [overviewView, setOverviewView] = useState<TimeViewType>('line');
-  const [feedView, setFeedView] = useState<TimeViewType>('line');
+  const [overviewView, setOverviewView] = useState<OverviewViewType>('area');
+  const [feedView, setFeedView] = useState<OverviewViewType>('area');
+  const [hourOfDayView, setHourOfDayView] = useState<HourOfDayViewType>('area');
+  const [retentionView, setRetentionView] = useState<RetentionViewType>('line');
   const [showFeedCrawlers, setShowFeedCrawlers] = useState(false);
   const [engagementTab, setEngagementTab] = useState<EpisodeEngagementTab>('downloads');
   const [locationsView, setLocationsView] = useState<LocationsViewType>('bar');
   const [sourceView, setSourceView] = useState<SourceViewType>('pie');
   const [narrow, setNarrow] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
+  /** When true, End date tracks the viewer's local "today" across midnight. */
+  const endPinnedToTodayRef = useRef(true);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 480px)');
@@ -323,6 +352,27 @@ export function PodcastAnalytics() {
     update();
     mq.addEventListener('change', update);
     return () => mq.removeEventListener('change', update);
+  }, []);
+
+  // Keep End on the viewer's local today when the range was opened (or set) as "through today".
+  useEffect(() => {
+    const syncEndToToday = () => {
+      if (!endPinnedToTodayRef.current) return;
+      const today = localDateYYYYMMDD();
+      setEndDate((prev) => (prev === today ? prev : today));
+    };
+    syncEndToToday();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncEndToToday();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', syncEndToToday);
+    const id = window.setInterval(syncEndToToday, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', syncEndToToday);
+      window.clearInterval(id);
+    };
   }, []);
 
   useEffect(() => {
@@ -427,34 +477,56 @@ export function PodcastAnalytics() {
   const uniqueListeners = viewAnalytics?.uniqueListeners ?? 0;
 
   const overviewData = useMemo(() => {
-    if (!viewAnalytics) return [];
+    const dates = eachLocalDateInclusive(startDate, endDate);
     const byDate: Record<string, { statDate: string; downloads: number }> = {};
-    for (const row of viewAnalytics.episodeListensDaily) {
-      const d = row.statDate;
-      if (!byDate[d]) byDate[d] = { statDate: d, downloads: 0 };
-      byDate[d].downloads += row.humanCount;
+    for (const d of dates) byDate[d] = { statDate: d, downloads: 0 };
+    if (viewAnalytics) {
+      for (const row of viewAnalytics.episodeListensDaily) {
+        const d = row.statDate;
+        if (!byDate[d]) continue;
+        byDate[d].downloads += row.humanCount;
+      }
     }
-    return Object.values(byDate).sort((a, b) => a.statDate.localeCompare(b.statDate));
+    return dates.map((d) => byDate[d]!);
+  }, [viewAnalytics, startDate, endDate]);
+
+  const hourOfDayData = useMemo(() => {
+    const bins = Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      label: formatHourLabel(hour),
+      downloads: 0,
+    }));
+    if (!viewAnalytics) return bins;
+    const serverTz = viewAnalytics.statTimezone;
+    for (const row of viewAnalytics.episodeListensHourly) {
+      const browserHour = serverLocalToBrowserHour(row.statDate, row.statHour, serverTz);
+      bins[browserHour]!.downloads += row.humanCount;
+    }
+    return bins;
   }, [viewAnalytics]);
 
   const feedData = useMemo(() => {
-    if (!analytics) return [];
+    const dates = eachLocalDateInclusive(startDate, endDate);
     const byDate: Record<string, { human: number; bot: number }> = {};
-    for (const row of analytics.rssDaily) {
-      const d = row.statDate;
-      if (!byDate[d]) byDate[d] = { human: 0, bot: 0 };
-      byDate[d].human += row.humanCount;
-      byDate[d].bot += row.botCount;
+    for (const d of dates) byDate[d] = { human: 0, bot: 0 };
+    if (analytics) {
+      for (const row of analytics.rssDaily) {
+        const d = row.statDate;
+        if (!byDate[d]) continue;
+        byDate[d].human += row.humanCount;
+        byDate[d].bot += row.botCount;
+      }
     }
-    return Object.entries(byDate)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([statDate, { human, bot }]) => ({
+    return dates.map((statDate) => {
+      const { human, bot } = byDate[statDate]!;
+      return {
         statDate,
         Listeners: human,
         Crawlers: bot,
         total: human + bot,
-      }));
-  }, [analytics]);
+      };
+    });
+  }, [analytics, startDate, endDate]);
 
   const episodeEngagementData = useMemo(() => {
     if (!viewAnalytics) return [];
@@ -520,6 +592,19 @@ export function PodcastAnalytics() {
     return Object.keys(retentionChartData[0]).filter((k) => k !== 'bucket');
   }, [viewAnalytics, retentionChartData]);
 
+  const retentionTableRows = useMemo(() => {
+    if (!viewAnalytics) return [];
+    const titleById = new Map(viewAnalytics.episodes.map((e) => [e.id, e.title]));
+    return viewAnalytics.retentionByEpisode.map((ep) => {
+      const pctByBucket = new Map(ep.buckets.map((b) => [b.bucket, b.pct]));
+      return {
+        episodeId: ep.episodeId,
+        title: titleById.get(ep.episodeId) ?? ep.episodeId,
+        buckets: RETENTION_BUCKETS.map((bucket) => pctByBucket.get(bucket) ?? 0),
+      };
+    });
+  }, [viewAnalytics]);
+
   const hasAnyData =
     overviewData.some((d) => d.downloads > 0) ||
     feedData.length > 0 ||
@@ -575,25 +660,6 @@ export function PodcastAnalytics() {
     viewType: TimeViewType
   ) => {
     const common = { data, margin: chartMargin };
-    if (viewType === 'line') {
-      return (
-        <LineChart {...common}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="statDate" tickFormatter={formatShortDate} {...axisProps} />
-          <YAxis tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))} {...axisProps} />
-          <Tooltip
-            contentStyle={tooltipContentStyle}
-            itemStyle={tooltipItemStyle}
-            labelStyle={tooltipLabelStyle}
-            labelFormatter={tooltipLabelFormatter}
-          />
-          <Legend />
-          {series.map((s) => (
-            <Line key={s.key} type="monotone" dataKey={s.key} name={s.name} stroke={s.color} strokeWidth={2} dot={{ r: 3 }} />
-          ))}
-        </LineChart>
-      );
-    }
     if (viewType === 'area') {
       return (
         <AreaChart {...common}>
@@ -678,7 +744,10 @@ export function PodcastAnalytics() {
                 const next = e.target.value;
                 if (!next) return;
                 setStartDate(next);
-                if (next > endDate) setEndDate(next);
+                if (next > endDate) {
+                  setEndDate(next);
+                  endPinnedToTodayRef.current = next === localDateYYYYMMDD();
+                }
               }}
             />
           </label>
@@ -693,6 +762,7 @@ export function PodcastAnalytics() {
                 const next = e.target.value;
                 if (!next) return;
                 setEndDate(next);
+                endPinnedToTodayRef.current = next === localDateYYYYMMDD();
                 if (next < startDate) setStartDate(next);
               }}
             />
@@ -834,10 +904,10 @@ export function PodcastAnalytics() {
               </span>
             </div>
             <CardTabs
-              options={['line', 'area', 'bar', 'table'] as const}
+              options={['area', 'bar', 'table'] as const}
               value={overviewView}
               onChange={setOverviewView}
-              labels={{ line: 'Line', area: 'Area', bar: 'Bar', table: 'Table' }}
+              labels={{ area: 'Area', bar: 'Bar', table: 'Table' }}
             />
             {overviewView === 'table' ? (
               <div className={styles.tableWrap}>
@@ -878,6 +948,78 @@ export function PodcastAnalytics() {
                 'Downloads are unique valid audio downloads of about one minute or more (250 KB), at most one per client per episode per day. Bots and tiny Range probes are excluded.'}{' '}
               {methodology?.uniqueListeners ??
                 'Unique listeners are distinct clients with at least one Download in this date range.'}
+            </p>
+          </div>
+
+          <div className={styles.card}>
+            <h2 className={styles.sectionTitle}>
+              <Clock size={18} strokeWidth={2} aria-hidden style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
+              Time of Day
+            </h2>
+            <CardTabs
+              options={['area', 'table'] as const}
+              value={hourOfDayView}
+              onChange={setHourOfDayView}
+              labels={{ area: 'Area', table: 'Table' }}
+            />
+            {hourOfDayView === 'table' ? (
+              <div className={styles.tableWrap}>
+                <table className={`${styles.table} ${styles.tableEqualColumns}`}>
+                  <thead>
+                    <tr>
+                      <th>Hour</th>
+                      <th className={styles.num}>Downloads</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hourOfDayData.map((row) => (
+                      <tr key={row.hour}>
+                        <td>{row.label}</td>
+                        <td className={styles.num}>{row.downloads}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : hourOfDayData.every((d) => d.downloads === 0) ? (
+              <div className={styles.chartContainer}>
+                <p className={styles.empty}>No downloads by hour in this date range yet.</p>
+              </div>
+            ) : (
+              <div className={styles.chartContainer}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={hourOfDayData} margin={chartMargin}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis
+                      dataKey="label"
+                      interval={narrow ? 2 : 1}
+                      {...axisProps}
+                    />
+                    <YAxis
+                      tickFormatter={(v) => (v >= 1000 ? `${v / 1000}k` : String(v))}
+                      {...axisProps}
+                    />
+                    <Tooltip
+                      contentStyle={tooltipContentStyle}
+                      itemStyle={tooltipItemStyle}
+                      labelStyle={tooltipLabelStyle}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="downloads"
+                      name="Downloads"
+                      stroke={COLORS.downloads}
+                      fill={COLORS.downloads}
+                      fillOpacity={0.5}
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <p className={styles.cardFooter}>
+              {methodology?.downloadsByHour ??
+                'Hours are shown in your local timezone.'}
             </p>
           </div>
 
@@ -1141,10 +1283,10 @@ export function PodcastAnalytics() {
               <span>Show crawlers</span>
             </label>
             <CardTabs
-              options={['line', 'area', 'bar', 'table'] as const}
+              options={['area', 'bar', 'table'] as const}
               value={feedView}
               onChange={setFeedView}
-              labels={{ line: 'Line', area: 'Area', bar: 'Bar', table: 'Table' }}
+              labels={{ area: 'Area', bar: 'Bar', table: 'Table' }}
             />
             {feedView === 'table' ? (
               <div className={styles.tableWrap}>
@@ -1194,7 +1336,52 @@ export function PodcastAnalytics() {
             <p className={styles.sectionSub}>
               How far listeners get in the episode on your HarborFM site or theme player.
             </p>
-            {retentionSeriesKeys.length === 0 ? (
+            <CardTabs
+              options={['line', 'table'] as const}
+              value={retentionView}
+              onChange={setRetentionView}
+              labels={{ line: 'Line', table: 'Table' }}
+            />
+            {retentionView === 'table' ? (
+              retentionTableRows.length === 0 ? (
+                <div className={styles.chartContainer}>
+                  <p className={styles.empty}>
+                    No website retention data yet. Curves appear after listeners play episodes on your HarborFM site or theme player.
+                  </p>
+                </div>
+              ) : (
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Episode</th>
+                        {RETENTION_BUCKETS.map((bucket) => (
+                          <th key={bucket} className={styles.num}>
+                            {bucket}%
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {retentionTableRows.map((row) => (
+                        <tr key={row.episodeId}>
+                          <td>
+                            <Link to={`/episodes/${row.episodeId}`} className={styles.episodeLink}>
+                              {row.title}
+                            </Link>
+                          </td>
+                          {row.buckets.map((pct, i) => (
+                            <td key={RETENTION_BUCKETS[i]} className={styles.num}>
+                              {pct}%
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : retentionSeriesKeys.length === 0 ? (
               <div className={styles.chartContainer}>
                 <p className={styles.empty}>
                   No website retention data yet. Curves appear after listeners play episodes on your HarborFM site or theme player.

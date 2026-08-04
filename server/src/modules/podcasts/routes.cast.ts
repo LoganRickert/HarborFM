@@ -2,12 +2,18 @@ import type { FastifyInstance } from "fastify";
 import send from "@fastify/send";
 import { nanoid } from "nanoid";
 import { basename, dirname, join, extname } from "path";
-import { existsSync, unlinkSync, writeFileSync } from "fs";
-import { and, asc, desc, eq, notInArray, sql } from "drizzle-orm";
+import {
+  copyFileSync,
+  existsSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   castCreateSchema,
   castUpdateSchema,
   castListQuerySchema,
+  castProfileUpdateSubmitSchema,
   parseCastSocialLinks,
   serializeCastSocialLinks,
 } from "@harborfm/shared";
@@ -44,18 +50,32 @@ import {
 import { getUserById } from "../users/repo.js";
 import { absoluteOrigin } from "../call/meetingMail.js";
 import { userRateLimitPreHandler } from "../../services/rateLimit.js";
+import {
+  castPendingPhotoDir,
+  deletePendingRow,
+  getCastProfileFlagsForIds,
+  getPendingForCast,
+  listPendingCastIdsForPodcast,
+  notifyCastOfProfileApproved,
+  pendingSocialLinks,
+  revokeActiveTokensForCast,
+  rotateCastProfileToken,
+  validateAndStorePendingPhoto,
+} from "../castProfileUpdate/index.js";
 
 /** Cast row from DB (camelCase). isPublic is 0/1 for API. */
 type CastRow = {
   id: string;
   podcastId: string;
   name: string;
+  nickname: string | null;
   role: "host" | "guest";
   description: string | null;
   photoPath: string | null;
   photoUrl: string | null;
   socialLinks: string | null;
   email: string | null;
+  timeZone: string | null;
   isPublic: number;
   createdAt: string;
 };
@@ -64,17 +84,22 @@ const castSelectFields = {
   id: podcastCast.id,
   podcastId: podcastCast.podcastId,
   name: podcastCast.name,
+  nickname: podcastCast.nickname,
   role: podcastCast.role,
   description: podcastCast.description,
   photoPath: podcastCast.photoPath,
   photoUrl: podcastCast.photoUrl,
   socialLinks: podcastCast.socialLinks,
   email: podcastCast.email,
+  timeZone: podcastCast.timeZone,
   isPublic: sql<number>`COALESCE(${podcastCast.isPublic}, 1)`.as("isPublic"),
   createdAt: podcastCast.createdAt,
 };
 
-function castRowToResponse(row: CastRow): Record<string, unknown> {
+function castRowToResponse(
+  row: CastRow,
+  flags?: { hasPendingProfileUpdate?: boolean; hasActiveProfileInvite?: boolean },
+): Record<string, unknown> {
   const photoFilename =
     row.photoPath && row.podcastId
       ? basename(row.photoPath)
@@ -83,6 +108,7 @@ function castRowToResponse(row: CastRow): Record<string, unknown> {
     id: row.id,
     podcastId: row.podcastId,
     name: row.name,
+    nickname: row.nickname?.trim() || null,
     role: row.role,
     description: row.description,
     photoPath: row.photoPath,
@@ -90,9 +116,17 @@ function castRowToResponse(row: CastRow): Record<string, unknown> {
     photoFilename,
     socialLinks: parseCastSocialLinks(row.socialLinks),
     email: row.email?.trim() || null,
+    timeZone: row.timeZone?.trim() || null,
     isPublic: row.isPublic,
     createdAt: row.createdAt,
+    hasPendingProfileUpdate: flags?.hasPendingProfileUpdate ?? false,
+    hasActiveProfileInvite: flags?.hasActiveProfileInvite ?? false,
   };
+}
+
+function castRowToResponseWithFlags(row: CastRow): Record<string, unknown> {
+  const flags = getCastProfileFlagsForIds([row.id]).get(row.id);
+  return castRowToResponse(row, flags);
 }
 
 function canEditCastForRole(
@@ -248,6 +282,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
             q: { type: "string" },
             sort: { type: "string", enum: ["newest", "oldest"] },
             episodeId: { type: "string" },
+            pendingOnly: { type: "string" },
           },
         },
         response: {
@@ -268,6 +303,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
       const q = queryData?.q ?? "";
       const sort = (queryData?.sort === "oldest" ? "oldest" : "newest") as "newest" | "oldest";
       const episodeId = (queryData?.episodeId ?? "").trim();
+      const pendingOnly = queryData?.pendingOnly === true;
 
       const conditions = [eq(podcastCast.podcastId, podcastId)];
       if (q?.trim()) {
@@ -298,6 +334,13 @@ export async function registerCastRoutes(app: FastifyInstance) {
           );
         }
       }
+      if (pendingOnly) {
+        const pendingIds = listPendingCastIdsForPodcast(podcastId);
+        if (pendingIds.length === 0) {
+          return { cast: [], total: 0 };
+        }
+        conditions.push(inArray(podcastCast.id, pendingIds));
+      }
       const whereClause = and(...conditions);
 
       const countRow = drizzleDb
@@ -319,7 +362,13 @@ export async function registerCastRoutes(app: FastifyInstance) {
         .limit(limit)
         .offset(offset)
         .all() as CastRow[];
-      return { cast: rows.map(castRowToResponse), total };
+      const flagsMap = getCastProfileFlagsForIds(rows.map((r) => r.id));
+      return {
+        cast: rows.map((row) =>
+          castRowToResponse(row, flagsMap.get(row.id)),
+        ),
+        total,
+      };
     },
   );
 
@@ -377,6 +426,8 @@ export async function registerCastRoutes(app: FastifyInstance) {
       const photoUrl = parsed.data.photoUrl?.trim() || null;
       const socialLinks = serializeCastSocialLinks(parsed.data.socialLinks ?? []);
       const email = parsed.data.email?.trim().toLowerCase() || null;
+      const timeZone = parsed.data.timeZone?.trim() || null;
+      const nickname = parsed.data.nickname?.trim() || null;
       const isPublic = parsed.data.isPublic ?? 1;
 
       drizzleDb
@@ -385,11 +436,13 @@ export async function registerCastRoutes(app: FastifyInstance) {
           id,
           podcastId,
           name: parsed.data.name.trim(),
+          nickname,
           role: castRole,
           description,
           photoUrl,
           socialLinks,
           email,
+          timeZone,
           isPublic: isPublic !== 0,
         })
         .run();
@@ -402,7 +455,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         .get() as CastRow;
       broadcastToPodcast(podcastId, { type: "showCastChanged" });
       afterUpdatePodcast(podcastId);
-      return reply.status(201).send(castRowToResponse(row));
+      return reply.status(201).send(castRowToResponseWithFlags(row));
     },
   );
 
@@ -466,15 +519,20 @@ export async function registerCastRoutes(app: FastifyInstance) {
 
       const set: Partial<{
         name: string;
+        nickname: string | null;
         role: "host" | "guest";
         description: string | null;
         photoUrl: string | null;
         socialLinks: string;
         email: string | null;
+        timeZone: string | null;
         isPublic: boolean;
       }> = {};
       if (parsed.data.name !== undefined) {
         set.name = parsed.data.name.trim();
+      }
+      if (parsed.data.nickname !== undefined) {
+        set.nickname = parsed.data.nickname?.trim() || null;
       }
       if (parsed.data.role !== undefined) {
         const newRole = parsed.data.role as "host" | "guest";
@@ -499,6 +557,9 @@ export async function registerCastRoutes(app: FastifyInstance) {
       if (parsed.data.email !== undefined) {
         set.email = parsed.data.email?.trim().toLowerCase() || null;
       }
+      if (parsed.data.timeZone !== undefined) {
+        set.timeZone = parsed.data.timeZone?.trim() || null;
+      }
       if (parsed.data.isPublic !== undefined) {
         set.isPublic = parsed.data.isPublic !== 0;
       }
@@ -515,7 +576,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
           )
           .limit(1)
           .get() as CastRow;
-        return castRowToResponse(current);
+        return castRowToResponseWithFlags(current);
       }
       drizzleDb
         .update(podcastCast)
@@ -536,7 +597,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         .where(eq(podcastCast.id, castId))
         .limit(1)
         .get() as CastRow;
-      return castRowToResponse(row);
+      return castRowToResponseWithFlags(row);
     },
   );
 
@@ -599,6 +660,8 @@ export async function registerCastRoutes(app: FastifyInstance) {
           // ignore
         }
       }
+      deletePendingRow(castId);
+      revokeActiveTokensForCast(castId);
       drizzleDb
         .delete(podcastCast)
         .where(
@@ -630,7 +693,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         tags: ["Podcasts"],
         summary: "Email cast member a profile update request",
         description:
-          "Sends the cast member an email asking them to reply with an updated photo and social links. Reply-To is the authenticated user who sends the request. Rate limited to once every 30 seconds per user (CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS).",
+          "Sends the cast member an email with a self-serve profile update link (and reply option). Reply-To is the authenticated user who sends the request. Rate limited to once every 30 seconds per user (CAST_REQUEST_INFO_RATE_LIMIT_WINDOW_MS).",
         params: {
           type: "object",
           properties: {
@@ -718,6 +781,13 @@ export async function registerCastRoutes(app: FastifyInstance) {
             })()
           : "") ||
         "http://localhost";
+      const origin = absoluteOrigin(fallbackOrigin);
+      const { raw } = rotateCastProfileToken({
+        podcastId,
+        castId,
+        createdByUserId: request.userId ?? null,
+      });
+      const updateUrl = `${origin}/cast-profile-update?token=${encodeURIComponent(raw)}`;
       const { photoUrl, photoOnFileUnlinked } = castPhotoAbsoluteUrlForEmail(
         existing,
         fallbackOrigin,
@@ -736,7 +806,8 @@ export async function registerCastRoutes(app: FastifyInstance) {
         photoOnFileUnlinked,
         socialLinks: parseCastSocialLinks(existing.socialLinks),
         replyToEmail: replyTo,
-        baseUrl: absoluteOrigin(fallbackOrigin),
+        baseUrl: origin,
+        updateUrl,
       });
       const result = await sendMail({
         to: toEmail,
@@ -749,6 +820,455 @@ export async function registerCastRoutes(app: FastifyInstance) {
         });
       }
       return { ok: true };
+    },
+  );
+
+  app.post(
+    "/podcasts/:podcastId/cast/:castId/profile-invite/expire",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Podcasts"],
+        summary: "Expire cast profile update invite link",
+        description:
+          "Revokes the cast profile self-update invite. Links otherwise remain valid for CAST_PROFILE_TOKEN_TTL_DAYS (default 14). Approve and disregard do not revoke the link.",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            castId: { type: "string" },
+          },
+          required: ["podcastId", "castId"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, castId } = request.params as {
+        podcastId: string;
+        castId: string;
+      };
+      if (!request.userId || !canAccessPodcast(request.userId, podcastId)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const role = getPodcastRole(request.userId, podcastId);
+      const existing = drizzleDb
+        .select(castSelectFields)
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
+      if (!existing) {
+        return reply.status(404).send({ error: "Cast member not found" });
+      }
+      if (!canEditCastForRole(role, existing.role as "host" | "guest")) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      revokeActiveTokensForCast(castId);
+      const flags = getCastProfileFlagsForIds([castId]).get(castId);
+      return castRowToResponse(existing, flags);
+    },
+  );
+
+  app.get(
+    "/podcasts/:podcastId/cast/:castId/profile-pending",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Podcasts"],
+        summary: "Get pending cast profile update for host review",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            castId: { type: "string" },
+          },
+          required: ["podcastId", "castId"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, castId } = request.params as {
+        podcastId: string;
+        castId: string;
+      };
+      if (!request.userId || !canAccessPodcast(request.userId, podcastId)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const role = getPodcastRole(request.userId, podcastId);
+      const existing = drizzleDb
+        .select(castSelectFields)
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
+      if (!existing) {
+        return reply.status(404).send({ error: "Cast member not found" });
+      }
+      if (!canEditCastForRole(role, existing.role as "host" | "guest")) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const pending = getPendingForCast(castId);
+      if (!pending) {
+        return reply.status(404).send({ error: "No pending update" });
+      }
+      const flags = getCastProfileFlagsForIds([castId]).get(castId);
+      const pendingPhotoUrl = pending.photoPath
+        ? `/${API_PREFIX}/podcasts/${encodeURIComponent(podcastId)}/cast/${encodeURIComponent(castId)}/profile-pending/photo?v=${encodeURIComponent(pending.updatedAt || pending.submittedAt || "")}`
+        : null;
+      return {
+        current: castRowToResponse(existing, flags),
+        pending: {
+          name: pending.name,
+          nickname: pending.nickname,
+          description: pending.description,
+          socialLinks: pendingSocialLinks(pending),
+          timeZone: pending.timeZone?.trim() || null,
+          photoPath: pending.photoPath,
+          photoUrl: pendingPhotoUrl,
+          submittedAt: pending.submittedAt,
+          updatedAt: pending.updatedAt,
+        },
+      };
+    },
+  );
+
+  app.get(
+    "/podcasts/:podcastId/cast/:castId/profile-pending/photo",
+    {
+      preHandler: [requireAuth],
+      schema: {
+        tags: ["Podcasts"],
+        summary: "Serve pending cast profile photo",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            castId: { type: "string" },
+          },
+          required: ["podcastId", "castId"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, castId } = request.params as {
+        podcastId: string;
+        castId: string;
+      };
+      if (!request.userId || !canAccessPodcast(request.userId, podcastId)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const pending = getPendingForCast(castId);
+      if (!pending?.photoPath || pending.podcastId !== podcastId) {
+        return reply.status(404).send({ error: "Not found" });
+      }
+      try {
+        const dir = castPendingPhotoDir(podcastId);
+        const safe = assertPathUnder(resolveDataPath(pending.photoPath), dir);
+        if (!existsSync(safe)) {
+          return reply.status(404).send({ error: "Not found" });
+        }
+        const contentType =
+          EXT_DOT_TO_MIMETYPE[extname(safe).toLowerCase()] || "image/jpeg";
+        const result = await send(request.raw, basename(safe), {
+          root: dirname(safe),
+          contentType: false,
+          acceptRanges: true,
+          cacheControl: false,
+        });
+        if (result.type === "error") {
+          return reply.status(404).send({ error: "Not found" });
+        }
+        reply.status(result.statusCode as 200 | 206 | 416);
+        const headers = result.headers as Record<string, string>;
+        for (const [key, value] of Object.entries(headers)) {
+          if (value !== undefined && key.toLowerCase() !== "cache-control") {
+            reply.header(key, value);
+          }
+        }
+        reply.header("Content-Type", contentType);
+        reply.header("Cache-Control", "private, no-cache");
+        return reply.send(result.stream);
+      } catch {
+        return reply.status(404).send({ error: "Not found" });
+      }
+    },
+  );
+
+  app.post(
+    "/podcasts/:podcastId/cast/:castId/profile-pending/disregard",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Podcasts"],
+        summary: "Disregard pending cast profile update without applying",
+        description:
+          "Deletes the pending proposal and revokes the invite link. Does not email the cast member.",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            castId: { type: "string" },
+          },
+          required: ["podcastId", "castId"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, castId } = request.params as {
+        podcastId: string;
+        castId: string;
+      };
+      if (!request.userId || !canAccessPodcast(request.userId, podcastId)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const role = getPodcastRole(request.userId, podcastId);
+      const existing = drizzleDb
+        .select(castSelectFields)
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
+      if (!existing) {
+        return reply.status(404).send({ error: "Cast member not found" });
+      }
+      if (!canEditCastForRole(role, existing.role as "host" | "guest")) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const pending = getPendingForCast(castId);
+      if (!pending) {
+        return reply.status(404).send({ error: "No pending update" });
+      }
+      deletePendingRow(castId);
+      broadcastToPodcast(podcastId, { type: "showCastChanged" });
+      const flags = getCastProfileFlagsForIds([castId]).get(castId);
+      return castRowToResponse(existing, flags);
+    },
+  );
+
+  app.post(
+    "/podcasts/:podcastId/cast/:castId/profile-pending/approve",
+    {
+      preHandler: [requireAuth, requireNotReadOnly],
+      schema: {
+        tags: ["Podcasts"],
+        summary: "Approve pending cast profile update",
+        params: {
+          type: "object",
+          properties: {
+            podcastId: { type: "string" },
+            castId: { type: "string" },
+          },
+          required: ["podcastId", "castId"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const { podcastId, castId } = request.params as {
+        podcastId: string;
+        castId: string;
+      };
+      if (!request.userId || !canAccessPodcast(request.userId, podcastId)) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const role = getPodcastRole(request.userId, podcastId);
+      const existing = drizzleDb
+        .select(castSelectFields)
+        .from(podcastCast)
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .limit(1)
+        .get() as CastRow | undefined;
+      if (!existing) {
+        return reply.status(404).send({ error: "Cast member not found" });
+      }
+      if (!canEditCastForRole(role, existing.role as "host" | "guest")) {
+        return reply.status(403).send({ error: "Forbidden" });
+      }
+      const pending = getPendingForCast(castId);
+      if (!pending) {
+        return reply.status(404).send({ error: "No pending update" });
+      }
+
+      let fields: Record<string, unknown> = {};
+      let uploadedPhoto: { buffer: Buffer; mimetype: string } | null = null;
+      if (request.isMultipart()) {
+        for await (const part of request.parts()) {
+          if (part.type === "file") {
+            const buffer = await part.toBuffer();
+            if (buffer.length > 0) {
+              uploadedPhoto = {
+                buffer,
+                mimetype: part.mimetype || "image/jpeg",
+              };
+            }
+          } else {
+            fields[part.fieldname] = part.value;
+          }
+        }
+      } else {
+        fields = (request.body ?? {}) as Record<string, unknown>;
+      }
+
+      const socialRaw =
+        typeof fields.socialLinks === "string"
+          ? (() => {
+              try {
+                return JSON.parse(fields.socialLinks as string);
+              } catch {
+                return fields.socialLinks;
+              }
+            })()
+          : fields.socialLinks;
+
+      const parsed = castProfileUpdateSubmitSchema.safeParse({
+        name: fields.name ?? pending.name,
+        nickname:
+          fields.nickname !== undefined ? fields.nickname : pending.nickname,
+        description:
+          fields.description !== undefined
+            ? fields.description
+            : pending.description,
+        socialLinks:
+          socialRaw !== undefined ? socialRaw : pendingSocialLinks(pending),
+        timeZone:
+          fields.timeZone !== undefined ? fields.timeZone : pending.timeZone,
+      });
+      if (!parsed.success) {
+        return reply.status(400).send({
+          error: parsed.error.issues[0]?.message ?? "Validation failed",
+        });
+      }
+
+      let nextPhotoPath = existing.photoPath;
+      let nextPhotoUrl = existing.photoUrl;
+      if (uploadedPhoto) {
+        const stored = await validateAndStorePendingPhoto({
+          podcastId,
+          castId,
+          buffer: uploadedPhoto.buffer,
+          mimetype: uploadedPhoto.mimetype,
+        });
+        if ("error" in stored) {
+          return reply.status(400).send({ error: stored.error });
+        }
+        const pendingAbs = resolveDataPath(stored.photoPath);
+        const ext = extname(pendingAbs) || ".jpg";
+        const destDir = castPhotoDir(podcastId);
+        const destPath = join(destDir, `${castId}${ext.startsWith(".") ? ext : `.${ext}`}`);
+        assertResolvedPathUnder(destPath, destDir);
+        copyFileSync(pendingAbs, destPath);
+        if (existing.photoPath) {
+          try {
+            const oldAbs = assertPathUnder(
+              resolveDataPath(existing.photoPath),
+              destDir,
+            );
+            if (oldAbs !== destPath && existsSync(oldAbs)) unlinkSync(oldAbs);
+          } catch {
+            // ignore
+          }
+        }
+        nextPhotoPath = pathRelativeToData(destPath);
+        nextPhotoUrl = null;
+      } else if (pending.photoPath) {
+        const pendingAbs = resolveDataPath(pending.photoPath);
+        const ext = extname(pendingAbs) || ".jpg";
+        const destDir = castPhotoDir(podcastId);
+        const destPath = join(destDir, `${castId}${ext.startsWith(".") ? ext : `.${ext}`}`);
+        assertResolvedPathUnder(destPath, destDir);
+        try {
+          const safePending = assertPathUnder(
+            pendingAbs,
+            castPendingPhotoDir(podcastId),
+          );
+          if (existsSync(safePending)) {
+            copyFileSync(safePending, destPath);
+            if (existing.photoPath) {
+              try {
+                const oldAbs = assertPathUnder(
+                  resolveDataPath(existing.photoPath),
+                  destDir,
+                );
+                if (oldAbs !== destPath && existsSync(oldAbs)) unlinkSync(oldAbs);
+              } catch {
+                // ignore
+              }
+            }
+            nextPhotoPath = pathRelativeToData(destPath);
+            nextPhotoUrl = null;
+          }
+        } catch {
+          // leave existing photo
+        }
+      }
+
+      drizzleDb
+        .update(podcastCast)
+        .set({
+          name: parsed.data.name.trim(),
+          nickname: parsed.data.nickname?.trim() || null,
+          description: parsed.data.description?.trim() || null,
+          socialLinks: serializeCastSocialLinks(parsed.data.socialLinks),
+          timeZone: parsed.data.timeZone?.trim() || null,
+          photoPath: nextPhotoPath,
+          photoUrl: nextPhotoUrl,
+        })
+        .where(
+          and(
+            eq(podcastCast.id, castId),
+            eq(podcastCast.podcastId, podcastId),
+          ),
+        )
+        .run();
+
+      deletePendingRow(castId);
+
+      const podcast = drizzleDb
+        .select({ title: podcasts.title })
+        .from(podcasts)
+        .where(eq(podcasts.id, podcastId))
+        .limit(1)
+        .get();
+      const fallbackOrigin =
+        (request.headers["origin"] as string | undefined) ||
+        absoluteOrigin("");
+      void notifyCastOfProfileApproved({
+        castName: parsed.data.name.trim(),
+        castEmail: existing.email,
+        podcastTitle: podcast?.title ?? "your show",
+        fallbackOrigin,
+      });
+
+      broadcastToPodcast(podcastId, { type: "showCastChanged" });
+      afterUpdatePodcast(podcastId);
+
+      const row = drizzleDb
+        .select(castSelectFields)
+        .from(podcastCast)
+        .where(eq(podcastCast.id, castId))
+        .limit(1)
+        .get() as CastRow;
+      const flags = getCastProfileFlagsForIds([castId]).get(castId);
+      return castRowToResponse(row, flags);
     },
   );
 
@@ -845,7 +1365,7 @@ export async function registerCastRoutes(app: FastifyInstance) {
         .where(eq(podcastCast.id, castId))
         .limit(1)
         .get() as CastRow;
-      return castRowToResponse(row);
+      return castRowToResponseWithFlags(row);
     },
   );
 }

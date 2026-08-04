@@ -9,15 +9,20 @@ import { drizzleDb } from "../db/drizzle.js";
 import {
   podcastStatsEpisodeDaily,
   podcastStatsEpisodeListensDaily,
+  podcastStatsEpisodeListensHourly,
   podcastStatsEpisodeLocationDaily,
   podcastStatsListenDedup,
   podcastStatsRetentionReach,
   podcastStatsRssDaily,
 } from "../db/schema.js";
-import { formatLocalDateYYYYMMDD } from "../utils/datetime.js";
+import { formatLocalDateYYYYMMDD, getLocalHour } from "../utils/datetime.js";
 
 function statDate(): string {
-  return formatLocalDateYYYYMMDD(); // YYYY-MM-DD in server local timezone
+  return formatLocalDateYYYYMMDD(); // YYYY-MM-DD in app timezone (settings or process)
+}
+
+function statHour(): number {
+  return getLocalHour(); // 0–23 in app timezone (settings or process)
 }
 
 /**
@@ -39,6 +44,7 @@ const rssCounters = new Map<Key, { bot: number; human: number }>();
 const episodeCounters = new Map<Key, { bot: number; human: number }>();
 const episodeLocationCounters = new Map<Key, { bot: number; human: number }>();
 const listenCounters = new Map<Key, { bot: number; human: number }>();
+const listenHourCounters = new Map<Key, { bot: number; human: number }>();
 
 const KEY_SEP = "|";
 
@@ -58,6 +64,14 @@ function episodeLocationKey(
 }
 function listenKey(episodeId: string, date: string, source: string): Key {
   return `listen:${episodeId}:${date}${KEY_SEP}${source}`;
+}
+function listenHourKey(
+  episodeId: string,
+  date: string,
+  hour: number,
+  source: string,
+): Key {
+  return `listenh:${episodeId}:${date}:${hour}${KEY_SEP}${source}`;
 }
 
 function incRss(podcastId: string, isBot: boolean, source: string): void {
@@ -123,6 +137,20 @@ function incListen(episodeId: string, isBot: boolean, source: string): void {
   listenCounters.set(key, cur);
 }
 
+function incListenHour(
+  episodeId: string,
+  isBot: boolean,
+  source: string,
+): void {
+  const date = statDate();
+  const hour = statHour();
+  const key = listenHourKey(episodeId, date, hour, source);
+  const cur = listenHourCounters.get(key) ?? { bot: 0, human: 0 };
+  if (isBot) cur.bot += 1;
+  else cur.human += 1;
+  listenHourCounters.set(key, cur);
+}
+
 export function recordRssRequest(
   podcastId: string,
   isBot: boolean,
@@ -156,6 +184,7 @@ export function recordEpisodeListenIfNew(
   const date = statDate();
   if (!tryRecordListenDedup(episodeId, date, clientKeyVal)) return;
   incListen(episodeId, isBot, source);
+  incListenHour(episodeId, isBot, source);
 }
 
 const RETENTION_BUCKETS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90] as const;
@@ -327,11 +356,49 @@ function flushListens(): void {
   listenCounters.clear();
 }
 
+function flushListensHourly(): void {
+  for (const [key, counts] of listenHourCounters) {
+    if (counts.bot === 0 && counts.human === 0) continue;
+    const [prefix, source] = key.split(KEY_SEP);
+    const parts = prefix.split(":");
+    const episodeId = parts[1];
+    const date = parts[2];
+    const hour = Number(parts[3]);
+    drizzleDb
+      .insert(podcastStatsEpisodeListensHourly)
+      .values({
+        episodeId,
+        statDate: date,
+        statHour: hour,
+        source,
+        botCount: counts.bot,
+        humanCount: counts.human,
+      })
+      .onConflictDoUpdate({
+        target: [
+          podcastStatsEpisodeListensHourly.episodeId,
+          podcastStatsEpisodeListensHourly.statDate,
+          podcastStatsEpisodeListensHourly.statHour,
+          podcastStatsEpisodeListensHourly.source,
+        ],
+        set: {
+          botCount:
+            sql`${podcastStatsEpisodeListensHourly.botCount} + ${counts.bot}`,
+          humanCount:
+            sql`${podcastStatsEpisodeListensHourly.humanCount} + ${counts.human}`,
+        },
+      })
+      .run();
+  }
+  listenHourCounters.clear();
+}
+
 export function flush(): void {
   flushRss();
   flushEpisode();
   flushEpisodeLocation();
   flushListens();
+  flushListensHourly();
 }
 
 let flushIntervalId: ReturnType<typeof setInterval> | null = null;

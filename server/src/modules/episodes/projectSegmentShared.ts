@@ -84,6 +84,7 @@ export type SegmentProjectJson = {
   hostDuckingSha256?: string | null;
   loudnessTargetingEnabled?: boolean;
   finalGainDb?: number;
+  multiTrackWhisperEnabled?: boolean;
 };
 
 export function readJsonFile<T>(path: string): T {

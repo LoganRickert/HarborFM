@@ -36,6 +36,7 @@ import {
   CALL_JOIN_CONTEXT,
 } from "./shared.js";
 import { labelSoundboardSegmentsInManifest } from "./soundboardManifestLabels.js";
+import { enrichManifestCastIds } from "./enrichManifestCastIds.js";
 
 async function requireRecordingSecret(
   request: FastifyRequest,
@@ -374,10 +375,15 @@ export async function registerInternalRoutes(app: FastifyInstance): Promise<void
         if (body.tracksManifest && Array.isArray(body.perTrackFilePaths) && body.perTrackFilePaths.length > 0) {
           try {
             const labeledManifest = labelSoundboardSegmentsInManifest(body.tracksManifest);
-            const manifest = labeledManifest as { recordingEpochMs?: number } | undefined;
+            const sessForCast = body.sessionId ? getSessionById(body.sessionId) : undefined;
+            const castEnrichedManifest = enrichManifestCastIds(
+              labeledManifest,
+              sessForCast?.participants ?? [],
+            );
+            const manifest = castEnrichedManifest as { recordingEpochMs?: number } | undefined;
             const recordingEpochMs = typeof manifest?.recordingEpochMs === "number" ? manifest.recordingEpochMs : undefined;
             const mtDir = multitrackRecordingsDir(body.podcastId, body.episodeId, body.segmentId, recordingEpochMs);
-            writeFileSync(join(mtDir, "tracks_manifest.json"), JSON.stringify(labeledManifest, null, 2));
+            writeFileSync(join(mtDir, "tracks_manifest.json"), JSON.stringify(castEnrichedManifest, null, 2));
             ensureOriginalTracksManifest(mtDir);
             const webrtcDir = getWebrtcRecordingsDir();
             const copiedBases: string[] = [];

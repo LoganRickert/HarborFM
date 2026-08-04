@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Crown, User, Settings, X, List } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, Pencil, Check, Volume2, Settings, X, List } from 'lucide-react';
 import type { ShowNotesItem } from '@harborfm/shared';
-import { getJoinInfo, callWebSocketUrl } from '../api/call';
+import { getJoinInfo, callWebSocketUrl, uploadCallChatImage } from '../api/call';
 import { getPublicConfig } from '../api/public';
 import { getAgcKey, getMicVolumeKey } from '../constants/micSettings';
 import { useMediasoupRoom } from '../hooks/useMediasoupRoom';
@@ -11,11 +11,12 @@ import { useMicSilenceWarning } from '../hooks/useMicSilenceWarning';
 import { useMeta } from '../hooks/useMeta';
 import { useWakeLock } from '../hooks/useWakeLock';
 import { RemoteAudio, AudioUnlockBanner } from '../components/GroupCall/RemoteAudio';
-import { AudioUnlockProvider } from '../components/GroupCall/AudioUnlockContext';
-import { CallChatPanel, type ChatMessage } from '../components/GroupCall/CallChatPanel';
+import { AudioUnlockProvider, RemoteLevelMeterUnlock } from '../components/GroupCall/AudioUnlockContext';
+import { CallChatPanel, type ChatMessage, type ChatSendPayload } from '../components/GroupCall/CallChatPanel';
 import { CallJoinHeader } from '../components/CallJoinHeader';
 import { LeaveCallConfirmDialog } from '../components/GroupCall/LeaveCallConfirmDialog';
 import { CallShowNotesDialog } from '../components/GroupCall/CallShowNotesDialog';
+import { ParticipantRoleIcon } from '../components/GroupCall/ParticipantRoleIcon';
 import type { CallJoinInfo } from '../api/call';
 import { createAudioLevelProcessor } from '../utils/audioLevel';
 import { formatDurationHMS } from '../utils/format';
@@ -152,7 +153,7 @@ export function CallJoin() {
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [webrtcUrl, setWebrtcUrl] = useState<string | undefined>(undefined);
   const [webrtcRoomId, setWebrtcRoomId] = useState<string | undefined>(undefined);
-  const [participants, setParticipants] = useState<Array<{ id: string; name: string; isHost: boolean; muted?: boolean; mutedByHost?: boolean; disconnected?: boolean }>>([]);
+  const [participants, setParticipants] = useState<Array<{ id: string; name: string; isHost: boolean; muted?: boolean; mutedByHost?: boolean; disconnected?: boolean; castId?: string; castPhotoUrl?: string; castLocked?: boolean }>>([]);
   const [hostDisconnected, setHostDisconnected] = useState<{ gracePeriodMs: number; endsAt: number } | null>(null);
   const [hostAwayCountdown, setHostAwayCountdown] = useState<number | null>(null);
   const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
@@ -178,6 +179,8 @@ export function CallJoin() {
   const displayNameInputRef = useRef<HTMLInputElement | null>(null);
   const myParticipantIdRef = useRef<string | null>(null);
   myParticipantIdRef.current = myParticipantId;
+  const deviceIdRef = useRef(deviceId);
+  deviceIdRef.current = deviceId;
   const myParticipant = myParticipantId ? participants.find((p) => p.id === myParticipantId) : null;
   const displayName = myParticipant?.name ?? name;
   const {
@@ -190,6 +193,8 @@ export function CallJoin() {
     livePublisherIds,
     publishersTracked,
     ready: producerReady,
+    setProducerVolume,
+    resumeRemoteLevelMeters,
   } = useMediasoupRoom(
     webrtcUrl,
     webrtcRoomId,
@@ -199,6 +204,7 @@ export function CallJoin() {
     undefined,
     autoGainControl,
     micVolume,
+    myParticipant?.castId ?? null,
   );
   // When in-call, show the mediasoup send-path level (what remotes hear), not the pre-join preview mic.
   const displayMicLevel = joined ? sendMicLevel : micLevel;
@@ -207,6 +213,29 @@ export function CallJoin() {
     joined && producerReady,
     muted || mutedByHost,
   );
+
+  useEffect(() => {
+    if (!joined || !producerReady || autoGainControl) return;
+    setProducerVolume(micVolume);
+  }, [joined, producerReady, autoGainControl, micVolume, setProducerVolume]);
+
+  // Announce mic settings so the host can remote-control this guest.
+  useEffect(() => {
+    if (!joined || !myParticipantId) return;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const label =
+      devices.find((d) => d.deviceId === deviceId)?.label ||
+      (deviceId ? `Microphone ${deviceId.slice(0, 8)}` : 'Default microphone');
+    ws.send(
+      JSON.stringify({
+        type: 'participantMicSettings',
+        deviceLabel: label,
+        autoGainControl,
+        micVolume,
+      }),
+    );
+  }, [joined, myParticipantId, deviceId, devices, autoGainControl, micVolume]);
   const setMutedRef = useRef(setMuted);
   setMutedRef.current = setMuted;
 
@@ -545,14 +574,15 @@ export function CallJoin() {
     }, 15000);
 
     ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          type: 'guest',
-          token,
-          name: name.trim(),
-          password: joinInfo?.passwordRequired ? password || undefined : undefined,
-        })
-      );
+        ws.send(
+          JSON.stringify({
+            type: 'guest',
+            token,
+            name: name.trim(),
+            password: joinInfo?.passwordRequired ? password || undefined : undefined,
+            ...(inviteToken ? { invite: inviteToken } : {}),
+          })
+        );
     };
     ws.onmessage = (event) => {
       try {
@@ -630,13 +660,28 @@ export function CallJoin() {
           setMutedState(m);
           setMutedRef.current(m);
           setMutedByHost(m && msg.mutedByHost === true);
+        } else if (msg.type === 'setParticipantMicSettings') {
+          const agc = msg.autoGainControl !== false;
+          const id = deviceIdRef.current || 'default';
+          setAutoGainControl(agc);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(getAgcKey(id), String(agc));
+          }
+          if (typeof msg.micVolume === 'number' && Number.isFinite(msg.micVolume)) {
+            const volume = Math.max(0, Math.min(8, msg.micVolume));
+            setMicVolume(volume);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(getMicVolumeKey(id), String(volume));
+            }
+          }
         } else if (msg.type === 'chat') {
           setChatMessages((prev) => [
             ...prev,
             {
               participantId: msg.participantId,
               participantName: msg.participantName ?? 'Unknown',
-              text: msg.text ?? '',
+              text: typeof msg.text === 'string' ? msg.text : '',
+              imageUrl: typeof msg.imageUrl === 'string' ? msg.imageUrl : null,
               timestamp: Date.now(),
             },
           ]);
@@ -694,10 +739,32 @@ export function CallJoin() {
     setEditingName(false);
   };
 
-  const handleChatSend = (text: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'chat', text }));
+  const handleChatSend = async ({ text, imageFile }: ChatSendPayload) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      throw new Error('Not connected to chat');
     }
+    const trimmed = text.trim();
+    let imageId: string | undefined;
+    if (imageFile) {
+      const participantId = myParticipantIdRef.current;
+      if (!token || !participantId) {
+        throw new Error('Cannot upload image right now');
+      }
+      const uploaded = await uploadCallChatImage({
+        token,
+        participantId,
+        file: imageFile,
+      });
+      imageId = uploaded.id;
+    }
+    if (!trimmed && !imageId) return;
+    wsRef.current.send(
+      JSON.stringify({
+        type: 'chat',
+        ...(trimmed ? { text: trimmed } : {}),
+        ...(imageId ? { imageId } : {}),
+      }),
+    );
   };
 
   const pageLayout = (content: React.ReactNode) => (
@@ -730,6 +797,7 @@ export function CallJoin() {
     const audioUnavailable = !webrtcUrl || !webrtcRoomId;
     return pageLayout(
       <AudioUnlockProvider>
+      <RemoteLevelMeterUnlock resume={resumeRemoteLevelMeters} />
       <>
         <div className={`${styles.card} ${recordingInProgress ? styles.cardRecording : ''}`}>
           {joinInfo?.artworkUrl && (
@@ -835,9 +903,13 @@ export function CallJoin() {
                 data-disconnected={p.disconnected || undefined}
                 data-my-participant={p.id === myParticipantId || undefined}
               >
-                <span className={styles.participantRoleIcon} aria-hidden>
-                  {p.isHost ? <Crown size={14} /> : <User size={14} />}
-                </span>
+                <ParticipantRoleIcon
+                  key={p.castPhotoUrl ?? p.id}
+                  isHost={p.isHost}
+                  castPhotoUrl={p.castPhotoUrl}
+                  className={styles.participantRoleIcon}
+                  photoClassName={styles.participantCastPhoto}
+                />
                 <span className={styles.participantInfo}>
                   {p.id === myParticipantId ? (
                     <>

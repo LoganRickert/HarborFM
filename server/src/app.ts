@@ -72,6 +72,7 @@ import {
   startEpisodeAlertsPoller,
 } from "./modules/episodeAlerts/index.js";
 import { registerEpisodeGuestReviewPublicRoutes } from "./modules/episodeGuestReview/index.js";
+import { registerCastProfileUpdatePublicRoutes } from "./modules/castProfileUpdate/index.js";
 import { episodeCollaborationRoutes } from "./modules/episodeCollaboration/index.js";
 import { themesRoutes, themePublicRoutes } from "./modules/themes/index.js";
 import { workerRoutes } from "./modules/workers/index.js";
@@ -349,6 +350,7 @@ async function main() {
   await app.register(episodeAlertRoutes, { prefix: apiPrefix });
   await app.register(registerEpisodeAlertPublicRoutes, { prefix: apiPrefix });
   await app.register(registerEpisodeGuestReviewPublicRoutes, { prefix: apiPrefix });
+  await app.register(registerCastProfileUpdatePublicRoutes, { prefix: apiPrefix });
   await app.register(episodeCollaborationRoutes, { prefix: apiPrefix });
   await app.register(themesRoutes, { prefix: apiPrefix });
   await app.register(themePublicRoutes, { prefix: apiPrefix });

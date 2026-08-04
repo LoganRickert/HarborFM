@@ -49,6 +49,8 @@ export const SETTINGS_TABS: SettingsTabDef[] = [
       'Tracking Consent',
       'GDPR',
       'Hostname',
+      'Server timezone',
+      'timezone',
       'WebSub',
       'Welcome Banner',
       'White Label',

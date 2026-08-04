@@ -31,6 +31,9 @@ import {
   type GroupCallMeetingEmailOptions,
 } from "../../services/email.js";
 import { API_PREFIX } from "../../config.js";
+import { drizzleDb } from "../../db/index.js";
+import { podcastCast } from "../../db/schema.js";
+import { eq } from "drizzle-orm";
 
 function isEmailEventTrackingEnabled(): boolean {
   const settings = readSettings();
@@ -38,6 +41,22 @@ function isEmailEventTrackingEnabled(): boolean {
     (settings as { email_event_tracking_enabled?: boolean })
       .email_event_tracking_enabled ?? true
   );
+}
+
+/** Private cast IANA zone when the invite is linked to a cast member. */
+function castTimeZoneForInvite(
+  invite?: MeetingInviteRow | null,
+): string | null {
+  const castId = invite?.castId?.trim();
+  if (!castId) return null;
+  const row = drizzleDb
+    .select({ timeZone: podcastCast.timeZone })
+    .from(podcastCast)
+    .where(eq(podcastCast.id, castId))
+    .limit(1)
+    .get() as { timeZone: string | null } | undefined;
+  const tz = row?.timeZone?.trim();
+  return tz || null;
 }
 
 function meetingEmailOpenPixelUrl(
@@ -181,6 +200,7 @@ function meetingEmailSharedOpts(
   | "episodeTitle"
   | "scheduledStartAt"
   | "hostTimeZone"
+  | "displayTimeZone"
   | "joinUrl"
   | "topicsUrl"
   | "joinCode"
@@ -194,6 +214,7 @@ function meetingEmailSharedOpts(
     episodeTitle: ctx.episodeTitle,
     scheduledStartAt: meeting.scheduledStartAt,
     hostTimeZone: meeting.hostTimeZone,
+    displayTimeZone: castTimeZoneForInvite(invite),
     joinUrl: absoluteJoinUrl(meeting, fallbackOrigin, invite),
     topicsUrl: absoluteTopicsUrl(meeting, fallbackOrigin, invite),
     joinCode: meeting.joinCode,
@@ -411,6 +432,7 @@ export async function notifyEmailedInvitesCancelled(
       episodeTitle: ctx.episodeTitle,
       scheduledStartAt: meeting.scheduledStartAt,
       hostTimeZone: meeting.hostTimeZone,
+      displayTimeZone: castTimeZoneForInvite(invite),
       guestName: invite.displayName,
       joinUrl,
       coverArtUrl: absoluteCoverArtUrl(ctx, fallbackOrigin),

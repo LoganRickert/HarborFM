@@ -11,10 +11,31 @@ import {
   rescheduleEpisodeMeeting,
 } from '../../api/call';
 import { getEpisodeCast } from '../../api/episodes';
-import { listCast } from '../../api/podcasts';
+import { castPhotoUrl, listCast } from '../../api/podcasts';
 import editorStyles from '../EpisodeEditor.module.css';
 import styles from './ScheduleMeetingDialog.module.css';
 
+function safeImageSrc(url: string | null | undefined): string {
+  if (!url?.trim()) return '';
+  try {
+    const parsed = new URL(url.trim());
+    if (['https:', 'http:', 'blob:'].includes(parsed.protocol.toLowerCase())) return parsed.href;
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
+function quickInvitePhotoSrc(
+  podcastId: string,
+  member: { id: string; photoFilename?: string | null; photoUrl?: string | null },
+): string | null {
+  if (member.photoFilename) {
+    return castPhotoUrl(podcastId, member.id, member.photoFilename);
+  }
+  const external = safeImageSrc(member.photoUrl);
+  return external || null;
+}
 function toLocalInputValue(iso: string): string {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return '';
@@ -219,6 +240,7 @@ export function ScheduleMeetingDialog({
   };
 
   const handleQuickInvite = async (member: {
+    id: string;
     name: string;
     email: string;
   }) => {
@@ -234,6 +256,7 @@ export function ScheduleMeetingDialog({
       const res = await createMeetingInvite(meeting.id, {
         name: member.name.trim() || null,
         email,
+        castId: member.id,
       });
       invalidate();
       await refetch();
@@ -342,6 +365,8 @@ export function ScheduleMeetingDialog({
       name: c.name,
       role: c.role,
       email: c.email?.trim() || '',
+      photoFilename: c.photoFilename ?? null,
+      photoUrl: c.photoUrl ?? null,
     }))
     .filter((c) => isValidInviteEmail(c.email));
   const showCastWithEmail = (showCastData?.cast ?? [])
@@ -350,6 +375,8 @@ export function ScheduleMeetingDialog({
       name: c.name,
       role: c.role as 'host' | 'guest',
       email: c.email?.trim() || '',
+      photoFilename: c.photoFilename ?? null,
+      photoUrl: c.photoUrl ?? null,
     }))
     .filter((c) => isValidInviteEmail(c.email));
   const quickInviteSource =
@@ -615,13 +642,16 @@ export function ScheduleMeetingDialog({
                         <div className={styles.inviteGroup}>
                           <span className={styles.label}>Quick invite</span>
                           <div className={styles.quickInviteList}>
-                            {quickInviteCandidates.map((member) => (
+                            {quickInviteCandidates.map((member) => {
+                              const photoSrc = quickInvitePhotoSrc(podcastId, member);
+                              return (
                               <button
                                 key={member.id}
                                 type="button"
                                 className={styles.quickInviteBtn}
                                 onClick={() =>
                                   void handleQuickInvite({
+                                    id: member.id,
                                     name: member.name,
                                     email: member.email,
                                   })
@@ -629,15 +659,35 @@ export function ScheduleMeetingDialog({
                                 disabled={busy}
                                 title={`Invite ${member.name} (${member.email})`}
                               >
-                                <Mail size={14} aria-hidden />
-                                <span className={styles.quickInviteName}>
+                                {photoSrc ? (
+                                  <img
+                                    src={photoSrc}
+                                    alt=""
+                                    className={styles.quickInvitePhoto}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      const fallback = e.currentTarget.nextElementSibling;
+                                      if (fallback instanceof HTMLElement) {
+                                        fallback.hidden = false;
+                                      }
+                                    }}
+                                  />
+                                ) : null}
+                                <span hidden={Boolean(photoSrc)}>
+                                  <Mail
+                                    size={14}
+                                    aria-hidden
+                                    className={styles.quickInviteMailIcon}
+                                  />
+                                </span>  <span className={styles.quickInviteName}>
                                   {member.name}
                                 </span>
                                 <span className={styles.quickInviteRole}>
                                   {member.role === 'host' ? 'Host' : 'Guest'}
                                 </span>
                               </button>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       ) : null}

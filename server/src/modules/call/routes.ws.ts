@@ -10,8 +10,10 @@ import {
   setParticipantMutedBySelf,
   setParticipantMutedByHost,
   setParticipantName,
+  setParticipantCastAvatar,
   setHostDisconnected,
 } from "../../services/callSession.js";
+import { resolvePublicCastByName } from "./castAvatar.js";
 import { getWebRtcConfig, webrtcRequestHeaders } from "../../services/webrtcConfig.js";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import { hangUpFakeDialInsForRoom, setPhoneDialInMuted, kickPhoneDialIn } from "./routes.dialIn.js";
@@ -31,6 +33,7 @@ import {
   handleStartRecording,
   handleStopRecording,
 } from "./wsHandlers.js";
+import { callChatImageExists, callChatImageUrl } from "./chatImages.js";
 
 export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
   app.get(
@@ -61,7 +64,7 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
           } else if (type === "migrateHost") {
             if (handleMigrateHost(socket, req, state)) return;
           } else if (type === "guest") {
-            if (handleGuestJoin(socket, req, msg as { token?: string; name?: string; password?: string }, state)) return;
+            if (handleGuestJoin(socket, req, msg as { token?: string; name?: string; password?: string; invite?: string }, state)) return;
           }
           return;
         }
@@ -97,6 +100,14 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
             setParticipantName(sessionId, participantId, name);
             const session = getSessionById(sessionId);
             if (session) {
+              const p = session.participants.find((x) => x.id === participantId);
+              if (p && !p.castLocked) {
+                setParticipantCastAvatar(
+                  sessionId,
+                  participantId,
+                  resolvePublicCastByName(session.podcastId, name),
+                );
+              }
               broadcastToSession(sessionId, {
                 type: "participants",
                 participants: [...session.participants],
@@ -112,6 +123,14 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
             setParticipantName(sessionId, participantId, name);
             const session = getSessionById(sessionId);
             if (session) {
+              const p = session.participants.find((x) => x.id === participantId);
+              if (p && !p.castLocked && p.source !== "phone") {
+                setParticipantCastAvatar(
+                  sessionId,
+                  participantId,
+                  resolvePublicCastByName(session.podcastId, name),
+                );
+              }
               broadcastToSession(sessionId, {
                 type: "participants",
                 participants: [...session.participants],
@@ -134,21 +153,35 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
         }
 
         if (type === "chat" && participantId) {
-          const text = (msg as { text?: string }).text;
-          if (text != null && typeof text === "string") {
-            const trimmed = text.trim().slice(0, 2000);
-            if (trimmed) {
-              const session = getSessionById(sessionId);
-              const p = session?.participants.find((x) => x.id === participantId);
-              const name = p?.name ?? "Unknown";
-              broadcastToSession(sessionId, {
-                type: "chat",
-                participantId,
-                participantName: name,
-                text: trimmed,
-              });
+          const textRaw = (msg as { text?: string }).text;
+          const imageIdRaw = (msg as { imageId?: string }).imageId;
+          const trimmed =
+            textRaw != null && typeof textRaw === "string"
+              ? textRaw.trim().slice(0, 2000)
+              : "";
+          const imageId =
+            typeof imageIdRaw === "string" && /^[a-zA-Z0-9_-]+$/.test(imageIdRaw.trim())
+              ? imageIdRaw.trim()
+              : "";
+          const session = getSessionById(sessionId);
+          if (!session) return;
+          let imageUrl: string | undefined;
+          if (imageId) {
+            if (!callChatImageExists(sessionId, imageId)) {
+              return;
             }
+            imageUrl = callChatImageUrl(sessionId, imageId, session.token);
           }
+          if (!trimmed && !imageUrl) return;
+          const p = session.participants.find((x) => x.id === participantId);
+          const name = p?.name ?? "Unknown";
+          broadcastToSession(sessionId, {
+            type: "chat",
+            participantId,
+            participantName: name,
+            ...(trimmed ? { text: trimmed } : {}),
+            ...(imageId && imageUrl ? { imageId, imageUrl } : {}),
+          });
           return;
         }
 
@@ -228,6 +261,74 @@ export async function registerWsRoutes(app: FastifyInstance): Promise<void> {
             type: "participants",
             participants: getSessionById(sid)?.participants ?? [],
           });
+          return;
+        }
+
+        if (type === "participantMicSettings") {
+          const sid = sessionId;
+          const pid =
+            participantId ??
+            socketToParticipant.get(socket as unknown as WebSocket)?.participantId;
+          if (!pid) return;
+          const m = msg as {
+            deviceLabel?: unknown;
+            autoGainControl?: unknown;
+            micVolume?: unknown;
+          };
+          const deviceLabel =
+            typeof m.deviceLabel === "string"
+              ? m.deviceLabel.trim().slice(0, 200)
+              : "";
+          const agc = m.autoGainControl !== false;
+          let volume = 1;
+          if (typeof m.micVolume === "number" && Number.isFinite(m.micVolume)) {
+            volume = Math.max(0, Math.min(8, m.micVolume));
+          }
+          broadcastToSession(sid, {
+            type: "participantMicSettings",
+            participantId: pid,
+            deviceLabel,
+            autoGainControl: agc,
+            micVolume: volume,
+          });
+          return;
+        }
+
+        if (type === "setParticipantMicSettings" && isHost) {
+          const sid = sessionId;
+          const targetParticipantId = (msg as { participantId?: string })
+            .participantId;
+          if (!targetParticipantId) return;
+          const session = getSessionById(sid);
+          const target = session?.participants.find(
+            (p) => p.id === targetParticipantId,
+          );
+          if (!target || target.source === "phone") return;
+          const m = msg as {
+            autoGainControl?: unknown;
+            micVolume?: unknown;
+          };
+          const payload: {
+            type: string;
+            autoGainControl: boolean;
+            micVolume?: number;
+          } = {
+            type: "setParticipantMicSettings",
+            autoGainControl: m.autoGainControl !== false,
+          };
+          if (typeof m.micVolume === "number" && Number.isFinite(m.micVolume)) {
+            payload.micVolume = Math.max(0, Math.min(8, m.micVolume));
+          }
+          const sockets = sessionSockets.get(sid);
+          if (sockets) {
+            for (const s of sockets) {
+              const info = socketToParticipant.get(s as unknown as WebSocket);
+              if (info?.participantId === targetParticipantId) {
+                s.send(JSON.stringify(payload));
+                break;
+              }
+            }
+          }
           return;
         }
 

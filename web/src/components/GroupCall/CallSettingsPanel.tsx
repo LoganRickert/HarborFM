@@ -1,6 +1,11 @@
 import { Settings, Minimize2, Maximize2, X, Mic, Volume2 } from 'lucide-react';
 import styles from './CallSettingsPanel.module.css';
 
+export type CallSettingsPersonOption = {
+  id: string;
+  name: string;
+};
+
 export interface CallSettingsPanelProps {
   devices: MediaDeviceInfo[];
   deviceId: string;
@@ -17,6 +22,17 @@ export interface CallSettingsPanelProps {
   onMicVolumeChange?: (volume: number) => void;
   /** When true, only render body (settings form) without header/panel chrome. Used on mobile inside call panel. */
   embedded?: boolean;
+  /** Other call participants the host can remote-control (exclude self and phone). */
+  otherParticipants?: CallSettingsPersonOption[];
+  /** 'self' or a participant id from otherParticipants. */
+  selectedParticipantId?: string;
+  onSelectedParticipantChange?: (id: string) => void;
+  remoteDeviceLabel?: string | null;
+  remoteSettingsReady?: boolean;
+  remoteAutoGainControl?: boolean;
+  onRemoteAutoGainControlChange?: (enabled: boolean) => void;
+  remoteMicVolume?: number;
+  onRemoteMicVolumeChange?: (volume: number) => void;
 }
 
 export function CallSettingsPanel({
@@ -34,36 +50,158 @@ export function CallSettingsPanel({
   micVolume = 1,
   onMicVolumeChange,
   embedded = false,
+  otherParticipants = [],
+  selectedParticipantId = 'self',
+  onSelectedParticipantChange,
+  remoteDeviceLabel = null,
+  remoteSettingsReady = false,
+  remoteAutoGainControl = true,
+  onRemoteAutoGainControlChange,
+  remoteMicVolume = 1,
+  onRemoteMicVolumeChange,
 }: CallSettingsPanelProps) {
+  const isSelf = selectedParticipantId === 'self';
+  const showPersonSelect = otherParticipants.length > 0 && !!onSelectedParticipantChange;
+
+  const effectiveAgc = isSelf ? autoGainControl : remoteAutoGainControl;
+  const effectiveVolume = isSelf ? micVolume : remoteMicVolume;
+  const onAgcChange = isSelf ? onAutoGainControlChange : onRemoteAutoGainControlChange;
+  const onVolumeChange = isSelf ? onMicVolumeChange : onRemoteMicVolumeChange;
+  const remoteControlsDisabled = !isSelf && !remoteSettingsReady;
+
   const bodyContent = (
     <>
-      {devices.length > 0 ? (
+      {showPersonSelect && (
+        <div className={styles.personSelector}>
+          <label className={styles.label} htmlFor="call-settings-person">
+            Person
+          </label>
+          <select
+            id="call-settings-person"
+            className={styles.select}
+            value={selectedParticipantId}
+            onChange={(e) => onSelectedParticipantChange?.(e.target.value)}
+            aria-label="Person whose mic settings to edit"
+          >
+            <option value="self">Myself</option>
+            {otherParticipants.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {isSelf ? (
+        devices.length > 0 ? (
+          <>
+            <div className={styles.micSelector}>
+              <label className={styles.label} htmlFor="call-settings-mic">
+                Microphone
+              </label>
+              <select
+                id="call-settings-mic"
+                className={styles.select}
+                value={deviceId}
+                onChange={(e) => onDeviceChange(e.target.value)}
+                aria-label="Microphone"
+              >
+                {devices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {onAgcChange && (
+              <div className={styles.agcRow}>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={effectiveAgc}
+                    onChange={(e) => onAgcChange(e.target.checked)}
+                    aria-label="Auto Gain Control"
+                  />
+                  <span className="toggle__track" aria-hidden="true" />
+                  <span>Auto Gain Control</span>
+                </label>
+              </div>
+            )}
+            {!effectiveAgc && onVolumeChange && (
+              <>
+                <div className={styles.volumeRow}>
+                  <label className={styles.label} htmlFor="call-settings-mic-volume">
+                    Volume
+                  </label>
+                  <input
+                    id="call-settings-mic-volume"
+                    type="range"
+                    min={0}
+                    max={800}
+                    value={Math.round((effectiveVolume ?? 1) * 100)}
+                    onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                    className={styles.volumeSlider}
+                    aria-label="Microphone volume"
+                  />
+                  <span className={styles.volumeValue}>
+                    {Math.round((effectiveVolume ?? 1) * 100)}%
+                  </span>
+                </div>
+                <p
+                  className={styles.agcHint}
+                  title="Chrome may still apply AGC. If volume still pumps, try chrome://flags to search 'WebRTC input volume' to Disabled."
+                >
+                  Use headphones to avoid feedback. If volume pumps, try disabling &quot;Allow WebRTC to
+                  adjust input volume&quot; in chrome://flags.
+                </p>
+              </>
+            )}
+            {onListenToSelfToggle && (
+              <div className={styles.listenRow}>
+                <button
+                  type="button"
+                  className={styles.listenBtn}
+                  onClick={onListenToSelfToggle}
+                  disabled={listenToSelfDisabled}
+                  aria-pressed={listenToSelf}
+                  aria-label={listenToSelf ? 'Stop listening to yourself' : 'Listen to yourself'}
+                >
+                  {listenToSelf ? <Volume2 size={16} /> : <Mic size={16} />}
+                  {listenToSelf ? ' Stop listening' : ' Listen to yourself'}
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className={styles.emptyHint}>
+            No microphones found. Grant microphone permission and refresh.
+          </p>
+        )
+      ) : (
         <>
           <div className={styles.micSelector}>
-            <label className={styles.label} htmlFor="call-settings-mic">
+            <span className={styles.label} id="call-settings-remote-mic-label">
               Microphone
-            </label>
-            <select
-              id="call-settings-mic"
-              className={styles.select}
-              value={deviceId}
-              onChange={(e) => onDeviceChange(e.target.value)}
-              aria-label="Microphone"
+            </span>
+            <p
+              className={styles.readOnlyMic}
+              aria-labelledby="call-settings-remote-mic-label"
+              aria-disabled="true"
             >
-              {devices.map((d) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
-                </option>
-              ))}
-            </select>
+              {remoteSettingsReady
+                ? remoteDeviceLabel?.trim() || 'Unknown microphone'
+                : 'Waiting for mic info...'}
+            </p>
           </div>
-          {onAutoGainControlChange && (
+          {onAgcChange && (
             <div className={styles.agcRow}>
-              <label className="toggle">
+              <label className={`toggle ${remoteControlsDisabled ? styles.toggleDisabled : ''}`}>
                 <input
                   type="checkbox"
-                  checked={autoGainControl}
-                  onChange={(e) => onAutoGainControlChange(e.target.checked)}
+                  checked={effectiveAgc}
+                  disabled={remoteControlsDisabled}
+                  onChange={(e) => onAgcChange(e.target.checked)}
                   aria-label="Auto Gain Control"
                 />
                 <span className="toggle__track" aria-hidden="true" />
@@ -71,47 +209,32 @@ export function CallSettingsPanel({
               </label>
             </div>
           )}
-          {!autoGainControl && onMicVolumeChange && (
-            <>
-              <div className={styles.volumeRow}>
-                <label className={styles.label} htmlFor="call-settings-mic-volume">Volume</label>
-                <input
-                  id="call-settings-mic-volume"
-                  type="range"
-                  min={0}
-                  max={800}
-                  value={Math.round((micVolume ?? 1) * 100)}
-                  onChange={(e) => onMicVolumeChange(parseInt(e.target.value, 10) / 100)}
-                  className={styles.volumeSlider}
-                  aria-label="Microphone volume"
-                />
-                <span className={styles.volumeValue}>{Math.round((micVolume ?? 1) * 100)}%</span>
-              </div>
-              <p className={styles.agcHint} title="Chrome may still apply AGC. If volume still pumps, try chrome://flags to search 'WebRTC input volume' to Disabled.">
-                Use headphones to avoid feedback. If volume pumps, try disabling &quot;Allow WebRTC to adjust input volume&quot; in chrome://flags.
-              </p>
-            </>
-          )}
-          {onListenToSelfToggle && (
-            <div className={styles.listenRow}>
-              <button
-                type="button"
-                className={styles.listenBtn}
-                onClick={onListenToSelfToggle}
-                disabled={listenToSelfDisabled}
-                aria-pressed={listenToSelf}
-                aria-label={listenToSelf ? 'Stop listening to yourself' : 'Listen to yourself'}
-              >
-                {listenToSelf ? <Volume2 size={16} /> : <Mic size={16} />}
-                {listenToSelf ? ' Stop listening' : ' Listen to yourself'}
-              </button>
+          {!effectiveAgc && onVolumeChange && (
+            <div className={styles.volumeRow}>
+              <label className={styles.label} htmlFor="call-settings-remote-mic-volume">
+                Volume
+              </label>
+              <input
+                id="call-settings-remote-mic-volume"
+                type="range"
+                min={0}
+                max={800}
+                value={Math.round((effectiveVolume ?? 1) * 100)}
+                disabled={remoteControlsDisabled}
+                onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                className={styles.volumeSlider}
+                aria-label="Microphone volume"
+              />
+              <span className={styles.volumeValue}>
+                {Math.round((effectiveVolume ?? 1) * 100)}%
+              </span>
             </div>
           )}
+          <p className={styles.agcHint}>
+            Changes apply to what they send to the call. Their microphone device cannot be
+            changed remotely.
+          </p>
         </>
-      ) : (
-        <p className={styles.emptyHint}>
-          No microphones found. Grant microphone permission and refresh.
-        </p>
       )}
     </>
   );

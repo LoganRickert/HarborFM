@@ -13,6 +13,7 @@ import {
   episodeGroupCallMeetingInvites,
   episodeGroupCallMeetings,
   episodes,
+  podcastCast,
   podcasts,
   users,
 } from "../../db/schema.js";
@@ -515,10 +516,25 @@ export function getInviteByToken(
     .get();
 }
 
+/** True when castId exists on the given podcast (public or private). */
+export function castBelongsToPodcast(
+  castId: string,
+  podcastId: string,
+): boolean {
+  const row = drizzleDb
+    .select({ id: podcastCast.id })
+    .from(podcastCast)
+    .where(and(eq(podcastCast.id, castId), eq(podcastCast.podcastId, podcastId)))
+    .limit(1)
+    .get();
+  return Boolean(row);
+}
+
 export function createInvite(input: {
   meetingId: string;
   email?: string | null;
   displayName?: string | null;
+  castId?: string | null;
 }): MeetingInviteRow {
   const nowIso = new Date().toISOString();
   const id = nanoid();
@@ -530,6 +546,7 @@ export function createInvite(input: {
       meetingId: input.meetingId,
       email: input.email?.trim() || null,
       displayName: input.displayName?.trim() || null,
+      castId: input.castId?.trim() || null,
       inviteToken,
       createdAt: nowIso,
       lastSentAt: null,

@@ -14,7 +14,7 @@ const sections: FeatureSection[] = [
       {
         name: 'Podcasts & episodes',
         detail:
-          'Create shows with artwork, categories, explicit flags, and full metadata. Episodes support draft, scheduled, and published states with season and episode numbers.',
+          'Create shows with artwork, categories, explicit flags, and full metadata. Episodes support draft, scheduled, and published states, plus Unlisted (link-only when released, off the public list/RSS/sitemap).',
       },
       {
         name: 'Segment-based editor',
@@ -59,7 +59,7 @@ const sections: FeatureSection[] = [
       {
         name: 'Transcripts',
         detail:
-          'Generate with Whisper ASR or upload SRT. Edit cues with trim awareness; optional LLM (Ollama or OpenAI) for summaries and copy.',
+          'Generate with Whisper ASR or upload SRT. Multi-track recordings can transcribe each take and merge into one timeline. Stitch an episode transcript, download SRT/TXT, edit cues, and optionally show caption lanes in Advanced Editor. Optional LLM (Ollama or OpenAI) for summaries and copy.',
       },
       {
         name: 'Import from RSS',
@@ -75,12 +75,17 @@ const sections: FeatureSection[] = [
       {
         name: 'Group calls (WebRTC)',
         detail:
-          'Host starts an ad-hoc call; guests join by link or 4-digit code. In-call chat, soundboard, and settings. Recordings land as episode segments.',
+          'Host starts an ad-hoc call; guests join by link or 4-digit code. In-call chat, soundboard, show notes (shared with guests by default), and settings. Recordings land as episode segments.',
       },
       {
         name: 'Scheduled meetings',
         detail:
           'Pick a start time from the episode editor; HarborFM reserves a join link and code. Invite by email or share link, reschedule or cancel anytime, then Start Meeting when ready. Guests see clear join statuses (waiting for host, too early, expired). Invite emails include ICS and a Google Calendar link. One meeting per episode; up to 50 active per account.',
+      },
+      {
+        name: 'Guest episode review',
+        detail:
+          'When an episode first becomes scheduled (or published and unlisted), HarborFM emails preview links to the meeting host, emailed invitees, and episode cast with an email. Guests can preview audio, approve, or leave feedback; the host is notified on response.',
       },
       {
         name: 'Live collaboration',
@@ -157,7 +162,7 @@ const sections: FeatureSection[] = [
       {
         name: 'Page customizations',
         detail:
-          'Per-show accent color, page theme selection, and toggles for author, descriptions, funding, podroll, cast, and reviews.',
+          'Per-show accent color, page theme selection, optional Meta Pixel ID (respects the consent banner when GDPR consent is enabled), and toggles for author, descriptions, funding, podroll, cast, and reviews.',
       },
       {
         name: 'Listen on & social links',
@@ -167,7 +172,7 @@ const sections: FeatureSection[] = [
       {
         name: 'Cast',
         detail:
-          'Hosts and guests on shows and episodes, with public feed display and Podcast 2.0 person tags.',
+          'Hosts and guests on shows and episodes, with nicknames, private email, social links, and optional time zone. Update emails a profile link for self-service proposals you approve. Public feed display and Podcast 2.0 person tags.',
       },
       {
         name: 'PWA',
@@ -266,12 +271,12 @@ const sections: FeatureSection[] = [
       {
         name: 'Podcast stats',
         detail:
-          'RSS hits, enclosure requests, and listens over time with per-episode breakdowns.',
+          'Primary metrics are Downloads (unique filtered audio downloads) and Unique listeners, plus Apps, Locations, Feed health, optional retention for website plays, and date/episode filters.',
       },
       {
         name: 'Listener vs crawler',
         detail:
-          'Classify known podcast apps as listeners and directory bots as crawlers for clearer charts.',
+          'Classify known podcast apps as listeners and directory bots/scrapers as crawlers for clearer charts.',
       },
       {
         name: 'GeoIP',

@@ -13,6 +13,7 @@ import {
   episodes,
   podcastStatsEpisodeDaily,
   podcastStatsEpisodeListensDaily,
+  podcastStatsEpisodeListensHourly,
   podcastStatsEpisodeLocationDaily,
   podcastStatsListenDedup,
   podcastStatsRetentionReach,
@@ -48,7 +49,7 @@ import { runDnsUpdateTask } from "../../services/dns/update-task.js";
 import { podcastRowWithFilename, jsonArrayOrNull, jsonObjectOrNull } from "./utils.js";
 import * as repo from "./repo.js";
 import * as service from "./service.js";
-import { lastNLocalDateRange } from "../../utils/datetime.js";
+import { getAppTimeZone, lastNLocalDateRange } from "../../utils/datetime.js";
 
 export async function registerCoreRoutes(app: FastifyInstance) {
   // GET /podcasts - list
@@ -502,6 +503,12 @@ export async function registerCoreRoutes(app: FastifyInstance) {
       const limit = query.limit;
       const offset = query.offset ?? 0;
 
+      const { userId } = request;
+      if (!canAccessPodcast(userId, podcastId)) {
+        return reply.status(404).send({ error: "Podcast not found" });
+      }
+      // Keep app timezone override in sync for default range + stat_timezone.
+      readSettings();
       if (startDate === undefined && endDate === undefined) {
         const range = lastNLocalDateRange(14);
         startDate = range.startDate;
@@ -518,10 +525,6 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "Invalid offset" });
       }
 
-      const { userId } = request;
-      if (!canAccessPodcast(userId, podcastId)) {
-        return reply.status(404).send({ error: "Podcast not found" });
-      }
       const podcast = drizzleDb
         .select({
           id: podcasts.id,
@@ -608,6 +611,14 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         bot_count: number;
         human_count: number;
       }> = [];
+      const episode_listens_hourly: Array<{
+        episode_id: string;
+        stat_date: string;
+        stat_hour: number;
+        source: string;
+        bot_count: number;
+        human_count: number;
+      }> = [];
       if (episodeIds.length > 0) {
         const epWhere = and(...epConditions);
         const epOrder = desc(podcastStatsEpisodeDaily.statDate);
@@ -685,6 +696,37 @@ export async function registerCoreRoutes(app: FastifyInstance) {
           listensQuery = listensQuery.limit(limit).offset(offset) as typeof listensQuery;
         }
         episode_listens_daily.push(...listensQuery.all());
+
+        const hourlyConditions = [
+          inArray(podcastStatsEpisodeListensHourly.episodeId, episodeIds),
+          ...(startDate !== undefined && endDate !== undefined
+            ? [
+                gte(podcastStatsEpisodeListensHourly.statDate, startDate),
+                lte(podcastStatsEpisodeListensHourly.statDate, endDate),
+              ]
+            : []),
+        ];
+        let hourlyQuery = drizzleDb
+          .select({
+            episode_id: podcastStatsEpisodeListensHourly.episodeId,
+            stat_date: podcastStatsEpisodeListensHourly.statDate,
+            stat_hour: podcastStatsEpisodeListensHourly.statHour,
+            source: podcastStatsEpisodeListensHourly.source,
+            bot_count: podcastStatsEpisodeListensHourly.botCount,
+            human_count: podcastStatsEpisodeListensHourly.humanCount,
+          })
+          .from(podcastStatsEpisodeListensHourly)
+          .where(and(...hourlyConditions))
+          .orderBy(
+            desc(podcastStatsEpisodeListensHourly.statDate),
+            podcastStatsEpisodeListensHourly.statHour,
+            podcastStatsEpisodeListensHourly.episodeId,
+            podcastStatsEpisodeListensHourly.source,
+          );
+        if (limit !== undefined) {
+          hourlyQuery = hourlyQuery.limit(limit).offset(offset) as typeof hourlyQuery;
+        }
+        episode_listens_hourly.push(...hourlyQuery.all());
       }
 
       // Unique listeners = distinct client keys with a download in range.
@@ -812,9 +854,11 @@ export async function registerCoreRoutes(app: FastifyInstance) {
         episode_daily,
         episode_location_daily,
         episode_listens_daily,
+        episode_listens_hourly,
         unique_listeners,
         unique_listeners_by_episode,
         retention_by_episode,
+        stat_timezone: getAppTimeZone(),
         methodology: {
           downloads:
             "Unique valid audio downloads of about one minute or more (250 KB), at most one per client per episode per day. Bots and tiny Range probes are excluded from human Downloads charts.",
@@ -824,6 +868,8 @@ export async function registerCoreRoutes(app: FastifyInstance) {
             "RSS feed fetches. Directory crawlers are invalid traffic for Downloads; shown separately under Feed health.",
           retention:
             "Website player playhead reach by decile on the HarborFM site or theme player.",
+          downloads_by_hour:
+            "Hours are shown in your local timezone.",
         },
       };
     },

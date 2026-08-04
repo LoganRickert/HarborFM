@@ -36,6 +36,7 @@ import {
 import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
 import { useDialogCloseGuard } from '../../hooks/useDialogCloseGuard';
 import { useBaselineDirty, snapshotForDirty } from '../../hooks/useBaselineDirty';
+import { ianaTimeZoneSelectOptions } from '../../utils/ianaTimeZones';
 import sharedStyles from '../PodcastDetail/shared.module.css';
 import localStyles from './ShowCast.module.css';
 
@@ -150,11 +151,13 @@ export function CastMemberDialog({
 }: CastMemberDialogProps) {
   const isEdit = !!cast;
   const [name, setName] = useState('');
+  const [nickname, setNickname] = useState('');
   const [role, setRole] = useState<'host' | 'guest'>('guest');
   const [description, setDescription] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [socialLinkRows, setSocialLinkRows] = useState<SocialLinkRow[]>([]);
   const [email, setEmail] = useState('');
+  const [timeZone, setTimeZone] = useState('');
   const [isPublic, setIsPublic] = useState(1);
   const [coverMode, setCoverMode] = useState<'url' | 'upload'>('url');
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -179,30 +182,36 @@ export function CastMemberDialog({
       const next = cast
         ? {
             name: cast.name,
+            nickname: cast.nickname ?? '',
             role: cast.role as 'host' | 'guest',
             description: cast.description ?? '',
             photoUrl: cast.photoUrl ?? '',
             socialLinks,
             email: cast.email ?? '',
+            timeZone: cast.timeZone ?? '',
             isPublic: cast.isPublic ?? 1,
             coverMode: (cast.photoFilename ? 'upload' : 'url') as 'url' | 'upload',
           }
         : {
             name: '',
+            nickname: '',
             role: (isFirstEntry ? 'host' : 'guest') as 'host' | 'guest',
             description: '',
             photoUrl: '',
             socialLinks: [] as string[],
             email: '',
+            timeZone: '',
             isPublic: 1,
             coverMode: 'url' as const,
           };
       setName(next.name);
+      setNickname(next.nickname);
       setRole(next.role);
       setDescription(next.description);
       setPhotoUrl(next.photoUrl);
       setSocialLinkRows(rowsFromUrls(next.socialLinks));
       setEmail(next.email);
+      setTimeZone(next.timeZone);
       setIsPublic(next.isPublic);
       setCoverMode(next.coverMode);
       setPendingFile(null);
@@ -268,11 +277,13 @@ export function CastMemberDialog({
     const socialLinks = normalizeCastSocialLinks(socialLinkRows.map((r) => r.url));
     const body: CastCreate = {
       name: trimName,
+      nickname: nickname.trim() || undefined,
       role,
       description: description.trim() || undefined,
       photoUrl: coverMode === 'url' ? (photoUrl.trim() || undefined) : undefined,
       socialLinks,
       email: email.trim() || undefined,
+      timeZone: timeZone.trim() || undefined,
       isPublic: isPublic as 0 | 1,
     };
     if (isEdit) {
@@ -294,15 +305,17 @@ export function CastMemberDialog({
   const currentForm = useMemo(
     () => ({
       name,
+      nickname,
       role,
       description,
       photoUrl,
       socialLinks: normalizeCastSocialLinks(socialLinkRows.map((r) => r.url)),
       email,
+      timeZone,
       isPublic,
       coverMode,
     }),
-    [name, role, description, photoUrl, socialLinkRows, email, isPublic, coverMode],
+    [name, nickname, role, description, photoUrl, socialLinkRows, email, timeZone, isPublic, coverMode],
   );
   const isDirty = useBaselineDirty(formBaseline, currentForm) || pendingFile != null;
   const {
@@ -380,6 +393,23 @@ export function CastMemberDialog({
 
               <div className={styles.castDialogFormGroup}>
                 <label className={styles.castDialogFormLabel}>
+                  Nickname
+                  <input
+                    type="text"
+                    value={nickname}
+                    onChange={(e) => setNickname(e.target.value)}
+                    className={styles.castDialogFormInput}
+                    placeholder="e.g. Jane"
+                    autoComplete="off"
+                  />
+                </label>
+                <p className={styles.castDialogHint}>
+                  Short name used in multi-speaker transcripts. Falls back to Name when empty.
+                </p>
+              </div>
+
+              <div className={styles.castDialogFormGroup}>
+                <label className={styles.castDialogFormLabel}>
                   Email
                   <input
                     type="email"
@@ -392,6 +422,27 @@ export function CastMemberDialog({
                 </label>
                 <p className={styles.castDialogHint}>
                   Used for meeting invites. Not shown on public pages.
+                </p>
+              </div>
+
+              <div className={styles.castDialogFormGroup}>
+                <label className={styles.castDialogFormLabel}>
+                  Time Zone
+                  <select
+                    value={timeZone}
+                    onChange={(e) => setTimeZone(e.target.value)}
+                    className={styles.castDialogFormInput}
+                  >
+                    <option value="">Not set</option>
+                    {ianaTimeZoneSelectOptions(timeZone).map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className={styles.castDialogHint}>
+                  Used for meeting emails so times show in their local zone. Not shown on public pages.
                 </p>
               </div>
 

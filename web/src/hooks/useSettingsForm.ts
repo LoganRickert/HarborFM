@@ -24,6 +24,8 @@ const DEFAULT_FORM_STATE: SettingsResponse = {
   publicFeedsEnabled: true,
   websubDiscoveryEnabled: false,
   hostname: '',
+  timezone: '',
+  effectiveTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   websubHub: '',
   finalBitrateKbps: 128,
   finalChannels: 'mono',

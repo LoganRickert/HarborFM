@@ -8,6 +8,7 @@ import type {
   SegmentTrackEqBand,
   SegmentTrackGate,
 } from '@harborfm/shared';
+import { resolveIncludeInTranscript } from '@harborfm/shared';
 import { editorLaneKey, type EditorClip } from './clipOps';
 
 export const EQ_LOW_HZ = 200;
@@ -47,6 +48,8 @@ export type TrackSettingsUi = {
   gateAttackMs: number;
   gateHoldMs: number;
   gateReleaseMs: number;
+  /** Include this track/clip in multi-track Whisper merge. */
+  includeInTranscript: boolean;
 };
 
 export function clamp(n: number, lo: number, hi: number): number {
@@ -147,6 +150,7 @@ export const DEFAULT_TRACK_SETTINGS: TrackSettingsUi = {
   gateAttackMs: 5,
   gateHoldMs: 50,
   gateReleaseMs: 100,
+  includeInTranscript: false,
 };
 
 export function clipToTrackSettings(clip: SegmentTrackClip): TrackSettingsUi {
@@ -197,6 +201,7 @@ export function clipToTrackSettings(clip: SegmentTrackClip): TrackSettingsUi {
     gateReleaseMs: gate
       ? clamp(gate.releaseMs, 1, 9000)
       : DEFAULT_TRACK_SETTINGS.gateReleaseMs,
+    includeInTranscript: resolveIncludeInTranscript(clip),
   };
 }
 
@@ -273,6 +278,7 @@ export function trackSettingsToClipPatch(
     eqBands,
     gate,
     comp,
+    includeInTranscript: settings.includeInTranscript,
     // Drop raw Reaper chunks so remake/export use param fields.
     reaEqChunkBase64: undefined,
     reaGateChunkBase64: undefined,
@@ -283,6 +289,7 @@ export function trackSettingsToClipPatch(
 /**
  * Apply track settings to every clip on the lane that is still following the
  * track (no Clip Settings override). Clears stale Rea* VST chunks.
+ * includeInTranscript always applies to the whole lane (not an FX override).
  */
 export function applyTrackSettingsToLane(
   clips: EditorClip[],
@@ -290,10 +297,15 @@ export function applyTrackSettingsToLane(
   settings: TrackSettingsUi,
 ): EditorClip[] {
   const patch = trackSettingsToClipPatch(settings);
+  const { includeInTranscript, ...fxPatch } = patch;
   return clips.map((c) => {
     if (editorLaneKey(c) !== laneKey) return c;
-    if (c.fxOverride === true) return c;
-    return applyPatchToClip(c, patch);
+    const next: EditorClip =
+      includeInTranscript === undefined
+        ? c
+        : { ...c, includeInTranscript };
+    if (c.fxOverride === true) return next;
+    return applyPatchToClip(next, fxPatch);
   });
 }
 

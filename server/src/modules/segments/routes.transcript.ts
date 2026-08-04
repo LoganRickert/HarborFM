@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { existsSync, readFileSync, writeFileSync, unlinkSync, copyFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, unlinkSync, copyFileSync, mkdirSync } from "fs";
 import { dirname, join, extname } from "path";
 import { nanoid } from "nanoid";
 import { requireAuth, requireNotReadOnly } from "../../plugins/auth.js";
@@ -27,6 +27,11 @@ import {
 } from "@harborfm/shared";
 import { broadcastToEpisode } from "../../services/episodeBroadcast.js";
 import * as repo from "./repo.js";
+import {
+  episodeTranscriptNeedsAsr,
+  generateSegmentTranscriptFile,
+  stitchEpisodeTranscriptFromSegments,
+} from "../../services/segmentTranscriptPipeline.js";
 import {
   transcriptPath,
   sanitizeTranscriptText,
@@ -172,6 +177,8 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
         const text = readFileSync(txtPath, "utf-8");
         return reply.send({ text });
       }
+      // Keep the existing sidecar until the new transcript writes successfully
+      // so a failed regenerate does not wipe the previous transcript.
       const settings = readSettings();
       if (!isTranscriptionProviderConfigured(settings)) {
         return reply
@@ -188,10 +195,13 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
       }
 
       if (transcriptStatusBySegment.get(segmentId) === "transcribing") {
-        return reply.status(409).send({
-          status: "transcribing",
-          message: "Transcript generation is already in progress.",
-        });
+        // Allow regenerate to take over a stuck/previous job; otherwise conflict.
+        if (!regenerate) {
+          return reply.status(409).send({
+            status: "transcribing",
+            message: "Transcript generation is already in progress.",
+          });
+        }
       }
       transcriptStatusBySegment.set(segmentId, "transcribing");
       transcriptErrorBySegment.delete(segmentId);
@@ -203,10 +213,36 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
         settings.transcription_provider === "self_hosted" &&
         settings.workers_enabled &&
         settings.workers_use_for_transcripts !== false;
+      const multiTrackWhisperEnabled =
+        (segment as { multiTrackWhisperEnabled?: boolean })
+          .multiTrackWhisperEnabled !== false;
+      const durationSec = Number(
+        (segment as { durationSec?: number }).durationSec,
+      ) || 0;
+      const trimRanges = (segment as { trimRanges?: unknown }).trimRanges;
       setImmediate(() => {
         (async () => {
           try {
-            if (useWorker) {
+            const writeLocal = async () => {
+              await generateSegmentTranscriptFile({
+                podcastId: access.podcastId,
+                episodeId,
+                segmentId,
+                audioPath,
+                audioBase,
+                settings,
+                multiTrackWhisperEnabled,
+                trimRanges,
+                durationSec,
+              });
+            };
+            // Multi-track path always runs on the API host (multiple takes).
+            // Single-file mix may still use the worker when configured.
+            const tryMultiFirst = multiTrackWhisperEnabled;
+            if (tryMultiFirst || !useWorker) {
+              assertPathUnder(dirname(txtPath), audioBase);
+              await writeLocal();
+            } else {
               assertPathUnder(dirname(txtPath), audioBase);
               await dispatchComputeJob({
                 kind: "transcribe",
@@ -220,19 +256,8 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
                   segmentId,
                   userId: request.userId,
                 }),
-                runLocal: async () => {
-                  const text = await runTranscription(
-                    audioPath,
-                    audioBase,
-                    settings,
-                  );
-                  writeFileSync(txtPath, text, "utf-8");
-                },
+                runLocal: writeLocal,
               });
-            } else {
-              const text = await runTranscription(audioPath, audioBase, settings);
-              assertPathUnder(dirname(txtPath), audioBase);
-              writeFileSync(txtPath, text, "utf-8");
             }
             transcriptStatusBySegment.set(segmentId, "done");
             broadcastToEpisode(episodeId, {
@@ -740,7 +765,7 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
         tags: ["Segments"],
         summary: "Generate episode transcript",
         description:
-          "Start transcription (Whisper or OpenAI) on the final episode audio. Returns 202; poll GET /episodes/:episodeId/transcript-status until done or failed.",
+          "Stitch segment transcripts into the final episode SRT (regenerating stale/missing segment transcripts first). Falls back to Whisper on the final mix when no segment audio is available. Returns 202; poll GET /episodes/:episodeId/transcript-status until done or failed.",
         params: {
           type: "object",
           properties: { episodeId: { type: "string" } },
@@ -790,7 +815,8 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
       const procDir = processedDir(podcastId, episodeId);
       assertPathUnder(audioPath, getDataDir());
       const settings = readSettings();
-      if (!isTranscriptionProviderConfigured(settings)) {
+      const needsAsr = episodeTranscriptNeedsAsr(podcastId, episodeId);
+      if (needsAsr && !isTranscriptionProviderConfigured(settings)) {
         return reply
           .status(400)
           .send({
@@ -798,7 +824,7 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
               "Set a transcription provider in Settings to generate transcripts.",
           });
       }
-      if (!repo.getUserCanTranscribe(request.userId)) {
+      if (needsAsr && !repo.getUserCanTranscribe(request.userId)) {
         return reply
           .status(403)
           .send({ error: "You do not have permission to use transcription." });
@@ -823,7 +849,20 @@ export async function registerTranscriptRoutes(app: FastifyInstance) {
           try {
             const srtPath = transcriptSrtPath(podcastId, episodeId);
             assertResolvedPathUnder(srtPath, getDataDir());
-            if (useWorker) {
+            mkdirSync(dirname(srtPath), { recursive: true });
+
+            const stitched = await stitchEpisodeTranscriptFromSegments({
+              podcastId,
+              episodeId,
+              settings,
+              onProgress: (message) => {
+                log.info({ episodeId, message }, "Episode transcript progress");
+              },
+            });
+
+            if (stitched != null) {
+              writeFileSync(srtPath, stitched, "utf-8");
+            } else if (useWorker) {
               await dispatchComputeJob({
                 kind: "transcribe",
                 apiBase,

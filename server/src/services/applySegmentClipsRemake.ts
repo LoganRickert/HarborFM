@@ -73,9 +73,16 @@ function clampClipToMediaDuration(
   entry: MultitrackSegmentEntry,
 ): MultitrackSegmentEntry {
   if (entry.loop === true) return entry;
-  // Editor / saved clips already carry intentional lengthMs; skip expensive
-  // sync waveform parse (can stall the event loop on large takes).
-  if (typeof entry.lengthMs === "number" && Number.isFinite(entry.lengthMs) && entry.lengthMs > 0) {
+  // Soundboard one-shots are frequently saved with inflated lengthMs (session
+  // end baked in). Always re-clamp those. Other clips with intentional lengthMs
+  // skip the waveform parse to avoid stalling the event loop.
+  const forceClampSoundboard = entry.source === "soundboard";
+  if (
+    !forceClampSoundboard &&
+    typeof entry.lengthMs === "number" &&
+    Number.isFinite(entry.lengthMs) &&
+    entry.lengthMs > 0
+  ) {
     return entry;
   }
   const base = clipFileBasename(entry);
@@ -106,17 +113,28 @@ function clampClipToMediaDuration(
   const endMs = Math.round(range.endSec * 1000);
   const lengthMs = endMs - startMs;
   if (lengthMs <= 0) return entry;
-  const prevLen =
+  const prevLenFromLength =
+    typeof entry.lengthMs === "number" &&
+    Number.isFinite(entry.lengthMs) &&
+    entry.lengthMs > 0
+      ? entry.lengthMs
+      : null;
+  const prevLenFromEnd =
     typeof entry.endMs === "number" &&
     typeof entry.startMs === "number" &&
     entry.endMs > entry.startMs
       ? entry.endMs - entry.startMs
       : null;
+  const prevLen = prevLenFromLength ?? prevLenFromEnd;
   // Already within ~50ms of media length: keep as-is.
   if (prevLen != null && Math.abs(prevLen - lengthMs) <= 50) {
     return { ...entry, lengthMs, endMs: startMs + lengthMs };
   }
-  if (prevLen != null && prevLen <= lengthMs + 50) {
+  if (
+    !forceClampSoundboard &&
+    prevLen != null &&
+    prevLen <= lengthMs + 50
+  ) {
     // Explicit shorter trim than media: keep editor/intentional length.
     return {
       ...entry,

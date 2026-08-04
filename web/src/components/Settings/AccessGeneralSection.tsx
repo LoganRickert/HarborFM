@@ -1,5 +1,6 @@
 import { AccessGeneralSectionProps } from '../../types/settings';
 import { SectionCard } from './SectionCard';
+import { ianaTimeZoneSelectOptions } from '../../utils/ianaTimeZones';
 import styles from '../../pages/Settings.module.css';
 
 export function AccessGeneralSection({
@@ -8,6 +9,7 @@ export function AccessGeneralSection({
   welcomeBannerRef,
   onResizeWelcomeBanner,
 }: AccessGeneralSectionProps) {
+  const timezoneOptions = ianaTimeZoneSelectOptions(form.timezone);
   return (
     <SectionCard
       title="Access & General"
@@ -64,6 +66,26 @@ export function AccessGeneralSection({
         <p className={styles.inputHelp}>
           Base URL for RSS feed enclosures when hosting audio files on this server. Used if no S3 export is configured.
           Changing this also updates the WebRTC public WebSocket URL when it still pointed at the previous hostname.
+        </p>
+      </label>
+
+      <label className={styles.label} data-settings-label="Server timezone">
+        Server timezone
+        <select
+          className={styles.select}
+          value={form.timezone}
+          onChange={(e) => onFormChange({ timezone: e.target.value })}
+        >
+          <option value="">Use system default</option>
+          {timezoneOptions.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </select>
+        <p className={styles.inputHelp}>
+          Effective timezone: {form.timezone.trim() || form.effectiveTimezone || 'UTC'}.
+          Analytics Downloads by day and hour use this zone. Changing it does not rewrite past analytics.
         </p>
       </label>
 

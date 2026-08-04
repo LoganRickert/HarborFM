@@ -32,7 +32,7 @@ export function CastRequestInfoDialog({
         <Dialog.Content className={styles.dialogContent}>
           <div className={styles.dialogHeaderRow}>
             <Dialog.Title className={styles.dialogTitle}>
-              Request profile update
+              Request Profile Update
             </Dialog.Title>
             <Dialog.Close asChild>
               <button
@@ -47,9 +47,10 @@ export function CastRequestInfoDialog({
           </div>
           <Dialog.Description className={styles.dialogDescription}>
             HarborFM will email {name}
-            {email ? ` at ${email}` : ''} asking them to reply with a new photo and any
-            social links to add or update. The message includes their current photo (when
-            available) and current social links.
+            {email ? ` at ${email}` : ''} a self-serve link to update their preferred
+            name, nickname, description, photo, and social links. The message includes
+            their current photo (when available) and current social links. Reply-To is
+            your account email.
           </Dialog.Description>
           {error ? (
             <p className={styles.error} role="alert">

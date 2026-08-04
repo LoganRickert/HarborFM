@@ -30,6 +30,21 @@ function sumRows(rows, episodeId, today) {
     .reduce((s, r) => s + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
 }
 
+function sumHourlyRows(rows, episodeId, today, hour) {
+  return (rows || [])
+    .filter(
+      (r) =>
+        r.episode_id === episodeId &&
+        r.stat_date === today &&
+        Number(r.stat_hour) === hour,
+    )
+    .reduce((s, r) => s + (r.human_count ?? 0) + (r.bot_count ?? 0), 0);
+}
+
+function currentHourLocal() {
+  return new Date().getHours();
+}
+
 /**
  * E2E: Podcast stats include IAB-style Downloads, Unique listeners, Website source,
  * and website retention reach. Requests public RSS / audio with different User-Agents,
@@ -57,14 +72,21 @@ export async function run({ runOne }) {
       if (!Array.isArray(data.rss_daily)) throw new Error('Expected rss_daily array');
       if (!Array.isArray(data.episode_daily)) throw new Error('Expected episode_daily array');
       if (!Array.isArray(data.episode_listens_daily)) throw new Error('Expected episode_listens_daily array');
+      if (!Array.isArray(data.episode_listens_hourly)) throw new Error('Expected episode_listens_hourly array');
       if (!Array.isArray(data.episode_location_daily)) throw new Error('Expected episode_location_daily array');
       if (typeof data.unique_listeners !== 'number') throw new Error('Expected unique_listeners number');
       if (!Array.isArray(data.unique_listeners_by_episode)) {
         throw new Error('Expected unique_listeners_by_episode array');
       }
       if (!Array.isArray(data.retention_by_episode)) throw new Error('Expected retention_by_episode array');
+      if (typeof data.stat_timezone !== 'string' || !data.stat_timezone.trim()) {
+        throw new Error('Expected non-empty stat_timezone string');
+      }
       if (!data.methodology || typeof data.methodology.downloads !== 'string') {
         throw new Error('Expected methodology.downloads string');
+      }
+      if (typeof data.methodology.downloads_by_hour !== 'string') {
+        throw new Error('Expected methodology.downloads_by_hour string');
       }
       for (const row of data.rss_daily) {
         if (row.source === undefined) throw new Error('rss_daily row missing source');
@@ -74,6 +96,19 @@ export async function run({ runOne }) {
       }
       for (const row of data.episode_listens_daily) {
         if (row.source === undefined) throw new Error('episode_listens_daily row missing source');
+      }
+      for (const row of data.episode_listens_hourly) {
+        if (row.episode_id === undefined) throw new Error('episode_listens_hourly row missing episode_id');
+        if (row.stat_date === undefined) throw new Error('episode_listens_hourly row missing stat_date');
+        if (row.stat_hour === undefined) throw new Error('episode_listens_hourly row missing stat_hour');
+        const hour = Number(row.stat_hour);
+        if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+          throw new Error(`episode_listens_hourly stat_hour out of range: ${row.stat_hour}`);
+        }
+        if (row.source === undefined) throw new Error('episode_listens_hourly row missing source');
+        if (row.bot_count === undefined || row.human_count === undefined) {
+          throw new Error('episode_listens_hourly row missing counts');
+        }
       }
       for (const row of data.episode_location_daily) {
         if (row.source === undefined) throw new Error('episode_location_daily row missing source');
@@ -204,6 +239,65 @@ export async function run({ runOne }) {
       const byEp = (data.unique_listeners_by_episode || []).find((r) => r.episode_id === episode.id);
       if (!byEp || (byEp.unique_listeners ?? 0) < 1) {
         throw new Error('Expected unique_listeners_by_episode entry for episode');
+      }
+    })
+  );
+
+  results.push(
+    await runOne('Full GET public episode audio increments episode_listens_hourly for current hour', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const today = todayLocal();
+      const hour = currentHourLocal();
+      const beforeHourly = sumHourlyRows(beforeData.episode_listens_hourly, episode.id, today, hour);
+
+      const episodeUrl = `${baseURL}/${podcast.id}/episodes/${episode.id}`;
+      const headers = {
+        'User-Agent': `${BROWSER_UA} HourlyWrite/${Date.now()}`,
+        'Accept-Language': `en-US,en;q=0.9;hourly=${Date.now()}`,
+      };
+      await fetch(episodeUrl, { headers });
+      await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const afterHourly = sumHourlyRows(data.episode_listens_hourly, episode.id, today, hour);
+      const delta = afterHourly - beforeHourly;
+      if (delta !== 1) {
+        throw new Error(
+          `Expected episode_listens_hourly +1 for hour ${hour}, got delta ${delta} (before ${beforeHourly}, after ${afterHourly})`,
+        );
+      }
+    })
+  );
+
+  results.push(
+    await runOne('Same client GET episode twice in same day counts as one hourly Download (dedup)', async () => {
+      const beforeRes = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      const beforeData = await beforeRes.json();
+      const today = todayLocal();
+      const hour = currentHourLocal();
+      const beforeHourly = sumHourlyRows(beforeData.episode_listens_hourly, episode.id, today, hour);
+
+      const episodeUrl = `${baseURL}/${podcast.id}/episodes/${episode.id}`;
+      const headers = {
+        'User-Agent': `${BROWSER_UA} HourlyDedup/${Date.now()}`,
+        'Accept-Language': `fr-FR,fr;q=0.9;hourly-dedup=${Date.now()}`,
+      };
+      await fetch(episodeUrl, { headers });
+      await fetch(episodeUrl, { headers });
+      await new Promise((r) => setTimeout(r, FLUSH_WAIT_MS));
+
+      const res = await apiFetch(`/podcasts/${podcast.id}/analytics`, {}, jar);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
+      const data = await res.json();
+      const afterHourly = sumHourlyRows(data.episode_listens_hourly, episode.id, today, hour);
+      const delta = afterHourly - beforeHourly;
+      if (delta !== 1) {
+        throw new Error(
+          `Expected hourly dedup: 2 same-client GETs should add 1, got delta ${delta}`,
+        );
       }
     })
   );
